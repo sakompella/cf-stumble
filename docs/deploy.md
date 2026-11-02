@@ -66,9 +66,49 @@ Every later deploy keeps them.
 
 `scripts/deploy/check-config.sh` checks that `CF_STUMBLE_HARNESS_COMMIT` is in your shell.
 
+## Deploying from CI
+
+GitHub Actions deploys production. Two workflows in `.github/workflows/` do the work:
+
+- `verify.yml` runs `pnpm verify` on Ubuntu for every push and every pull request.
+- `deploy.yml` runs `pnpm run deploy --yes` for the stage `prod` when Verify passes on a push to `main`. It checks out the commit that Verify tested. A concurrency group lets only one deploy run at a time; a second deploy waits for the first to finish.
+
+The normal deploy path is therefore a push or merge to `main`. The runner has Docker, so it builds the Container image and pushes it to the account's registry. Pushing that image from the Mac through OrbStack failed with "use of closed network connection" during the staging rehearsal, which is why deploys moved to CI.
+
+You can also start a deploy by hand from `main`: open **Actions** > **Deploy** > **Run workflow**, or run `gh workflow run deploy.yml --ref main`. Tick `adopt` (`-f adopt=true`) only for the one-time switch from `cf deploy` (see "Switch production from `cf deploy` to Alchemy"). The workflow skips the job when you start it from any other branch.
+
+A runner has no terminal, so Alchemy cannot ask you to approve its plan. `--yes` approves it, and a push to `main` applies whatever the plan contains. Review changes to `infra/` in the pull request, and read the plan in the job log afterwards.
+
+### Credentials
+
+The deploy job reads two values from the repository settings (**Settings** > **Secrets and variables** > **Actions**):
+
+- The secret `CLOUDFLARE_API_TOKEN`: an account API token with the permissions in the table below.
+- The variable `CLOUDFLARE_ACCOUNT_ID`: the account ID. It is not secret.
+
+| Permission group         | Scope                               | Used for                                                                                                    |
+| ------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Workers Scripts Write    | Account                             | The Worker, its settings and versions, Durable Object migrations, the state store Worker, preview sessions. |
+| Workers Containers Write | Account                             | The container application, its rollouts, and the registry credentials for the image push.                   |
+| Secrets Store Write      | Account                             | Reading the state store's token through a preview Worker that binds the secret; Read cannot bind it.        |
+| Workers Routes Write     | Zone: the zone that holds the route | The route `stumble.akompella.dev/*`.                                                                        |
+| Zone Read                | Zone: the zone that holds the route | Looking up the zone ID from the zone name in the stack.                                                     |
+
+`pnpm alchemy logs` also needs Workers Tail Read; the deploy does not.
+
+Create the token as an account API token: **Manage Account** > **Account API Tokens** > **Create Token** > **Create Custom Token**. Add the five permissions, limit the zone permissions to the route's zone, then copy the value into the secret with `gh secret set CLOUDFLARE_API_TOKEN --repo <owner>/<repository>`, which reads it from standard input. The `cf` login cannot create tokens: its OAuth scopes do not include token management, and `pnpm exec cf accounts tokens create` answers 403 with code 9109.
+
+### State in CI
+
+GitHub Actions sets `CI=true`, and Alchemy then keeps no state store credentials on disk. On every run it finds the account's single Secrets Store and reads the state store's bearer token from it through a short-lived preview Worker that binds the secret. It then derives the address of the `alchemy-state-store` Worker from the account's `workers.dev` subdomain. A CI run therefore reads the same state as any machine that deploys to the account, because each one finds the store from the account. Nothing about the state is kept in GitHub. Keep exactly one Secrets Store on the account: Alchemy takes the first one it lists.
+
+In CI, Alchemy refuses to create a missing state store or upgrade an outdated one unless the command has `--yes`. The deploy passes `--yes` to approve its plan, so it can also create or upgrade the store. Create the store from a machine before the first CI deploy, so that you see it happen: the first `pnpm alchemy plan` on the account creates it (step 3 of the switch).
+
 ## Deploy an update
 
-Deploy with `pnpm run deploy`. It builds the Container image, which needs Docker, and pushes it to the account's registry. On the Mac, Alchemy's push of the image's 1 GB layer through OrbStack failed with "use of closed network connection" during the staging rehearsal; run the deploy again on a steady network. Agents follow the same steps with their completion checks in `.agents/skills/cf-operations/SKILL.md`.
+A push to `main` deploys through CI (see "Deploying from CI"). To deploy from a machine instead, run `pnpm run deploy`. It builds the Container image, which needs Docker, and pushes it to the account's registry. On the Mac, Alchemy's push of the image's 1 GB layer through OrbStack failed with "use of closed network connection" during the staging rehearsal, so deploy from a machine only when CI cannot. Agents follow the same steps with their completion checks in `.agents/skills/cf-operations/SKILL.md`.
+
+The checks below apply to both paths. For a deploy from CI, do steps 1 to 5 before you merge to `main`; the Deploy workflow then takes the place of `pnpm run deploy`, and the checks after the deploy stay the same.
 
 Before you deploy:
 
@@ -97,9 +137,9 @@ Workers Logs keeps events for 7 days. After a deploy that changes lifecycle beha
 Production was deployed with `cf deploy` from `cloudflare.config.ts` until the commit that added `infra/alchemy.run.ts`. The first Alchemy deploy adopts the existing Worker `cf-stumble` and its container application instead of creating new ones. Treat the Durable Object data as lost: the staging rehearsal kept the namespace ids, but production holds nothing that needs to survive, so this procedure does not depend on it. The instance secrets do survive (see "Instance secrets").
 
 1. Record what is there now: `pnpm exec cf workers deployments list --worker cf-stumble`, `pnpm exec cf workers secrets list --worker cf-stumble`, the container application id and version, and the Worker's bindings and settings (`GET /accounts/<account-id>/workers/scripts/cf-stumble/settings`). Find the commit before the switch, which the rollback deploys: `git rev-parse "$(git log --diff-filter=A --format=%H -- infra/alchemy.run.ts)~1"`.
-2. Use a machine with Docker and a steady network, and set the credentials (see "Configuration files").
+2. Set the credentials on a machine (see "Configuration files"); the plan in step 3 runs there. A deploy from a machine, instead of CI, also needs Docker and a steady network.
 3. Run `pnpm run build:page`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod --adopt`. The first plan on the account also creates the state store. Expect the Worker as a create (Alchemy adopts it when it finds a Worker with that name) and the container application as adopted. Stop if the plan shows anything else.
-4. Run `pnpm run deploy --adopt`.
+4. Run the Deploy workflow from `main` with `adopt` ticked: `gh workflow run deploy.yml --ref main -f adopt=true`. From a machine, the same step is `pnpm run deploy --adopt`.
 5. Check the result against step 1. The secrets list has the same names. The bindings are `AI`, `CHATGPT_MODEL`, `LOADER`, `SUPERVISOR`, and `WORKSPACE_HOST`, plus the `ALCHEMY_*` variables. The route is `stumble.akompella.dev/*`, the `workers.dev` subdomain is off, and the container application id is unchanged. `GET /health` returns `{"ok":true}`. Submit and activate a generation (see "First run"), send a message, and check that its turn runs a tool call. Then run `pnpm ops:check --since 1h`.
 
 To roll back, deploy the commit from step 1 with `cf deploy`:

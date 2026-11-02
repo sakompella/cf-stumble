@@ -1,6 +1,6 @@
 ---
 name: cf-operations
-description: Operate a cf-stumble instance on Cloudflare with Alchemy and `cf`. Use when deploying with `pnpm run deploy`, checking a deployment or runtime with `pnpm ops:check`, staging a risky change on a throwaway Worker, or diagnosing container cost and idle stops.
+description: Operate a cf-stumble instance on Cloudflare with Alchemy and `cf`. Use when deploying (a push to `main`, or `pnpm run deploy`), checking a deployment or runtime with `pnpm ops:check`, staging a risky change on a throwaway Worker, or diagnosing container cost and idle stops.
 ---
 
 # Operate a cf-stumble instance
@@ -22,17 +22,19 @@ The owner API needs no credential: call it with plain `curl`.
 
 ### 1. Prepare
 
-Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth whoami` (it shows the account). List the secrets with `pnpm exec cf workers secrets list --worker <worker>`. Check that the last container rollout finished: `pnpm exec cf containers applications get <container-app-id>`, and the instance state from the instances call at the end of `docs/agents/design/observability.md`, "Checking a running deployment".
+Work from a clean tree on `main`. Run `pnpm verify` (CI runs it again before it deploys), then `pnpm exec cf auth whoami` (it shows the account). List the secrets with `pnpm exec cf workers secrets list --worker <worker>`. Check that the last container rollout finished: `pnpm exec cf containers applications get <container-app-id>`, and the instance state from the instances call at the end of `docs/agents/design/observability.md`, "Checking a running deployment".
 
 **Complete when:** `pnpm verify` passed on this exact commit, the account is the intended one, and no rollout is in progress.
 
 ### 2. Deploy
 
-Run `pnpm run build:page`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change. Then run `pnpm run deploy`. Never deploy the Worker with another tool. If anything changed the Worker outside Alchemy (the dashboard, `cf deploy`), run `pnpm run deploy --force`: a plain deploy is then a no-op. If the image push fails with "use of closed network connection", run the deploy again on a steady network.
+The normal path for production is a push or merge to `main`. GitHub Actions runs Verify on the commit, and when it passes, the Deploy workflow runs `pnpm run deploy --yes` for the stage `prod` (`docs/deploy.md`, "Deploying from CI"). Before you merge, run `pnpm run build:page`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change: CI approves the plan without showing it to anyone. After the push, follow the run with `gh run watch` and read the plan in the job log.
 
-The first Alchemy deploy of a production that `cf deploy` deployed follows `docs/deploy.md`, "Switch production from `cf deploy` to Alchemy", and needs Aditya's go-ahead.
+Deploy from a machine with `pnpm run deploy` only when CI cannot. Never deploy the Worker with another tool. If anything changed the Worker outside Alchemy (the dashboard, `cf deploy`), run `pnpm run deploy --force` from a machine: a plain deploy is then a no-op. If the image push fails with "use of closed network connection", run the deploy again on a steady network.
 
-**Complete when:** the exit code is 0 and the deployment list (`pnpm exec cf workers deployments list --worker <worker>`) shows a new version at 100%.
+The first Alchemy deploy of a production that `cf deploy` deployed follows `docs/deploy.md`, "Switch production from `cf deploy` to Alchemy", and needs Aditya's go-ahead. In CI it is a manual run of the Deploy workflow from `main` with `adopt` ticked.
+
+**Complete when:** the Deploy run (or the local command) succeeded and the deployment list (`pnpm exec cf workers deployments list --worker <worker>`) shows a new version at 100%.
 
 ### 3. Compare
 
