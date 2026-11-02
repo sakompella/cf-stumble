@@ -3,13 +3,8 @@ import type { AddressInfo } from "node:net";
 import type { HarnessScenario } from "./fixtures.mjs";
 import { openConversations, type Conversations } from "./conversations.mjs";
 import { parseJsonRecordText, type JsonValue } from "../json.mjs";
-import {
-  isOwnerPageScriptPath,
-  sendJson,
-  sendOwnerPage,
-  sendOwnerPageScript,
-  serveJsonRoute,
-} from "./server-routes.mjs";
+import { ownerPageResponse } from "../../src/routes/page.js";
+import { sendJson, sendResponse, serveJsonRoute } from "./server-routes.mjs";
 import { conversationRoute, serveConversation } from "./server-conversation.mjs";
 import {
   initialState,
@@ -62,16 +57,11 @@ async function handle(
     return;
   }
 
-  if (req.method === "GET" && path === "/") {
-    record.status = 200;
-    sendOwnerPage(res);
+  const page = ownerPageResponse(new Request(url, { method: req.method ?? "GET" }));
 
-    return;
-  }
-
-  if (req.method === "GET" && isOwnerPageScriptPath(path)) {
-    record.status = 200;
-    sendOwnerPageScript(res);
+  if (page !== undefined) {
+    record.status = page.status;
+    await sendResponse(res, page);
 
     return;
   }
