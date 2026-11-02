@@ -4,7 +4,7 @@ What runs in production, what was decided outside an ADR, and what is still open
 
 ## What is deployed
 
-Production is the Worker `cf-stumble`, deployed only with `cf deploy`. Run `pnpm exec cf workers deployments list` before you assume that production matches a commit.
+Production is the Worker `cf-stumble`. Until someone runs the procedure in `docs/deploy.md`, "Switch production from `cf deploy` to Alchemy", it is a `cf deploy` deployment from before `infra/alchemy.run.ts` existed; after the switch, only `pnpm run deploy` deploys it. Run `pnpm exec cf workers deployments list --worker cf-stumble` before you assume that production matches a commit.
 
 On 2026-10-31 production runs `96d3607` (Worker version `cea854d2`, container image updated), with generation 6 (`96d3607`) active at epoch 22. Older generations report no or an older facet compatibility key, so activation and rollback refuse them (checked on production: rollback to generation 4 answered 409 `facet-compatibility-mismatch`). A `bash` tool call ran and a page send was answered.
 

@@ -36,17 +36,17 @@ origin in the policy, and the page's own guarantees already close the gap.
 
 **Builds.** `pnpm verify` runs `build:page` before the typecheck. `pnpm test:browser` runs it first,
 and the stub server serves the file with the Worker's headers and
-policy. Every Worker build runs it through the `build.command` in `wrangler.config.ts`, which
-`cf build` and `cf deploy` read through Wrangler. On a fresh checkout,
+policy. `pnpm run deploy` runs it before Alchemy bundles the Worker. On a fresh checkout,
 run `pnpm build:page` before `pnpm typecheck` or `pnpm test` alone. The page is immutable host
 code, not part of a generation's module map.
 
-**Budgets.** `tools/bundle-budgets.test.ts`, in `pnpm test:tools`, measures the Worker upload with
-`wrangler deploy --dry-run --experimental-new-config --containers-rollout=none` and the page script, both gzipped, and fails
-above its limits. The limits sit about 10 percent above the measured sizes. The real constraint on
+**Budgets.** `tools/bundle-budgets.test.ts`, in `pnpm test:tools`, measures the Worker bundle that
+`wrangler deploy src/worker.ts --dry-run` writes with the compatibility settings in
+`infra/worker-settings.ts`, and the page script, both gzipped, and fails above its limits. Alchemy
+bundles the deployed Worker with Rolldown, so the measured bundle stands in for the upload. The limits sit about 10 percent above the measured sizes. The real constraint on
 the Worker is startup time, which only a staged deploy measures.
 
 **Alternatives.** An inline bundle under the page's nonce needs no new route, but repeats a large
 download on every load. Cloudflare static assets would need routing configuration
-in `cloudflare.config.ts`. Typed DOM modules without a framework need
+in the Worker configuration. Typed DOM modules without a framework need
 fewer dependencies, but the owner chose Foldkit.
