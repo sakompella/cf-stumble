@@ -6,7 +6,6 @@ import {
   REPOSITORY_SIZE_VERDICT_FUNCTION,
   repositorySizeVerdictSource,
 } from "../../src/github/index.js";
-import { parseProjectCatalog, type Project } from "../../src/project-catalog.js";
 import { projectCloneSource } from "../../src/project-provision.js";
 import {
   FLOCK_STAND_IN,
@@ -16,22 +15,11 @@ import {
   underScratch,
   writeExecutable,
 } from "../workspace/planned-shell-fixture.js";
+import { projectOf } from "../project-fixtures.js";
 
 const jq = execFileSync("/bin/sh", ["-c", "command -v jq"], { encoding: "utf8" }).trim();
 
-const project: Project = (() => {
-  const parsed = parseProjectCatalog([
-    {
-      id: "sample-repo-1",
-      displayName: "Repo one",
-      repositoryUrl: "https://github.com/sample/repo-1",
-    },
-  ])?.[0];
-
-  if (parsed === undefined) throw new Error("the sample project must parse");
-
-  return parsed;
-})();
+const project = projectOf("https://github.com/sample/repo-1");
 
 const scratch = scratchDirectory("cf-stumble-size-guard-");
 

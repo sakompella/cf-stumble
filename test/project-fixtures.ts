@@ -1,34 +1,28 @@
 import {
-  parseProjectCatalog,
+  canonicalRepositoryUrl,
+  defaultProjectDisplayName,
   parseProjectId,
+  projectIdForRepository,
   type Project,
   type ProjectCatalog,
   type ProjectId,
 } from "../src/project-catalog.js";
 import { selectableCatalog, type SelectableCatalog } from "../src/selectable-projects.js";
 
-const parsed = parseProjectCatalog([
-  {
-    id: "sample-project-one",
-    displayName: "sample/project-one",
-    repositoryUrl: "https://github.com/sample/project-one",
-  },
-  {
-    id: "sample-project-two",
-    displayName: "sample/project-two",
-    repositoryUrl: "https://github.com/sample/project-two",
-  },
-]);
+export function projectOf(repositoryUrl: string): Project {
+  const id = projectIdForRepository(repositoryUrl);
+  const url = canonicalRepositoryUrl(repositoryUrl);
 
-if (parsed === undefined || parsed[0] === undefined || parsed[1] === undefined) {
-  throw new Error("the sample catalog must parse");
+  if (id === undefined || url === undefined) throw new Error(`${repositoryUrl} must be a project`);
+
+  return { id, displayName: defaultProjectDisplayName(url), repositoryUrl: url };
 }
 
-export const sampleCatalog: ProjectCatalog = parsed;
+export const sampleProjectOne: Project = projectOf("https://github.com/sample/project-one");
 
-export const sampleProjectOne: Project = parsed[0];
+export const sampleProjectTwo: Project = projectOf("https://github.com/sample/project-two");
 
-export const sampleProjectTwo: Project = parsed[1];
+export const sampleCatalog: ProjectCatalog = [sampleProjectOne, sampleProjectTwo];
 
 export const sampleSelectableCatalog: SelectableCatalog = selectableCatalog(sampleCatalog);
 

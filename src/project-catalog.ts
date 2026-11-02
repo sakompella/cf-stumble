@@ -22,12 +22,6 @@ export type Project = Readonly<{
 
 export type ProjectCatalog = readonly Project[];
 
-type ProjectConfiguration = Readonly<{
-  id: string;
-  displayName: string;
-  repositoryUrl: string;
-}>;
-
 function isProjectId(value: string): value is ProjectId {
   return value.length <= PROJECT_ID_LIMIT && projectIdPattern.test(value);
 }
@@ -138,35 +132,6 @@ export function defaultProjectDisplayName(repositoryUrl: PublicRepositoryUrl): s
   const segments = new URL(repositoryUrl).pathname.split("/").filter((part) => part.length > 0);
 
   return segments.slice(-2).join("/");
-}
-
-function parseProject(value: ProjectConfiguration): Project | undefined {
-  const id = parseProjectId(value.id);
-  const repositoryUrl = parsePublicRepositoryUrl(value.repositoryUrl);
-
-  if (id === undefined || value.displayName.trim().length === 0 || repositoryUrl === undefined) {
-    return undefined;
-  }
-
-  return { id, displayName: value.displayName, repositoryUrl };
-}
-
-export function parseProjectCatalog(
-  value: readonly ProjectConfiguration[],
-): ProjectCatalog | undefined {
-  const projects: Project[] = [];
-
-  for (const entry of value) {
-    const project = parseProject(entry);
-
-    if (project === undefined || projects.some((existing) => existing.id === project.id)) {
-      return undefined;
-    }
-
-    projects.push(Object.freeze(project));
-  }
-
-  return Object.freeze(projects);
 }
 
 type ProjectResolution =

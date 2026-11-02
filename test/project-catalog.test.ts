@@ -1,30 +1,12 @@
 import { expect, test } from "vitest";
 import {
   canonicalRepositoryUrl,
-  parseProjectCatalog,
   parseProjectId,
   PROJECT_ID_LIMIT,
   projectIdForRepository,
   resolveProject,
-  type ProjectCatalog,
 } from "../src/project-catalog.js";
-import { sampleCatalog, sampleProjectOne } from "./project-fixtures.js";
-
-function catalogOf(...urls: readonly string[]): ProjectCatalog {
-  const parsed = parseProjectCatalog(
-    urls.map((repositoryUrl, index) => ({
-      id: projectIdForRepository(repositoryUrl) ?? "",
-      displayName: `project ${index}`,
-      repositoryUrl,
-    })),
-  );
-
-  if (parsed === undefined) {
-    throw new Error("these repository URLs must produce a catalog");
-  }
-
-  return parsed;
-}
+import { projectOf } from "./project-fixtures.js";
 
 test("resolves every project of a non-empty catalog", () => {
   const count = 3;
@@ -34,7 +16,7 @@ test("resolves every project of a non-empty catalog", () => {
     (_, index) => `https://github.com/sample/repo-${index}`,
   );
 
-  const catalog = catalogOf(...urls);
+  const catalog = urls.map((url) => projectOf(url));
 
   expect(catalog).toHaveLength(count);
 
@@ -105,22 +87,4 @@ test.each([
   ],
 ])("derives no id for %s", (_, url) => {
   expect(projectIdForRepository(url)).toBeUndefined();
-});
-
-test("refuses a malformed or ambiguous catalog", () => {
-  expect(
-    parseProjectCatalog([
-      {
-        id: "project-one",
-        displayName: "Project one",
-        repositoryUrl: "http://example.invalid/project-one.git",
-      },
-    ]),
-    "an insecure repository URL",
-  ).toBeUndefined();
-  expect(
-    parseProjectCatalog([sampleProjectOne, sampleProjectOne]),
-    "two rows with one id would make resolution depend on position",
-  ).toBeUndefined();
-  expect(parseProjectCatalog(sampleCatalog)).toEqual(sampleCatalog);
 });

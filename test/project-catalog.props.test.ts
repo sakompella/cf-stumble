@@ -4,7 +4,6 @@ import { expect, test } from "vitest";
 
 import {
   canonicalRepositoryUrl,
-  parseProjectCatalog,
   parseProjectId,
   PROJECT_ID_LIMIT,
   projectIdForRepository,
@@ -133,39 +132,5 @@ test("keeps the earlier id of every owner without a hyphen and name without dots
     const earlier = `${owner}-${name}`.toLowerCase();
 
     expect(projectIdForRepository(`https://github.com/${owner}/${name}`)).toBe(earlier);
-  });
-});
-
-type RawProject = Readonly<{
-  id: string;
-  displayName: string;
-  repositoryUrl: string;
-}>;
-
-function drawRawCatalog(tc: hegel.TestCase): RawProject[] {
-  const count = tc.draw(gs.integers({ minValue: 2, maxValue: 6 }));
-
-  return Array.from({ length: count }, (_, index) => {
-    const repository = tc.draw(gs.fromRegex("[a-z]{1,6}"));
-    const repositoryUrl = `https://github.com/owner${index}/${repository}`;
-
-    return {
-      id: projectIdForRepository(repositoryUrl) ?? "",
-      displayName: `project ${index}`,
-      repositoryUrl,
-    };
-  });
-}
-
-test("rejects duplicate catalog ids even when duplicate rows are far apart", () => {
-  hegel.test((tc) => {
-    const raw = drawRawCatalog(tc);
-    const duplicate = raw[0];
-
-    if (duplicate === undefined) throw new Error("generated catalog must be non-empty");
-
-    expect(
-      parseProjectCatalog([...raw, { ...duplicate, displayName: "duplicate" }]),
-    ).toBeUndefined();
   });
 });
