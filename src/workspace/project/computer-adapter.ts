@@ -89,6 +89,8 @@ function guardedReader(
 
         if (next.done) return { done: true };
 
+        if (next.value.name === "exit") await waitForPostCommandSync(reader);
+
         return { done: false, value: toBackendEvent(next.value) };
       } catch (cause) {
         if (guard.replaced()) throw new ContainerRestartedError();
@@ -98,6 +100,10 @@ function guardedReader(
     },
     cancel: () => reader.cancel(),
   };
+}
+
+async function waitForPostCommandSync(reader: RuntimeReader): Promise<void> {
+  while (!(await reader.read()).done);
 }
 
 export function computerExecBackend(
