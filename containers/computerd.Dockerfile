@@ -36,13 +36,6 @@ RUN mkdir -p .devbox/node-binaries \
  && tar -xJf "node-${NODE_VERSION}-linux-x64.tar.xz" \
  && tar -xJf "node-${NODE_VERSION}-darwin-x64.tar.xz"
 
-FROM computerd-source AS computerd-upstream
-ARG UPSTREAM_COMPUTERD_SHA256=5d1a601f337004d1a9b43e243a65b7168832c900738b6d66df120ea77b6dc24c
-RUN npm run build -w @cloudflare/dofs -w @cloudflare/computer-rpc -w @cloudflare/computerd \
- && npm run build:bin -w @cloudflare/computerd \
- && printf '%s  %s\n' "$UPSTREAM_COMPUTERD_SHA256" artifacts/computerd/computerd-linux-x64 \
-    | sha256sum -c -
-
 FROM computerd-source AS computerd
 COPY containers/computerd-walk.patch /tmp/computerd-walk.patch
 RUN git apply --check /tmp/computerd-walk.patch \
