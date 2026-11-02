@@ -73,6 +73,11 @@ const throwingRoutes: readonly (readonly [string, Request, Partial<OwnerApiSuper
     { connectProject: thrown },
   ],
   [
+    "POST /api/github/connection/refresh",
+    controlRequest("/api/github/connection/refresh", "{}"),
+    { refreshGitHubConnection: thrown },
+  ],
+  [
     "POST /api/github/authorization",
     controlRequest("/api/github/authorization", "{}"),
     { startGitHubAuthorization: thrown },

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
-import { logRedactedCause } from "../diagnostics.js";
 import { projectIdFromPath } from "./route-pattern.js";
 import type { SelectableCatalog } from "../selectable-projects.js";
 import type {
@@ -74,16 +73,11 @@ function recordResponse(record: GitHubConnectionRecord): Response {
   return Response.json({ ok: true, github: record.github, checkedAt: record.checkedAt });
 }
 
-function refreshResponse(supervisor: ProjectApiSupervisor): Effect.Effect<Response> {
+function refreshResponse(
+  supervisor: ProjectApiSupervisor,
+): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.refreshGitHubConnection()).pipe(
     Effect.map((record) => recordResponse(record)),
-    Effect.catchTag("SupervisorCallFailed", (failure) =>
-      Effect.sync(() => {
-        logRedactedCause("routes.projects.connection: workspace-unavailable", failure.cause);
-
-        return jsonError(503, "internal-error");
-      }),
-    ),
   );
 }
 

@@ -30,28 +30,6 @@ function post(path: string, body: RequestBody): Request {
   });
 }
 
-test.each([
-  ["rejects", new Error("workspace RPC is unavailable")],
-  ["times out", new DOMException("workspace RPC timed out", "TimeoutError")],
-] as const)("maps a connection refresh whose Supervisor RPC %s to 503", async (_kind, cause) => {
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  const response = await ownerApiResponse(
-    post("/api/github/connection/refresh", {}),
-    supervisor({ refreshGitHubConnection: () => Promise.reject(cause) }),
-  );
-
-  expect(response.status).toBe(503);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    error: { code: "internal-error" },
-  });
-  expect(loggedErrors).toHaveBeenCalledWith(
-    expect.stringContaining("routes.projects.connection: workspace-unavailable"),
-  );
-  expect(loggedErrors.mock.calls.join(" ")).toContain(cause.message);
-});
-
 test("connects the repository the body names, and nothing else it carries", async () => {
   const sent: unknown[] = [];
 
