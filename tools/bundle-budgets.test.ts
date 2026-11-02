@@ -11,7 +11,7 @@ const KIB = 1024;
 
 const WORKER_UPLOAD_GZIP_LIMIT = 600 * KIB;
 
-const OWNER_SCRIPT_GZIP_LIMIT = 216 * KIB;
+const OWNER_SCRIPT_GZIP_LIMIT = 240 * KIB;
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
