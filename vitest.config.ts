@@ -78,9 +78,6 @@ const PLATFORM_STREAM_REJECTIONS = [
     file: "test/supervisor/conversations/generation-1.test.ts",
     message: "ReadableStream received over RPC disconnected prematurely.",
   },
-  { file: "test/supervisor/projects/turn-cancel.test.ts", message: "Stream was cancelled." },
-  { file: "test/supervisor/startup-check/body.test.ts", message: "body exploded" },
-  { file: "test/supervisor/startup-check/body.test.ts", message: "startup-check deadline expired" },
 ] as const;
 
 function isPlatformStreamNoise(error: { message?: string; VITEST_TEST_PATH?: string }): boolean {
