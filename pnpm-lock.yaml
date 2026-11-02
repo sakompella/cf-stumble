@@ -21,8 +21,8 @@ importers:
         specifier: 1.4.0
         version: 1.4.0(@aws-sdk/credential-provider-node@3.972.90)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(undici@7.30.1)(ws@8.21.0)(zod@4.6.6)
       effect:
-        specifier: 4.0.0
-        version: 4.0.0
+        specifier: 4.1.1
+        version: 4.1.1
     devDependencies:
       '@cloudflare/vitest-plugin':
         specifier: ^1.4.12
@@ -31,11 +31,11 @@ importers:
         specifier: ^5.20261102.1
         version: 5.20261102.1
       '@effect/platform-browser':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)
+        specifier: 4.1.1
+        version: 4.1.1(effect@4.1.1)
       '@foldkit/oxlint-plugin':
-        specifier: 0.15.3
-        version: 0.15.3(effect@4.0.0)
+        specifier: 0.15.4
+        version: 0.15.4(effect@4.1.1)
       '@hegeldev/hegel':
         specifier: 0.4.12
         version: 0.4.12
@@ -55,8 +55,8 @@ importers:
         specifier: 0.28.2
         version: 0.28.2
       foldkit:
-        specifier: 0.168.0
-        version: 0.168.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0)
+        specifier: 0.170.0
+        version: 0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1)
       knip:
         specifier: 6.44.1
         version: 6.44.1
@@ -310,10 +310,10 @@ packages:
     resolution: {integrity: sha512-MLIfowwUYIY65jSjMX82paZOrX/NTvLk6D08h+3Jq42a99RzUOewzuCR0zOlPul3D6UBfddat76VT6LvsHEs1w==}
     engines: {node: '>=22.19.0'}
 
-  '@effect/platform-browser@4.0.0':
-    resolution: {integrity: sha512-OHo7EPpF3RVPiI+mjoU9yd05LdCdKPjzDXqs5wRgF9CsdVvwN76B0zgt54DxPUcvMYri1tVJOtLCVnK0tRkNQQ==}
+  '@effect/platform-browser@4.1.1':
+    resolution: {integrity: sha512-bfJuCUX0qPv0fqVWq65cLNWoSFHt2vPDMn0m2cpaxz51/gaCclT3yBAk3JxN/7aEBvcKVXMui9G8uz4a9uoDgA==}
     peerDependencies:
-      effect: ^4.0.0
+      effect: ^4.1.1
 
   '@emnapi/core@1.11.2':
     resolution: {integrity: sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA==}
@@ -483,8 +483,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@foldkit/oxlint-plugin@0.15.3':
-    resolution: {integrity: sha512-LprfdZcR4uIqzTqHhJWT9bjJiS1km4MsN9Yyqk8JcKAEHpAxwgneG3MvA7p5aPXVDpZE/zh5FCGzhRIz1MnscQ==}
+  '@foldkit/oxlint-plugin@0.15.4':
+    resolution: {integrity: sha512-qBFoApW7UAn5gu2GWyhL5lwyQpD9scCwESJOWQ3uC3h1oVnpToDmlCvFNC3HmfNZjQUxcGSwvWtL9LOB+ECyjg==}
     engines: {node: '>=20.19.0 || >=22.12.0'}
 
   '@google/genai@2.21.0':
@@ -1791,8 +1791,8 @@ packages:
     peerDependencies:
       effect: ^4.0.0
 
-  effect@4.0.0:
-    resolution: {integrity: sha512-ooc1TG5t+FfzgYnFz2ff6BBKyZ7EwBRVXC7c4RhQUAD6/TZ2gTXXMeb4WX7a19ozQo4J73/QW+S00YAIresoMQ==}
+  effect@4.1.1:
+    resolution: {integrity: sha512-XYu65BrcmNqu5i7PPvP4dqL+R5ma37zIsfuSPjcn78mog+6e5PkilNg7Xo+pBpjXJYlWEIpH4j91tMrfW05CMw==}
 
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
@@ -1856,12 +1856,12 @@ packages:
     resolution: {integrity: sha512-Ievi/yy8DS3ygGvT47PjSfdFoX+2isQueoYP1cntFW1JLYAuS4GD7NUPGg4zv2iZfV52uDyk5w5Z0TdpRS6Q1g==}
     engines: {node: '>=20'}
 
-  foldkit@0.168.0:
-    resolution: {integrity: sha512-FyAY34MdmF1JwdKiPq12uKHBmLny3QxAJ6WdakbXCBh8KR1lQfvdKEygQ/XAlxb2ICSmpVaFga5RgDSnxZsFiw==}
+  foldkit@0.170.0:
+    resolution: {integrity: sha512-H/MRQe/IZ/LqpgPi+Zy1S1OXQ8o12e2S/6U+phQu3WmoHSm7Vase/dEnOvrq9YZfqxK44/oVq6wE9oqXzEIaig==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
-      '@effect/platform-browser': 4.0.0
-      effect: 4.0.0
+      '@effect/platform-browser': ~4.1.0
+      effect: ~4.1.0
 
   formatly@0.11.4:
     resolution: {integrity: sha512-TeCC10lP8KCgoX+Fe5lryILIT0/Dy+nP0OSVnsuB5CwXoLuOdqxCYlPFF1inR8S/zTy1ec7TjhS2TeRKWzzImA==}
@@ -2949,9 +2949,9 @@ snapshots:
 
   '@earendil-works/pi-telemetry@1.4.0': {}
 
-  '@effect/platform-browser@4.0.0(effect@4.0.0)':
+  '@effect/platform-browser@4.1.1(effect@4.1.1)':
     dependencies:
-      effect: 4.0.0
+      effect: 4.1.1
 
   '@emnapi/core@1.11.2':
     dependencies:
@@ -3052,9 +3052,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@foldkit/oxlint-plugin@0.15.3(effect@4.0.0)':
+  '@foldkit/oxlint-plugin@0.15.4(effect@4.1.1)':
     dependencies:
-      effect-oxlint: 0.4.0(effect@4.0.0)
+      effect-oxlint: 0.4.0(effect@4.1.1)
     transitivePeerDependencies:
       - effect
 
@@ -3897,12 +3897,12 @@ snapshots:
     dependencies:
       safe-buffer: 5.2.1
 
-  effect-oxlint@0.4.0(effect@4.0.0):
+  effect-oxlint@0.4.0(effect@4.1.1):
     dependencies:
       '@oxlint/plugins': 1.90.0
-      effect: 4.0.0
+      effect: 4.1.1
 
-  effect@4.0.0: {}
+  effect@4.1.1: {}
 
   end-of-stream@1.4.5:
     dependencies:
@@ -3993,10 +3993,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  foldkit@0.168.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0):
+  foldkit@0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1):
     dependencies:
-      '@effect/platform-browser': 4.0.0(effect@4.0.0)
-      effect: 4.0.0
+      '@effect/platform-browser': 4.1.1(effect@4.1.1)
+      effect: 4.1.1
       parse5: 8.0.1
 
   formatly@0.11.4:
