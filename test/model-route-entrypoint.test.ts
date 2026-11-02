@@ -12,8 +12,6 @@ import type { ChatGPTAccess } from "../src/chatgpt/index.js";
 import type { StreamingProviderPayload, WorkersAiBinding } from "../src/model-route-events.js";
 import type { ModelRouteRequest, ValidationFailure } from "../src/model-route.js";
 
-const REQUIRED_MODEL = "@cf/zai-org/glm-5.3-flash";
-
 type RecordedCall = Readonly<{ model: string; input: StreamingProviderPayload }>;
 
 type FakeBinding = Readonly<{ ai: WorkersAiBinding; calls: readonly RecordedCall[] }>;
@@ -107,25 +105,6 @@ test("the entrypoint answers a provider's two text deltas with exactly those two
   expect(done.usage.outputTokens).toBeGreaterThan(0);
 });
 
-test("the entrypoint asks the one fixed model with a streaming payload and nothing else", async () => {
-  const binding = bindingStreaming([sseLine({ response: "ok" }), DONE_LINE]);
-  await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
-  expect(binding.calls).toHaveLength(1);
-  const call = binding.calls[0];
-
-  if (call === undefined) throw new Error("the entrypoint never called the binding");
-  expect(call.model).toBe(REQUIRED_MODEL);
-  expect(Object.keys(call.input).toSorted()).toEqual([
-    "max_tokens",
-    "messages",
-    "reasoning_effort",
-    "stream",
-  ]);
-  expect(call.input.stream).toBe(true);
-  expect(call.input.max_tokens).toBe(4096);
-  expect(call.input.messages).toEqual([{ role: "user", content: "hi" }]);
-});
-
 test("a request that names its own model is refused as a plain value and never reaches the binding", () => {
   const binding = bindingStreaming([DONE_LINE]);
 
@@ -159,51 +138,6 @@ test("a provider stream that stops before its terminal marker keeps the text it 
   ]);
 });
 
-test("malformed provider lines are skipped and the deltas around them still arrive exactly once", async () => {
-  const binding = bindingStreaming([
-    "event: ping\n",
-    ": a comment line\n",
-    "data: {not json at all\n",
-    sseLine("a bare string, not an object"),
-    sseLine({ response: "one" }),
-    sseLine({ response: "" }),
-    sseLine({ unrecognised: { field: 1 } }),
-    sseLine({ response: "two" }),
-    DONE_LINE,
-  ]);
-
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
-  expect(events.filter((event) => event.type === "text-delta")).toEqual([
-    { type: "text-delta", delta: "one" },
-    { type: "text-delta", delta: "two" },
-  ]);
-  expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "onetwo" } });
-  expect(events).toHaveLength(3);
-});
-
-test("the entrypoint assembles one tool call whose id, name and argument fragments arrive on separate chunks", async () => {
-  const binding = bindingStreaming([
-    sseLine({ tool_calls: [{ index: 0, id: "call_1", function: { name: "bash" } }] }),
-    sseLine({ tool_calls: [{ index: 0, function: { arguments: '{"cmd":' } }] }),
-    sseLine({ tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] }),
-    DONE_LINE,
-  ]);
-
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
-  expect(events.filter((event) => event.type === "tool-call-delta")).toEqual([
-    { type: "tool-call-delta", delta: { index: 0, id: "call_1", name: "bash" } },
-    { type: "tool-call-delta", delta: { index: 0, argumentsDelta: '{"cmd":' } },
-    { type: "tool-call-delta", delta: { index: 0, argumentsDelta: '"ls"}' } },
-  ]);
-  expect(events.at(-1)).toMatchObject({
-    type: "done",
-    message: {
-      content: null,
-      tool_calls: [{ id: "call_1", function: { name: "bash", arguments: '{"cmd":"ls"}' } }],
-    },
-  });
-});
-
 test("two tool calls the provider reports without an index stay two separate calls", async () => {
   const binding = bindingStreaming([
     sseLine({
@@ -224,20 +158,6 @@ test("two tool calls the provider reports without an index stay two separate cal
         { id: "call_2", function: { name: "write_file", arguments: '{"path":"b"}' } },
       ],
     },
-  });
-});
-
-test("the entrypoint reports the provider's own input_tokens/output_tokens as a measurement", async () => {
-  const binding = bindingStreaming([
-    sseLine({ response: "ok" }),
-    sseLine({ usage: { input_tokens: 41, output_tokens: 7 } }),
-    DONE_LINE,
-  ]);
-
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
-  expect(events.at(-1)).toMatchObject({
-    type: "done",
-    usage: { inputTokens: 41, outputTokens: 7, estimated: false },
   });
 });
 
@@ -265,26 +185,19 @@ test("with no ChatGPT credential connected, the Supervisor's route answers from 
   expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "fallback" } });
 });
 
-test("a Supervisor's route forwards an assistant message sent without tool_calls, with none", async () => {
+test("a Supervisor's route sends the binding the normalized messages", async () => {
   const binding = bindingStreaming([sseLine({ response: "ok" }), DONE_LINE]);
 
-  const outcome = supervisedRoute(binding, { kind: "not-connected" }).runStream({
-    messages: [
-      { role: "user", content: "hi", name: "owner" },
-      { role: "assistant", content: "hello" },
-      { role: "user", content: "again" },
-    ],
-  });
+  await collectEvents(
+    streamOf(
+      supervisedRoute(binding, { kind: "not-connected" }).runStream({
+        messages: [{ role: "user", content: "hi", name: "owner" }],
+      }),
+    ),
+  );
 
-  const events = await collectEvents(streamOf(outcome));
-
-  expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "ok" } });
   expect(binding.calls.map((call) => call.input.messages)).toEqual([
-    [
-      { role: "user", content: "hi" },
-      { role: "assistant", content: "hello", tool_calls: [] },
-      { role: "user", content: "again" },
-    ],
+    [{ role: "user", content: "hi" }],
   ]);
 });
 

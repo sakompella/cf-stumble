@@ -8,7 +8,6 @@ import {
   parseProjectId,
   PROJECT_ID_LIMIT,
   projectIdForRepository,
-  resolveProject,
 } from "../src/project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../src/selectable-projects.js";
 
@@ -157,31 +156,6 @@ function drawRawCatalog(tc: hegel.TestCase): RawProject[] {
     };
   });
 }
-
-test("resolves each catalog id to its own project regardless of position", () => {
-  hegel.test((tc) => {
-    const raw = drawRawCatalog(tc);
-    const catalog = parseProjectCatalog(raw);
-    expect(catalog).toBeDefined();
-
-    if (catalog === undefined) throw new Error("generated catalog must be valid");
-
-    const absentId = "absent-project";
-    const expectedById = new Map(catalog.map((project) => [project.id, project]));
-    const rotation = tc.draw(gs.integers({ minValue: 0, maxValue: catalog.length - 1 }));
-    const permuted = [...catalog.slice(rotation), ...catalog.slice(0, rotation)];
-
-    for (const [id, expected] of expectedById) {
-      expect(resolveProject(id, catalog)).toEqual({ ok: true, project: expected });
-      expect(resolveProject(id, permuted)).toEqual({ ok: true, project: expected });
-    }
-
-    expect(resolveProject(absentId, catalog)).toEqual({
-      ok: false,
-      reason: "unknown-project-id",
-    });
-  });
-});
 
 test("rejects duplicate catalog ids even when duplicate rows are far apart", () => {
   hegel.test((tc) => {

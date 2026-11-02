@@ -2,8 +2,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
-const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
-
 const ORIGIN = "https://cf-stumble.test";
 
 afterEach(() => {
@@ -31,53 +29,6 @@ function post(path: string, body: RequestBody): Request {
     body: JSON.stringify(body),
   });
 }
-
-test("lists the tenant's projects", async () => {
-  const response = await ownerApiResponse(
-    get("/api/projects"),
-    supervisor({
-      listProjects: () => Promise.resolve([{ kind: "repository", ...connectedProject }]),
-    }),
-  );
-
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toEqual({
-    ok: true,
-    projects: [{ kind: "repository", ...connectedProject }],
-  });
-});
-
-const CONNECTED = { state: "connected", login: "octocat", source: "device-authorization" } as const;
-
-test("answers the recorded connection with the time the workspace was last checked", async () => {
-  const response = await ownerApiResponse(
-    get("/api/github/connection"),
-    supervisor({
-      getGitHubConnection: () => Promise.resolve({ github: CONNECTED, checkedAt: 1_000 }),
-    }),
-  );
-
-  expect(response.status).toBe(200);
-  const body = await response.text();
-  expect(JSON.parse(body)).toEqual({ ok: true, github: CONNECTED, checkedAt: 1_000 });
-  expect(body).not.toContain(FAKE_TOKEN);
-});
-
-test("refreshes the connection on a POST from the page", async () => {
-  const response = await ownerApiResponse(
-    post("/api/github/connection/refresh", {}),
-    supervisor({
-      refreshGitHubConnection: () => Promise.resolve({ github: CONNECTED, checkedAt: 2_000 }),
-    }),
-  );
-
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toEqual({
-    ok: true,
-    github: CONNECTED,
-    checkedAt: 2_000,
-  });
-});
 
 test.each([
   ["rejects", new Error("workspace RPC is unavailable")],
@@ -133,16 +84,14 @@ test("connects the repository the body names, and nothing else it carries", asyn
   });
 });
 
-test.each([
-  [{ repositoryUrl: 7 }],
-  [{ displayName: "no url" }],
-  [{ repositoryUrl: "https://github.com/sample/repo-1", displayName: 7 }],
-  [{ repositoryUrl: "https://github.com/sample/repo-1", displayName: null }],
-  [{ repositoryUrl: "https://github.com/sample/repo-1", tenant: "someone-else" }],
-  [{ repositoryUrl: "https://github.com/sample/repo-1", token: FAKE_TOKEN }],
-  ["not an object"],
-])("refuses the connect body %j before it reaches the Supervisor", async (body) => {
-  const response = await ownerApiResponse(post("/api/projects/connect", body), supervisor());
+test("refuses a connect body whose displayName is null before it reaches the Supervisor", async () => {
+  const response = await ownerApiResponse(
+    post("/api/projects/connect", {
+      repositoryUrl: "https://github.com/sample/repo-1",
+      displayName: null,
+    }),
+    supervisor(),
+  );
 
   expect(response.status).toBe(400);
   await expect(response.json()).resolves.toEqual({

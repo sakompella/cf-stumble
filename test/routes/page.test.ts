@@ -2,50 +2,31 @@ import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
 import { OWNER_PAGE_IDS } from "../../src/page/element-ids.js";
-import { ownerPageResponse } from "../../src/routes/index.js";
 import worker from "../../src/worker.js";
 
 const BROWSER_ACCEPT =
   "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
 
-function pageRequest(headers: Record<string, string> = {}): Request {
-  return new Request("https://cf-stumble.test/", { headers });
+function pageFetch(path: string, accept: string, method = "GET"): Promise<Response> {
+  return worker.fetch(
+    new Request(`https://cf-stumble.test${path}`, { method, headers: { accept } }),
+    env,
+  );
 }
 
-function pageFetch(path: string, accept: string): Promise<Response> {
-  return worker.fetch(new Request(`https://cf-stumble.test${path}`, { headers: { accept } }), env);
-}
+test.each([BROWSER_ACCEPT, "*/*", "application/json", ""])(
+  "GET / receives the owner page when it accepts %j",
+  async (accept) => {
+    const response = await pageFetch("/", accept);
+    const body = await response.text();
 
-test("a browser request for GET / receives the owner page", async () => {
-  const response = await worker.fetch(pageRequest({ accept: BROWSER_ACCEPT }), env);
-  const body = await response.text();
-
-  expect(response.status).toBe(200);
-  expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
-  expect(response.headers.get("cache-control")).toBe("no-store");
-  expect(body).toContain("<!doctype html>");
-  expect(body).toContain(`id="${OWNER_PAGE_IDS.root}"`);
-});
-
-test("every GET / is the owner page, whatever it accepts", () => {
-  expect(ownerPageResponse(pageRequest({ accept: "*/*" }))?.status).toBe(200);
-  expect(ownerPageResponse(pageRequest({ accept: "application/json" }))?.status).toBe(200);
-  expect(ownerPageResponse(pageRequest())?.status).toBe(200);
-});
-
-test("only GET / is the owner page", () => {
-  const posted = new Request("https://cf-stumble.test/", {
-    method: "POST",
-    headers: { accept: BROWSER_ACCEPT },
-  });
-
-  const other = new Request("https://cf-stumble.test/api/status", {
-    headers: { accept: BROWSER_ACCEPT },
-  });
-
-  expect(ownerPageResponse(posted)).toBeUndefined();
-  expect(ownerPageResponse(other)).toBeUndefined();
-});
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toContain("<!doctype html>");
+    expect(body).toContain(`id="${OWNER_PAGE_IDS.root}"`);
+  },
+);
 
 test("the page policy admits its own style and its same-origin script, and no inline code", async () => {
   const response = await pageFetch("/", BROWSER_ACCEPT);
@@ -76,13 +57,20 @@ test("the page's script is served once per path and kept by the browser", async 
   expect(await response.text()).toBe(OWNER_PAGE_SCRIPT_FILE.source);
 });
 
-test("a path the Worker does not own answers 404", async () => {
+test("a path or method the Worker does not own answers 404", async () => {
   const stale = OWNER_PAGE_SCRIPT_FILE.path.replace(/owner-[0-9a-f]+/u, "owner-0000000000000000");
 
-  for (const path of [stale, "/unknown", "/generations"]) {
-    const response = await pageFetch(path, "*/*");
+  const requests = [
+    ["GET", stale],
+    ["GET", "/unknown"],
+    ["GET", "/generations"],
+    ["POST", "/"],
+  ] as const;
 
-    expect(response.status, path).toBe(404);
+  for (const [method, path] of requests) {
+    const response = await pageFetch(path, BROWSER_ACCEPT, method);
+
+    expect(response.status, `${method} ${path}`).toBe(404);
     await expect(response.json()).resolves.toEqual({ ok: false, error: { code: "not-found" } });
   }
 });

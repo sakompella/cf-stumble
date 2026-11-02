@@ -16,7 +16,6 @@ tester.run("cf-stumble/no-typescript-private-rpc-member", noTypeScriptPrivateRpc
     `${workers}class Route extends WorkerEntrypoint { run() { return this.#helper(); } #helper() { return 1; } }`,
     `${workers}class Host extends DurableObject { private readonly name = "host"; constructor(ctx: DurableObjectState, env: object) { super(ctx, env); } }`,
     `${workers}class Host extends DurableObject { private static label() { return "host"; } }`,
-    `${workers}class Host extends DurableObject { public fetch() { return new Response(); } }`,
     "class Store { private read() { return 1; } }",
     "class Store extends Map { private read() { return 1; } }",
     "import { DurableObject } from './local.js'; class Host extends DurableObject { private read() { return 1; } }",

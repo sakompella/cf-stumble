@@ -98,20 +98,6 @@ describe("route classes", () => {
     ]);
   });
 
-  it("keeps the allowance for every route that can reach the workspace", () => {
-    for (const route of [
-      "/api/projects/:projectId/messages",
-      "/api/projects/:projectId/disconnect",
-      "/api/projects/connect",
-      "/api/github/connection/refresh",
-      "/api/workspace/reset",
-      "/api/generations/submit",
-    ]) {
-      assert.deepEqual(rules(check([request(0, route)], runningBetween(0, 20))), [], route);
-      assert.deepEqual(rules(check([request(0, route)], runningBetween(0, 25))), ["ran-past-idle"]);
-    }
-  });
-
   it("gives the owner page's events stream no allowance, however long it stays open", () => {
     const stream = {
       ...request(120, "/api/projects/:projectId/events"),

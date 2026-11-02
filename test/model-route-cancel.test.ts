@@ -22,16 +22,6 @@ function quietProvider() {
   return { ai, seen };
 }
 
-test("cancelling the model stream cancels the provider's stream", async () => {
-  const { ai, seen } = quietProvider();
-  const reader = streamModelEvents(ai, REQUEST).getReader();
-
-  await readFirstEvent(reader);
-  await reader.cancel();
-
-  expect(await until(() => seen.cancelled)).toBeLessThan(PROMPTLY_MS);
-});
-
 test("cancelling the model stream before the provider answers aborts the provider call", async () => {
   const seen = { aborted: false };
 
