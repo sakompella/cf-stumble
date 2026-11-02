@@ -17,7 +17,7 @@ type SystemMessage = Readonly<{ role: "system"; content: string }>;
 
 type UserMessage = Readonly<{ role: "user"; content: string }>;
 
-export type ToolCall = Readonly<{
+type ToolCall = Readonly<{
   id: string;
   function: Readonly<{ name: string; arguments: string }>;
 }>;

@@ -3,9 +3,9 @@ import * as gs from "@hegeldev/hegel/generators";
 import * as Schema from "effect/Schema";
 
 import type {
+  AssistantMessage,
   ModelRouteRequest,
   RouteMessage,
-  ToolCall,
   ToolDefinition,
 } from "../src/model-route-request.js";
 
@@ -36,7 +36,7 @@ const identifier = gs.text({ alphabet: "abc_-0", minSize: 1, maxSize: 8 });
 
 const ROLES = ["system", "user", "assistant", "tool"] as const;
 
-function drawToolCall(tc: hegel.TestCase): ToolCall {
+function drawToolCall(tc: hegel.TestCase): AssistantMessage["tool_calls"][number] {
   return {
     id: tc.draw(identifier),
     function: { name: tc.draw(identifier), arguments: tc.draw(text) },

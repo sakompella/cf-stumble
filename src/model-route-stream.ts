@@ -4,14 +4,14 @@ import {
   type ParsedProviderChunk,
   type TokenUsage,
 } from "./model-route-stream-parse.js";
-import type { AssistantMessage, ModelRouteRequest, ToolCall } from "./model-route.js";
+import type { AssistantMessage, ModelRouteRequest } from "./model-route.js";
 import type {
   ModelStreamEvent,
   ModelStreamInference,
   StreamingProviderPayload,
   ToolCallDelta,
 } from "./model-route-events.js";
-import { resolveUsage, type ProviderResult } from "./model-route-usage.js";
+import { resolveUsage } from "./model-route-usage.js";
 import {
   modelUnavailable,
   modelUnavailableBecause,
@@ -37,22 +37,6 @@ function buildStreamingProviderPayload(request: ModelRouteRequest): StreamingPro
   return request.tools === undefined
     ? { messages: request.messages, ...fixed }
     : { messages: request.messages, tools: request.tools, ...fixed };
-}
-
-function normalizeResponse(raw: ProviderResult): AssistantMessage {
-  const content = raw.response ?? null;
-  const toolCalls: ToolCall[] = [];
-
-  if (raw.tool_calls !== undefined) {
-    for (const tc of raw.tool_calls) {
-      toolCalls.push({
-        id: tc.id,
-        function: { name: tc.function.name, arguments: tc.function.arguments },
-      });
-    }
-  }
-
-  return { role: "assistant", content, tool_calls: toolCalls };
 }
 
 type ToolCallAccumulator = { id: string; name: string; args: string[] };
@@ -116,13 +100,10 @@ export class ProviderStreamAccumulator {
     if (chunk.truncated !== undefined) this.truncated = true;
   }
 
-  result(): ProviderResult {
-    const response = this.texts.length > 0 ? this.texts.join("") : null;
-
-    if (this.toolCalls.size === 0) return { response };
-
+  result(): AssistantMessage {
     return {
-      response,
+      role: "assistant",
+      content: this.texts.length > 0 ? this.texts.join("") : null,
       tool_calls: Array.from(this.toolCalls.values()).map((acc) => ({
         id: acc.id,
         function: { name: acc.name, arguments: acc.args.join("") },
@@ -139,12 +120,9 @@ export function finishedTurn(
   accumulator: ProviderStreamAccumulator,
   request: ModelRouteRequest,
 ): ModelTurnAnswer {
-  const result = accumulator.result();
+  const message = accumulator.result();
 
-  const answer = {
-    message: normalizeResponse(result),
-    usage: resolveUsage(accumulator.usage(), request, result),
-  };
+  const answer = { message, usage: resolveUsage(accumulator.usage(), request, message) };
 
   return accumulator.truncated ? { ...answer, truncated: true } : answer;
 }

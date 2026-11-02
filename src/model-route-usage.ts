@@ -1,10 +1,5 @@
-import type { ModelRouteRequest, ToolCall } from "./model-route.js";
+import type { AssistantMessage, ModelRouteRequest } from "./model-route.js";
 import type { ModelUsage } from "./model-route-events.js";
-
-export type ProviderResult = Readonly<{
-  response?: string | null;
-  tool_calls?: ReadonlyArray<ToolCall>;
-}>;
 
 const USAGE_BYTES = new TextEncoder();
 
@@ -17,7 +12,7 @@ function estimateTokens(byteLength: number): number {
 export function resolveUsage(
   reported: Readonly<{ inputTokens: number; outputTokens: number }> | undefined,
   request: ModelRouteRequest,
-  result: ProviderResult,
+  message: AssistantMessage,
 ): ModelUsage {
   if (reported !== undefined) {
     return {
@@ -30,7 +25,7 @@ export function resolveUsage(
   const promptBytes = USAGE_BYTES.encode(JSON.stringify(request.messages)).length;
 
   const completionBytes = USAGE_BYTES.encode(
-    (result.response ?? "") + JSON.stringify(result.tool_calls ?? []),
+    (message.content ?? "") + JSON.stringify(message.tool_calls),
   ).length;
 
   return {

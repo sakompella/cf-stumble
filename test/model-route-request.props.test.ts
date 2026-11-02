@@ -5,9 +5,9 @@ import { expect, test } from "vitest";
 
 import {
   parseRequest,
+  type AssistantMessage,
   type ModelRouteRequest,
   type RouteMessage,
-  type ToolCall,
 } from "../src/model-route-request.js";
 import { decodeWire, drawRequest, text } from "./model-route-draws.js";
 
@@ -44,7 +44,11 @@ const CONTENT_VALUES: readonly Broken[] = [undefined, 1, null, {}, []];
 
 const IDENTIFIER_VALUES: readonly Broken[] = [undefined, "", 1, null];
 
-function callMutants(call: ToolCall, where: string, withCall: Splice): Mutant[] {
+function callMutants(
+  call: AssistantMessage["tool_calls"][number],
+  where: string,
+  withCall: Splice,
+): Mutant[] {
   return [
     { where, values: ENTRY_VALUES, build: (value) => withCall(value) },
     { where, values: IDENTIFIER_VALUES, build: (value) => withCall({ ...call, id: value }) },

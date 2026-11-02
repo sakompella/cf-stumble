@@ -8,7 +8,6 @@ import type { WorkersAiBinding } from "./model-route-events.js";
 import { modelEventStream, type ModelTurn } from "./model-route-turn.js";
 
 export type {
-  ToolCall,
   AssistantMessage,
   RouteMessage,
   ToolDefinition,
