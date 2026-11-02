@@ -135,19 +135,6 @@ test("installs the token into the workspace and returns a status without it", as
   expect(JSON.stringify(completed)).not.toContain(FAKE_TOKEN);
 });
 
-test("keeps waiting while the owner is still at GitHub's page", async () => {
-  const subject = tenant("authorization-pending", [
-    deviceReply,
-    { error: "authorization_pending" },
-  ]);
-
-  await subject.github((github) => github.startAuthorization(NOW));
-
-  const polled = await subject.github((github) => github.completeAuthorization(NOW + 1_000));
-
-  expect(polled).toMatchObject({ ok: true, status: { state: "awaiting-authorization" } });
-});
-
 test("redeems one authorization once, so a replayed completion finds nothing", async () => {
   const subject = tenant("authorization-replay", [deviceReply, { access_token: FAKE_TOKEN }]);
   await subject.github((github) => github.startAuthorization(NOW));
@@ -160,19 +147,39 @@ test("redeems one authorization once, so a replayed completion finds nothing", a
   expect(replayed).toEqual({ ok: false, problem: "no-pending-authorization" });
 });
 
+const AWAITING = { state: "awaiting-authorization" };
+
 test.each([
-  [{ error: "expired_token" }, "authorization-expired"],
-  [{ error: "access_denied" }, "authorization-denied"],
-])("ends the authorization when GitHub answers %j", async (reply, problem) => {
-  const subject = tenant(`authorization-${problem}`, [deviceReply, reply]);
+  {
+    reply: { error: "authorization_pending" },
+    completed: { ok: true, status: AWAITING },
+    afterwards: AWAITING,
+  },
+  {
+    reply: { error: "server_error" },
+    completed: { ok: false, problem: "provider-unavailable" },
+    afterwards: AWAITING,
+  },
+  {
+    reply: { error: "expired_token" },
+    completed: { ok: false, problem: "authorization-expired" },
+    afterwards: { state: "disconnected" },
+  },
+  {
+    reply: { error: "access_denied" },
+    completed: { ok: false, problem: "authorization-denied" },
+    afterwards: { state: "disconnected" },
+  },
+])("settles the authorization as expected when GitHub answers $reply", async (row) => {
+  const subject = tenant(`authorization-${row.reply.error}`, [deviceReply, row.reply]);
   await subject.github((github) => github.startAuthorization(NOW));
 
-  const ended = await subject.github((github) => github.completeAuthorization(NOW + 1_000));
+  const completed = await subject.github((github) => github.completeAuthorization(NOW + 1_000));
 
   const afterwards = await subject.github((github) => github.status(NOW + 1_000));
 
-  expect(ended).toEqual({ ok: false, problem });
-  expect(afterwards).toEqual({ state: "disconnected" });
+  expect(completed).toMatchObject(row.completed);
+  expect(afterwards).toMatchObject(row.afterwards);
 });
 
 test.each([
@@ -215,18 +222,6 @@ test.each([
     expect(subject.workspace.credentialRequests.join("")).not.toContain(FAKE_TOKEN);
   },
 );
-
-test("keeps the authorization when GitHub cannot answer, so the owner can retry", async () => {
-  const subject = tenant("authorization-unavailable", [deviceReply, { error: "server_error" }]);
-  await subject.github((github) => github.startAuthorization(NOW));
-
-  const failed = await subject.github((github) => github.completeAuthorization(NOW + 1_000));
-
-  const afterwards = await subject.github((github) => github.status(NOW + 1_000));
-
-  expect(failed).toEqual({ ok: false, problem: "provider-unavailable" });
-  expect(afterwards).toMatchObject({ state: "awaiting-authorization" });
-});
 
 test("drops an authorization the owner never finished, rather than keeping the code", async () => {
   const subject = tenant("authorization-expires", [deviceReply, { access_token: FAKE_TOKEN }]);

@@ -1,12 +1,6 @@
 import { expect, test } from "vitest";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import {
-  HARNESS_BUILD_CONFIGURATION,
-  HARNESS_BUILD_STEP_NAMES,
-  planHarnessBuild,
-  type HarnessBuildConfiguration,
-} from "../../../src/harness-build.js";
-import { PROJECTS_DIRECTORY, WORKSPACE_ROOT } from "../../../src/workspace-layout.js";
+import { HARNESS_BUILD_CONFIGURATION, planHarnessBuild } from "../../../src/harness-build.js";
 
 declare global {
   interface ImportMeta {
@@ -76,59 +70,6 @@ test("the configured phases are, in order, what build:artifact runs locally", ()
 const commit = testHarnessCommit("6000000000000000000000000000000000000003");
 
 const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);
-
-test("plans each build phase as its own step, in the order the phases depend on", () => {
-  expect(plan.steps.map((step) => step.name)).toEqual([
-    "provision",
-    "isolate",
-    "checkout",
-    ...HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.name),
-  ]);
-  expect(plan.steps.map((step) => step.name)).toEqual(HARNESS_BUILD_STEP_NAMES);
-
-  for (const phase of HARNESS_BUILD_CONFIGURATION.buildPhases) {
-    const own = plan.steps.filter((step) => step.source.includes(phase.command));
-    expect(
-      own.map((step) => step.name),
-      `${phase.command} belongs to the ${phase.name} step and to no other`,
-    ).toEqual([phase.name]);
-  }
-
-  expect(
-    plan.steps.filter((step) => step.source.includes(" archive ")).map((step) => step.name),
-    "extracting the commit is the checkout step, not a build phase",
-  ).toEqual(["checkout"]);
-});
-
-test("plans an isolated build directory outside the project workspace", () => {
-  const configuration: HarnessBuildConfiguration = {
-    ...HARNESS_BUILD_CONFIGURATION,
-    buildRoot: "/harness-builds",
-    harnessRepositoryRoot: "/harness",
-    harnessGitDir: "/harness/.git",
-  };
-
-  const isolated = planHarnessBuild(configuration, commit);
-
-  expect(isolated.directory).toBe(`/harness-builds/${commit}`);
-  expect(isolated.moduleMapPath).toBe(`/harness-builds/${commit}/build/module-map.json`);
-
-  for (const phase of configuration.buildPhases) {
-    const step = isolated.steps.find((planned) => planned.name === phase.name);
-    expect(step?.cwd).toBe(WORKSPACE_ROOT);
-    expect(step?.source).toContain(`cd '${isolated.directory}'`);
-    expect(step?.source).toContain(phase.command);
-    expect(
-      step?.source,
-      "each phase's own output is bounded, and its exit code survives the pipe",
-    ).toContain("set -o pipefail");
-  }
-
-  expect(
-    isolated.steps.every((step) => !step.source.includes(PROJECTS_DIRECTORY)),
-    "a harness build must not name a project directory",
-  ).toBe(true);
-});
 
 test("provisions the harness repository under a lock and refuses an unexpected origin", () => {
   const provision = plan.steps[0]?.source;

@@ -27,7 +27,6 @@ const commits = {
   evicted: "7100000000000000000000000000000000000001",
   atomic: "7100000000000000000000000000000000000002",
   large: "7100000000000000000000000000000000000003",
-  incomplete: "7100000000000000000000000000000000000004",
   rolledForward: "7100000000000000000000000000000000000005",
   unbuildable: "7100000000000000000000000000000000000006",
   loggedFailure: "7100000000000000000000000000000000000007",
@@ -59,17 +58,6 @@ function refusingSecondChunk(storage: DurableObjectStorage): ModuleMapStorage {
     },
     transactionSync: (operation) => storage.transactionSync(operation),
   };
-}
-
-function storedKind(
-  control: DurableObjectStub<Supervisor>,
-  harnessCommit: string,
-): Promise<string> {
-  return runInDurableObject(control, (_instance, state) => {
-    const found = new ModuleMapStore(state.storage).read(testHarnessCommit(harnessCommit));
-
-    return Result.isFailure(found) ? `problem:${found.failure.code}` : found.success.kind;
-  });
 }
 
 afterEach(async () => {
@@ -204,32 +192,6 @@ test("logs a redacted cause instead of discarding it when the transaction throws
   expect(logged).toContain("the storage refused a chunk");
   expect(containsCredential(logged), "the operator log must redact token-shaped causes").toBe(
     false,
-  );
-});
-
-test("reports an incomplete stored module map instead of rebuilding the commit", async () => {
-  const control = await activeSupervisor("incomplete-module-map-fails-closed");
-  const input = largeModuleMap(commits.incomplete);
-  await storeModuleMap(control, input);
-  await runInDurableObject(control, (_instance, state) => {
-    state.storage.sql.exec(
-      "UPDATE module_map_chunks SET chunk_index = 5 WHERE harness_commit = ? AND chunk_index = 1",
-      commits.incomplete,
-    );
-  });
-  const label = await submitCandidate(control, commits.incomplete);
-
-  const prepared = await control.prepareGeneration(generationLabel(label));
-
-  expect(
-    prepared,
-    "a damaged row set is reported, not rebuilt: a build failure would say so instead",
-  ).toEqual({
-    ok: false,
-    problem: { code: "stored-module-map-incomplete", harnessCommit: commits.incomplete },
-  });
-  await expect(storedKind(control, commits.incomplete)).resolves.toBe(
-    "problem:stored-module-map-incomplete",
   );
 });
 

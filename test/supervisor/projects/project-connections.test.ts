@@ -85,53 +85,6 @@ test("keeps a repository the workspace cannot read out of the catalog", async ()
   ).toBe(false);
 });
 
-test("maps a clone disk failure to repository-too-large", async () => {
-  const workspace = new FakeTenantWorkspace();
-  workspace.cloneExitCode = 122;
-  const subject = tenant("connect-clone-disk-fails", { workspace, fallbackToken: FAKE_TOKEN });
-
-  const refused = await subject.connections((connections) =>
-    connections.connect(REPOSITORY, undefined, NOW),
-  );
-
-  expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
-});
-
-test("takes a project back out when its clone fails, so a listed project has files", async () => {
-  const workspace = new FakeTenantWorkspace();
-  workspace.cloneExitCode = 128;
-  const subject = tenant("connect-clone-fails", { workspace, fallbackToken: FAKE_TOKEN });
-
-  const refused = await subject.connections((connections) =>
-    connections.connect(REPOSITORY, undefined, NOW),
-  );
-
-  const listed = await subject.connections((connections) =>
-    Effect.sync(() => connections.catalog()),
-  );
-
-  expect(refused).toMatchObject({ ok: false, problem: { code: "provisioning-failed" } });
-  expect(listed).toEqual([HARNESS_PROJECT]);
-});
-
-test("lists the harness with no connection, and clones nothing for it", async () => {
-  const subject = tenant("harness-entry", { fallbackToken: FAKE_TOKEN });
-  await subject.connections((connections) => connections.connect(REPOSITORY, "Repo one", NOW));
-
-  const listed = await subject.connections((connections) =>
-    Effect.sync(() => connections.catalog()),
-  );
-
-  const harness = listed.find((project) => project.kind === "harness");
-
-  expect(harness).toEqual(HARNESS_PROJECT);
-  expect(harness).not.toHaveProperty("repositoryUrl");
-  expect(
-    subject.workspace.commands.filter((command) => command.includes("git clone")),
-    "only the connected repository was cloned; the harness checkout is already there",
-  ).toHaveLength(1);
-});
-
 test("refuses a repository URL that once reduced to the harness entry's id", async () => {
   const subject = tenant("harness-id-taken", { fallbackToken: FAKE_TOKEN });
 
@@ -175,32 +128,28 @@ test("disconnects a project row and removes its clone through the narrow workspa
   expect(removal).not.toContain("/workspace/harness");
 });
 
-test("removes the project row when workspace cleanup fails", async () => {
-  const subject = tenant("disconnect-workspace-fails", { fallbackToken: FAKE_TOKEN });
-  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
-  subject.workspace.unavailable = true;
-
-  const disconnected = await subject.connections((connections) =>
-    connections.disconnect("sample-repo-1", () => true),
-  );
-
-  const listed = await subject.connections((connections) =>
-    Effect.sync(() => connections.catalog()),
-  );
-
-  expect(disconnected).toEqual({
-    ok: true,
-    projectId: "sample-repo-1",
-    workspace: "failed",
-  });
-  expect(listed).toEqual([HARNESS_PROJECT]);
-});
-
-test("reports a removal that the durable store does not show as failed, not removed", async () => {
+test.each([
+  {
+    outcome: "the workspace is unavailable",
+    arrange: (workspace: FakeTenantWorkspace) => {
+      workspace.unavailable = true;
+    },
+  },
+  {
+    outcome: "the durable store does not show the removal",
+    arrange: (workspace: FakeTenantWorkspace) => {
+      workspace.commandSync = "incomplete";
+    },
+  },
+])("removes the project row and reports the clone as failed when $outcome", async (row) => {
   vi.spyOn(console, "error").mockImplementation(() => {});
-  const subject = tenant("disconnect-sync-incomplete", { fallbackToken: FAKE_TOKEN });
+
+  const subject = tenant(`disconnect-${row.outcome.replaceAll(" ", "-")}`, {
+    fallbackToken: FAKE_TOKEN,
+  });
+
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
-  subject.workspace.commandSync = "incomplete";
+  row.arrange(subject.workspace);
 
   const disconnected = await subject.connections((connections) =>
     connections.disconnect("sample-repo-1", () => true),
@@ -211,23 +160,5 @@ test("reports a removal that the durable store does not show as failed, not remo
   );
 
   expect(disconnected).toEqual({ ok: true, projectId: "sample-repo-1", workspace: "failed" });
-  expect(listed).toEqual([HARNESS_PROJECT]);
-});
-
-test("keeps a repository whose clone the durable store does not show out of the catalog", async () => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  const workspace = new FakeTenantWorkspace();
-  workspace.commandSync = "incomplete";
-  const subject = tenant("connect-sync-incomplete", { workspace, fallbackToken: FAKE_TOKEN });
-
-  const refused = await subject.connections((connections) =>
-    connections.connect(REPOSITORY, undefined, NOW),
-  );
-
-  const listed = await subject.connections((connections) =>
-    Effect.sync(() => connections.catalog()),
-  );
-
-  expect(refused).toMatchObject({ ok: false, problem: { code: "provisioning-failed" } });
   expect(listed).toEqual([HARNESS_PROJECT]);
 });

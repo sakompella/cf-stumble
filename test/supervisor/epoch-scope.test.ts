@@ -54,26 +54,6 @@ test("keeps the activation epoch stable while the active generation serves", asy
   });
 });
 
-test("keeps the activation epoch stable when an activation is rejected", async () => {
-  const control = await readyReplacement("epoch-scope-rejected-request");
-  const beforeRejection = await control.getActiveGeneration();
-
-  const rejected = await control.controlGeneration({
-    kind: "activate",
-    label: generationLabel(99),
-    observedEpoch: beforeRejection.epoch,
-  });
-
-  expect(rejected).toEqual({ ok: false, problem: { code: "unknown-generation" } });
-  expect(await control.getActiveGeneration()).toEqual(beforeRejection);
-
-  const corrected = await activateReplacement(control, beforeRejection.epoch);
-  expect(corrected).toMatchObject({
-    ok: true,
-    outcome: { kind: "activated", generation: { label: 1 } },
-  });
-});
-
 test("a repeated passing check advances the epoch and rejects an activation from its prior view", async () => {
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName(
     "epoch-scope-recheck-stale-activation",

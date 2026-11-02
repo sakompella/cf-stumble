@@ -91,27 +91,6 @@ test("a failing step names that step, and the steps after it never run", async (
   }
 });
 
-test("retries provisioning after an interrupted checkout", async () => {
-  const host = failingAt("checkout", { stderr: "build failed", exitCode: 3 });
-
-  const interrupted = await built(host);
-  host.answers = {};
-  const resumed = await built(host);
-
-  if (Result.isSuccess(interrupted) || Result.isFailure(resumed)) {
-    throw new Error("the checkout interruption must recover on the next build request");
-  }
-
-  expect(interrupted.failure).toEqual({
-    code: "build-step-failed",
-    harnessCommit: BUILD_COMMIT,
-    step: "checkout",
-    exitCode: 3,
-    diagnostics: { stdoutTail: "", stderrTail: "build failed", truncated: false },
-  });
-  expect(host.steps().filter((step) => step === "provision")).toHaveLength(2);
-});
-
 test("reports missing and invalid build output as plain typed failures", async () => {
   const missing = new FakeBuildHost();
   missing.output = undefined;

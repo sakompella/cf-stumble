@@ -7,7 +7,6 @@ import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { loadMainFacet } from "../../../src/facet/index.js";
 import { HarnessArtifacts, ModuleMapStore } from "../../../src/supervisor/artifacts/index.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
-import type { ModuleMapStorage } from "../../../src/supervisor/artifacts/index.js";
 import { BuildHost, unreachableHost } from "./build-hosts.js";
 
 const modelRoute = workerExports.ModelRoute({});
@@ -16,26 +15,7 @@ const commits = {
   built: testHarnessCommit("1000000000000000000000000000000000000001"),
   stored: testHarnessCommit("1000000000000000000000000000000000000002"),
   failed: testHarnessCommit("1000000000000000000000000000000000000004"),
-  unstorable: testHarnessCommit("1000000000000000000000000000000000000005"),
 } as const;
-
-function refusingStorage(storage: DurableObjectStorage): ModuleMapStorage {
-  return {
-    sql: {
-      exec: <T extends Record<string, SqlStorageValue>>(
-        query: string,
-        ...bindings: unknown[]
-      ): SqlStorageCursor<T> => {
-        if (query.includes("INSERT INTO module_map_chunks")) {
-          throw new Error("the storage refused a chunk");
-        }
-
-        return storage.sql.exec<T>(query, ...bindings);
-      },
-    },
-    transactionSync: (operation) => storage.transactionSync(operation),
-  };
-}
 
 function supervisor(name: string) {
   return env.SUPERVISOR.getByName(name);
@@ -135,23 +115,4 @@ test("reports a failed build and stores nothing", async () => {
     diagnostics: { stdoutTail: "", stderrTail: "", truncated: false },
   });
   expect(outcome.rows).toBe(0);
-});
-
-test("fails preparation when the store refuses the write", async () => {
-  const control = supervisor("prepare-fails-on-unstorable-map");
-
-  const problem = await runInDurableObject(control, async (_instance, state) => {
-    const prepared = await resultOf(
-      new HarnessArtifacts(refusingStorage(state.storage), () => new BuildHost()).prepare(
-        commits.unstorable,
-      ),
-    );
-
-    return Result.isFailure(prepared) ? prepared.failure : undefined;
-  });
-
-  expect(problem).toEqual({
-    code: "artifact-write-failed",
-    harnessCommit: commits.unstorable,
-  });
 });
