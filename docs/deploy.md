@@ -89,7 +89,7 @@ The image also carries the packages your harness build needs, fetched from the l
 
 Your first submission is slow. Installing packages and bundling the harness takes most of that time. It is not stuck.
 
-The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk). Activating or rolling back a generation takes under a second.
+The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk), set by `WORKSPACE_CONTAINER_INSTANCE` in `src/workspace/container-instance.ts`. Activating or rolling back a generation takes under a second.
 
 The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules` and `/tmp`. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
 
