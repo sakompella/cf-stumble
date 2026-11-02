@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { OWNER_PAGE_SCRIPT_FILE, ownerPageHtml } from "../../src/page/index.js";
+import {
+  OWNER_PAGE_FAVICON,
+  OWNER_PAGE_SCRIPT_FILE,
+  ownerPageHtml,
+  ownerPagePolicy,
+} from "../../src/page/index.js";
 import {
   NEW_PROJECT,
   authorizationPayload,
@@ -35,10 +40,7 @@ export function sendOwnerPage(res: ServerResponse): void {
   res.writeHead(200, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
-    "content-security-policy":
-      `default-src 'none'; connect-src 'self'; img-src 'self'; ` +
-      `style-src 'nonce-${nonce}'; script-src 'self'; ` +
-      `form-action 'none'; base-uri 'none'; frame-ancestors 'none'`,
+    "content-security-policy": ownerPagePolicy(nonce),
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
   });
@@ -58,6 +60,15 @@ export function sendOwnerPageScript(res: ServerResponse): void {
     "x-content-type-options": "nosniff",
   });
   res.end(OWNER_PAGE_SCRIPT_FILE.source);
+}
+
+export function isOwnerPageFaviconPath(path: string): boolean {
+  return path === OWNER_PAGE_FAVICON.path;
+}
+
+export function sendOwnerPageFavicon(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "image/svg+xml" });
+  res.end(OWNER_PAGE_FAVICON.source);
 }
 
 function field(body: JsonValue, key: string): JsonValue | undefined {

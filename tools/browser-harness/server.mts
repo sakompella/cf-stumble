@@ -6,9 +6,11 @@ import type { GenerationRecord, GenerationState } from "./fixtures-generation.mj
 import { openConversations, type Conversations } from "./conversations.mjs";
 import { parseJsonRecordText, type JsonValue } from "../json.mjs";
 import {
+  isOwnerPageFaviconPath,
   isOwnerPageScriptPath,
   sendJson,
   sendOwnerPage,
+  sendOwnerPageFavicon,
   sendOwnerPageScript,
   serveJsonRoute,
 } from "./server-routes.mjs";
@@ -127,9 +129,9 @@ async function handle(
     return;
   }
 
-  if (req.method === "GET" && path === "/favicon.ico") {
-    record.status = 204;
-    res.writeHead(204).end();
+  if (req.method === "GET" && isOwnerPageFaviconPath(path)) {
+    record.status = 200;
+    sendOwnerPageFavicon(res);
 
     return;
   }

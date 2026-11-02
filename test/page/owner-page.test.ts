@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { ownerPageHtml, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
+import { ownerPageHtml, OWNER_PAGE_FAVICON, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
 import { OWNER_PAGE_IDS } from "../../src/page/element-ids.js";
 
 test("the document is a container for the program and one same-origin script, and nothing else can run or style the page", () => {
@@ -11,7 +11,10 @@ test("the document is a container for the program and one same-origin script, an
     `<script src="${OWNER_PAGE_SCRIPT_FILE.path}">`,
   ]);
   expect(html).not.toMatch(/\son[a-z]+=/u);
-  expect(html).not.toMatch(/<(?:link|img|iframe)\b/u);
+  expect(html.match(/<link\b[^>]*>/gu)).toEqual([
+    `<link rel="icon" type="image/svg+xml" href="${OWNER_PAGE_FAVICON.path}" />`,
+  ]);
+  expect(html).not.toMatch(/<(?:img|iframe)\b/u);
 });
 
 test("the script's path names a hash of its bytes", async () => {
