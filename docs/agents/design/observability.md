@@ -61,8 +61,8 @@ For past events, open the Cloudflare dashboard, Workers & Pages, `cf-stumble`, O
 filter on `event` (for example `event = run.settled`). Workers Logs keeps events for 7 days.
 
 Cloudflare Issues and Workers traces are on (`observability.issues` and `observability.traces` in
-`cloudflare.config.ts`); a deployment from a configuration without `issues`
-turns Issues off. Issues groups uncaught exceptions, failed invocations, 5xx responses, and
+`infra/alchemy.run.ts`; traces only on the stage `prod`); a deployment from a configuration without
+`issues` turns Issues off. Issues groups uncaught exceptions, failed invocations, 5xx responses, and
 `console.error` output, so an `error` event appears there; it ignores `warn`, and it misses work
 that is slow or expensive but succeeds. Every sampling rate is 1. A span is one event in the logs
 quota (20 million a month on Workers Paid, then $0.60 per million); one cold start of the workspace

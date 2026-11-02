@@ -11,26 +11,42 @@ You need:
 - A Cloudflare account on the Workers Paid plan. This project uses Durable Objects with SQLite storage, Containers, and Worker Loaders. They are not available on the free plan.
 - A GitHub account.
 - A domain in the same Cloudflare account for the Worker's route.
+- Docker, to build the Container image.
 
 The workspace runs project commands and can make Workers AI requests. Use an account where you can control the resulting charges.
 
 ## Configuration files
 
-`cloudflare.config.ts` is the only Worker configuration. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the Workers AI and loader bindings. It declares one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"), and no per-instance values or secrets: instance values are secrets set per instance (see "Instance secrets"). `cf build`, `cf deploy`, and the test runner read it.
+`infra/alchemy.run.ts` is the only Worker configuration. It is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.84, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that the test runner reads too: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, and the one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"). Neither file declares per-instance values or secrets (see "Instance secrets").
 
-The file exports a function of the mode. A plain `cf deploy` leaves the mode undefined and gets the production configuration. Vitest passes the mode `test`, which names the Worker `cf-stumble-test` and leaves out the Workers AI binding, because the test runtime has no AI service to reach. Everything else is the same in both modes, and `test/docs/cloudflare-config.test.ts` checks that. Do not deploy with `--mode test`.
+The stack is a function of the stage:
 
-`wrangler.config.ts` is not Worker configuration. `cf build` and `cf deploy` delegate to the `wrangler` dev dependency, and Wrangler reads its `build.command` from this file. The command, `pnpm run build:page`, writes the owner page's script before Wrangler bundles the Worker. Without the file, the bundle step fails on a fresh checkout, or ships a stale page script on a checkout that has an old one, because `cloudflare.config.ts` has no field for a build command. The file also turns off type generation, so a build does not rewrite `.cloudflare/types`. `cf` also needs `wrangler` declared in `package.json`: without it, `cf build` stops with "No Cloudflare dev server is installed".
+- The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, no `workers.dev` subdomain, a `standard-3` container, and traces on.
+- Any other stage `<stage>` is a separate Worker, `cf-stumble-<stage>`, with its own container application `cf-stumble-<stage>-workspacehost`, a `workers.dev` subdomain without preview URLs, no route, a `standard-1` container, and traces off.
+- Vitest builds its Worker, `cf-stumble-test`, from `infra/worker-settings.ts` and leaves out the Workers AI binding, because the test runtime has no AI service to reach.
 
-`cf` has no `--config` flag, so a staging copy needs its own directory (see `.agents/skills/cf-operations/references/staging.md`). Two commands stay on Wrangler, because `cf` has no equivalent: `pnpm exec wrangler tail cf-stumble` streams logs, and the staging cleanup removes a Worker with `npx wrangler delete`, which also removes its Durable Object namespaces.
+Alchemy is its own pnpm project in `infra/`, with its own lockfile, because Alchemy 2.0.0-beta.84 needs Effect 4.0 while the Worker uses Effect 4.1, and the Worker's dependency tree, which the Container image copies, should not change for Alchemy. `pnpm install:infra` installs it; `pnpm verify` and `pnpm run deploy` run that first.
 
-Use `cf deploy` as the only deploy path for the Worker. If Workers Builds is connected to the Worker, disable or reconfigure it first, so that an automatic build does not deploy through another path.
+Run Alchemy from the repository root, because the stack names its files relative to it: `pnpm alchemy <command> --config infra/alchemy.run.ts --stage <stage>`. The commands you need:
 
-Do not remove `Supervisor` or `WorkspaceHost` from `exports`, and do not change their `storage` value. A missing or mismatched class can orphan that class's stored data. Cloudflare cannot roll a Durable Object lifecycle change back to a version from before the change, so do not rely on a rollback across the first deployment that uses `exports`.
+- `pnpm run deploy` writes the owner page's script with `pnpm run build:page` and deploys the stage `prod`. Alchemy does not run a build command of its own, so a deploy of another stage needs `pnpm run build:page` first.
+- `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod` lists what a deploy would change, and changes nothing.
+- `pnpm alchemy logs --config infra/alchemy.run.ts --stage prod --tail` streams the Worker's logs. `pnpm exec wrangler tail cf-stumble --format json` also works and gives JSON.
+- `pnpm alchemy destroy --config infra/alchemy.run.ts --stage <stage>` deletes a stage's Worker and container application.
+
+Alchemy keeps what it deployed for each stage in the account, in a Worker named `alchemy-state-store` (ADR-0049). The first `plan` or `deploy` on an account creates that Worker and two secrets in the account's default Secrets Store, and saves its address and token under `~/.alchemy/profiles/`. Any machine with credentials for the account reads the same state. Do not delete the state store while a stage exists: Alchemy then forgets what it deployed, and the next deploy must pass `--adopt` to take the existing resources back.
+
+Alchemy reads `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, or a profile that `pnpm alchemy profile edit --profile default --add Cloudflare` writes. The staging rehearsal used the OAuth token of the `cf` login (`oauth_token` in `~/.config/cloudflare/config/default.json`, after `pnpm exec cf auth whoami` refreshed it). `cf` stays for secrets, container applications, registry images, and deployment lists, and `wrangler` stays for `wrangler tail`, the bundle size check, and the test runner.
+
+Alchemy changes two things that `cf deploy` did not. It adds plain-text variables named `ALCHEMY_*` to the Worker. It also turns on the `new_module_registry` compatibility flag unless the Worker sets `legacy_module_registry`, so the stack sets that flag to keep the module registry that `cf deploy` used.
+
+Use `pnpm run deploy` as the only deploy path for the Worker. If Workers Builds is connected to the Worker, disable or reconfigure it first, so that an automatic build does not deploy through another path. Alchemy does not see changes made outside it, such as a dashboard edit or a `cf deploy`: the next deploy is a no-op unless the stack changed. Deploy with `--force` to write the stack's settings again.
+
+Do not rename or remove `Supervisor` or `WorkspaceHost`, or their bindings. Alchemy writes the Durable Object migrations, and a class that disappears from the stack can orphan or delete that class's stored data.
 
 ## Instance secrets
 
-Values that differ per instance are Worker secrets, set once per instance and never committed. `cloudflare.config.ts` declares none of them. The only plain-text variable it declares is `CHATGPT_MODEL`, which is the same for every deployment and which `cf deploy` keeps because it is declared. `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`. A declared secret would also be required, and a required secret makes the first deploy of a new Worker fail.
+Values that differ per instance are Worker secrets, set once per instance and never committed. No file declares them, and an Alchemy deploy keeps secrets that the stack does not declare: the staging rehearsal set all three below, deployed a changed Worker, and found all three afterwards. The only plain-text variable the stack declares is `CHATGPT_MODEL`, which is the same for every deployment.
 
 | Secret                   | Required by the Worker | Purpose                                        |
 | ------------------------ | ---------------------- | ---------------------------------------------- |
@@ -38,50 +54,73 @@ Values that differ per instance are Worker secrets, set once per instance and ne
 | `GITHUB_OAUTH_CLIENT_ID` | No                     | The GitHub OAuth app for the device flow.      |
 | `GH_TOKEN`               | No                     | An unattended-run GitHub credential.           |
 
-Set them in one of two ways:
+Set each one after the first deploy, when the Worker exists:
 
-- Put them in a JSON or `.env` file outside the repository and run `pnpm exec cf deploy --secrets-file <file>`. Delete the file afterward.
-- Run `pnpm exec cf workers secrets update <NAME> --worker <worker> --type secret_text --text '<value>'` for each name. The value appears in the command line and the shell history, so prefer `--secrets-file` for a credential such as `GH_TOKEN`.
+```sh
+pnpm exec cf workers secrets update <NAME> --worker <worker> --type secret_text --text '<value>'
+```
 
-Every later deploy keeps them. An instance whose values are still plain-text variables must convert them with `--secrets-file`; that turns them into secrets. Running `cf workers secrets update` for a name that is already a plain variable is untested.
+The value appears in the command line and the shell history. For a credential such as `GH_TOKEN`, keep the value in a file outside the repository, pass `--text "$(cat <file>)"`, and delete the file afterward.
+
+Every later deploy keeps them.
 
 `scripts/deploy/check-config.sh` checks that `CF_STUMBLE_HARNESS_COMMIT` is in your shell.
 
 ## Deploy an update
 
-Deploy with `cf deploy`, run under Node through `pnpm exec cf`. It builds the Container image, which needs Docker. `cf` cannot load `cloudflare.config.ts` under Bun. Agents follow the same steps with their completion checks in `.agents/skills/cf-operations/SKILL.md`.
+Deploy with `pnpm run deploy`. It builds the Container image, which needs Docker, and pushes it to the account's registry. On the Mac, Alchemy's push of the image's 1 GB layer through OrbStack failed with "use of closed network connection" during the staging rehearsal; run the deploy again on a steady network. Agents follow the same steps with their completion checks in `.agents/skills/cf-operations/SKILL.md`.
 
 Before you deploy:
 
 1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
-2. Run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` does not read that config by itself: pass `--token-file ~/.config/cloudflare/config/default.json` or set `CLOUDFLARE_API_TOKEN` (see `docs/agents/design/observability.md`, "Credentials"). If more than one account is visible, set `CLOUDFLARE_ACCOUNT_ID`.
+2. Set the credentials (see "Configuration files") and run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` does not read that config by itself: pass `--token-file ~/.config/cloudflare/config/default.json` or set `CLOUDFLARE_API_TOKEN` (see `docs/agents/design/observability.md`, "Credentials").
 3. Check that the instance secrets you rely on exist: `pnpm exec cf workers secrets list --worker <worker>`. A deploy keeps secrets, so a missing one stays missing.
 4. Check that the last container rollout finished. `pnpm exec cf containers applications get <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Checking a running deployment", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
-5. Run `pnpm exec cf deploy --dry-run` first. It builds the image and lists the bindings, and it uploads nothing.
+5. Run `pnpm run build:page`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change.
 
-Then run `pnpm exec cf deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
-
-`cf deploy` can print "Deploy complete" and still have aborted with "Aborting the upload operation because of conflicts ... remove the --strict flag". That happens when someone last changed the live Worker in the dashboard or through the script API. Check the exit code and the deployment list, not the final line. Fix it by deploying once with the settings you want, or by re-applying the dashboard change in `cloudflare.config.ts`.
+Then run `pnpm run deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
 
 After the deploy, compare against what you had before:
 
-- The deployment list (`pnpm exec cf workers deployments list`, with the Worker name) shows a new version at 100%.
-- The container application keeps its id, and its version goes up. A new application id means the deploy created a second application instead of updating the first. Check that the `name` in `cloudflare.config.ts` still equals `<worker>-workspacehost`.
+- The deployment list (`pnpm exec cf workers deployments list --worker <worker>`) shows a new version at 100%.
+- The container application keeps its id, and its version goes up. A new application id means the deploy created a second application instead of updating the first.
 - The Durable Object namespace ids for `Supervisor` and `WorkspaceHost` are unchanged, and the secret names are the same as before.
-- The Worker's Observability settings still show logs, traces, and Issues on. A configuration without `observability.issues` turns Issues off.
+- The Worker's Observability settings still show logs, traces, and Issues on.
 - `pnpm ops:check --since 1h` prints a check mark, or only findings you can explain. The idle stop fires ten minutes after the last work (`workspace.container.idle-stop`).
 
-For a risky change, stage it first on a separate Worker with its own name and container, then delete everything you created. The procedure, with the cleanup list and the proof that only the production Worker remains, is in `.agents/skills/cf-operations/SKILL.md`, "Stage a risky change".
+For a risky change, stage it first on a separate stage with its own Worker and container, then destroy it. The procedure, with the cleanup list and the proof that only the production Worker remains, is in `.agents/skills/cf-operations/SKILL.md`, "Stage a risky change".
 
 Workers Logs keeps events for 7 days. After a deploy that changes lifecycle behavior, copy out the events you need as evidence before they expire.
 
+## Switch production from `cf deploy` to Alchemy
+
+Production was deployed with `cf deploy` from `cloudflare.config.ts` until the commit that added `infra/alchemy.run.ts`. The first Alchemy deploy adopts the existing Worker `cf-stumble` and its container application instead of creating new ones. Treat the Durable Object data as lost: the staging rehearsal kept the namespace ids, but production holds nothing that needs to survive, so this procedure does not depend on it. The instance secrets do survive (see "Instance secrets").
+
+1. Record what is there now: `pnpm exec cf workers deployments list --worker cf-stumble`, `pnpm exec cf workers secrets list --worker cf-stumble`, the container application id and version, and the Worker's bindings and settings (`GET /accounts/<account-id>/workers/scripts/cf-stumble/settings`). Find the commit before the switch, which the rollback deploys: `git rev-parse "$(git log --diff-filter=A --format=%H -- infra/alchemy.run.ts)~1"`.
+2. Use a machine with Docker and a steady network, and set the credentials (see "Configuration files").
+3. Run `pnpm run build:page`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod --adopt`. The first plan on the account also creates the state store. Expect the Worker as a create (Alchemy adopts it when it finds a Worker with that name) and the container application as adopted. Stop if the plan shows anything else.
+4. Run `pnpm run deploy --adopt`.
+5. Check the result against step 1. The secrets list has the same names. The bindings are `AI`, `CHATGPT_MODEL`, `LOADER`, `SUPERVISOR`, and `WORKSPACE_HOST`, plus the `ALCHEMY_*` variables. The route is `stumble.akompella.dev/*`, the `workers.dev` subdomain is off, and the container application id is unchanged. `GET /health` returns `{"ok":true}`. Submit and activate a generation (see "First run"), send a message, and check that its turn runs a tool call. Then run `pnpm ops:check --since 1h`.
+
+To roll back, deploy the commit from step 1 with `cf deploy`:
+
+```sh
+git worktree add --detach /tmp/cf-stumble-rollback <commit>
+cd /tmp/cf-stumble-rollback
+pnpm install --frozen-lockfile
+pnpm exec cf auth whoami
+pnpm exec cf deploy
+```
+
+Run `cf deploy` in a terminal. It warns that the Worker was last updated through the script API and asks whether to continue; answer yes. Without a terminal it answers no for you, prints "Aborting the upload operation because of conflicts", and exits 1. A rehearsal on a throwaway Worker without a container (Alchemy deploy, then `cf deploy`, then `pnpm alchemy deploy --force`) kept the Worker's secret through both switches; a rollback of the container application is untested. To return to Alchemy after a rollback, run `pnpm run deploy --force`, because Alchemy does not see that the Worker changed.
+
 ## Container image
 
-`cloudflare.config.ts` points to `containers/computerd.Dockerfile`, not to a registry image. The Dockerfile builds `computerd`, Cloudflare Computer's container daemon, from a pinned public source commit with one small patch, then copies it into a Debian and Node image. The first image build fetches that source and its npm packages, so it takes a few minutes longer than copying a prebuilt binary.
+The stack points the Container at `containers/computerd.Dockerfile`, not at a registry image. The Dockerfile builds `computerd`, Cloudflare Computer's container daemon, from a pinned public source commit with one small patch, then copies it into a Debian and Node image. The first image build fetches that source and its npm packages, so it takes a few minutes longer than copying a prebuilt binary.
 
 This indirection is required. Cloudflare Containers only pull images from the deploying account's managed registry or from a registry that account has configured. A direct reference to the public image fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Workers Builds has Docker, so it builds this Dockerfile and pushes the result to the deploying account's managed registry.
 
-If you deploy by hand, use Docker. Podman does not work for this deployment because it can rewrite the image manifest when it pushes, leaving Wrangler with a local digest that Cloudflare cannot find in the registry. The resulting deployment error is `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
+If you deploy by hand, use Docker. Podman does not work for this deployment because it can rewrite the image manifest when it pushes, leaving the deploy with a local digest that Cloudflare cannot find in the registry. The resulting deployment error is `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
 
 The image also carries the packages your harness build needs, fetched from the lockfile. That makes it about a gigabyte larger and your first build several minutes faster, because the build reads packages from the image instead of the network.
 
@@ -117,9 +156,9 @@ As the owner, send `POST /api/workspace/reset` to recover. Projects and the harn
 
 ## One entry point
 
-`cloudflare.config.ts` sets `workersDev: false`. Your instance answers on the hostname you gave the Worker a route for, and nowhere else.
+The stage `prod` has no `workers.dev` subdomain. Your instance answers on the hostname you gave the Worker a route for, and nowhere else.
 
-If you want the subdomain as well, set `workersDev: true`.
+If you want the subdomain as well, set `workersDev` for production in `infra/alchemy.run.ts`.
 
 ## Connect a project
 
@@ -139,7 +178,7 @@ To remove a connected project, send `POST /api/projects/{id}/disconnect`. The re
 
 ## Connect ChatGPT
 
-The model route answers from the fixed Workers AI model until you connect a ChatGPT account. After that it answers from OpenAI's Responses API with your ChatGPT subscription, using the model that `CHATGPT_MODEL` names in `cloudflare.config.ts` (`gpt-6.1-sol`). The Supervisor keeps the access and refresh tokens in its SQLite and refreshes them itself, so you connect once per instance. Your browser and the harness never receive a token. See ADR-0047.
+The model route answers from the fixed Workers AI model until you connect a ChatGPT account. After that it answers from OpenAI's Responses API with your ChatGPT subscription, using the model that `CHATGPT_MODEL` names in `infra/worker-settings.ts` (`gpt-6.1-sol`). The Supervisor keeps the access and refresh tokens in its SQLite and refreshes them itself, so you connect once per instance. Your browser and the harness never receive a token. See ADR-0047.
 
 Connect from the owner page:
 
@@ -187,4 +226,4 @@ A wrong URL fails safely. The first build step tries to clone it, fails, and rep
 
 Workers Paid, Container time, and Workers AI requests can cost money. The Workspace Host stops the container ten minutes after the last work (ADR-0043), so an unused instance costs little. A client that keeps calling a route that touches the workspace keeps the container running, and `pnpm ops:check` counts each call as work, so it does not report it (`docs/agents/incident-2026-09-container-cost.md`).
 
-Delete the Worker, the Container application, and the old images in the account's registry when you no longer need the instance. Each deploy of a new image leaves the previous one in the registry as rollback history; list them with `pnpm exec cf containers images list` and remove the ones you will not roll back to with `pnpm exec cf containers images delete <repository>:<tag>`.
+Delete the Worker and the Container application with `pnpm alchemy destroy --config infra/alchemy.run.ts --stage prod`, and delete the old images in the account's registry, when you no longer need the instance. Delete the `alchemy-state-store` Worker and its two Secrets Store secrets only when no stage on the account remains. Each deploy of a new image leaves the previous one in the registry as rollback history; list them with `pnpm exec cf containers images list` and remove the ones you will not roll back to with `pnpm exec cf containers images delete <repository>:<tag>`.

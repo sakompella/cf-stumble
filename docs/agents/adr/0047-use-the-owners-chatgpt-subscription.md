@@ -60,7 +60,7 @@ if it still holds. The owner's ChatGPT view shows the limit, with its end when k
 refusals, such as `subscription_sharing_user_not_eligible` or
 `subscription_sharing_usage_unavailable`, still fail the call.
 
-**The model is fixed per deployment.** `CHATGPT_MODEL` in `cloudflare.config.ts` names it
+**The model is fixed per deployment.** `CHATGPT_MODEL` in `infra/worker-settings.ts` names it
 (`gpt-6.1-sol`, the model OpenAI's token sharing documentation uses in its examples). The request
 uses medium reasoning effort, `store: false` and streaming, and passes system messages as
 `instructions`, because the token sharing preview accepts only that shape. A caller still cannot

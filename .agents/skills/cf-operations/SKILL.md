@@ -1,13 +1,13 @@
 ---
 name: cf-operations
-description: Operate a cf-stumble instance on Cloudflare with `cf`. Use when deploying with `cf deploy`, checking a deployment or runtime with `pnpm ops:check`, staging a risky change on a throwaway Worker, or diagnosing container cost and idle stops.
+description: Operate a cf-stumble instance on Cloudflare with Alchemy and `cf`. Use when deploying with `pnpm run deploy`, checking a deployment or runtime with `pnpm ops:check`, staging a risky change on a throwaway Worker, or diagnosing container cost and idle stops.
 ---
 
 # Operate a cf-stumble instance
 
-Placeholders: `<worker>` is `worker.name` in `cloudflare.config.ts`. `<account-id>` comes from `pnpm exec cf accounts list`. `<container-app-id>` is the `id` of the application named `<worker>-workspacehost` in `GET /accounts/<account-id>/containers/applications`. Look each one up; never copy one from another instance.
+Placeholders: `<worker>` is `cf-stumble` for the stage `prod` and `cf-stumble-<stage>` for any other stage (`workerName` in `infra/worker-settings.ts`). `<account-id>` comes from `pnpm exec cf accounts list`. `<container-app-id>` is the `id` of the application named `<worker>-workspacehost` in `GET /accounts/<account-id>/containers/applications`. Look each one up; never copy one from another instance.
 
-Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live `cf` or `wrangler` call: it shows the account and refreshes the login that `cf` keeps in its config. `pnpm ops:check` does not use that login by itself; see the Check branch.
+Run Alchemy from the repository root as `pnpm alchemy <command> --config infra/alchemy.run.ts --stage <stage>`, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set (`docs/deploy.md`, "Configuration files"). Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live `cf`, `wrangler`, or Alchemy call: it shows the account and refreshes the login that `cf` keeps in its config. `pnpm ops:check` does not use that login by itself; see the Check branch.
 
 The owner API needs no credential: call it with plain `curl`.
 
@@ -28,11 +28,11 @@ Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth who
 
 ### 2. Deploy
 
-Run `pnpm exec cf deploy --dry-run` and read the bindings it lists. Then run `pnpm exec cf deploy`. Never deploy the Worker with another tool. Never pass `--var`: `cf deploy` removes plain-text variables that `cloudflare.config.ts` does not declare.
+Run `pnpm run build:page`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change. Then run `pnpm run deploy`. Never deploy the Worker with another tool. If anything changed the Worker outside Alchemy (the dashboard, `cf deploy`), run `pnpm run deploy --force`: a plain deploy is then a no-op. If the image push fails with "use of closed network connection", run the deploy again on a steady network.
 
-`cf deploy` can print "Deploy complete" after it aborted on a conflict (the live Worker was last edited in the dashboard or through the script API). Trust the exit code.
+The first Alchemy deploy of a production that `cf deploy` deployed follows `docs/deploy.md`, "Switch production from `cf deploy` to Alchemy", and needs Aditya's go-ahead.
 
-**Complete when:** the exit code is 0 and the deployment list (`pnpm exec cf workers deployments list`) shows a new version at 100%.
+**Complete when:** the exit code is 0 and the deployment list (`pnpm exec cf workers deployments list --worker <worker>`) shows a new version at 100%.
 
 ### 3. Compare
 
@@ -64,19 +64,19 @@ List the account's Workers, container applications, Durable Object namespaces, a
 
 ### 2. Build the staging copy
 
-Create a worktree and a staging directory with a unique Worker name and container name. `cf` has no `--config` flag, so the directory holds its own `cloudflare.config.ts` and `wrangler.config.ts`.
+Create a worktree and pick a unique stage name. The stack turns any stage other than `prod` into a Worker `cf-stumble-<stage>` with a `workers.dev` subdomain, no route, traces off, and a `standard-1` container named `cf-stumble-<stage>-workspacehost`.
 
-**Complete when:** the configuration has a unique `name` that differs from `<worker>`, `workersDev: true`, no `triggers`, a container named `<name>-workspacehost`, and instance type `standard-1`; and you printed these values and checked them before the deploy.
+**Complete when:** the stage is unique and is not `prod`, and `pnpm alchemy plan` for it lists only resources named `cf-stumble-<stage>` (plus the state store on an account that has none).
 
 ### 3. Deploy and exercise
 
-Set the secrets with `--secrets-file`. Deploy with `pnpm exec cf deploy` from the staging directory. Exercise the change, then read the events (`docs/agents/design/observability.md`, "Querying") and `pnpm ops:check --worker <name>`.
+Deploy with `pnpm alchemy deploy --config infra/alchemy.run.ts --stage <stage>` after `pnpm run build:page`. Set the secrets with `pnpm exec cf workers secrets update`. Exercise the change, then read the events (`docs/agents/design/observability.md`, "Querying") and `pnpm ops:check --worker <name>`.
 
 **Complete when:** the change did what you claim, with timestamps and event names as evidence, and you recorded the container minutes used (the instances API, start to `inactive`).
 
 ### 4. Clean up and prove it
 
-Delete the Worker, the container application, the registry images you pushed, and the worktree and staging directory. Then list again.
+Run `pnpm alchemy destroy --config infra/alchemy.run.ts --stage <stage>`, delete the registry images you pushed, and remove the worktree. Then list again.
 
 **Complete when:** the Workers, applications, namespaces, and images lists equal the baseline from step 1, and `<worker>` and every resource you did not create are untouched.
 

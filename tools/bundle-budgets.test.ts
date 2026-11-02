@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { gzipSync } from "node:zlib";
+import { compatibility } from "../infra/worker-settings.ts";
 import { OWNER_PAGE_SCRIPT_SOURCE } from "../src/page/owner-script.generated.ts";
 
 const KIB = 1024;
@@ -28,9 +29,13 @@ function workerUploadGzipBytes(): number {
       "exec",
       "wrangler",
       "deploy",
+      "src/worker.ts",
       "--dry-run",
-      "--experimental-new-config",
-      "--containers-rollout=none",
+      "--name",
+      "cf-stumble-budget",
+      "--compatibility-date",
+      compatibility.date,
+      ...compatibility.flags.flatMap((flag) => ["--compatibility-flags", flag]),
       "--outdir",
       outdir,
     ],
