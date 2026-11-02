@@ -57,6 +57,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
   readonly writes: (readonly [string, string])[] = [];
   readonly stdins: (readonly [string, string])[] = [];
   readonly credentialRequests: string[] = [];
+  readonly provisionRequests: ProjectProvisionRequest[] = [];
   readonly names: string[] = [];
 
   credentialState: GitHubCredentialState = "missing";
@@ -201,6 +202,8 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
+
+    this.provisionRequests.push(request);
 
     return Effect.runPromise(executeProjectProvisionRequest({ operations: this, request }));
   }

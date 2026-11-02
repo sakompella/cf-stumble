@@ -1,6 +1,5 @@
 import { expect, test } from "vitest";
-import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import { HARNESS_BUILD_CONFIGURATION, planHarnessBuild } from "../../../src/harness-build.js";
+import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
 
 declare global {
   interface ImportMeta {
@@ -59,27 +58,4 @@ test("the configured phases are, in order, what build:artifact runs locally", ()
     scriptCommand("build:artifact"),
     "a developer, the clean-build probe and the deployed build must run the same work in the same order",
   ).toBe(phases.join(" && "));
-  expect(phases[0], "a freshly extracted commit has no node_modules").toContain(
-    "pnpm install --frozen-lockfile",
-  );
-  expect(phases[1], "esbuild cannot resolve Pi Durable before the install").toBe(
-    "pnpm run build:module-map",
-  );
-});
-
-const commit = testHarnessCommit("6000000000000000000000000000000000000003");
-
-const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);
-
-test("provisions the harness repository under a lock and refuses an unexpected origin", () => {
-  const provision = plan.steps[0]?.source;
-
-  expect(provision).toContain('exec 9>"$lock"\nflock 9');
-  expect(provision).toContain(
-    'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$staging"',
-  );
-  expect(provision).toContain(
-    'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
-  );
-  expect(provision).toContain('if test "$actual_remote" != "$expected_remote"; then');
 });

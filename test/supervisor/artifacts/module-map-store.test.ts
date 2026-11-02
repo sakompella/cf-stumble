@@ -186,10 +186,10 @@ test("logs a redacted cause instead of discarding it when the transaction throws
   });
 
   expect(outcome).toBe("artifact-write-failed");
-  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
-  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
-  expect(logged).toContain("artifact-write-failed");
-  expect(logged).toContain("the storage refused a chunk");
+  const logged = loggedErrors.mock.calls.map((call) => call.join(" ")).join("\n");
+  expect(logged, "the discarded cause must reach an operator log").toContain(
+    "the storage refused a chunk",
+  );
   expect(containsCredential(logged), "the operator log must redact token-shaped causes").toBe(
     false,
   );

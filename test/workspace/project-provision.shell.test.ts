@@ -83,6 +83,17 @@ describe("provisioning a project clone", () => {
     expect(readdirSync(checkout())).toEqual(["owned.txt"]);
   });
 
+  test("an existing clone of another repository is refused and left alone", () => {
+    expect(provision().status).toBe(0);
+    const local = commitFile(checkout(), "local.txt", "local");
+    git(checkout(), "remote", "set-url", "origin", `file://${layout.root}/another-origin`);
+
+    const ran = provision();
+
+    expect(ran.status).toBe(1);
+    expect(git(checkout(), "rev-parse", "HEAD")).toBe(local);
+  });
+
   test("the lock file survives a provision, so two holders can never lock different files", () => {
     expect(provision().status).toBe(0);
 

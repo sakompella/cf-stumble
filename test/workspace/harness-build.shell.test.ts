@@ -169,6 +169,17 @@ describe("the provision step", () => {
     expect(readdirSync(harness())).toEqual(["owned.txt"]);
   });
 
+  test("refuses an existing checkout whose origin is another repository and leaves it alone", () => {
+    runOk("provision");
+    const local = commitFile(harness(), "local.txt", "local");
+
+    const ran = runStep("provision", head, `file://${layout.root}/another-origin`);
+
+    expect(ran.status).toBe(1);
+    expect(git(harness(), "rev-parse", "HEAD")).toBe(local);
+    expect(git(harness(), "config", "--get", "remote.origin.url")).toBe(origin.url);
+  });
+
   test("leaves no checkout and no staging tree when the clone fails", () => {
     const ran = runStep("provision", head, `file://${layout.root}/no-such-remote`);
 

@@ -2,6 +2,7 @@ import { reset } from "cloudflare:test";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
 import { FAKE_TOKEN, NOW, REPOSITORY, tenant } from "./connection-tenant.js";
@@ -38,9 +39,9 @@ test("connects a repository once the workspace credential works, and provisions 
 test("a third repository joins the same one workspace, not a workspace of its own", async () => {
   const subject = tenant("connect-three", { fallbackToken: FAKE_TOKEN });
 
-  for (const suffix of ["one", "two", "three"]) {
+  for (const [offset, suffix] of ["one", "two", "three"].entries()) {
     const connected = await subject.connections((connections) =>
-      connections.connect(`https://github.com/sample/repo-${suffix}`, undefined, NOW),
+      connections.connect(`https://github.com/sample/repo-${suffix}`, undefined, NOW + offset),
     );
 
     expect(connected).toMatchObject({ ok: true });
@@ -52,8 +53,8 @@ test("a third repository joins the same one workspace, not a workspace of its ow
 
   expect(listed.map((project) => project.id)).toEqual([
     "sample-repo-one",
-    "sample-repo-three",
     "sample-repo-two",
+    "sample-repo-three",
     "harness",
   ]);
   expect(
@@ -104,9 +105,17 @@ test("refuses a repository URL that once reduced to the harness entry's id", asy
   ).toEqual([]);
 });
 
-test("disconnects a project row and removes its clone through the narrow workspace step", async () => {
-  const subject = tenant("disconnect-project", { fallbackToken: FAKE_TOKEN });
+test("disconnecting a project removes its clone and leaves the harness checkout", async () => {
+  const workspace = new FakeTenantWorkspace();
+  const subject = tenant("disconnect-project", { workspace, fallbackToken: FAKE_TOKEN });
+
+  await workspace.build({
+    kind: "build-step",
+    harnessCommit: testHarnessCommit("1".repeat(40)),
+    step: "provision",
+  });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBe("directory");
 
   const disconnected = await subject.connections((connections) =>
     connections.disconnect("sample-repo-1", () => true),
@@ -122,10 +131,8 @@ test("disconnects a project row and removes its clone through the narrow workspa
     workspace: "removed",
   });
   expect(listed).toEqual([HARNESS_PROJECT]);
-  const removal = subject.workspace.commands.find((command) => command.includes("rm -rf"));
-  expect(removal).toContain("/workspace/projects/sample-repo-1");
-  expect(removal).toContain("/workspace/projects/sample-repo-1.provisioning");
-  expect(removal).not.toContain("/workspace/harness");
+  expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBeUndefined();
+  expect(await workspace.lstat("/workspace/harness")).toBe("directory");
 });
 
 test.each([
