@@ -4,7 +4,6 @@ import { execInWorkspace, killAll, type RunningCommands } from "./execution-env-
 import {
   absolutePath,
   canonicalPath,
-  createTempFile,
   exists,
   fileInfo,
   readTextFile,
@@ -56,7 +55,7 @@ export function createComputerEnv(options: ComputerEnvOptions): ExecutionEnv {
     createDir: unsupported("createDir"),
     remove: unsupported("remove"),
     createTempDir: unsupported("createTempDir"),
-    createTempFile: (tempOptions, context) => createTempFile(workspace, tempOptions, context),
+    createTempFile: unsupported("createTempFile"),
     exec: (command, execOptions, context) =>
       execInWorkspace(workspace, running, command, execOptions, context),
     cleanup: () => killAll(workspace, running),

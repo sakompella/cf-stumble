@@ -7,7 +7,6 @@ import {
   capabilityCall,
   fromAddressed,
   fromProject,
-  invalid,
   resolveInWorkspace,
   type ComputerWorkspace,
   type WorkspacePath,
@@ -163,46 +162,15 @@ export async function canonicalPath(
   return canonical.ok ? { ok: true, value: fromAddressed(canonical.value).absolute } : canonical;
 }
 
-function namePart(value: string | undefined, label: string): Result<string, FileError> {
-  const part = value ?? "";
-
-  if (part.includes("/") || part.includes("\0"))
-    return invalid(`${label} must not contain "/" or NUL`);
-
-  return { ok: true, value: part };
-}
-
-function uniqueTempPath(
-  prefix: string | undefined,
-  suffix?: string,
-): Result<WorkspacePath, FileError> {
-  const before = namePart(prefix, "prefix");
-
-  if (!before.ok) return before;
-
-  const after = namePart(suffix, "suffix");
-
-  if (!after.ok) return after;
-
-  const name = `${before.value}${crypto.randomUUID().replaceAll("-", "")}${after.value}`;
-
-  return { ok: true, value: fromAddressed(`${TEMP_DIRECTORY}/${name}`) };
-}
-
-export async function createTempFile(
+export async function createSpillFile(
   workspace: ComputerWorkspace,
-  options: { prefix?: string; suffix?: string } | undefined,
-  context: Context,
 ): Promise<Result<string, FileError>> {
-  if (context.abortSignal?.aborted === true) return aborted();
+  const name = `pi-output-${crypto.randomUUID().replaceAll("-", "")}.log`;
+  const path = fromAddressed(`${TEMP_DIRECTORY}/${name}`);
 
-  const path = uniqueTempPath(options?.prefix, options?.suffix);
-
-  if (!path.ok) return path;
-
-  const created = await capabilityCall(path.value.absolute, () =>
-    workspace.target.writeFile(path.value.addressed, new Uint8Array(0), "create-exclusive"),
+  const created = await capabilityCall(path.absolute, () =>
+    workspace.target.writeFile(path.addressed, new Uint8Array(0), "create-exclusive"),
   );
 
-  return created.ok ? { ok: true, value: path.value.absolute } : created;
+  return created.ok ? { ok: true, value: path.absolute } : created;
 }

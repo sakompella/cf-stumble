@@ -6,7 +6,7 @@ import {
   type ShellSpillOptions,
 } from "@earendil-works/pi-durable/env";
 import type { ComputerWorkspace } from "./execution-env-paths.js";
-import { createTempFile, writeBytes } from "./execution-env-files.js";
+import { createSpillFile, writeBytes } from "./execution-env-files.js";
 
 const APPEND_CHARACTERS = 128 * 1024;
 
@@ -41,11 +41,7 @@ export class OutputSpill {
         return kept;
       }
 
-      const created = await createTempFile(
-        this.#workspace,
-        { prefix: "pi-output-", suffix: ".log" },
-        this.#context,
-      );
+      const created = await createSpillFile(this.#workspace);
 
       if (!created.ok) return spillFailure(created.error);
 
