@@ -9,35 +9,37 @@ type SyncRPC = BackendHandle["rpc"]["sync"];
 
 type FetchChangesInput = Parameters<SyncRPC["fetchChanges"]>[0];
 
-function delegated(calls: string[], name: string): never {
-  calls.push(name);
+type Call = readonly [name: string, args: readonly unknown[]];
+
+function delegated(calls: Call[], name: string, args: readonly unknown[]): never {
+  calls.push([name, args]);
 
   throw new Error(name);
 }
 
-function syncFor(calls: string[], fetchChanges: SyncRPC["fetchChanges"]): SyncRPC {
+function syncFor(calls: Call[], fetchChanges: SyncRPC["fetchChanges"]): SyncRPC {
   return {
-    push: () => delegated(calls, "sync.push"),
+    push: (...args) => delegated(calls, "sync.push", args),
     fetchChanges,
-    watermarks: () => delegated(calls, "sync.watermarks"),
-    readEntry: () => delegated(calls, "sync.readEntry"),
-    hasObjects: () => delegated(calls, "sync.hasObjects"),
-    fetchObjects: () => delegated(calls, "sync.fetchObjects"),
-    pushObjects: () => delegated(calls, "sync.pushObjects"),
+    watermarks: (...args) => delegated(calls, "sync.watermarks", args),
+    readEntry: (...args) => delegated(calls, "sync.readEntry", args),
+    hasObjects: (...args) => delegated(calls, "sync.hasObjects", args),
+    fetchObjects: (...args) => delegated(calls, "sync.fetchObjects", args),
+    pushObjects: (...args) => delegated(calls, "sync.pushObjects", args),
   };
 }
 
-function shellFor(calls: string[]): BackendHandle["rpc"]["shell"] {
+function shellFor(calls: Call[]): BackendHandle["rpc"]["shell"] {
   return {
-    exec: () => delegated(calls, "shell.exec"),
-    getExec: () => delegated(calls, "shell.getExec"),
-    killExec: () => delegated(calls, "shell.killExec"),
-    disposeExec: () => delegated(calls, "shell.disposeExec"),
+    exec: (...args) => delegated(calls, "shell.exec", args),
+    getExec: (...args) => delegated(calls, "shell.getExec", args),
+    killExec: (...args) => delegated(calls, "shell.killExec", args),
+    disposeExec: (...args) => delegated(calls, "shell.disposeExec", args),
   };
 }
 
 function backendWith(fetchChanges: SyncRPC["fetchChanges"]) {
-  const calls: string[] = [];
+  const calls: Call[] = [];
   const sync = syncFor(calls, fetchChanges);
   const shell = shellFor(calls);
 
@@ -45,7 +47,7 @@ function backendWith(fetchChanges: SyncRPC["fetchChanges"]) {
     rpc: { sync, shell },
     runtimeId: "runtime",
     sync: "remote",
-    close: () => delegated(calls, "close"),
+    close: () => delegated(calls, "close", []),
   };
 
   const backend: HostedBackend<number> = {
@@ -53,8 +55,6 @@ function backendWith(fetchChanges: SyncRPC["fetchChanges"]) {
     type: "test",
     callable: true,
     connect: () => {
-      calls.push("connect");
-
       return Promise.resolve(handle);
     },
   };
@@ -109,7 +109,7 @@ test("preserves caller ignores while adding node_modules", async () => {
   ]);
 });
 
-test("delegates every backend and RPC operation other than fetchChanges", async () => {
+test("every other backend and RPC operation reaches the backend with its arguments and outcome", async () => {
   const { backend, calls, handle } = backendWith(() =>
     Promise.resolve({
       currentCursor: { rev: 1, path: null },
@@ -118,37 +118,36 @@ test("delegates every backend and RPC operation other than fetchChanges", async 
     }),
   );
 
-  const wrappedHandle = await connect(withWorkspaceSyncIgnore(backend));
+  const wrapped = await connect(withWorkspaceSyncIgnore(backend));
+  const { sync, shell } = wrapped.rpc;
+  const changes: Parameters<SyncRPC["push"]>[0]["changes"] = new ReadableStream();
+  const objects: Parameters<SyncRPC["pushObjects"]>[0] = new ReadableStream();
+  const hashes = [new Uint8Array([7])];
 
-  expect(() =>
-    wrappedHandle.rpc.sync.push({ senderRev: 0, changes: new ReadableStream() }),
-  ).toThrow();
-  expect(() => wrappedHandle.rpc.sync.watermarks()).toThrow();
-  expect(() => wrappedHandle.rpc.sync.readEntry("/")).toThrow();
-  expect(() => wrappedHandle.rpc.sync.hasObjects([])).toThrow();
-  expect(() => wrappedHandle.rpc.sync.fetchObjects([])).toThrow();
-  expect(() => wrappedHandle.rpc.sync.pushObjects(new ReadableStream())).toThrow();
-  expect(() => wrappedHandle.rpc.shell.exec({ source: "true" })).toThrow();
-  expect(() => wrappedHandle.rpc.shell.getExec({ id: "exec" })).toThrow();
-  expect(() => wrappedHandle.rpc.shell.killExec({ id: "exec" })).toThrow();
-  expect(() => wrappedHandle.rpc.shell.disposeExec({ id: "exec" })).toThrow();
-  expect(() => wrappedHandle.close()).toThrow();
+  expect(() => sync.push({ senderRev: 0, changes })).toThrow("sync.push");
+  expect(() => sync.watermarks()).toThrow("sync.watermarks");
+  expect(() => sync.readEntry("/a")).toThrow("sync.readEntry");
+  expect(() => sync.hasObjects(hashes)).toThrow("sync.hasObjects");
+  expect(() => sync.fetchObjects(hashes)).toThrow("sync.fetchObjects");
+  expect(() => sync.pushObjects(objects)).toThrow("sync.pushObjects");
+  expect(() => shell.exec({ source: "true" })).toThrow("shell.exec");
+  expect(() => shell.getExec({ id: "x" })).toThrow("shell.getExec");
+  expect(() => shell.killExec({ id: "x" })).toThrow("shell.killExec");
+  expect(() => shell.disposeExec({ id: "x" })).toThrow("shell.disposeExec");
 
-  expect(wrappedHandle.runtimeId).toBe(handle.runtimeId);
-  expect(wrappedHandle.sync).toBe(handle.sync);
-  expect(wrappedHandle.rpc.shell).toBe(handle.rpc.shell);
   expect(calls).toEqual([
-    "connect",
-    "sync.push",
-    "sync.watermarks",
-    "sync.readEntry",
-    "sync.hasObjects",
-    "sync.fetchObjects",
-    "sync.pushObjects",
-    "shell.exec",
-    "shell.getExec",
-    "shell.killExec",
-    "shell.disposeExec",
-    "close",
+    ["sync.push", [{ senderRev: 0, changes }]],
+    ["sync.watermarks", []],
+    ["sync.readEntry", ["/a"]],
+    ["sync.hasObjects", [hashes]],
+    ["sync.fetchObjects", [hashes]],
+    ["sync.pushObjects", [objects]],
+    ["shell.exec", [{ source: "true" }]],
+    ["shell.getExec", [{ id: "x" }]],
+    ["shell.killExec", [{ id: "x" }]],
+    ["shell.disposeExec", [{ id: "x" }]],
   ]);
+  expect(wrapped.runtimeId).toBe(handle.runtimeId);
+  expect(wrapped.sync).toBe(handle.sync);
+  expect(() => wrapped.close()).toThrow("close");
 });

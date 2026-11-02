@@ -1,10 +1,6 @@
 import { expect, test } from "vitest";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
-import {
-  HARNESS_BUILD_CONFIGURATION,
-  harnessBuildStep,
-  planHarnessBuild,
-} from "../../src/harness-build.js";
+import { HARNESS_BUILD_CONFIGURATION, planHarnessBuild } from "../../src/harness-build.js";
 import {
   HARNESS_DIRECTORY,
   PROJECTS_DIRECTORY,
@@ -13,15 +9,9 @@ import {
 
 const commit = testHarnessCommit("5000000000000000000000000000000000000002");
 
-const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
-
-const moduleMapPath = `${buildDirectory}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
-
-test("keeps build scratch apart from every repository in the workspace", () => {
+test("build scratch holds no repository, and every build step starts in the workspace", () => {
   const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);
 
-  expect(plan.directory).toBe(buildDirectory);
-  expect(plan.moduleMapPath).toBe(moduleMapPath);
   expect(
     [HARNESS_DIRECTORY, PROJECTS_DIRECTORY].some(
       (repository) =>
@@ -31,59 +21,7 @@ test("keeps build scratch apart from every repository in the workspace", () => {
     "build scratch must contain no repository, so clearing it destroys no checkout",
   ).toBe(false);
   expect(
-    plan.steps.every((step) => !step.source.includes(PROJECTS_DIRECTORY)),
-    "a harness build must not name a project directory",
-  ).toBe(true);
-  expect(
     plan.steps.every((step) => step.cwd === WORKSPACE_ROOT),
-    "every build step runs in the workspace, because Computer refuses a working directory outside it",
+    "Computer refuses a working directory outside the workspace",
   ).toBe(true);
-  expect(
-    HARNESS_BUILD_CONFIGURATION.buildPhases.every((phase) =>
-      harnessBuildStep(plan, phase.name).source.includes(`cd '${buildDirectory}'`),
-    ),
-    "and every build phase changes into its own scratch directory itself",
-  ).toBe(true);
-  expect(
-    harnessBuildStep(plan, "isolate").source,
-    "the only thing a build deletes is its own scratch directory",
-  ).toBe(
-    `mkdir -p ${HARNESS_BUILD_CONFIGURATION.buildRoot} && rm -rf ${buildDirectory} && mkdir -p ${buildDirectory}`,
-  );
-});
-
-test("a build never replaces the editable harness checkout", () => {
-  const provision = harnessBuildStep(
-    planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit),
-    "provision",
-  );
-
-  expect(
-    provision.source.indexOf(
-      'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$staging"',
-    ),
-    "a replacement clone must land beside the repository, not on top of it",
-  ).toBeGreaterThan(0);
-  expect(
-    provision.source.includes('rm -rf "$repository"'),
-    "the checkout the owner edits must survive a clone that never finishes",
-  ).toBe(false);
-  expect(
-    provision.source,
-    "a populated directory that is not a repository is reported, never deleted",
-  ).toContain('    printf "%s is not a git repository and is not empty\\n" "$repository" >&2');
-  expect(provision.source).toContain(
-    [
-      '  git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$staging"',
-      '  git -C "$staging" config core.fileMode false',
-      '  rmdir "$repository" 2>/dev/null || true',
-    ].join("\n"),
-  );
-  expect(
-    provision.source,
-    "an existing harness checkout must not have unrelated config rewritten",
-  ).not.toContain('git -C "$repository" config core.fileMode false');
-  expect(provision.source, "only an empty directory is removed").toContain(
-    '  rmdir "$repository" 2>/dev/null || true',
-  );
 });

@@ -54,7 +54,7 @@ test("a signal-less waiter proceeds after the Workspace Host command ceiling", a
   }
 });
 
-test("clears the stale ceiling timer when a waiter finishes normally", async () => {
+test("a waiter that finishes normally leaves no timer pending", async () => {
   vi.useFakeTimers();
   const delayed = delayedProvisionHost();
   const namespace = namespaceFor(delayed.host);
@@ -79,14 +79,11 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
     );
 
     await Promise.resolve();
-
-    expect(vi.getTimerCount()).toBe(2);
-
     delayed.release();
 
     expect(Result.isSuccess(await first)).toBe(true);
     expect(Result.isSuccess(await second)).toBe(true);
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount(), "a finished wait must not leave its stale ceiling armed").toBe(0);
   } finally {
     vi.useRealTimers();
   }

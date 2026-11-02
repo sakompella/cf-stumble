@@ -94,9 +94,9 @@ test("an install whose workspace copy is still pending logs the credential out a
   expect(everythingLogged()).not.toContain(FAKE_TOKEN);
 });
 
-test("a failed logout does not hide the incomplete sync", async () => {
+async function outcomeWhenLogout(logoutFailure?: Error) {
   const lenient = new RecordingOperations();
-  lenient.failure = new Error("container gone");
+  lenient.failure = logoutFailure;
   const strict = new RecordingOperations();
   strict.failure = new WorkspaceSyncIncomplete("pending");
 
@@ -108,5 +108,21 @@ test("a failed logout does not hide the incomplete sync", async () => {
     }),
   );
 
-  expect(result).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
+  return {
+    result,
+    logouts: lenient.sources.filter((source) => source.includes("gh auth logout")),
+  };
+}
+
+test("a failed logout is attempted, reaches the operator log, and leaves the same outcome as a successful one", async () => {
+  capturedEvents();
+
+  const succeeded = await outcomeWhenLogout();
+  const failed = await outcomeWhenLogout(new Error("container gone"));
+
+  expect(failed.logouts).toHaveLength(1);
+  expect(failed.result.ok).toBe(false);
+  expect(failed.result).toEqual(succeeded.result);
+  expect(JSON.stringify(failed.result)).not.toContain("container gone");
+  expect(everythingLogged()).toContain("container gone");
 });

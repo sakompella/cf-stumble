@@ -1,7 +1,8 @@
+import type * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { afterEach, expect, test, vi } from "vitest";
-import { textLines } from "../log-capture.js";
-import { parseGitHubToken, REDACTED, type GitHubToken } from "../../src/github/index.js";
+import { capturedEvents, everythingLogged, textLines } from "../log-capture.js";
+import { parseGitHubToken, type GitHubToken } from "../../src/github/index.js";
 import {
   checkRepositoryAccess,
   installWorkspaceCredential,
@@ -43,49 +44,55 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("logs the thrown cause instead of discarding it, with the install token redacted", async () => {
-  const host = new ThrowingWorkspaceHost();
-  host.cause = new Error(`socket hang up while sending ${FAKE_TOKEN}`);
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+type CredentialStep = (
+  namespace: CredentialWorkspaceNamespace,
+) => Effect.Effect<unknown, Readonly<{ code: string }>>;
 
-  const installed = await runToResult(
-    installWorkspaceCredential({
-      workspaceName: "tenant-workspace",
-      namespace: namespaceOf(host),
-      token: FAKE_TOKEN,
-    }),
-  );
+const credentialSteps: readonly (readonly [string, CredentialStep])[] = [
+  [
+    "install",
+    (namespace: CredentialWorkspaceNamespace) =>
+      installWorkspaceCredential({
+        workspaceName: "tenant-workspace",
+        namespace,
+        token: FAKE_TOKEN,
+      }),
+  ],
+  [
+    "status",
+    (namespace: CredentialWorkspaceNamespace) =>
+      readWorkspaceCredentialStatus({ workspaceName: "tenant-workspace", namespace }),
+  ],
+  [
+    "repository access",
+    (namespace: CredentialWorkspaceNamespace) =>
+      checkRepositoryAccess({
+        workspaceName: "tenant-workspace",
+        namespace,
+        repositoryUrl: "https://github.com/owner/repo",
+      }),
+  ],
+];
 
-  expect(Result.isFailure(installed) && plainProblem(installed.failure)).toEqual({
-    code: "credential-workspace-unavailable",
-    detail: "",
-  });
-  expect(textLines(loggedErrors), "the discarded cause must reach an operator log").toHaveLength(1);
-  const logged = textLines(loggedErrors)[0] ?? "";
-  expect(logged).toContain("credential-workspace-unavailable");
-  expect(logged, "the install token must never reach the log").not.toContain(FAKE_TOKEN);
-  expect(logged).toContain(REDACTED);
-});
+test.each(credentialSteps)(
+  "a %s step whose RPC throws is unavailable, and its logged cause carries no token",
+  async (_name, step) => {
+    const host = new ThrowingWorkspaceHost();
+    host.cause = new Error(`socket hang up while sending ${FAKE_TOKEN}`);
+    capturedEvents();
 
-test("logs a status read's thrown cause the same way, without a token to redact", async () => {
-  const host = new ThrowingWorkspaceHost();
-  host.cause = new Error("websocket is not open");
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const outcome = await runToResult(step(namespaceOf(host)));
 
-  const status = await runToResult(
-    readWorkspaceCredentialStatus({
-      workspaceName: "tenant-workspace",
-      namespace: namespaceOf(host),
-    }),
-  );
-
-  expect(Result.isFailure(status) && plainProblem(status.failure)).toEqual({
-    code: "credential-workspace-unavailable",
-    detail: "",
-  });
-  const logged = textLines(loggedErrors)[0] ?? "";
-  expect(logged).toContain("credential-access.status");
-});
+    expect(Result.isFailure(outcome) && plainProblem(outcome.failure)).toEqual({
+      code: "credential-workspace-unavailable",
+      detail: "",
+    });
+    expect(everythingLogged(), "the cause must still reach an operator log").toContain(
+      "socket hang up",
+    );
+    expect(everythingLogged(), "no token may reach any log").not.toContain(FAKE_TOKEN);
+  },
+);
 
 test("distinguishes a timeout from an ordinary RPC failure in the log alone", async () => {
   const host = new ThrowingWorkspaceHost();
