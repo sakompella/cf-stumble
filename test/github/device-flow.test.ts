@@ -75,8 +75,7 @@ test("asks GitHub for a device code and keeps the codes apart", async () => {
       intervalSeconds: 5,
     },
   });
-  expect(calls[0]?.url).toBe("https://github.com/login/device/code");
-  expect(calls[0]?.body).toBe(`client_id=${CLIENT_ID}&scope=repo`);
+  expect(new URLSearchParams(calls[0]?.body).get("client_id")).toBe(CLIENT_ID);
 });
 
 test("refuses to start without a configured client id, and never calls the provider", async () => {

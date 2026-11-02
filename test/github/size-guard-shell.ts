@@ -123,7 +123,7 @@ function run({ directory, bin }: ReturnType<typeof prepare>, source: string) {
   return spawnSync("/bin/sh", ["-c", source], {
     encoding: "utf8",
     env: {
-      PATH: `${bin}:/usr/bin:/bin`,
+      PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`,
       STUB_DIR: directory,
       STUB_JQ: jq,
       STUB_SECRET: FAKE_TOKEN,

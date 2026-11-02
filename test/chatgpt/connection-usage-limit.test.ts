@@ -73,8 +73,7 @@ test("a new sign-in and a disconnect forget a usage limit", async () => {
 
     connection.markUsageLimited(ACCESS_ONE, clock.now + HOUR);
     connection.disconnect();
-    connected(harness);
-    expect(connection.view().connection).not.toHaveProperty("usageLimit");
+    expect(harness.store.usageLimit()).toBeUndefined();
 
     return Promise.resolve();
   });

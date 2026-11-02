@@ -122,7 +122,7 @@ test("the Supervisor reports no credential before the first connection, and a di
   await expect(supervisor.getChatGPTConnection()).resolves.toEqual({
     connection: { state: "disconnected" },
     login: null,
-    model: "gpt-6.1-sol",
+    model: env.CHATGPT_MODEL,
   });
 
   await runInDurableObject(supervisor, (_instance, state) => {

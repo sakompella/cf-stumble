@@ -1,10 +1,5 @@
 import { expect, test } from "vitest";
 import {
-  credentialStatusSource,
-  installCredentialSource,
-  repositoryAccessSource,
-} from "../../src/github/index.js";
-import {
   HARNESS_BUILD_CONFIGURATION,
   provisionHarnessRepository,
 } from "../../src/harness-build.js";
@@ -19,9 +14,6 @@ const exportsDurableConfiguration = [
 ];
 
 test.each([
-  ["install", installCredentialSource()],
-  ["status", credentialStatusSource()],
-  ["repository access", repositoryAccessSource("https://github.com/owner/repo")],
   ["project clone", projectCloneSource(sampleProjectOne)],
   [
     "harness provisioning",

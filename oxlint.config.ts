@@ -81,6 +81,15 @@ export default defineConfig({
 
   overrides: [
     {
+      files: [
+        "src/github/**",
+        "src/workspace/github-credential*",
+        "src/workspace/credential-access*",
+        "src/supervisor/projects/**",
+      ],
+      rules: { "eslint/no-console": "error" },
+    },
+    {
       files: ["src/page/client/**"],
       rules: {
         "foldkit/acquire-release-constructs-in-acquire-body": "error",
