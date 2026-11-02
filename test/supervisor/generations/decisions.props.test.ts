@@ -161,3 +161,38 @@ test("a check records the outcome's status and compatibility, advances the epoch
     });
   });
 });
+
+test("a current command is accepted exactly when its target is ready with the current compatibility and, for a rollback, was active", () => {
+  hegel.test(
+    (tc) => {
+      const epoch = tc.draw(count);
+      const target = tc.draw(labelValue);
+
+      const record = {
+        generation: generation(
+          target,
+          tc.draw(gs.sampledFrom(["candidate", "ready", "failed"] as const)),
+        ),
+        wasActive: tc.draw(gs.booleans()),
+        compatibility: tc.draw(recordedCompatibility),
+      };
+
+      const command = { kind: tc.draw(kind), label: label(target), observedEpoch: epoch };
+      const activeLabel = tc.draw(gs.booleans()) ? label(target) : undefined;
+
+      const decision = decideActivation(
+        command,
+        record,
+        { activeLabel, epoch },
+        SUPERVISOR_COMPATIBILITY,
+      );
+
+      expect(decision.ok).toBe(
+        record.generation.status === "ready" &&
+          record.compatibility === SUPERVISOR_COMPATIBILITY &&
+          (command.kind === "activate" || record.wasActive),
+      );
+    },
+    { testCases: 300 },
+  );
+});

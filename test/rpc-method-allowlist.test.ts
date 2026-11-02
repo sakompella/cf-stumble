@@ -2,7 +2,10 @@ import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { ModelRoute } from "../src/model-route.js";
 import { ProjectRpcTarget } from "../src/workspace/project/index.js";
-import { ConversationHostTarget } from "../src/supervisor/conversations/host-target.js";
+import {
+  ConversationHostTarget,
+  GenerationHostTarget,
+} from "../src/supervisor/conversations/host-target.js";
 
 type Prototype = NonNullable<ReturnType<typeof Reflect.getPrototypeOf>>;
 
@@ -40,6 +43,15 @@ test("ProjectRpcTarget exposes exactly the allowlisted RPC members", () => {
     "readFile",
     "startExec",
     "writeFile",
+  ]);
+});
+
+test("the generation host a serving facet holds exposes exactly the allowlisted RPC members", () => {
+  expect(rpcMemberNames(GenerationHostTarget.prototype)).toStrictEqual([
+    "controlGeneration",
+    "generationStatus",
+    "prepareGeneration",
+    "submitGeneration",
   ]);
 });
 

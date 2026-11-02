@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import { isHarnessCommit, type HarnessCommit } from "../harness-commit.js";
+import type { HarnessCommit } from "../harness-commit.js";
+import { GenerationControlTarget, GenerationSubmissionRequest } from "../generation-requests.js";
 import {
-  isGenerationLabel,
   type ActivationCommand,
   type ControlProblemCode,
   type GenerationControlResult,
@@ -10,7 +9,7 @@ import {
   type Submission,
 } from "../supervisor/generations.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
-import { callSupervisor, Count, decodeRequestBody, jsonError } from "./json.js";
+import { callSupervisor, decodeRequestBody, jsonError } from "./json.js";
 
 export type GenerationControlSupervisor = {
   readonly controlGeneration: (command: ActivationCommand) => Promise<GenerationControlResult>;
@@ -41,20 +40,11 @@ function refusalResponse(
   return Response.json(refusal, { status: CONTROL_REFUSAL_STATUS[refusal.problem.code] });
 }
 
-const GenerationControlBody = Schema.Struct({
-  observedEpoch: Count,
-  label: Count.pipe(Schema.refine(isGenerationLabel)),
-});
-
 type ControlCommandKind = "activate" | "rollback";
-
-const GenerationSubmissionBody = Schema.Struct({
-  harnessCommit: Schema.String.pipe(Schema.refine(isHarnessCommit)),
-});
 
 export const handleGenerationControl = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {
-    const body = yield* decodeRequestBody(request, GenerationControlBody);
+    const body = yield* decodeRequestBody(request, GenerationControlTarget);
 
     const result = yield* callSupervisor(() =>
       supervisor.controlGeneration({ kind, label: body.label, observedEpoch: body.observedEpoch }),
@@ -77,7 +67,7 @@ export const handleGenerationControl = Effect.fnUntraced(
 
 export const handleGenerationSubmission = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationSubmissionSupervisor) {
-    const { harnessCommit } = yield* decodeRequestBody(request, GenerationSubmissionBody);
+    const { harnessCommit } = yield* decodeRequestBody(request, GenerationSubmissionRequest);
 
     const submitted = yield* callSupervisor(() => supervisor.submitGeneration(harnessCommit));
 
