@@ -37,8 +37,8 @@ importers:
         specifier: 0.15.3
         version: 0.15.3(effect@4.0.0)
       '@hegeldev/hegel':
-        specifier: 0.4.5
-        version: 0.4.5
+        specifier: 0.4.12
+        version: 0.4.12
       '@oxlint/plugins':
         specifier: ^1.90.0
         version: 1.90.0
@@ -496,38 +496,38 @@ packages:
       '@modelcontextprotocol/sdk':
         optional: true
 
-  '@hegeldev/hegel-darwin-arm64@0.4.5':
-    resolution: {integrity: sha512-YxVIYThJpCGmpYwT11dXe6RS/8VhP0hR5ZvRoRJrX1foMS5ZnU7fp1UqDBL4mU+yTEY9zCJFX/wuCxJiV4BExw==}
+  '@hegeldev/hegel-darwin-arm64@0.4.12':
+    resolution: {integrity: sha512-7/7uyh/Yh7FtPBoDXSex9mpYlr6E5nnNd90KGU2cHPpr3QxFzSzx0gNLGKpkjPxxzkSCryQ4E1gBWuZyT4RJwg==}
     engines: {node: '>=20.11.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@hegeldev/hegel-linux-arm64@0.4.5':
-    resolution: {integrity: sha512-DCoIWPJ0TkUIUn62a5OF78VBjYbEp6dF3AmSNJ/ySEHZXShxZoChUS4bLqXHBbcYZnM9R554QOyGANzc/Q8NgA==}
+  '@hegeldev/hegel-linux-arm64@0.4.12':
+    resolution: {integrity: sha512-DbHbVrkZTZUzN9EoxMSBqEb5o1RhR5T4UF1ksCgxy0hABg6H8y4xSaW5mvhXMy/Us5y+ZGDivBnz83mHUK8PFw==}
     engines: {node: '>=20.11.0'}
     cpu: [arm64]
     os: [linux]
 
-  '@hegeldev/hegel-linux-x64@0.4.5':
-    resolution: {integrity: sha512-MhBvsfizvPKOot7U6H19W65G2KEPeOFFNv4F/+E7ubO75QJGWaBPvufJ96xPv/nfgBtLbYeu3sFQxvTNluwu1g==}
+  '@hegeldev/hegel-linux-x64@0.4.12':
+    resolution: {integrity: sha512-NkaQXRU13ZD2xbj/BF71P+XzgTQDLHhlSrdVcW8nds/j2JjwPlU0uyGcsmFgoKs+Icu6VEb6F2yXLTffdiWfLQ==}
     engines: {node: '>=20.11.0'}
     cpu: [x64]
     os: [linux]
 
-  '@hegeldev/hegel-win32-arm64@0.4.5':
-    resolution: {integrity: sha512-TDOrfNgPXeEJv4ONuqG+rgzQ+7yhqPIMVBDl3kGtFi7f6aA4cQFjKAVdinX8hHyZzFQeIU0IMPvtt0dpCHD9hA==}
+  '@hegeldev/hegel-win32-arm64@0.4.12':
+    resolution: {integrity: sha512-vXN3pj/0IyYhkFpTNIDBQWetc7ETqNNA3yMECa5TR8JhAHKUjh+2XT6b4iGl4gTGtJaYsD9TBaK2FUl4+XN0nw==}
     engines: {node: '>=20.11.0'}
     cpu: [arm64]
     os: [win32]
 
-  '@hegeldev/hegel-win32-x64@0.4.5':
-    resolution: {integrity: sha512-ZWh/Yd2iHSShpWdb5t4wm9bWG1kxjhQOFW5fsFEcVXyAKldaXgHU1Di9fkR2M+0khNjNyUIVoeoGU69i/Bt6Fg==}
+  '@hegeldev/hegel-win32-x64@0.4.12':
+    resolution: {integrity: sha512-hxfNl0nl/cSloICPgVm73inyNr1+i/jmpNbetSZ//m8nhpGYOxhP8BX9v+L9IEpxzj9DfD6SlUtoyFeO2GZoGg==}
     engines: {node: '>=20.11.0'}
     cpu: [x64]
     os: [win32]
 
-  '@hegeldev/hegel@0.4.5':
-    resolution: {integrity: sha512-JnCLfQT9kgQFf128efFziu9FqvOlYxZl9NzFVAq7zx1iYb8yNs3vyqZApXTSDvvCpOVPkhUcNrEX5EOc7zx7BA==}
+  '@hegeldev/hegel@0.4.12':
+    resolution: {integrity: sha512-Mi37LE3mkkHoZX2qmi8CCNZimbXzPJnWDvbCPczbNqQ7Eb3+cRUPQfxMEiZD0JnuN+u/UfOxzdXei64V4LU1vw==}
     engines: {node: '>=20.11.0'}
 
   '@img/colour@1.1.0':
@@ -3069,30 +3069,30 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@hegeldev/hegel-darwin-arm64@0.4.5':
+  '@hegeldev/hegel-darwin-arm64@0.4.12':
     optional: true
 
-  '@hegeldev/hegel-linux-arm64@0.4.5':
+  '@hegeldev/hegel-linux-arm64@0.4.12':
     optional: true
 
-  '@hegeldev/hegel-linux-x64@0.4.5':
+  '@hegeldev/hegel-linux-x64@0.4.12':
     optional: true
 
-  '@hegeldev/hegel-win32-arm64@0.4.5':
+  '@hegeldev/hegel-win32-arm64@0.4.12':
     optional: true
 
-  '@hegeldev/hegel-win32-x64@0.4.5':
+  '@hegeldev/hegel-win32-x64@0.4.12':
     optional: true
 
-  '@hegeldev/hegel@0.4.5':
+  '@hegeldev/hegel@0.4.12':
     dependencies:
       koffi: 3.1.6
     optionalDependencies:
-      '@hegeldev/hegel-darwin-arm64': 0.4.5
-      '@hegeldev/hegel-linux-arm64': 0.4.5
-      '@hegeldev/hegel-linux-x64': 0.4.5
-      '@hegeldev/hegel-win32-arm64': 0.4.5
-      '@hegeldev/hegel-win32-x64': 0.4.5
+      '@hegeldev/hegel-darwin-arm64': 0.4.12
+      '@hegeldev/hegel-linux-arm64': 0.4.12
+      '@hegeldev/hegel-linux-x64': 0.4.12
+      '@hegeldev/hegel-win32-arm64': 0.4.12
+      '@hegeldev/hegel-win32-x64': 0.4.12
 
   '@img/colour@1.1.0': {}
 
