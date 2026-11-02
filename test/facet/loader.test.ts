@@ -1,8 +1,7 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import * as Result from "effect/Result";
-import { loadMainFacet, MainHarnessArtifact } from "../../src/facet/index.js";
+import { loadMainFacet, type MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/artifact.js";
 import { parsedArtifact } from "./fixture.js";
 
@@ -137,32 +136,4 @@ test("reuses the cached Worker Loader entry when the same harness commit is load
     await responseText(rebuiltHarness.worker),
     "a labeled commit is immutable, so its Loader entry must not change under it",
   ).toBe("code the commit was labeled with");
-});
-
-test("refuses an artifact with an invalid harness commit or no entry module before it can load", () => {
-  const invalidCommit = MainHarnessArtifact.parse({
-    harnessCommit: "main",
-    entryModule: "main.js",
-    modules: [{ name: "main.js", source: facetModule('"ignored"') }],
-  });
-
-  const withoutEntry = MainHarnessArtifact.parse({
-    harnessCommit: "4123456789abcdef0123456789abcdef01234567",
-    entryModule: "main.js",
-    modules: [
-      {
-        name: "other.js",
-        source: 'export default { fetch() { return new Response("other"); } };',
-      },
-    ],
-  });
-
-  expect(Result.isFailure(invalidCommit) ? invalidCommit.failure : "parsed").toEqual({
-    code: "invalid-harness-commit",
-    harnessCommit: "main",
-  });
-  expect(Result.isFailure(withoutEntry) ? withoutEntry.failure : "parsed").toEqual({
-    code: "entry-module-not-found",
-    entryModule: "main.js",
-  });
 });

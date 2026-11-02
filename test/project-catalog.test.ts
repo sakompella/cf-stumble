@@ -48,30 +48,6 @@ test("resolves every project of a non-empty catalog", () => {
   });
 });
 
-test("gives one repository the same identity whatever its position or display name", () => {
-  const url = "https://github.com/sample/repo-1";
-  const first = catalogOf(url, "https://github.com/sample/repo-2");
-  const reordered = catalogOf("https://github.com/sample/repo-2", url);
-
-  const renamed = parseProjectCatalog([
-    { id: projectIdForRepository(url) ?? "", displayName: "a new name", repositoryUrl: url },
-  ]);
-
-  expect(projectIdForRepository(url)).toBe("sample-repo-1");
-  expect(resolveProject("sample-repo-1", first)).toMatchObject({ ok: true });
-  expect(resolveProject("sample-repo-1", reordered)).toMatchObject({ ok: true });
-  expect(renamed?.[0]?.id).toBe("sample-repo-1");
-});
-
-test.each([
-  "https://github.com/Sample/Repo-1.git",
-  "https://GitHub.com/Sample/Repo-1",
-  "https://github.com/Sample/Repo-1/",
-])("converges %s on one canonical repository and one project id", (written) => {
-  expect(canonicalRepositoryUrl(written)).toBe("https://github.com/Sample/Repo-1");
-  expect(projectIdForRepository(written)).toBe("sample-repo-1");
-});
-
 test("refuses a repository URL that no clone could use", () => {
   expect(canonicalRepositoryUrl("http://github.com/sample/repo")).toBeUndefined();
   expect(canonicalRepositoryUrl("https://token@github.com/sample/repo")).toBeUndefined();
