@@ -3,6 +3,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
 import { redactCredentials, REDACTED } from "../../src/github/index.js";
+import { containsCredential } from "../../src/github/redaction.js";
 
 const prefix = gs.sampledFrom(["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]);
 
@@ -46,6 +47,9 @@ test("redacts documented tokens next to non-word delimiters and reaches a fixpoi
     const message = `${tc.draw(boundary)}${tc.draw(wordGlue)}${token}${tc.draw(wordGlue)}${tc.draw(boundary)}`;
     const redacted = redactCredentials(message);
 
+    expect(containsCredential(message)).toBe(true);
+    expect(containsCredential(redacted)).toBe(false);
+    expect(redacted).toContain(REDACTED);
     expect(redacted).not.toContain(token);
     expect(redacted.replaceAll(REDACTED, "")).not.toContain(body.slice(-6));
     expect(redactCredentials(redacted)).toBe(redacted);
@@ -65,11 +69,12 @@ test("redacts arbitrary opaque known tokens", () => {
 
 test("redacts generated HTTPS URL userinfo credentials", () => {
   hegel.test((tc) => {
-    const user = tc.draw(urlPart);
+    const user = tc.draw(gs.oneOf(urlPart, gs.just("x-access-token")));
     const secret = `secret-${tc.draw(urlPart)}`;
     const message = `remote: https://${user}:${secret}@github.com/owner/repo.git failed`;
     const redacted = redactCredentials(message);
 
+    expect(redacted).toBe(`remote: https://${REDACTED}@github.com/owner/repo.git failed`);
     expect(redacted).not.toContain(user);
     expect(redacted).not.toContain(secret);
     expect(redactCredentials(redacted)).toBe(redacted);

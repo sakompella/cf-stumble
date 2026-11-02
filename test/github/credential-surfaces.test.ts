@@ -77,6 +77,20 @@ function storedText(storage: DurableObjectStorage): string {
     .join("\n");
 }
 
+function expectTokenOnlyOnInstallStdin(workspace: FakeTenantWorkspace): void {
+  expect(workspace.commands.join("\n"), "no command line carries the token").not.toContain(
+    FAKE_TOKEN,
+  );
+  expect(
+    workspace.writes.filter(([, content]) => content.includes(FAKE_TOKEN)),
+    "a file is a surface too: the token is written to no path at all",
+  ).toEqual([]);
+  expect(
+    workspace.stdins.filter(([, input]) => input.includes(FAKE_TOKEN)).map(([source]) => source),
+    "the token reaches exactly one command, on its standard input",
+  ).toEqual([expect.stringContaining("gh auth login")]);
+}
+
 afterEach(async () => {
   vi.restoreAllMocks();
   await reset();
@@ -147,6 +161,7 @@ test("an RPC failure during authorization logs a redacted cause and never the to
 });
 
 test("a whole authorization leaves the token in the workspace and nowhere else", async () => {
+  const events = capturedEvents();
   const workspace = new FakeTenantWorkspace();
   const name = "credential-surfaces";
   const answers: unknown[] = [];
@@ -190,43 +205,14 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
     FAKE_TOKEN,
   );
   expect(stored).not.toContain("device-code-secret");
-  expect(workspace.commands.join("\n"), "no command line carries the token").not.toContain(
-    FAKE_TOKEN,
-  );
-  expect(
-    workspace.writes.filter(([, content]) => content.includes(FAKE_TOKEN)),
-    "a file is a surface too: the token is written to no path at all",
-  ).toEqual([]);
-  expect(
-    workspace.stdins.filter(([, input]) => input.includes(FAKE_TOKEN)).map(([source]) => source),
-    "the token reaches exactly one command, on its standard input",
-  ).toEqual([expect.stringContaining("gh auth login")]);
-});
-
-test("no log line at any level carries the token, and the install is logged with its source", async () => {
-  const events = capturedEvents();
-  const workspace = new FakeTenantWorkspace();
-  const name = "credential-surfaces-log";
-
-  await runInDurableObject(env.SUPERVISOR.getByName(name), async (_instance, state) => {
-    const { github, connections } = tenantConnections(state.storage, name, workspace, {
-      clientId: "Iv1.cfstumbleFAKE",
-      fallbackToken: undefined,
-      fetcher: githubReplying(),
-    });
-
-    await Effect.runPromise(github.startAuthorization(NOW));
-    await Effect.runPromise(github.completeAuthorization(NOW + 1_000));
-    await Effect.runPromise(connections.connect(REPOSITORY, "Repo one", NOW + 2_000));
-  });
-
+  expectTokenOnlyOnInstallStdin(workspace);
   expect(named(events(), "github-credential.install")).toEqual([
     expect.objectContaining({ source: "device-authorization", outcome: "connected" }),
   ]);
 
   const everything = everythingLogged();
 
-  expect(everything).not.toContain(FAKE_TOKEN);
+  expect(everything, "no log line at any level carries the token").not.toContain(FAKE_TOKEN);
   expect(everything, "the device code redeems the authorization").not.toContain(
     "device-code-secret",
   );

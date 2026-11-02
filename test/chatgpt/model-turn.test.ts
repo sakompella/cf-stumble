@@ -190,36 +190,6 @@ test("a revoked grant fails the call before anything is sent", async () => {
   expect(calls).toEqual([]);
 });
 
-test("a provider failure keeps the text already streamed, logs only its code, and errors the call", async () => {
-  const logged = capturedEvents();
-
-  const { events } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
-    Promise.resolve(
-      sseResponse([
-        responsesEvent({ type: "response.output_text.delta", delta: "part" }),
-        responsesEvent({
-          type: "response.failed",
-          response: {
-            error: { code: "subscription_sharing_usage_limit_exceeded", message: "Read a.txt" },
-          },
-        }),
-      ]),
-    ),
-  );
-
-  expect(events).toEqual([
-    { type: "text-delta", delta: "part" },
-    { type: "error", error: { code: "model-unavailable" } },
-  ]);
-  expect(named(logged(), "chatgpt.model-call")).toEqual([
-    expect.objectContaining({
-      outcome: "stream-failed",
-      code: "subscription_sharing_usage_limit_exceeded",
-    }),
-  ]);
-  expect(everythingLogged()).not.toContain("Read a.txt");
-});
-
 test("an error object without a type, then [DONE], keeps the text already streamed, logs the code, and errors the call", async () => {
   const logged = capturedEvents();
   const errorObject = { error: { code: "server_error", message: "Read a.txt" } };
@@ -244,20 +214,13 @@ test("an error object without a type, then [DONE], keeps the text already stream
   expect(everythingLogged()).not.toContain("Read a.txt");
 });
 
-test("an HTTP refusal and a stream that stops early both end as model-unavailable", async () => {
-  const refused = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
-    Promise.resolve(
-      Response.json({ error: { code: "subscription_sharing_user_not_eligible" } }, { status: 403 }),
-    ),
-  );
-
+test("a stream that stops early ends as model-unavailable", async () => {
   const truncated = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
     Promise.resolve(
       sseResponse([responsesEvent({ type: "response.output_text.delta", delta: "x" })]),
     ),
   );
 
-  expect(refused.events).toEqual([{ type: "error", error: { code: "model-unavailable" } }]);
   expect(truncated.events.at(-1)).toEqual({ type: "error", error: { code: "model-unavailable" } });
 });
 

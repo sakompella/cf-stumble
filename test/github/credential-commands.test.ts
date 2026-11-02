@@ -22,29 +22,25 @@ test.each([
   ["install", installCredentialSource()],
   ["status", credentialStatusSource()],
   ["repository access", repositoryAccessSource("https://github.com/owner/repo")],
+  ["project clone", projectCloneSource(sampleProjectOne)],
+  [
+    "harness provisioning",
+    provisionHarnessRepository(
+      HARNESS_BUILD_CONFIGURATION,
+      testHarnessCommit("5000000000000000000000000000000000000001"),
+    ),
+  ],
 ])("the %s command exports the durable gh and Git configuration first", (_name, source) => {
   const lines = source.split("\n");
-  const firstUse = lines.findIndex((line) => /\b(gh|git) (auth|api|ls-remote)\b/u.test(line));
+
+  const firstOther = lines.findIndex(
+    (line) => !line.startsWith("set ") && !exportsDurableConfiguration.includes(line),
+  );
 
   for (const exported of exportsDurableConfiguration) {
     const at = lines.indexOf(exported);
 
     expect(at).toBeGreaterThanOrEqual(0);
-    expect(at).toBeLessThan(firstUse);
-  }
-});
-
-test("clone and harness provisioning export the durable configuration for private repositories", () => {
-  const clone = projectCloneSource(sampleProjectOne);
-
-  const harness = provisionHarnessRepository(
-    HARNESS_BUILD_CONFIGURATION,
-    testHarnessCommit("5000000000000000000000000000000000000001"),
-  );
-
-  for (const source of [clone, harness]) {
-    for (const exported of exportsDurableConfiguration) {
-      expect(source).toContain(exported);
-    }
+    expect(at).toBeLessThan(firstOther);
   }
 });
