@@ -98,16 +98,4 @@ ENV COMPUTER_VAR_GH_CONFIG_DIR=/workspace/.config/gh
 ENV COMPUTER_VAR_GIT_CONFIG_GLOBAL=/workspace/.gitconfig
 EXPOSE 8080
 
-ENV PNPM_HOME=/usr/local/pnpm
-ENV PATH=/usr/local/pnpm:/usr/local/pnpm/bin:$PATH
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /seed/
-COPY vendor/cloudflare-computer-0.3.0.tgz /seed/vendor/
-RUN cd /seed \
- && corepack install \
- && corepack pnpm fetch \
- && rm -rf /seed
-
-RUN mkdir -p /root/.local/share/pnpm \
- && ln -s /usr/local/pnpm/store /root/.local/share/pnpm/store
-
 ENTRYPOINT ["/usr/local/bin/computerd"]
