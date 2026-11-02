@@ -7,7 +7,6 @@ import type {
   MainHarnessArtifact,
 } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
-import { runAtEntryPoint } from "../../run-entry-point.js";
 import { ModuleMapStore } from "./store.js";
 import type { ModuleMapStorage, StoredModuleMapProblem } from "./store.js";
 import { buildModuleMap, type BuildWorkspaceHost, type HarnessBuildProblem } from "./build.js";
@@ -20,12 +19,9 @@ export type MainFacetMountProblem = { readonly code: "no-active-generation" } | 
 
 export type MountedFacet = Fetcher<MainFacetTarget>;
 
-type SettledBuild = Result.Result<MainHarnessArtifact, HarnessBuildProblem>;
-
 export class HarnessArtifacts {
   private readonly store: ModuleMapStore;
   private readonly workspace: () => BuildWorkspaceHost;
-  private readonly inFlight = new Map<HarnessCommit, Promise<SettledBuild>>();
 
   constructor(storage: ModuleMapStorage, workspace: () => BuildWorkspaceHost) {
     this.store = new ModuleMapStore(storage);
@@ -40,7 +36,7 @@ export class HarnessArtifacts {
         return stored.artifact;
       }
 
-      const built = yield* this.build(harnessCommit);
+      const built = yield* buildModuleMap(this.workspace, harnessCommit);
 
       return yield* Effect.fromResult(this.store.write(built));
     });
@@ -59,28 +55,6 @@ export class HarnessArtifacts {
         return facets.get<MainFacetTarget>(SERVING_FACET_NAME, () => ({ class: facetClass }));
       }),
     );
-  }
-
-  private build(
-    harnessCommit: HarnessCommit,
-  ): Effect.Effect<MainHarnessArtifact, HarnessBuildProblem> {
-    return Effect.suspend(() => {
-      const settled = this.inFlight.get(harnessCommit) ?? this.start(harnessCommit);
-
-      return Effect.promise(() => settled).pipe(Effect.flatMap(Effect.fromResult));
-    });
-  }
-
-  private start(harnessCommit: HarnessCommit): Promise<SettledBuild> {
-    const started = runAtEntryPoint(
-      Effect.result(buildModuleMap(this.workspace, harnessCommit)),
-    ).finally(() => {
-      this.inFlight.delete(harnessCommit);
-    });
-
-    this.inFlight.set(harnessCommit, started);
-
-    return started;
   }
 
   private load(
@@ -112,8 +86,4 @@ export { ModuleMapStore } from "./store.js";
 
 export type { ModuleMapStorage } from "./store.js";
 
-export {
-  type BuildWorkspaceHost,
-  type BuildWorkspaceNamespace,
-  type HarnessBuildProblem,
-} from "./build.js";
+export { type BuildWorkspaceHost, type BuildWorkspaceNamespace } from "./build.js";
