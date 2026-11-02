@@ -115,7 +115,6 @@ test("starts an authorization and answers its status", async () => {
             verificationUri: "https://github.com/login/device",
             userCode: "WDJB-MJHT",
             expiresAt: 1,
-            intervalSeconds: 5,
           },
           checkedAt: 4_000,
         }),
@@ -130,7 +129,6 @@ test("starts an authorization and answers its status", async () => {
       verificationUri: "https://github.com/login/device",
       userCode: "WDJB-MJHT",
       expiresAt: 1,
-      intervalSeconds: 5,
     },
     checkedAt: 4_000,
   });

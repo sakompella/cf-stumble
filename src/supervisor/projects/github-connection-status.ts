@@ -14,7 +14,6 @@ export type GitHubConnectionStatus =
       verificationUri: string;
       userCode: string;
       expiresAt: number;
-      intervalSeconds: number;
     }>
   | Readonly<{ state: "connected"; login: string; source: CredentialSource }>
   | Readonly<{

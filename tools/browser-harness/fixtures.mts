@@ -78,7 +78,6 @@ export function github(scenario: HarnessScenario): JsonValue {
       verificationUri: "https://github.com/login/device",
       userCode: "WDJB-MJHT",
       expiresAt: 1_760_000_900_000,
-      intervalSeconds: 5,
     };
   }
 

@@ -106,7 +106,6 @@ test("shows the verification page and the user code, and never the device code",
       verificationUri: "https://github.com/login/device",
       userCode: "WDJB-MJHT",
       expiresAt: NOW + 900_000,
-      intervalSeconds: 5,
     },
     checkedAt: null,
   });

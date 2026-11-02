@@ -104,7 +104,6 @@ export class GitHubConnection {
           verificationUri: pending.verificationUri,
           userCode: pending.userCode,
           expiresAt: pending.expiresAt,
-          intervalSeconds: pending.intervalSeconds,
         };
   }
 
