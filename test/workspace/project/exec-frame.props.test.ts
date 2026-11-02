@@ -145,3 +145,80 @@ test("keeps every frame bounded and emits one ordered terminal event", async () 
     { testCases: 60 },
   );
 });
+
+async function runToEnd(
+  stdout: Uint8Array[],
+  stderr: Uint8Array[],
+  ending: "exit" | "eof",
+): Promise<DecodedEvent[]> {
+  const backend = new FakeExecBackend();
+
+  const operation = startExecOperation(
+    backend,
+    { command: "x", cwd: "/workspace", timeoutMs: 60_000 },
+    () => {},
+  );
+
+  await Promise.resolve();
+
+  const handle = backend.handles[0]!;
+
+  for (const data of stdout) handle.push({ name: "stdout", data });
+
+  for (const data of stderr) handle.push({ name: "stderr", data });
+
+  if (ending === "exit") handle.push({ name: "exit", exitCode: 0 });
+  else handle.end();
+
+  const reader = operation.events.getReader();
+  const frames: Uint8Array[] = [];
+
+  for (let next = await reader.read(); !next.done; next = await reader.read()) {
+    frames.push(next.value);
+  }
+
+  return eventsOf(frames);
+}
+
+const cutBytes = gs
+  .tuples(text, gs.integers({ minValue: 0, maxValue: 200 }), gs.binary({ maxSize: 3 }))
+  .map(([value, keep, tail]) => {
+    const encoded = new TextEncoder().encode(value);
+
+    return new Uint8Array([...encoded.slice(0, keep % (encoded.length + 1)), ...tail]);
+  });
+
+test("output equals a one-shot decode of the bytes, however they are cut and however the stream ends", async () => {
+  await hegel.testAsync(
+    async (tc) => {
+      const stdout = tc.draw(cutBytes);
+      const stderr = tc.draw(cutBytes);
+
+      const offsets = tc.draw(
+        gs.arrays(gs.integers({ minValue: 0, maxValue: 200 }), { maxSize: 6 }),
+      );
+
+      const ending = tc.draw(gs.sampledFrom(["exit", "eof"] as const));
+
+      const events = await runToEnd(
+        splitBytes(stdout, offsets),
+        splitBytes(stderr, offsets),
+        ending,
+      );
+
+      const outputOf = (kind: string) =>
+        events
+          .filter((event) => event.kind === kind)
+          .map((event) => event.data ?? "")
+          .join("");
+
+      expect(outputOf("stdout")).toBe(new TextDecoder().decode(stdout));
+      expect(outputOf("stderr")).toBe(new TextDecoder().decode(stderr));
+      expect(events.at(-1)).toMatchObject({
+        kind: "terminal",
+        outcome: ending === "exit" ? "exited" : "failed",
+      });
+    },
+    { testCases: 200 },
+  );
+});
