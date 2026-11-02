@@ -15,12 +15,12 @@ const confirmed: GenerationRecord = {
   compatibility: COMPATIBILITY,
 };
 
-test("a check confirming the recorded status and compatibility is a no-op that still advances the epoch", () => {
+test("a check confirming the recorded status and compatibility is a no-op that keeps the epoch", () => {
   const decided = decidePreparation(
     confirmed,
     { status: "ready", compatibility: COMPATIBILITY },
     { activeLabel: undefined, epoch: 5 },
   );
 
-  expect(decided).toEqual({ record: confirmed, epoch: 6, effect: "no-op" });
+  expect(decided).toEqual({ record: confirmed, epoch: 5, effect: "no-op" });
 });

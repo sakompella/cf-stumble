@@ -125,7 +125,7 @@ export function decidePreparation(
       generation: { ...current.generation, status: outcome.status },
       compatibility,
     },
-    epoch: selection.epoch + 1,
+    epoch: unchanged ? selection.epoch : selection.epoch + 1,
     effect: unchanged ? "no-op" : "recorded",
   };
 }
