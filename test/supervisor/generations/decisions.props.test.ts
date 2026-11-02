@@ -30,40 +30,74 @@ const recordedCompatibility = gs.sampledFrom([
   undefined,
 ] as const);
 
-test("only the current epoch can change the selection, whatever the target", () => {
-  hegel.test((tc) => {
-    const epoch = tc.draw(count);
-    const observedEpoch = tc.draw(count);
-    const target = tc.draw(labelValue);
-    const status = tc.draw(gs.sampledFrom(["candidate", "ready", "failed"] as const));
+const foreignCompatibility = gs.oneOf(
+  gs.sampledFrom(["pi-durable@1.4.0/host-1", "pi-durable@1.4.0", undefined] as const),
+  gs.text({ maxSize: 12 }).filter((text) => text !== SUPERVISOR_COMPATIBILITY),
+);
 
-    const stored = tc.draw(gs.booleans());
+function drawDefectiveActivation(tc: hegel.TestCase) {
+  const epoch = tc.draw(count);
+  const target = tc.draw(labelValue);
+  const commandKind = tc.draw(kind);
+  const stale = tc.draw(gs.booleans());
+  const unknown = tc.draw(gs.booleans());
+  const notReady = tc.draw(gs.booleans());
+  const neverActive = tc.draw(gs.booleans());
+  const mismatched = tc.draw(gs.booleans());
+  const observedOffset = tc.draw(gs.integers({ minValue: -1_000, maxValue: 1_000 }));
+  tc.assume(!stale || observedOffset !== 0);
 
-    const record = stored
-      ? {
-          generation: generation(target, status),
-          wasActive: tc.draw(gs.booleans()),
-          compatibility: tc.draw(recordedCompatibility),
-        }
-      : undefined;
+  const record = unknown
+    ? undefined
+    : {
+        generation: generation(
+          target,
+          notReady ? tc.draw(gs.sampledFrom(["candidate", "failed"] as const)) : "ready",
+        ),
+        wasActive: !neverActive,
+        compatibility: mismatched ? tc.draw(foreignCompatibility) : SUPERVISOR_COMPATIBILITY,
+      };
 
-    const command = { kind: tc.draw(kind), label: label(target), observedEpoch };
+  const present = [
+    ...(stale ? (["stale-epoch"] as const) : []),
+    ...(unknown ? (["unknown-generation"] as const) : []),
+    ...(!unknown && notReady ? (["not-ready"] as const) : []),
+    ...(!unknown && neverActive && commandKind === "rollback"
+      ? (["not-previously-active"] as const)
+      : []),
+    ...(!unknown && mismatched ? (["facet-compatibility-mismatch"] as const) : []),
+  ];
 
-    const decision = decideActivation(
-      command,
-      record,
-      { activeLabel: undefined, epoch },
-      SUPERVISOR_COMPATIBILITY,
-    );
+  const command = {
+    kind: commandKind,
+    label: label(target),
+    observedEpoch: stale ? epoch + observedOffset : epoch,
+  };
 
-    if (observedEpoch !== epoch) {
-      expect(decision).toEqual({ ok: false, problem: { code: "stale-epoch" } });
-    }
+  return { command, record, selection: { activeLabel: undefined, epoch }, present };
+}
 
-    if (record === undefined || status !== "ready") expect(decision.ok).toBe(false);
+test("a refused activation reports its defect, a stale epoch first, and an accepted one has none", () => {
+  hegel.test(
+    (tc) => {
+      const { command, record, selection, present } = drawDefectiveActivation(tc);
+      const decision = decideActivation(command, record, selection, SUPERVISOR_COMPATIBILITY);
 
-    if (record?.compatibility !== SUPERVISOR_COMPATIBILITY) expect(decision.ok).toBe(false);
-  });
+      if (present.length === 0) {
+        expect(decision).toMatchObject({
+          ok: true,
+          outcome: { kind: command.kind === "activate" ? "activated" : "rolled-back" },
+        });
+      } else if (command.observedEpoch !== selection.epoch) {
+        expect(decision).toEqual({ ok: false, problem: { code: "stale-epoch" } });
+      } else if (present.length === 1) {
+        expect(decision).toEqual({ ok: false, problem: { code: present[0] } });
+      } else {
+        expect(decision.ok ? [] : present).toContain(decision.ok ? "" : decision.problem.code);
+      }
+    },
+    { testCases: 500 },
+  );
 });
 
 test("an accepted activation advances the epoch by exactly one, and only when it changes the selection", () => {
