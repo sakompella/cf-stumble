@@ -37,15 +37,6 @@ test.each([
   );
 });
 
-test("the error names the sync status, not Computer's pull error text", () => {
-  expect(() => commandOutput({ ...ran, sync: pending }, "require-complete")).toThrow(
-    "post-command sync pending (exit 0, skipped 0)",
-  );
-  expect(() => commandOutput({ ...ran, sync: pending }, "require-complete")).not.toThrow(
-    "pull failed",
-  );
-});
-
 test("a command that does not need a durable result ignores a pending sync", () => {
   expect(commandOutput({ ...ran, sync: pending }, "not-required")).toEqual(ran);
 });

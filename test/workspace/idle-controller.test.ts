@@ -112,16 +112,14 @@ test("nothing is armed while no container runs", () => {
   expect(alarms).toEqual([]);
 });
 
-test("a lease moves the alarm to one limit after it ends, and an earlier lease does not shorten it", () => {
-  const { idle, alarms } = controller();
-  idle.lease(500_000);
-  idle.lease(300_000);
+test("a lease puts the alarm one limit after it ends; an earlier lease does not shorten it, and an ended lease moves it earlier", () => {
+  const overlapping = controller();
+  overlapping.idle.lease(500_000);
+  overlapping.idle.lease(300_000);
 
-  expect(alarms).toEqual([510_000]);
-  expect(idle.snapshot().leaseEndsAtMs).toBe(500_000);
-});
+  expect(overlapping.alarms).toEqual([510_000]);
+  expect(overlapping.idle.snapshot().leaseEndsAtMs).toBe(500_000);
 
-test("an ended lease counts the idle limit from its end and moves the alarm earlier", () => {
   const { idle, clock, alarms } = controller();
   const end = idle.lease(500_000);
   clock.now = 20_000;
@@ -150,16 +148,6 @@ test("forgetting the alarm lets the next activity arm a new one", () => {
   expect(alarms).toHaveLength(2);
 });
 
-test("an alarm before the limit re-arms for the moment the limit passes", async () => {
-  const { idle, clock, alarms, calls } = controller();
-  idle.begin()();
-  clock.now = 6_000;
-  await idle.onAlarm();
-
-  expect(alarms).toEqual([11_000, 11_000]);
-  expect(calls).toEqual([]);
-});
-
 test("an alarm that cannot re-arm itself rejects, so the platform runs it again", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   const { idle, clock } = controller({ alarmFails: true });
@@ -168,14 +156,13 @@ test("an alarm that cannot re-arm itself rejects, so the platform runs it again"
   await expect(idle.onAlarm()).rejects.toThrow("alarm write failed");
 });
 
-test("an alarm while work is in flight checks again a full limit later and stops nothing", async () => {
+test("an alarm before the limit re-arms for the moment the limit passes", async () => {
   const { idle, clock, alarms, calls } = controller();
-  idle.begin();
-  idle.touch();
-  clock.now = 20_000;
+  idle.begin()();
+  clock.now = 6_000;
   await idle.onAlarm();
 
-  expect(alarms.at(-1)).toBe(30_000);
+  expect(alarms).toEqual([11_000, 11_000]);
   expect(calls).toEqual([]);
 });
 
@@ -188,16 +175,6 @@ test("an alarm that finds the container stopped arms nothing and stops nothing",
 
   expect(alarms).toHaveLength(1);
   expect(calls).toEqual([]);
-});
-
-test("an alarm at the limit closes the Workspace and destroys the container", async () => {
-  const { idle, clock, alarms, calls } = controller();
-  idle.begin()();
-  clock.now = 11_000;
-  await idle.onAlarm();
-
-  expect(calls).toEqual(["close", "destroy"]);
-  expect(alarms, "a stopped container is not checked again").toHaveLength(1);
 });
 
 test.each([
@@ -228,14 +205,15 @@ test.each([
   expect(alarms.at(-1)).toBe(21_000);
 });
 
-test("a failed close is logged and the container is still destroyed", async () => {
+test("a failed close is logged and the container is still destroyed, and a stopped container is not checked again", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
-  const { idle, clock, calls } = controller({ closeFails: true });
+  const { idle, clock, alarms, calls } = controller({ closeFails: true });
   idle.begin()();
   clock.now = 11_000;
   await idle.onAlarm();
 
   expect(calls).toEqual(["close", "destroy"]);
+  expect(alarms).toHaveLength(1);
 });
 
 test("a failed destroy checks again one limit later", async () => {

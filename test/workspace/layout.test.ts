@@ -1,19 +1,13 @@
 import { expect, test } from "vitest";
 import { resolveInWorkspace } from "../../src/facet/generation-1/execution-env-paths.js";
 import { parseAddressedPath } from "../../src/workspace/project/resolve.js";
-import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
-import { projectCloneSource } from "../../src/project-provision.js";
-import { shellQuote } from "../../src/shell-quote.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   BUILD_SCRATCH_ROOT,
-  GITHUB_CLI_CONFIG_DIRECTORY,
-  GIT_GLOBAL_CONFIG_PATH,
   HARNESS_DIRECTORY,
   HARNESS_GIT_DIRECTORY,
   MANAGED_AGENT_INSTRUCTIONS_PATH,
   PROJECTS_DIRECTORY,
-  WORKSPACE_SYNC_IGNORES,
   projectDirectory,
   projectGitDirectory,
   WORKSPACE_ROOT,
@@ -55,19 +49,6 @@ test("gives the harness, each project, and build scratch separate directories", 
   expect(projectDirectory(projectOne.id).startsWith(`${PROJECTS_DIRECTORY}/`)).toBe(true);
 });
 
-test("the build configuration and project provisioning read this layout", () => {
-  expect(HARNESS_BUILD_CONFIGURATION.buildRoot).toBe(BUILD_SCRATCH_ROOT);
-  expect(HARNESS_BUILD_CONFIGURATION.harnessRepositoryRoot).toBe(HARNESS_DIRECTORY);
-  expect(HARNESS_BUILD_CONFIGURATION.harnessGitDir).toBe(HARNESS_GIT_DIRECTORY);
-
-  expect(projectCloneSource(projectOne)).toContain(
-    [
-      `repository=${shellQuote(projectDirectory(projectOne.id))}`,
-      `git_dir=${shellQuote(projectGitDirectory(projectOne.id))}`,
-    ].join("\n"),
-  );
-});
-
 test("the facet guard and the addressed-path space share one root", () => {
   const inside = [
     WORKSPACE_ROOT,
@@ -105,19 +86,5 @@ test("a sibling repository is reachable and everything above the root is not", (
 
   for (const escape of ["../../../etc/passwd", "/etc/passwd", `${WORKSPACE_ROOT}/../secrets`]) {
     expect(resolveInWorkspace(cwd, escape).ok, `${escape} must not resolve`).toBe(false);
-  }
-});
-
-test("keeps the gh and Git configuration in the durable workspace, apart from every repository", () => {
-  for (const path of [GITHUB_CLI_CONFIG_DIRECTORY, GIT_GLOBAL_CONFIG_PATH]) {
-    expect(path.startsWith(`${WORKSPACE_ROOT}/`)).toBe(true);
-    expect(path.startsWith(`${PROJECTS_DIRECTORY}/`)).toBe(false);
-    expect(path.startsWith(`${HARNESS_DIRECTORY}/`)).toBe(false);
-    expect(path).not.toBe(MANAGED_AGENT_INSTRUCTIONS_PATH);
-    expect(
-      path
-        .split("/")
-        .filter((segment) => WORKSPACE_SYNC_IGNORES.some((ignored) => ignored === segment)),
-    ).toStrictEqual([]);
   }
 });

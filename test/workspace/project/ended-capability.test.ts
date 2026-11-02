@@ -24,8 +24,6 @@ const LATE_CALLS = {
 
 const CLEANUP_METHODS = ["kill", "endTurn"];
 
-const FILE_METHODS = ["lstat", "readFile", "writeFile"] as const;
-
 function liveTarget(remainingMs: number) {
   const provider = new FakeProjectFilesystemProvider();
   provider.addFile("/workspace/kept.txt", encode("kept"));
@@ -121,26 +119,4 @@ test("cleanup calls still answer after the turn has ended", async () => {
     value: null,
   });
   await expect(target.endTurn()).resolves.toEqual({ ok: true, value: { killed: 0 } });
-});
-
-test("a container replacement still does not refuse file access", async () => {
-  const containerState = { generation: 0 };
-  const provider = new FakeProjectFilesystemProvider();
-  provider.addFile("/workspace/kept.txt", encode("kept"));
-
-  const target = new ProjectRpcTarget(
-    provider,
-    new FakeProjectTransactions(),
-    new FakeExecBackend(),
-    {
-      remainingMs: 60_000,
-      containerState,
-    },
-  );
-
-  containerState.generation = 1;
-
-  for (const name of FILE_METHODS) {
-    await expect(CAPABILITY_CALLS[name](target)).resolves.toMatchObject({ ok: true });
-  }
 });

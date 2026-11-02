@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import { withDecodedEvents } from "./decoded-events.js";
+import { encode } from "./target-helpers.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -21,7 +22,7 @@ function makeTarget(options: ConstructorParameters<typeof ProjectRpcTarget>[3] =
   const target = withDecodedEvents(rawTarget);
   madeTargets.push(rawTarget);
 
-  return { execBackend, target, rawTarget };
+  return { provider, execBackend, target, rawTarget };
 }
 
 const madeTargets: ProjectRpcTarget[] = [];
@@ -42,23 +43,17 @@ test.each([50, 500, 10_000])(
   },
 );
 
-test("a transport blip does not refuse filesystem or exec operations", async () => {
-  const state = { generation: 0 };
-  const { execBackend, target, rawTarget } = makeTarget({ containerState: state });
-
-  await expect(rawTarget.lstat("/")).resolves.toMatchObject({ ok: true });
-  await expect(target.startExec({ command: "still-available" })).resolves.toMatchObject({
-    ok: true,
-  });
-  expect(execBackend.requests).toHaveLength(1);
-});
-
 test("a replacement preserves filesystem access and reports one restart before exec retry", async () => {
   const state = { generation: 0 };
-  const { execBackend, target, rawTarget } = makeTarget({ containerState: state });
+  const { provider, execBackend, target, rawTarget } = makeTarget({ containerState: state });
+  provider.addFile("/workspace/kept.txt", encode("kept"));
   state.generation = 1;
 
   await expect(rawTarget.lstat("/")).resolves.toMatchObject({ ok: true });
+  await expect(rawTarget.readFile("/kept.txt")).resolves.toMatchObject({ ok: true });
+  await expect(rawTarget.writeFile("/new.txt", encode("new"), "overwrite")).resolves.toMatchObject({
+    ok: true,
+  });
   await expect(target.startExec({ command: "first-after-restart" })).resolves.toEqual({
     ok: false,
     error: { code: "container-restarted" },

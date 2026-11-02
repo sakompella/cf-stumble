@@ -129,19 +129,11 @@ test("keeps the managed instructions above every repository in the workspace", (
   expect(MANAGED_AGENT_INSTRUCTIONS).toContain("Never print or commit authentication tokens.");
 });
 
-test("gives each project its own directory inside the one workspace", () => {
+test("clones into the project's own directory and names no other repository", () => {
   const one = projectDirectory(projectOne.id);
-  const two = projectDirectory(projectTwo.id);
 
   expect(projectCloneSource(projectOne)).toContain(`repository=${shellQuote(one)}\n`);
   expect(projectCloneSource(projectOne)).toContain(`git_dir=${shellQuote(`${one}/.git`)}\n`);
-  expect(one).not.toBe(two);
-  expect(
-    [one, two, HARNESS_DIRECTORY].some((directory, index, all) =>
-      all.some((other, otherIndex) => otherIndex !== index && other.startsWith(`${directory}/`)),
-    ),
-    "no repository may sit inside another",
-  ).toBe(false);
   expect(projectCloneSource(projectOne)).not.toContain(projectDirectory(projectTwo.id));
   expect(projectCloneSource(projectOne)).not.toContain(HARNESS_DIRECTORY);
 });

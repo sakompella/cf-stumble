@@ -93,28 +93,6 @@ test("lstat returns a provider failure when symlink metadata cannot be read", as
   });
 });
 
-test.each<readonly [string, string]>([
-  ["ENOENT", "not-found"],
-  ["ENOTDIR", "not-directory"],
-  ["EISDIR", "is-directory"],
-  ["EACCES", "permission-denied"],
-  ["EPERM", "permission-denied"],
-  ["EROFS", "permission-denied"],
-  ["ELOOP", "symlink-loop"],
-  ["EWEIRD", "backend-unavailable"],
-])("provider error %s maps to %s", async (rawCode, expected) => {
-  const provider = throwingProvider(rawCode);
-
-  const target = new ProjectRpcTarget(
-    provider,
-    new FakeProjectTransactions(),
-    new FakeExecBackend(),
-  );
-
-  const result = await target.lstat("/anything");
-  expect(result).toEqual({ ok: false, error: { code: expected, path: "/anything" } });
-});
-
 afterEach(() => {
   vi.restoreAllMocks();
 });

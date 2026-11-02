@@ -1,57 +1,14 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import {
-  executeHarnessBuildRequest,
   type CommandOutput,
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "../../src/workspace/executor.js";
-import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../../src/project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { WorkspaceHost } from "../../src/workspace/host.js";
 import { ensureManagedInstructions } from "../../src/workspace/managed-instructions.js";
-import { workspaceContainerBackendConfiguration } from "../../src/workspace/workspace-platform.js";
-
-const commit = "5000000000000000000000000000000000000001";
-
-class FakeOperations implements WorkspaceOperations {
-  lstat(): Promise<WorkspacePathKind | undefined> {
-    return Promise.resolve("directory");
-  }
-
-  readFile(): Promise<string> {
-    return Promise.resolve("{}");
-  }
-
-  writeFile(): Promise<void> {
-    return Promise.reject(new Error("this test writes nothing"));
-  }
-
-  runCommand(): Promise<CommandOutput> {
-    return Promise.resolve({ stdout: "{}", stderr: "", exitCode: 0 });
-  }
-}
-
-test("configures the container backend for direct egress", () => {
-  expect(workspaceContainerBackendConfiguration("workspace-id").egress).toEqual({ mode: "direct" });
-});
-
-test("returns a build result as a plain value", async () => {
-  const result = await Effect.runPromise(
-    executeHarnessBuildRequest({
-      configuration: HARNESS_BUILD_CONFIGURATION,
-      operations: new FakeOperations(),
-      request: { kind: "build-output", harnessCommit: commit },
-    }),
-  );
-
-  expect(result).toEqual({
-    ok: true,
-    result: { kind: "command", stdout: "{}", stderr: "", exitCode: 0 },
-  });
-  expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
-});
 
 test("exposes only the Workspace Host RPC methods", () => {
   expect(

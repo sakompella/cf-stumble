@@ -1,26 +1,13 @@
 import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
-import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import type { WorkspaceCommandResult } from "../../src/workspace/index.js";
 import {
   parseProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/project-provision.js";
-import { ProvisionFailed, ProvisionUnavailable } from "../../src/workspace/provisioning.js";
+import { ProvisionUnavailable } from "../../src/workspace/provisioning.js";
 import { provisionerFor, ScriptedProvisionHost, TENANT_WORKSPACE } from "./provisioning-fakes.js";
-
-test("namespace fixtures record names independently", () => {
-  const host = new ScriptedProvisionHost();
-  const first = namespaceFor(host);
-  const second = namespaceFor(host);
-
-  first.getByName("first-workspace");
-  second.getByName("second-workspace");
-
-  expect(first.names).toEqual(["first-workspace"]);
-  expect(second.names).toEqual(["second-workspace"]);
-});
 
 test("clones and then writes the managed instructions into the tenant's workspace", async () => {
   const host = new ScriptedProvisionHost();
@@ -67,64 +54,48 @@ test("carries a resolved project, never command text", async () => {
   ).toEqual({ ok: false, error: { code: "invalid-request" } });
 });
 
-test("an interrupted provision and its resumption ask for the same state", async () => {
-  const host = new ScriptedProvisionHost();
-  const { provision } = provisionerFor(host);
-  const clean = new ScriptedProvisionHost();
-  await provisionerFor(clean).provision();
-
-  host.failingStep = "clone";
-  const interrupted = await provision();
-  host.failingStep = undefined;
-  const resumed = await provision();
-
-  if (Result.isSuccess(interrupted) || Result.isFailure(resumed)) {
-    throw new Error("an interrupted clone must recover on the next provision request");
-  }
-
-  expect(interrupted.failure).toMatchObject({ _tag: "ProvisionFailed", exitCode: 128 });
-  expect(interrupted.failure).toBeInstanceOf(ProvisionFailed);
-  expect(host.steps, "a failed clone stops before the instructions step").toEqual([
+test.each<readonly ["clone" | "instructions" | undefined, readonly string[], object | undefined]>([
+  [
     "clone",
-    "clone",
+    ["clone", "clone", "instructions"],
+    expect.objectContaining({ _tag: "ProvisionFailed", exitCode: 128 }),
+  ],
+  [
     "instructions",
-  ]);
-  expect(
-    host.plans.slice(1),
-    "the resumed run plans exactly what an uninterrupted run plans",
-  ).toEqual(clean.plans);
-  expect(host.plans[0], "the interrupted clone asked for the same reconciliation").toEqual(
-    host.plans[1],
-  );
-});
+    ["clone", "instructions", "clone", "instructions"],
+    expect.objectContaining({ _tag: "ProvisionUnavailable" }),
+  ],
+  [undefined, ["clone", "instructions", "clone", "instructions"], undefined],
+])(
+  "a provision after a run that failed at %s reconciles from scratch and asks for the same state",
+  async (failingStep, steps, expectedFailure) => {
+    const host = new ScriptedProvisionHost();
+    const { provision } = provisionerFor(host);
+    const clean = new ScriptedProvisionHost();
+    await provisionerFor(clean).provision();
 
-test("repeats the clone after the instructions step failed, rather than resuming mid-plan", async () => {
-  const host = new ScriptedProvisionHost();
-  const { provision } = provisionerFor(host);
+    host.failingStep = failingStep;
+    const first = await provision();
+    host.failingStep = undefined;
+    const second = await provision();
 
-  host.failingStep = "instructions";
-  const interrupted = await provision();
-  host.failingStep = undefined;
-  const resumed = await provision();
+    if (Result.isFailure(second)) {
+      throw new Error("a provision after a failed one must succeed");
+    }
 
-  if (Result.isSuccess(interrupted) || Result.isFailure(resumed)) {
-    throw new Error("a failed instructions write must recover on the next provision request");
-  }
-
-  expect(interrupted.failure).toBeInstanceOf(ProvisionUnavailable);
-  expect(host.steps).toEqual(["clone", "instructions", "clone", "instructions"]);
-});
-
-test("reconciles again on a plain repeat, holding no memory of the last run", async () => {
-  const host = new ScriptedProvisionHost();
-  const { provision } = provisionerFor(host);
-
-  await provision();
-  await provision();
-
-  expect(host.steps).toEqual(["clone", "instructions", "clone", "instructions"]);
-  expect(host.plans.slice(1)).toEqual(host.plans.slice(0, 1));
-});
+    expect(Result.isFailure(first) ? first.failure : undefined).toEqual(expectedFailure);
+    expect(host.steps, "a failed step stops the plan and the next request starts over").toEqual(
+      steps,
+    );
+    expect(
+      host.plans.slice(-clean.plans.length),
+      "the later run plans exactly what an uninterrupted run plans",
+    ).toEqual(clean.plans);
+    expect(host.plans[0], "the earlier run asked for the same reconciliation").toEqual(
+      host.plans.at(-1),
+    );
+  },
+);
 
 test("keeps a refused or unreachable workspace one typed failure", async () => {
   const refusing = new ScriptedProvisionHost();
