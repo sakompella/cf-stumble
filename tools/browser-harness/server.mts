@@ -2,7 +2,6 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { resolve } from "node:path";
 import { parseScenario, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
-import type { GenerationRecord, GenerationState } from "./fixtures-generation.mjs";
 import { openConversations, type Conversations } from "./conversations.mjs";
 import { parseJsonRecordText, type JsonValue } from "../json.mjs";
 import {
@@ -20,12 +19,6 @@ import {
   type ScenarioState,
 } from "./server-state.mjs";
 
-export type GenerationPatch = Readonly<{
-  activeLabel?: number;
-  epoch?: number;
-  generations?: readonly GenerationRecord[];
-}>;
-
 export type HarnessServer = Readonly<{
   url: string;
   scenario: () => HarnessScenario;
@@ -37,9 +30,7 @@ export type HarnessServer = Readonly<{
   openEventStreams: (projectId: string) => number;
   entries: Conversations["entries"];
   projects: () => readonly ProjectEntry[];
-  generation: () => GenerationState;
   chatgpt: () => ScenarioState["chatgpt"];
-  setGeneration: (patch: GenerationPatch) => void;
   close: () => Promise<void>;
 }>;
 
@@ -166,15 +157,7 @@ function controls(state: ScenarioState, url: string, close: () => Promise<void>)
     openEventStreams: (projectId) => state.openEventStreams.get(projectId) ?? 0,
     entries: (projectId) => state.conversations.entries(projectId),
     projects: () => [...state.projects],
-    generation: () => state.generation,
     chatgpt: () => state.chatgpt,
-    setGeneration: (patch) => {
-      state.generation = {
-        generations: patch.generations ?? state.generation.generations,
-        activeLabel: patch.activeLabel ?? state.generation.activeLabel,
-        epoch: patch.epoch ?? state.generation.epoch,
-      };
-    },
     close,
   };
 }

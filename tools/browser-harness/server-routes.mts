@@ -7,6 +7,7 @@ import {
   connectPayload,
   projectsPayload,
   refreshPayload,
+  STATUS_PAYLOAD,
 } from "./fixtures.mjs";
 import {
   disconnect,
@@ -15,8 +16,7 @@ import {
   startLogin,
   type ChatGPTAnswer,
 } from "./fixtures-chatgpt.mjs";
-import { runGenerationCommand, statusPayload, submitGeneration } from "./fixtures-generation.mjs";
-import { isJsonNumber, isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
+import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import type { ScenarioState } from "./server-state.mjs";
 
 export type RouteAnswer = Readonly<{ status: number; payload: JsonValue }>;
@@ -70,12 +70,6 @@ function readString(body: JsonValue, key: string): string | undefined {
   return value !== undefined && isJsonString(value) ? value : undefined;
 }
 
-function readNumber(body: JsonValue, key: string): number | undefined {
-  const value = field(body, key);
-
-  return value !== undefined && isJsonNumber(value) ? value : undefined;
-}
-
 const INVALID_REQUEST: RouteAnswer = {
   status: 400,
   payload: { ok: false, problem: { code: "invalid-request" } },
@@ -95,37 +89,6 @@ function connect(state: ScenarioState, body: JsonValue): RouteAnswer {
   }
 
   return { status: 200, payload: connectPayload(state.scenario, already) };
-}
-
-function submit(state: ScenarioState, body: JsonValue): RouteAnswer {
-  const harnessCommit = readString(body, "harnessCommit");
-
-  if (harnessCommit === undefined || harnessCommit === "") {
-    return INVALID_REQUEST;
-  }
-
-  const answer = submitGeneration(state.generation, harnessCommit);
-  state.generation = answer.next;
-
-  return { status: answer.status, payload: answer.payload };
-}
-
-function command(
-  kind: "activate" | "rollback",
-): (state: ScenarioState, body: JsonValue) => RouteAnswer {
-  return (state, body) => {
-    const observedEpoch = readNumber(body, "observedEpoch");
-    const label = readNumber(body, "label");
-
-    if (observedEpoch === undefined || label === undefined) {
-      return INVALID_REQUEST;
-    }
-
-    const answer = runGenerationCommand(state.generation, kind, observedEpoch, label);
-    state.generation = answer.next;
-
-    return { status: answer.status, payload: answer.payload };
-  };
 }
 
 function chatgptRoute(
@@ -161,7 +124,7 @@ const JSON_ROUTES: readonly Readonly<{
   {
     method: "GET",
     path: "/api/status",
-    answer: (state) => statusPayload(state.generation, state.scenario),
+    answer: () => ({ status: 200, payload: STATUS_PAYLOAD }),
   },
   {
     method: "GET",
@@ -200,9 +163,6 @@ const JSON_ROUTES: readonly Readonly<{
     path: "/api/github/authorization/complete",
     answer: (state) => ({ status: 200, payload: authorizationPayload(state.scenario) }),
   },
-  { method: "POST", path: "/api/generations/submit", answer: submit },
-  { method: "POST", path: "/api/generations/activate", answer: command("activate") },
-  { method: "POST", path: "/api/generations/rollback", answer: command("rollback") },
 ];
 
 export function serveJsonRoute(

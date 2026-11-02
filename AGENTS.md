@@ -47,7 +47,7 @@ Deploying with Alchemy (a push to `main`, which deploys through GitHub Actions, 
 
 `pnpm verify` never opens a browser, so it cannot see that the owner page fills itself in. To look at the page yourself, use the `chrome-devtools` MCP server first: open the page served by `scripts/local/dev.sh` or by a staging copy, then read its snapshot, console messages and network requests. Use Playwright when that server is not available.
 
-`pnpm test:browser` checks the page in a browser: Playwright specs in `tools/playwright` drive the real page against a local stub of the owner API (`tools/browser-harness`) and cover the streamed turn, cancel, reload persistence, the project sidebar, GitHub states, the generation drawer, and a phone viewport. It needs Chromium and stays outside the commit gate; set `CHROMIUM_PATH` to an executable when Playwright's own download does not run, as on NixOS.
+`pnpm test:browser` checks the page in a browser: Playwright specs in `tools/playwright` drive the real page against a local stub of the owner API (`tools/browser-harness`) and cover the streamed turn, cancel, reload persistence, the project sidebar, GitHub states, and a phone viewport. It needs Chromium and stays outside the commit gate; set `CHROMIUM_PATH` to an executable when Playwright's own download does not run, as on NixOS.
 
 ### Scope
 

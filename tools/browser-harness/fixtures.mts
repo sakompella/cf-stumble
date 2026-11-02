@@ -12,7 +12,6 @@ export const HARNESS_SCENARIOS = [
   "github-awaiting-authorization",
   "chatgpt-connected",
   "chatgpt-needs-reconnect",
-  "status-problem",
 ] as const;
 
 export type HarnessScenario = (typeof HARNESS_SCENARIOS)[number];
@@ -125,3 +124,10 @@ export function authorizationPayload(scenario: HarnessScenario): JsonValue {
 export function refreshPayload(scenario: HarnessScenario): JsonValue {
   return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }
+
+export const STATUS_PAYLOAD: JsonValue = {
+  activeGeneration: {
+    generation: { label: 1, harnessCommit: "abc123", status: "ready" },
+    epoch: 3,
+  },
+};

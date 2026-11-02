@@ -1,7 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { initialChatGPT, type ChatGPTState } from "./fixtures-chatgpt.mjs";
 import { initialProjects, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
-import { INITIAL_GENERATION, type GenerationState } from "./fixtures-generation.mjs";
 import type { Conversations } from "./conversations.mjs";
 import type { JsonValue } from "../json.mjs";
 
@@ -17,7 +16,6 @@ export type RequestRecord = { method: string; path: string; body: JsonValue; sta
 export type ScenarioState = {
   scenario: HarnessScenario;
   projects: ProjectEntry[];
-  generation: GenerationState;
   chatgpt: ChatGPTState;
   requests: RequestRecord[];
   conversations: Conversations;
@@ -31,7 +29,6 @@ export function initialState(
   return {
     scenario,
     projects: [...initialProjects(scenario)],
-    generation: INITIAL_GENERATION,
     chatgpt: initialChatGPT(scenario),
     requests: [],
     conversations,
