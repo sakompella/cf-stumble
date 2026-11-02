@@ -70,11 +70,10 @@ RUN sed -i \
  && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/10snapshot \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      fuse3 libfuse2t64 ca-certificates curl gnupg git tar \
+      fuse3 libfuse2t64 ca-certificates curl git tar \
  && mkdir -p /etc/apt/keyrings \
- && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
- && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+ && curl -fsSLo /etc/apt/keyrings/nodesource.asc https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+ && echo "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_22.x nodistro main" \
       > /etc/apt/sources.list.d/nodesource.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends "nodejs=${NODEJS_VERSION}" \
