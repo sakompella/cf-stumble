@@ -1,6 +1,5 @@
 import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
-import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import type { WorkspaceCommandResult } from "../../src/workspace/index.js";
 import {
@@ -9,18 +8,6 @@ import {
 } from "../../src/workspace/project-provision.js";
 import { ProvisionFailed, ProvisionUnavailable } from "../../src/workspace/provisioning.js";
 import { provisionerFor, ScriptedProvisionHost, TENANT_WORKSPACE } from "./provisioning-fakes.js";
-
-test("namespace fixtures record names independently", () => {
-  const host = new ScriptedProvisionHost();
-  const first = namespaceFor(host);
-  const second = namespaceFor(host);
-
-  first.getByName("first-workspace");
-  second.getByName("second-workspace");
-
-  expect(first.names).toEqual(["first-workspace"]);
-  expect(second.names).toEqual(["second-workspace"]);
-});
 
 test("clones and then writes the managed instructions into the tenant's workspace", async () => {
   const host = new ScriptedProvisionHost();

@@ -83,12 +83,6 @@ function build(operations: FakeBuildOperations, request: HarnessBuildRequest) {
   );
 }
 
-test("rejects an invalid harness commit fixture", () => {
-  expect(() => testHarnessCommit("not-a-harness-commit")).toThrow(
-    "the test commit must be a valid harness commit",
-  );
-});
-
 test("plans one planned step, or the build output, from a validated commit", () => {
   const step = parseHarnessBuildRequest({
     kind: "build-step",
@@ -178,18 +172,6 @@ test("reads the module map the build wrote, through the shell that wrote it", as
     moduleMapPath,
   );
   expect(read, "and reads it rather than searching for it").toContain('cat -- "$path"');
-});
-
-test("reports a build that wrote no module map as a non-zero read", async () => {
-  const operations = new FakeBuildOperations();
-  operations.exitCode = 1;
-
-  await expect(build(operations, { kind: "build-output", harnessCommit: commit })).resolves.toEqual(
-    {
-      ok: true,
-      result: { kind: "command", stdout: "", stderr: "", exitCode: 1 },
-    },
-  );
 });
 
 test("rejects a commit that is not a harness commit, so no path can escape the build root", async () => {

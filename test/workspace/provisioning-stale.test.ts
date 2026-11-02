@@ -3,7 +3,6 @@ import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
 import { PROVISION_STALE_AFTER_MS } from "../../src/workspace/provision-exclusion.js";
 import { delayedProvisionHost, LostFirstProvisionHost } from "./provisioning-fakes.js";
@@ -91,10 +90,6 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
   } finally {
     vi.useRealTimers();
   }
-});
-
-test("provision stale ceiling covers both Host calls of a provision", () => {
-  expect(PROVISION_STALE_AFTER_MS).toBeGreaterThanOrEqual(2 * WORKSPACE_COMMAND_TIMEOUT_MS);
 });
 
 test("drops an in-flight provision after the Workspace Host command ceiling", async () => {

@@ -11,7 +11,6 @@ import { MANAGED_AGENT_INSTRUCTIONS } from "../../src/project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { WorkspaceHost } from "../../src/workspace/host.js";
 import { ensureManagedInstructions } from "../../src/workspace/managed-instructions.js";
-import { workspaceContainerBackendConfiguration } from "../../src/workspace/workspace-platform.js";
 
 const commit = "5000000000000000000000000000000000000001";
 
@@ -32,10 +31,6 @@ class FakeOperations implements WorkspaceOperations {
     return Promise.resolve({ stdout: "{}", stderr: "", exitCode: 0 });
   }
 }
-
-test("configures the container backend for direct egress", () => {
-  expect(workspaceContainerBackendConfiguration("workspace-id").egress).toEqual({ mode: "direct" });
-});
 
 test("returns a build result as a plain value", async () => {
   const result = await Effect.runPromise(

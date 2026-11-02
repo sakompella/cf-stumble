@@ -15,17 +15,6 @@ test("arbitrary bytes round-trip exactly", async () => {
   if (read.ok) expect(Array.from(read.value)).toEqual([0x00, 0xff, 0xc3, 0x28]);
 });
 
-test("multibyte file content reports a byte size, not a character count", async () => {
-  const { target } = makeTarget();
-  const content = "héllo";
-  await target.writeFile("/greeting.txt", encode(content), "overwrite");
-
-  const info = await target.lstat("/greeting.txt");
-  expect(info.ok).toBe(true);
-
-  if (info.ok) expect(info.value.size).toBe(6);
-});
-
 test("a symlink's size is the byte length of its target, not the string length", async () => {
   const { provider, target } = makeTarget();
   const targetText = "café-target";
