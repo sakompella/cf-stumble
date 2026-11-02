@@ -20,7 +20,7 @@ Run `pnpm verify` before you claim anything works. It runs `verify:vendor` (the 
 
 After a staging deploy or an e2e run, run `pnpm ops:check` (see `docs/agents/design/observability.md`, "Checking a running deployment") before you claim it works. `pnpm verify` cannot see runtime faults such as an idle container that keeps running. When the machine is busy, a test can exceed Vitest's default 5 s timeout; run that test again alone before you suspect your change.
 
-A tracked `.githooks/pre-commit` runs the same command and blocks the commit when it fails. `pnpm format` fixes formatting; nothing else in the gate is auto-fixable.
+CI runs the full gate on Ubuntu: `.github/workflows/verify.yml` runs `pnpm verify` on every push and pull request. A tracked `.githooks/pre-commit` runs the same command and blocks the commit when it fails. `pnpm format` fixes formatting; nothing else in the gate is auto-fixable.
 
 ### Editor setup
 
@@ -37,7 +37,7 @@ Other editors run `tsrs --lsp -stdio` as an LSP server for TypeScript files, and
 
 ### Cloudflare operations
 
-Deploying with Alchemy (`pnpm run deploy`), checking a deployment or runtime with `pnpm ops:check`, staging a risky change, and diagnosing container cost or idle stops: use the `cf-operations` skill (`.agents/skills/cf-operations/SKILL.md`). `docs/deploy.md` is the human runbook.
+Deploying with Alchemy (a push to `main`, which deploys through GitHub Actions, or `pnpm run deploy`), checking a deployment or runtime with `pnpm ops:check`, staging a risky change, and diagnosing container cost or idle stops: use the `cf-operations` skill (`.agents/skills/cf-operations/SKILL.md`). `docs/deploy.md` is the human runbook.
 
 ### Alchemy, Cloudflare CLI and configuration
 
