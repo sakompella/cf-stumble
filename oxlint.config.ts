@@ -5,6 +5,7 @@ export default defineConfig({
     "node_modules",
     "dist",
     ".wrangler",
+    ".alchemy",
     ".agents/**",
     "tools/oxlint/anti-slop/**",
     "vendor/**",

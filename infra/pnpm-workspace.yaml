@@ -1,0 +1,9 @@
+# Alchemy runs from its own pnpm project, because Alchemy 2.0.0-beta.84 imports modules that
+# Effect 4.1 removed while the Worker uses Effect 4.1, and the container's dependency seed should
+# hold only the Worker's packages. Alchemy's Effect packages stay on 4.0.
+overrides:
+  "@effect/platform-node>@effect/platform-node-shared": 4.0.7
+  "@alchemy.run/cloudflare>@effect/sql-d1": 4.0.7
+# workerd serves `alchemy dev`, which this project does not use.
+allowBuilds:
+  workerd: false
