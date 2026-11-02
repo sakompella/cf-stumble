@@ -39,6 +39,31 @@ const urlPart = gs.text({
   maxSize: 20,
 });
 
+const alphanumeric = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+const nearMiss = gs.oneOf(
+  gs.sampledFrom([
+    "ghost",
+    "ghp",
+    "gh",
+    "github",
+    "https://github.com/o/r",
+    "https://github.com/o/r@v1",
+    "repository",
+    "not found",
+  ]),
+  gs
+    .tuples(
+      gs.sampledFrom(["ghp_", "gho_", "ghu_", "ghs_", "ghr_"]),
+      gs.text({ alphabet: alphanumeric, maxSize: 15 }),
+    )
+    .map(([tokenPrefix, body]) => `${tokenPrefix}${body}`),
+  gs.text({ alphabet: `${alphanumeric}_`, maxSize: 15 }).map((body) => `github_pat_${body}`),
+  gs.text({ alphabet: alphanumeric, minSize: 16, maxSize: 30 }).map((body) => `ghx_${body}`),
+);
+
+const separator = gs.sampledFrom([" ", "\n", ":", "/", "(", ")", ","]);
+
 test("redacts documented tokens next to non-word delimiters and reaches a fixpoint", () => {
   hegel.test((tc) => {
     const tokenPrefix = tc.draw(prefix);
@@ -78,5 +103,22 @@ test("redacts generated HTTPS URL userinfo credentials", () => {
     expect(redacted).not.toContain(user);
     expect(redacted).not.toContain(secret);
     expect(redactCredentials(redacted)).toBe(redacted);
+  });
+});
+
+test("text with no token shape in it is returned unchanged", () => {
+  hegel.test((tc) => {
+    const pieces = tc.draw(gs.arrays(nearMiss, { minSize: 1, maxSize: 6 }));
+
+    const separators = tc.draw(
+      gs.arrays(separator, { minSize: pieces.length, maxSize: pieces.length }),
+    );
+
+    const text = pieces
+      .map((piece, index) => `${index === 0 ? "" : separators[index]}${piece}`)
+      .join("");
+
+    expect(redactCredentials(text)).toBe(text);
+    expect(containsCredential(text)).toBe(false);
   });
 });
