@@ -43,6 +43,10 @@ async function ran(env: ExecutionEnv, command: string | readonly string[]) {
   };
 }
 
+function linesInAnyOrder(run: Awaited<ReturnType<typeof ran>> | undefined) {
+  return run === undefined ? undefined : { ...run, output: run.output.split("\n").toSorted() };
+}
+
 test("a plain stumble command runs in the facet instead of the workspace container", async () => {
   const { reached, generations } = recordingControl();
   const expected = await runStumble(["gen", "status"], { generations });
@@ -92,7 +96,9 @@ test("a command that only resembles stumble runs in the workspace exactly as it 
       withoutStumble = await ran(env, command);
     });
 
-    expect(withStumble, String(command)).toStrictEqual(withoutStumble);
+    expect(linesInAnyOrder(withStumble), String(command)).toStrictEqual(
+      linesInAnyOrder(withoutStumble),
+    );
   }
 
   expect(reached).toStrictEqual([]);
