@@ -57,12 +57,12 @@ RUN npm run build -w @cloudflare/dofs -w @cloudflare/computer-rpc -w @cloudflare
  && npm run build:bin -w @cloudflare/computerd \
  && install -D -m 0755 artifacts/computerd/computerd-linux-x64 /usr/local/bin/computerd
 
-FROM docker.io/library/debian:stable-slim@sha256:eb593cf2c358cacef45ca0a424bbc7d30cfa3466265fc2662b9466a0ca6ba1c5
+FROM docker.io/library/debian:stable-slim@sha256:13e0a2e78aa0554ad5ff66e4e260c6dbcdff807eb1f39d43b9fb0288aae88b04
 
-ARG DEBIAN_SNAPSHOT=20261005T000000Z
-ARG NODEJS_VERSION=22.23.3-1nodesource1
-ARG GH_VERSION=2.102.0
-ARG GH_LINUX_AMD64_DEB_SHA256=7e54a307f90afdc59796c325ec0c49fb09e6c18537727207a8ac7513584ea5b0
+ARG DEBIAN_SNAPSHOT=20261102T000000Z
+ARG NODEJS_VERSION=22.23.4-1nodesource1
+ARG GH_VERSION=2.103.3
+ARG GH_LINUX_AMD64_DEB_SHA256=e3bafef96328d1a67de3a968bdfe1cc2ffd58cf6aba8b5e201356897ed06bb3d
 
 RUN sed -i \
       -e "s#deb.debian.org/debian-security#snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}#" \
