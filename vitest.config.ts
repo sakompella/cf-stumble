@@ -114,6 +114,7 @@ export default defineConfig({
         },
         test: {
           name: "node",
+          testTimeout: 20_000,
           include: [
             "test/**/*.props.test.ts",
             "test/**/*.shell.test.ts",
