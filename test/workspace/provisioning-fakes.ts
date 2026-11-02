@@ -98,22 +98,6 @@ export class NeverSettlingProvisionHost extends FakeProvisionHost {
   }
 }
 
-export class LostFirstProvisionHost extends FakeProvisionHost {
-  calls = 0;
-
-  override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
-    this.calls += 1;
-
-    if (this.calls === 1) {
-      this.record(request);
-
-      return new Promise(() => {});
-    }
-
-    return super.provision(request);
-  }
-}
-
 export class ScriptedProvisionHost extends FakeProvisionHost {
   readonly plans: WorkspacePlan[] = [];
   failingStep: "clone" | "instructions" | undefined;

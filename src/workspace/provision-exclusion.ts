@@ -1,27 +1,9 @@
 import * as Effect from "effect/Effect";
-import {
-  WORKSPACE_RPC_TIMEOUT_MARGIN_MS,
-  WORKSPACE_RPC_TIMEOUT_MS,
-} from "../workspace-command-timeout.js";
 
-type ActiveProvision = Readonly<{
-  operation: Promise<unknown>;
-  startedAt: number;
-}>;
-
-const HOST_CALLS_PER_PROVISION = 2;
-
-export const PROVISION_STALE_AFTER_MS =
-  HOST_CALLS_PER_PROVISION * WORKSPACE_RPC_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
-
-const activeProvisions = new Map<string, ActiveProvision>();
+const activeProvisions = new Map<string, Promise<void>>();
 
 export function clearWorkspaceProvision(workspaceName: string): void {
   activeProvisions.delete(workspaceName);
-}
-
-function provisionIsStale(active: ActiveProvision, now: number): boolean {
-  return now - active.startedAt > PROVISION_STALE_AFTER_MS;
 }
 
 export function provisionInWorkspace<A, E>(
@@ -36,14 +18,12 @@ export function provisionInWorkspace<A, E>(
     for (;;) {
       const active = activeProvisions.get(input.workspaceName);
 
-      if (active !== undefined && !provisionIsStale(active, Date.now())) {
+      if (active !== undefined) {
         const wait = yield* Effect.promise(() => settleActiveProvision(active, input.signal));
 
         if (wait === "aborted") return yield* Effect.fail(input.aborted);
         continue;
       }
-
-      if (active !== undefined) clearStaleProvision(input.workspaceName);
 
       if (input.signal !== undefined && input.signal.aborted) {
         return yield* Effect.fail(input.aborted);
@@ -51,12 +31,9 @@ export function provisionInWorkspace<A, E>(
 
       const settled = { settle: (): void => {} };
 
-      const tracked: ActiveProvision = {
-        operation: new Promise<void>((resolve) => {
-          settled.settle = resolve;
-        }),
-        startedAt: Date.now(),
-      };
+      const tracked = new Promise<void>((resolve) => {
+        settled.settle = resolve;
+      });
 
       activeProvisions.set(input.workspaceName, tracked);
 
@@ -72,54 +49,28 @@ export function provisionInWorkspace<A, E>(
   });
 }
 
-function removeActiveProvision(workspaceName: string, active: ActiveProvision): void {
+function removeActiveProvision(workspaceName: string, active: Promise<void>): void {
   if (activeProvisions.get(workspaceName) === active) activeProvisions.delete(workspaceName);
 }
 
-function clearStaleProvision(workspaceName: string): void {
-  activeProvisions.delete(workspaceName);
-}
-
-type ProvisionWait = "settled" | "aborted" | "stale";
+type ProvisionWait = "settled" | "aborted";
 
 function settleActiveProvision(
-  active: ActiveProvision,
+  active: Promise<void>,
   signal: AbortSignal | undefined,
 ): Promise<ProvisionWait> {
   if (signal !== undefined && signal.aborted) return Promise.resolve("aborted");
 
-  const remaining = Math.max(0, PROVISION_STALE_AFTER_MS - (Date.now() - active.startedAt) + 1);
-
   return new Promise((resolve) => {
-    let finished = false;
-    let staleTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const finish = (result: ProvisionWait) => {
-      if (finished) return;
-
-      finished = true;
-
-      if (staleTimer !== undefined) clearTimeout(staleTimer);
-      signal?.removeEventListener("abort", onAbort);
-      resolve(result);
-    };
-
     const onAbort = () => {
-      finish("aborted");
+      resolve("aborted");
     };
 
-    staleTimer = setTimeout(() => {
-      finish("stale");
-    }, remaining);
     signal?.addEventListener("abort", onAbort, { once: true });
-    active.operation.then(
-      () => {
-        finish("settled");
-      },
-      () => {
-        finish("settled");
-      },
-    );
+    void active.then(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve("settled");
+    });
   });
 }
 
@@ -128,22 +79,10 @@ export function waitForWorkspaceProvision(
   signal?: AbortSignal,
 ): Effect.Effect<boolean> {
   return Effect.gen(function* () {
-    for (;;) {
-      const active = activeProvisions.get(workspaceName);
+    const active = activeProvisions.get(workspaceName);
 
-      if (active === undefined) return signal?.aborted !== true;
+    if (active === undefined) return signal?.aborted !== true;
 
-      if (provisionIsStale(active, Date.now())) {
-        clearStaleProvision(workspaceName);
-
-        continue;
-      }
-
-      const wait = yield* Effect.promise(() => settleActiveProvision(active, signal));
-
-      if (wait === "aborted") return false;
-
-      if (wait === "settled") return true;
-    }
+    return (yield* Effect.promise(() => settleActiveProvision(active, signal))) === "settled";
   });
 }
