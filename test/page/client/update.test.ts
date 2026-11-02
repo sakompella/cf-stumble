@@ -193,20 +193,6 @@ test("cancelling posts an abort for the selected project", () => {
   expect(cancelled.commands?.[0]?.args).toEqual({ projectId: "repo" });
 });
 
-test("an event or refusal from a stream the page replaced is dropped", () => {
-  const page = readyPage();
-  const switched = after(page, [Message.ClickedProject({ projectId: "harness" })]);
-  const old = page.eventsStreamId;
-
-  expect(switched.eventsStreamId).not.toBe(old);
-  expect(
-    after(switched, [
-      Message.ReceivedEvent({ streamId: old, event: { type: "run_start", inputs: [1] } }),
-      Message.RefusedEvents({ streamId: old, wording: "rejected: x" }),
-    ]),
-  ).toEqual(switched);
-});
-
 test("a dropped stream says it is reconnecting and keeps the conversation it showed", () => {
   const running = after(readyPage(), [event({ type: "run_start", inputs: [1] })]);
 

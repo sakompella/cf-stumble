@@ -1,33 +1,12 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
 
 import { parseRequest, type ToolDefinition } from "../src/model-route-request.js";
+import { decodeWire, drawTools, drawTool } from "./model-route-draws.js";
 
 const USER = { role: "user", content: "Hi" } as const;
-
-const decodeWire = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
-
-function drawTool(tc: hegel.TestCase): ToolDefinition {
-  const property = tc.draw(gs.text({ alphabet: "abc_", minSize: 1, maxSize: 6 }));
-
-  return {
-    type: "function",
-    function: {
-      name: tc.draw(gs.text({ alphabet: "abcXYZ_-", minSize: 1, maxSize: 12 })),
-      description: tc.draw(gs.text({ maxSize: 20 })),
-      parameters: { type: "object", properties: { [property]: { type: "string" } } },
-    },
-  };
-}
-
-function drawTools(tc: hegel.TestCase): ToolDefinition[] {
-  const count = tc.draw(gs.integers({ minValue: 0, maxValue: 4 }));
-
-  return Array.from({ length: count }, () => drawTool(tc));
-}
 
 const WRONG_VALUES = {
   type: [undefined, "", "Function", "web_search", 1, null, {}],

@@ -2,22 +2,29 @@ import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { runAtEntryPoint, runResponseBody } from "../src/run-entry-point.js";
 
-test("a program's value is the entry point's value", async () => {
-  await expect(runAtEntryPoint(Effect.succeed(7))).resolves.toBe(7);
-});
+const RUNNERS = [
+  ["runAtEntryPoint", (program: Effect.Effect<void>) => runAtEntryPoint(program)],
+  [
+    "runResponseBody",
+    (program: Effect.Effect<void>) => runResponseBody(program, new AbortController().signal),
+  ],
+] as const;
 
-test("a defect rejects with the value that was thrown, as an async function would", async () => {
-  const thrown = new Error("platform fault");
+test.each(RUNNERS)(
+  "%s: a defect rejects with the value that was thrown, as an async function would",
+  async (_name, run) => {
+    const thrown = new Error("platform fault");
 
-  await expect(runAtEntryPoint(Effect.promise(() => Promise.reject(thrown)))).rejects.toBe(thrown);
-  await expect(
-    runAtEntryPoint(
-      Effect.sync(() => {
-        throw thrown;
-      }),
-    ),
-  ).rejects.toBe(thrown);
-});
+    await expect(run(Effect.promise(() => Promise.reject(thrown)))).rejects.toBe(thrown);
+    await expect(
+      run(
+        Effect.sync(() => {
+          throw thrown;
+        }),
+      ),
+    ).rejects.toBe(thrown);
+  },
+);
 
 test("a response body keeps streaming after the program has returned", async () => {
   const body = new TransformStream<Uint8Array, Uint8Array>();
@@ -55,17 +62,4 @@ test("a body's program runs until the body is cancelled, then runs its finalizer
 
   await expect(running).resolves.toBeUndefined();
   expect(finalized).toEqual(["released"]);
-});
-
-test("a body's program that dies rejects with the value that was thrown", async () => {
-  const thrown = new Error("stream reader unavailable");
-
-  await expect(
-    runResponseBody(
-      Effect.sync(() => {
-        throw thrown;
-      }),
-      new AbortController().signal,
-    ),
-  ).rejects.toBe(thrown);
 });

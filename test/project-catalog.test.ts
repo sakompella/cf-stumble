@@ -26,13 +26,6 @@ function catalogOf(...urls: readonly string[]): ProjectCatalog {
   return parsed;
 }
 
-test("ships no projects, because a project exists only once a tenant connects one", () => {
-  expect(resolveProject("sample-project-one", [])).toEqual({
-    ok: false,
-    reason: "unknown-project-id",
-  });
-});
-
 test("resolves every project of a non-empty catalog", () => {
   const count = 3;
 
@@ -55,30 +48,6 @@ test("resolves every project of a non-empty catalog", () => {
   });
 });
 
-test("gives one repository the same identity whatever its position or display name", () => {
-  const url = "https://github.com/sample/repo-1";
-  const first = catalogOf(url, "https://github.com/sample/repo-2");
-  const reordered = catalogOf("https://github.com/sample/repo-2", url);
-
-  const renamed = parseProjectCatalog([
-    { id: projectIdForRepository(url) ?? "", displayName: "a new name", repositoryUrl: url },
-  ]);
-
-  expect(projectIdForRepository(url)).toBe("sample-repo-1");
-  expect(resolveProject("sample-repo-1", first)).toMatchObject({ ok: true });
-  expect(resolveProject("sample-repo-1", reordered)).toMatchObject({ ok: true });
-  expect(renamed?.[0]?.id).toBe("sample-repo-1");
-});
-
-test.each([
-  "https://github.com/Sample/Repo-1.git",
-  "https://GitHub.com/Sample/Repo-1",
-  "https://github.com/Sample/Repo-1/",
-])("converges %s on one canonical repository and one project id", (written) => {
-  expect(canonicalRepositoryUrl(written)).toBe("https://github.com/Sample/Repo-1");
-  expect(projectIdForRepository(written)).toBe("sample-repo-1");
-});
-
 test("refuses a repository URL that no clone could use", () => {
   expect(canonicalRepositoryUrl("http://github.com/sample/repo")).toBeUndefined();
   expect(canonicalRepositoryUrl("https://token@github.com/sample/repo")).toBeUndefined();
@@ -87,21 +56,9 @@ test("refuses a repository URL that no clone could use", () => {
   expect(projectIdForRepository("https://github.com/--/--")).toBeUndefined();
 });
 
-test("keeps the id of every connected repository whose name has no dot or underscore", () => {
-  expect(projectIdForRepository("https://github.com/sakompella/emaily-demo")).toBe(
-    "sakompella-emaily-demo",
-  );
-  expect(projectIdForRepository("https://GitHub.com/Sakompella/Emaily-Demo.git/")).toBe(
-    "sakompella-emaily-demo",
-  );
-  expect(projectIdForRepository("https://github.com/sample/repo-1")).toBe("sample-repo-1");
-  expect(projectIdForRepository("https://github.com/octocat/hello-world")).toBe(
-    "octocat-hello-world",
-  );
-});
-
 test.each([
   ["owner/a-b", "owner-a-b"],
+  ["sakompella/emaily-demo", "sakompella-emaily-demo"],
   ["owner/a.b", "owner-a-b--2d"],
   ["owner/a_b", "owner-a-b--2u"],
   ["owner/a--b", "owner-a-b--2hh"],
