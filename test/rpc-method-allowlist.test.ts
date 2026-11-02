@@ -1,6 +1,7 @@
 import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { ModelRoute } from "../src/model-route.js";
+import { StartupCheckModel } from "../src/startup-check-model.js";
 import { ProjectRpcTarget } from "../src/workspace/project/index.js";
 import {
   ConversationHostTarget,
@@ -33,6 +34,10 @@ function rpcMemberNames(prototype: Prototype): string[] {
 
 test("ModelRoute exposes exactly the allowlisted RPC members", () => {
   expect(rpcMemberNames(ModelRoute.prototype)).toStrictEqual(["runStream"]);
+});
+
+test("the scripted model a startup check uses exposes exactly the allowlisted RPC members", () => {
+  expect(rpcMemberNames(StartupCheckModel.prototype)).toStrictEqual(["runStream"]);
 });
 
 test("ProjectRpcTarget exposes exactly the allowlisted RPC members", () => {

@@ -50,6 +50,7 @@ export async function servingGeneration1(
     throw new Error("the built generation must pass its startup check");
   }
 
+  workspace.leases.splice(0);
   await activateGeneration(control, label);
 
   return control;

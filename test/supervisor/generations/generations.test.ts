@@ -9,6 +9,7 @@ import {
   storeModuleMap,
   submitCandidate,
   generationLabel,
+  servingFacetSource,
   testHarnessCommit,
 } from "../helpers.js";
 import { FACET_COMPATIBILITY } from "../../../src/facet-compatibility.js";
@@ -21,18 +22,16 @@ const thirdHarnessCommit = "1123456789abcdef0123456789abcdef01234567";
 function stagedPreparationArtifact(harnessCommit: string) {
   return artifact(
     harnessCommit,
-    `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  constructor(ctx, env) {
+    servingFacetSource(
+      "staged",
+      `constructor(ctx, env) {
     super(ctx, env);
-    ctx.storage.kv.put("checks", (ctx.storage.kv.get("checks") ?? 0) + 1);
+    globalThis.checks = (globalThis.checks ?? 0) + 1;
   }
   compatibility() {
-    return this.ctx.storage.kv.get("checks") < 3 ? ${JSON.stringify(FACET_COMPATIBILITY)} : "0.0.1";
-  }
-}
-`,
+    return globalThis.checks < 3 ? ${JSON.stringify(FACET_COMPATIBILITY)} : "0.0.1";
+  }`,
+    ),
   );
 }
 

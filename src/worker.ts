@@ -10,6 +10,8 @@ export { WorkspaceProxy } from "@cloudflare/computer";
 
 export { ModelRoute } from "./model-route.js";
 
+export { StartupCheckModel } from "./startup-check-model.js";
+
 const SUPERVISOR_NAME = "owner";
 
 function noStore(response: Response): Response {

@@ -1,3 +1,5 @@
 export { ServingConversations } from "./serving.js";
 
-export { GenerationHostTarget } from "./host-target.js";
+export { ConversationHostTarget, GenerationHostTarget } from "./host-target.js";
+
+export { endWorkspaceTurn } from "./held-workspaces.js";

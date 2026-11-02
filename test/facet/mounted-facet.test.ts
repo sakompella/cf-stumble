@@ -8,6 +8,7 @@ import {
   servedText,
   submitCandidate,
   FACET_COMPATIBILITY_METHOD,
+  ANSWER_STARTUP_CHECK,
 } from "../supervisor/helpers.js";
 
 const reportingCommit = "e0e0000000000000000000000000000000000001";
@@ -27,7 +28,9 @@ export class MainFacet extends DurableObject {
   ${FACET_COMPATIBILITY_METHOD}
   async attach() {}
   async createConversation(cwd) { return "conversation:" + cwd; }
-  async events() {
+  async submit() { return 1; }
+  async events(conversationId) {
+    ${ANSWER_STARTUP_CHECK}
     const outbound = await fetch("https://example.com/").then(() => "allowed", () => "blocked");
     return new Response("bindings " + Object.keys(this.env).sort().join(",") + "; outbound " + outbound).body;
   }

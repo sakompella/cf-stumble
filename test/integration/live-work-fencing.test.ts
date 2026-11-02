@@ -5,7 +5,11 @@ import { ProjectRpcTarget } from "../../src/workspace/project/index.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
-import { FACET_COMPATIBILITY_METHOD } from "../supervisor/helpers.js";
+import {
+  ANSWER_STARTUP_CHECK,
+  FACET_COMPATIBILITY_METHOD,
+  STARTUP_CHECK_CONVERSATION,
+} from "../supervisor/helpers.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -35,6 +39,7 @@ export class MainFacet extends DurableObject {
   }
 
   async submit(conversationId) {
+    if (conversationId === ${JSON.stringify(STARTUP_CHECK_CONVERSATION)}) return "startup check";
     await this.host.running([conversationId]);
     await this.host.arm({ active: true });
     this.run = (async () => {
@@ -48,6 +53,10 @@ export class MainFacet extends DurableObject {
     })();
 
     return "submission";
+  }
+
+  async events(conversationId) {
+    ${ANSWER_STARTUP_CHECK}
   }
 }
 `;

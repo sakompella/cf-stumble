@@ -56,14 +56,33 @@ export function obtainProjectWorkspace(
       return null;
     }
 
-    return yield* Effect.promise(() =>
-      namespace
-        .getByName(workspaceName)
-        .project({ remainingMs })
-        .then(
-          (capability) => capability,
-          () => null,
-        ),
-    );
+    return yield* workspaceCapability(sources, remainingMs);
   });
+}
+
+export function obtainScratchWorkspace(
+  sources: WorkspaceSources,
+  remainingMs: number,
+  signal: AbortSignal,
+): Effect.Effect<ProjectCapabilityStub | null> {
+  return waitForWorkspaceProvision(sources.workspaceName, signal).pipe(
+    Effect.flatMap((ready) =>
+      ready ? workspaceCapability(sources, remainingMs) : Effect.succeed(null),
+    ),
+  );
+}
+
+function workspaceCapability(
+  { namespace, workspaceName }: WorkspaceSources,
+  remainingMs: number,
+): Effect.Effect<ProjectCapabilityStub | null> {
+  return Effect.promise(() =>
+    namespace
+      .getByName(workspaceName)
+      .project({ remainingMs })
+      .then(
+        (capability) => capability,
+        () => null,
+      ),
+  );
 }

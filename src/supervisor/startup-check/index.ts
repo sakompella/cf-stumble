@@ -2,27 +2,37 @@ import * as Effect from "effect/Effect";
 import type { MainFacetCapabilities } from "../../facet/index.js";
 import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
+import type { ProjectCapabilityStub } from "../projects/index.js";
 import type {
   Generation,
   GenerationLabel,
   Generations,
   PreparationRecord,
 } from "../generations.js";
-import { runStartupCheck, type StartupCheckOutcome } from "./candidate.js";
+import {
+  runStartupCheck,
+  type StartupCheckDeadlines,
+  type StartupCheckOutcome,
+} from "./candidate.js";
 
-const STARTUP_CHECK_DEADLINE_MS = 5_000;
+const STARTUP_CHECK_DEADLINES: StartupCheckDeadlines = {
+  compatibilityMs: 5_000,
+  conversationMs: 90_000,
+};
 
 export type StartupCheckHost = Readonly<{
   ctx: DurableObjectState;
   loader: WorkerLoader;
   artifacts: HarnessArtifacts;
   generations: Generations;
-  modelRoute: () => MainFacetCapabilities["MODEL"];
+  model: () => MainFacetCapabilities["MODEL"];
+  workspace: (
+    remainingMs: number,
+    signal: AbortSignal,
+  ) => Effect.Effect<ProjectCapabilityStub | null>;
 }>;
 
-export type StartupCheckOptions = {
-  readonly deadlineMs?: number;
-};
+export type StartupCheckOptions = Readonly<{ deadlines?: Partial<StartupCheckDeadlines> }>;
 
 type StartupCheckReport = StartupCheckOutcome &
   Readonly<{ generation: Generation; effect: PreparationRecord["effect"] }>;
@@ -61,11 +71,10 @@ function checkLabeledStartup(
 
     const moduleMap = yield* host.artifacts.prepare(generation.harnessCommit);
 
-    const outcome = yield* runStartupCheck(
-      host,
-      moduleMap,
-      options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS,
-    );
+    const outcome = yield* runStartupCheck(host, moduleMap, {
+      ...STARTUP_CHECK_DEADLINES,
+      ...options.deadlines,
+    });
 
     const recorded = host.generations.recordPreparation(
       label,

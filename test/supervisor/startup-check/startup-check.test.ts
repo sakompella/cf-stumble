@@ -27,7 +27,12 @@ export class MainFacet extends DurableObject {
 `;
 }
 
-async function checked(name: string, harnessCommit: string, source: string, deadlineMs?: number) {
+async function checked(
+  name: string,
+  harnessCommit: string,
+  source: string,
+  options?: Parameters<typeof prepareWithModuleMap>[3],
+) {
   const control = await activeSupervisor(name);
   const label = await labelCandidate(control, harnessCommit);
 
@@ -35,13 +40,13 @@ async function checked(name: string, harnessCommit: string, source: string, dead
     control,
     label,
     artifact(harnessCommit, source),
-    deadlineMs === undefined ? undefined : { deadlineMs },
+    options,
   );
 
   return { control, label, result };
 }
 
-test("records a generation as ready when it reports the Supervisor's facet compatibility", async () => {
+test("records a generation as ready when it reports the Supervisor's facet compatibility and answers its startup-check conversation", async () => {
   const { control, label, result } = await checked(
     "startup-check-ordinary",
     commits.ordinary,
@@ -50,13 +55,54 @@ test("records a generation as ready when it reports the Supervisor's facet compa
 
   expect(result).toMatchObject({
     ok: true,
-    report: {
-      stage: "ready",
-      reason: `the generation reports ${FACET_COMPATIBILITY}`,
-      generation: { label, status: "ready" },
-    },
+    report: { stage: "ready", generation: { label, status: "ready" } },
   });
   expect(await control.getActiveGeneration()).toMatchObject({ generation: { label: 0 } });
+});
+
+test("a generation that loads but fails every message fails its startup check and leaves the active generation serving", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-failing-messages",
+    commits.failingMessages,
+    facet(`${FACET_COMPATIBILITY_METHOD}
+  async attach() {}
+  async createConversation(cwd) { return "conversation:" + cwd; }
+  async submit() { throw new Error("every message fails"); }`),
+  );
+
+  expect(result).toMatchObject({ ok: true, report: { stage: "conversation-failed" } });
+  await expectFailedCandidate(control, label);
+});
+
+test("a generation whose attach fails fails its startup check and leaves the active generation serving", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-failing-attach",
+    commits.failingAttach,
+    servingFacetSource(
+      "failing attach",
+      FACET_COMPATIBILITY_METHOD,
+      `async attach() { throw new Error("attach fails"); }`,
+    ),
+  );
+
+  expect(result).toMatchObject({ ok: true, report: { stage: "conversation-failed" } });
+  await expectFailedCandidate(control, label);
+});
+
+test("a generation in its startup check is attached without generation control", async () => {
+  const { result } = await checked(
+    "startup-check-no-generation-control",
+    commits.noGenerationControl,
+    servingFacetSource(
+      "no generation control",
+      FACET_COMPATIBILITY_METHOD,
+      `async attach(host, generations) {
+    if (generations !== undefined) throw new Error("a startup check must not pass generation control");
+  }`,
+    ),
+  );
+
+  expect(result).toMatchObject({ ok: true, report: { stage: "ready" } });
 });
 
 test.each([
@@ -157,16 +203,34 @@ test("records a candidate that never reports its compatibility as failed at the 
     "startup-check-delayed",
     commits.delayed,
     facet(`compatibility() { return new Promise(() => {}); }`),
-    50,
+    { deadlines: { compatibilityMs: 50 } },
   );
 
-  expect(result).toMatchObject({
-    ok: true,
-    report: {
-      stage: "deadline-expired",
-      reason: "the facet compatibility answer exceeded the deadline",
-    },
+  expect(result).toMatchObject({ ok: true, report: { stage: "deadline-expired" } });
+  await expectFailedCandidate(control, label);
+});
+
+test("records a candidate whose startup-check conversation never settles as failed at the deadline", async () => {
+  const running = JSON.stringify({
+    type: "snapshot",
+    entries: [],
+    run: { inputs: [1] },
+    tools: [],
+    inbox: [],
   });
+
+  const { control, label, result } = await checked(
+    "startup-check-unsettled",
+    commits.unsettled,
+    facet(`${FACET_COMPATIBILITY_METHOD}
+  async attach() {}
+  async createConversation(cwd) { return "conversation:" + cwd; }
+  async submit() { return 1; }
+  async events() { return new Response(${JSON.stringify(`${running}\n`)}).body; }`),
+    { deadlines: { conversationMs: 500 } },
+  );
+
+  expect(result).toMatchObject({ ok: true, report: { stage: "deadline-expired" } });
   await expectFailedCandidate(control, label);
 });
 
@@ -176,7 +240,9 @@ test("remounts a checked generation instead of reusing its warm candidate instan
 
   const candidate = artifact(
     commits.fresh,
-    facet(`constructor(ctx, env) {
+    servingFacetSource(
+      "fresh",
+      `constructor(ctx, env) {
     super(ctx, env);
     ctx.storage.kv.put("constructions", (ctx.storage.kv.get("constructions") ?? 0) + 1);
   }
@@ -185,7 +251,8 @@ test("remounts a checked generation instead of reusing its warm candidate instan
     this.ctx.storage.kv.put("calls", calls);
     const fresh = this.ctx.storage.kv.get("constructions") === calls;
     return fresh ? ${JSON.stringify(FACET_COMPATIBILITY)} : "a reused instance";
-  }`),
+  }`,
+    ),
   );
 
   await storeModuleMap(control, candidate);
@@ -207,11 +274,13 @@ test("overlapping preparations of one generation do not abort each other's start
     control,
     artifact(
       commits.ordinary,
-      facet(`
-  async compatibility() {
+      servingFacetSource(
+        "overlapping",
+        `async compatibility() {
     await new Promise((resolve) => setTimeout(resolve, 50));
     return ${JSON.stringify(FACET_COMPATIBILITY)};
-  }`),
+  }`,
+      ),
     ),
   );
 

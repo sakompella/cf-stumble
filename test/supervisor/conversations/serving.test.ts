@@ -7,6 +7,7 @@ import {
   prepareWithModuleMap,
   submitCandidate,
   FACET_COMPATIBILITY_METHOD,
+  ANSWER_STARTUP_CHECK,
   generationLabel,
 } from "../helpers.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
@@ -51,7 +52,8 @@ export class MainFacet extends DurableObject {
     await this.host.running([]);
     await this.host.arm({ active: false });
   }
-  async events() {
+  async events(conversationId) {
+    ${ANSWER_STARTUP_CHECK}
     return new ReadableStream({
       start(c) {
         c.enqueue(new TextEncoder().encode("${harnessCommit}"));
