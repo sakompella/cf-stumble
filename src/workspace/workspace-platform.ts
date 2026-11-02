@@ -3,13 +3,11 @@ import {
   type DurableObjectStorageLike,
   type WorkspaceBackend,
 } from "@cloudflare/computer";
-import {
-  CloudflareContainerBackend,
-  WorkspaceContainerAPI,
-} from "@cloudflare/computer/backends/container";
+import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
 import { logEvent } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore } from "./backend-sync-ignore.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
+import { WORKSPACE_CONTAINER_INSTANCE } from "./container-instance.js";
 
 export function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLike {
   function exec<Row extends object>(query: string, ...bindings: unknown[]): { toArray(): Row[] };
@@ -28,7 +26,7 @@ export class WorkspacePlatform {
   readonly lifecycle = new ContainerLifecycle();
   readonly #state: DurableObjectState;
   readonly #platformContainer: DurableObjectState["container"];
-  readonly #containerBackend: CloudflareContainerBackend;
+  readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   #workspace: Workspace;
 
@@ -36,10 +34,11 @@ export class WorkspacePlatform {
     this.#state = state;
     this.#platformContainer = state.container;
     this.#container = new WorkspaceContainerAPI(state);
-    this.#containerBackend = new CloudflareContainerBackend({
+    this.#containerBackend = new ContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       workspace: { binding: "WORKSPACE_HOST", id: state.id.toString() },
       egress: { mode: "direct" },
+      instance: WORKSPACE_CONTAINER_INSTANCE,
     });
     this.#workspaceBackend = withWorkspaceSyncIgnore(this.#containerBackend, (runtimeId) => {
       this.lifecycle.connected(runtimeId);
@@ -75,6 +74,7 @@ export class WorkspacePlatform {
       storage: computerStorage(this.#state.storage),
       sessionId: this.#state.id.toString(),
       backends: [this.#workspaceBackend],
+      output: false,
     });
   }
 }

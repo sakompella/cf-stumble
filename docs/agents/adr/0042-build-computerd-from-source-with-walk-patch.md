@@ -3,10 +3,10 @@
 > **Review:** Agent-only
 
 The workspace image builds `computerd` from Computer source commit
-`12336475c9fd03f5280a4537a707797fc0131fbd` with one checked-in patch,
+`9f0ade40196a4ef95ddde4f2b75e1555d9dfeeb1` (release 0.8.0) with one checked-in patch,
 `containers/computerd-walk.patch`, instead of copying the binary out of
-`ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11b5c9235ecd7ba7a4d9a4bbad52e8fd4366d76ee3dbfa1099c9295c6f`.
-This changes the image half of the pair that ADR-0026 pins; the source commit stays the same.
+`ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:de6f3727a12c8adb2f8ece853105ccc461fef02f90e368fac4e0578eacc461aa`.
+This changes the image half of the pins that ADR-0026 records; the source commit stays the same.
 
 A Cloudflare container cannot mount FUSE, so computerd keeps `/workspace` in step with its store
 through a userspace shim. Upstream, the shim walks the whole tree every 250 ms and before every
@@ -22,8 +22,10 @@ list as `WORKSPACE_SYNC_IGNORES`, and a test checks that the two agree. Files un
 segment therefore exist only in the container: they are not durable and a container restart
 loses them.
 
-The build follows upstream's release workflow. To upgrade, move `COMPUTER_COMMIT` in
-`containers/computerd.Dockerfile` and re-apply the patches. Delete the walk patch and this record
-when an upstream release fixes the walk.
+The build follows upstream's release workflow. Since 0.8.0 the binary embeds a native FUSE addon,
+which the source stage compiles on Debian trixie and passes to the build through
+`COMPUTERD_FUSE_ADDON`. To upgrade, move `COMPUTER_COMMIT` in `containers/computerd.Dockerfile`
+and rebase the walk patch. Delete the walk patch and this record when an upstream release fixes
+the walk.
 
 ADR-0044 changes how often the shim walks the disk: it no longer polls every 250 ms.

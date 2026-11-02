@@ -8,7 +8,6 @@ export default defineConfig({
     ".alchemy",
     ".agents/**",
     "tools/oxlint/anti-slop/**",
-    "vendor/**",
   ],
   jsPlugins: [
     { name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" },

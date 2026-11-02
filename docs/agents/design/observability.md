@@ -86,7 +86,7 @@ finding otherwise, and exits 1 on any finding or `unknown`.
   GitHub refresh and authorization, generation submit, activate and rollback, workspace reset). The page and Durable Object fetches never reach the
   workspace.
 - GraphQL `containersUsageAdaptiveGroups`: `allocatedMemory` byte-seconds per five-minute bucket,
-  divided by the provisioned memory of the `<worker>-workspacehost` application and by 60, gives
+  divided by the instance's memory (`WORKSPACE_CONTAINER_MEMORY_MIB`) and by 60, gives
   running minutes. A bucket counts at most five minutes.
 
 **Rule `ran-past-idle`.** Each `workspace` request allows the container to run from its start until

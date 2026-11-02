@@ -1,6 +1,6 @@
 # Staging a risky change
 
-Used by the Stage branch of `../SKILL.md`. `<stage>` is a unique name such as `cfs-<topic>-<4 random letters>`. The stack names the Worker `cf-stumble-<stage>` and its container application `cf-stumble-<stage>-workspacehost`; below, `<name>` is `cf-stumble-<stage>`.
+Used by the Stage branch of `../SKILL.md`. `<stage>` is a unique name such as `cfs-<topic>-<4 random letters>`. The stack names the Worker `cf-stumble-<stage>` and attaches a container application to its `WorkspaceHost` namespace; below, `<name>` is `cf-stumble-<stage>`.
 
 ## Layout
 
@@ -20,7 +20,7 @@ pnpm alchemy plan --config infra/alchemy.run.ts --stage <stage>
 pnpm alchemy deploy --config infra/alchemy.run.ts --stage <stage>
 ```
 
-A stage other than `prod` has a `workers.dev` subdomain without preview URLs, no route, traces off (one cold start writes about 12,600 spans that drown the events), and a `standard-1` container.
+A stage other than `prod` has a `workers.dev` subdomain without preview URLs, no route, traces off (one cold start writes about 12,600 spans that drown the events), and the same container instance size as production, which the Durable Object requests at launch.
 
 ## Before each deploy
 
@@ -46,7 +46,7 @@ An HTTP client with a default user agent may get 403 from the API; set your own 
 ```sh
 pnpm alchemy destroy --config infra/alchemy.run.ts --stage <stage>
 pnpm exec cf containers images list                 # find the repository:tag left behind
-pnpm exec cf containers images delete <name>-workspacehost:<tag>
+pnpm exec cf containers images delete <repository>:<tag>
 cd / && git -C <repo> worktree remove --force /tmp/<stage>
 ```
 

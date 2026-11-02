@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
+import { durableObjectClasses } from "../../infra/worker-settings.ts";
 import { routePattern } from "../../src/routes/route-pattern.ts";
+import { WORKSPACE_CONTAINER_MEMORY_MIB } from "../../src/workspace/container-instance.ts";
 import {
   isJsonArray,
   isJsonNumber,
@@ -197,18 +199,31 @@ export async function fetchUsage(
   worker: string,
   window: TimeWindow,
 ): Promise<readonly UsageBucket[]> {
-  const name = `${worker}-workspacehost`;
+  const namespaces = await send(
+    token,
+    `${API}/accounts/${account}/workers/durable_objects/namespaces?per_page=1000`,
+  );
+
+  const namespace = digArray(namespaces, "result")?.find(
+    (entry) =>
+      digString(entry, "script") === worker &&
+      digString(entry, "class") === durableObjectClasses.WORKSPACE_HOST,
+  );
+
+  const namespaceId = digString(namespace, "id");
   const applications = await send(token, `${API}/accounts/${account}/containers/applications`);
 
   const application = digArray(applications, "result")?.find(
-    (app) => digString(app, "name") === name,
+    (app) =>
+      namespaceId !== null && digString(app, "durable_objects", "namespace_id") === namespaceId,
   );
 
   const id = digString(application, "id");
-  const memoryMib = digNumber(application, "configuration", "memory_mib");
 
-  if (id === null || memoryMib === null) {
-    throw new ApiFailure(`no container application named ${name}`);
+  if (id === null) {
+    throw new ApiFailure(
+      `no container application serves ${worker}'s ${durableObjectClasses.WORKSPACE_HOST} namespace`,
+    );
   }
 
   const response = await send(token, `${API}/graphql`, {
@@ -221,5 +236,5 @@ export async function fetchUsage(
     },
   });
 
-  return parseUsage(response, memoryMib * 1024 * 1024);
+  return parseUsage(response, WORKSPACE_CONTAINER_MEMORY_MIB * 1024 * 1024);
 }

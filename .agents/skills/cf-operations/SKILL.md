@@ -5,7 +5,7 @@ description: Operate a cf-stumble instance on Cloudflare with Alchemy and `cf`. 
 
 # Operate a cf-stumble instance
 
-Placeholders: `<worker>` is `cf-stumble` for the stage `prod` and `cf-stumble-<stage>` for any other stage (`workerName` in `infra/worker-settings.ts`). `<account-id>` comes from `pnpm exec cf accounts list`. `<container-app-id>` is the `id` of the application named `<worker>-workspacehost` in `GET /accounts/<account-id>/containers/applications`. Look each one up; never copy one from another instance.
+Placeholders: `<worker>` is `cf-stumble` for the stage `prod` and `cf-stumble-<stage>` for any other stage (`workerName` in `infra/worker-settings.ts`). `<account-id>` comes from `pnpm exec cf accounts list`. `<container-app-id>` is the `id` of the container application whose `durable_objects.namespace_id` is the id of the `<worker>` `WorkspaceHost` namespace in `GET /accounts/<account-id>/workers/durable_objects/namespaces`; Alchemy generates the application's name, so search `GET /accounts/<account-id>/containers/applications` by namespace, not by name. Look each one up; never copy one from another instance.
 
 Run Alchemy from the repository root as `pnpm alchemy <command> --config infra/alchemy.run.ts --stage <stage>`, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set (`docs/deploy.md`, "Configuration files"). Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live `cf`, `wrangler`, or Alchemy call: it shows the account and refreshes the login that `cf` keeps in its config. `pnpm ops:check` does not use that login by itself; see the Check branch.
 
@@ -66,7 +66,7 @@ List the account's Workers, container applications, Durable Object namespaces, a
 
 ### 2. Build the staging copy
 
-Create a worktree and pick a unique stage name. The stack turns any stage other than `prod` into a Worker `cf-stumble-<stage>` with a `workers.dev` subdomain, no route, traces off, and a `standard-1` container named `cf-stumble-<stage>-workspacehost`.
+Create a worktree and pick a unique stage name. The stack turns any stage other than `prod` into a Worker `cf-stumble-<stage>` with a `workers.dev` subdomain, no route, traces off, and its own container application attached to its `WorkspaceHost` namespace. Every stage boots the production instance size, `WORKSPACE_CONTAINER_INSTANCE` in `src/workspace/container-instance.ts`.
 
 **Complete when:** the stage is unique and is not `prod`, and `pnpm alchemy plan` for it lists only resources named `cf-stumble-<stage>` (plus the state store on an account that has none).
 

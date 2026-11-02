@@ -21,15 +21,14 @@
     "deploy": "pnpm run install:infra && pnpm run build:page && pnpm alchemy deploy --config infra/alchemy.run.ts --stage prod",
     "build:loaded-execution-env-fixture": "pnpm exec tsx tools/build-loaded-execution-env-fixture.mts",
     "verify:project-protocol": "pnpm exec tsx tools/verify-project-protocol.mts",
-    "verify:vendor": "pnpm exec tsx tools/verify-computer-tarball.mts",
     "probe:clean-build": "scripts/probe/clean-build.sh",
     "ops:check": "pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --since 2h",
     "test:browser": "pnpm build:page && playwright test -c tools/playwright/playwright.config.mts",
-    "verify": "pnpm install:infra && pnpm verify:vendor && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm knip && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
+    "verify": "pnpm install:infra && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm knip && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
-    "@cloudflare/computer": "file:vendor/cloudflare-computer-0.3.0.tgz",
+    "@cloudflare/computer": "0.8.0",
     "@earendil-works/chord": "1.4.0",
     "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-durable": "1.4.0",

@@ -22,7 +22,7 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 The stack is a function of the stage:
 
 - The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, no `workers.dev` subdomain, a `standard-3` container, and traces on.
-- Any other stage `<stage>` is a separate Worker, `cf-stumble-<stage>`, with its own container application `cf-stumble-<stage>-workspacehost`, a `workers.dev` subdomain without preview URLs, no route, a `standard-1` container, and traces off.
+- Any other stage `<stage>` is a separate Worker, `cf-stumble-<stage>`, with its own container application attached to its `WorkspaceHost` namespace, a `workers.dev` subdomain without preview URLs, no route, and traces off. Every stage boots the production instance size, which the Durable Object requests at launch.
 - Vitest builds its Worker, `cf-stumble-test`, from `infra/worker-settings.ts` and leaves out the Workers AI binding, because the test runtime has no AI service to reach.
 
 Alchemy is its own pnpm project in `infra/`, with its own lockfile, because Alchemy 2.0.0-beta.84 needs Effect 4.0 while the Worker uses Effect 4.1, and the Worker's dependency tree, which the Container image copies, should not change for Alchemy. `pnpm install:infra` installs it; `pnpm verify` and `pnpm run deploy` run that first.
@@ -115,7 +115,7 @@ Before you deploy:
 1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
 2. Set the credentials (see "Configuration files") and run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` does not read that config by itself: pass `--token-file ~/.config/cloudflare/config/default.json` or set `CLOUDFLARE_API_TOKEN` (see `docs/agents/design/observability.md`, "Credentials").
 3. Check that the instance secrets you rely on exist: `pnpm exec cf workers secrets list --worker <worker>`. A deploy keeps secrets, so a missing one stays missing.
-4. Check that the last container rollout finished. `pnpm exec cf containers applications get <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Checking a running deployment", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
+4. Check that the last container rollout finished. `pnpm exec cf containers applications get <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Checking a running deployment", shows each instance's state. Find `<container-app-id>` in the applications list: it is the application whose `durable_objects.namespace_id` is the Worker's `WorkspaceHost` namespace id (`GET /accounts/<account-id>/workers/durable_objects/namespaces`). Alchemy generates the application's name.
 5. Run `pnpm run build:page`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change.
 
 Then run `pnpm run deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
@@ -168,7 +168,7 @@ The image also carries the packages your harness build needs, fetched from the l
 
 Your first submission is slow. Installing packages and bundling the harness takes most of that time. It is not stuck.
 
-The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk). Activating or rolling back a generation takes under a second.
+The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk), set by `WORKSPACE_CONTAINER_INSTANCE` in `src/workspace/container-instance.ts`. Activating or rolling back a generation takes under a second.
 
 The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules` and `/tmp`. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
 

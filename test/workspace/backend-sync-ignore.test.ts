@@ -125,7 +125,7 @@ test("every other backend and RPC operation reaches the backend with its argumen
   const hashes = [new Uint8Array([7])];
 
   expect(() => sync.push({ senderRev: 0, changes })).toThrow("sync.push");
-  expect(() => sync.watermarks()).toThrow("sync.watermarks");
+  expect(() => sync.watermarks({ settle: true })).toThrow("sync.watermarks");
   expect(() => sync.readEntry("/a")).toThrow("sync.readEntry");
   expect(() => sync.hasObjects(hashes)).toThrow("sync.hasObjects");
   expect(() => sync.fetchObjects(hashes)).toThrow("sync.fetchObjects");
@@ -137,7 +137,7 @@ test("every other backend and RPC operation reaches the backend with its argumen
 
   expect(calls).toEqual([
     ["sync.push", [{ senderRev: 0, changes }]],
-    ["sync.watermarks", []],
+    ["sync.watermarks", [{ settle: true }]],
     ["sync.readEntry", ["/a"]],
     ["sync.hasObjects", [hashes]],
     ["sync.fetchObjects", [hashes]],
@@ -150,4 +150,42 @@ test("every other backend and RPC operation reaches the backend with its argumen
   expect(wrapped.runtimeId).toBe(handle.runtimeId);
   expect(wrapped.sync).toBe(handle.sync);
   expect(() => wrapped.close()).toThrow("close");
+});
+
+test("adds node_modules to a change pack fetch and keeps the pack transport", async () => {
+  const inputs: Parameters<NonNullable<SyncRPC["fetchChangePack"]>>[0][] = [];
+
+  const { backend, handle } = backendWith(() => Promise.reject(new Error("unused")));
+
+  handle.rpc.sync.fetchChangePack = (input) => {
+    inputs.push(input);
+
+    return Promise.resolve({
+      cursor: { rev: 1, path: null },
+      drained: true,
+      entryCount: 0,
+      appliedPushCursor: { rev: 1, path: null },
+      stream: new ReadableStream(),
+    });
+  };
+
+  handle.rpc.sync.applyChangePack = (...args) => delegated([], "sync.applyChangePack", args);
+
+  const sync = (await connect(withWorkspaceSyncIgnore(backend))).rpc.sync;
+
+  await sync.fetchChangePack?.({ maxEntries: 1, maxBytes: 1, generation: "g" });
+
+  expect(inputs).toEqual([
+    { maxEntries: 1, maxBytes: 1, generation: "g", ignore: ["node_modules"] },
+  ]);
+  expect("applyChangePack" in sync).toBe(true);
+});
+
+test("offers no pack transport when the backend has none", async () => {
+  const { backend } = backendWith(() => Promise.reject(new Error("unused")));
+
+  const sync = (await connect(withWorkspaceSyncIgnore(backend))).rpc.sync;
+
+  expect("fetchChangePack" in sync).toBe(false);
+  expect("applyChangePack" in sync).toBe(false);
 });

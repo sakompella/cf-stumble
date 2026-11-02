@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 
 const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8" })
   .split("\n")
-  .filter((path) => path !== "" && !/^(?:vendor|docs|tools\/oxlint\/anti-slop)\//u.test(path));
+  .filter((path) => path !== "" && !/^(?:docs|tools\/oxlint\/anti-slop)\//u.test(path));
 
 const DIRECTIVE = /\b(?:oxlint|eslint)-(?:disable|enable)|@ts-(?:expect-error|ignore|nocheck)/u;
 

@@ -2,4 +2,3 @@
 # `containers/computerd.Dockerfile` copies, never node_modules, .git or local secrets.
 *
 !containers/computerd-walk.patch
-!containers/computerd-exec.patch

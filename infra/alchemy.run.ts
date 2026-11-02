@@ -40,13 +40,14 @@ export default Alchemy.Stack(
       env: {
         ...plainTextBindings,
         SUPERVISOR: Cloudflare.DurableObject(durableObjectClasses.SUPERVISOR),
-        WORKSPACE_HOST: Cloudflare.Container("WorkspaceHost", {
-          name: `${name}-workspacehost`,
-          className: durableObjectClasses.WORKSPACE_HOST,
-          dockerfile: "containers/computerd.Dockerfile",
-          context: ".",
-          instanceType: isProduction ? "standard-3" : "standard-1",
-          maxInstances: 1,
+        WORKSPACE_HOST: Cloudflare.DurableObject(durableObjectClasses.WORKSPACE_HOST, {
+          containers: [
+            Cloudflare.Container("app", {
+              schedulingPolicy: "durable_object",
+              dockerfile: "containers/computerd.Dockerfile",
+              context: ".",
+            }),
+          ],
         }),
         LOADER: Cloudflare.WorkerLoader(),
         AI: Cloudflare.Workers.AI(),
