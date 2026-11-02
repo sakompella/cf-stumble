@@ -23,6 +23,9 @@ importers:
       effect:
         specifier: 4.1.1
         version: 4.1.1
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
     devDependencies:
       '@cloudflare/vitest-plugin':
         specifier: ^1.4.12
@@ -51,9 +54,6 @@ importers:
       cf:
         specifier: 1.0.0-beta.26
         version: 1.0.0-beta.26(@types/node@22.20.5)
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
       foldkit:
         specifier: 0.170.0
         version: 0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1)

@@ -33,7 +33,7 @@ export const HARNESS_BUILD_CONFIGURATION = {
   buildPhases: [
     {
       name: "install",
-      command: "pnpm install --frozen-lockfile --reporter=silent --ignore-scripts",
+      command: "pnpm install --frozen-lockfile --prod --reporter=silent --ignore-scripts",
     },
     { name: "build-module-map", command: "pnpm run build:module-map" },
   ],
