@@ -10,8 +10,6 @@ export const HARNESS_SCENARIOS = [
   "no-projects",
   "github-disconnected",
   "github-awaiting-authorization",
-  "chatgpt-connected",
-  "chatgpt-needs-reconnect",
 ] as const;
 
 export type HarnessScenario = (typeof HARNESS_SCENARIOS)[number];
@@ -117,10 +115,6 @@ export const CHECKED_AT = new Date(2026, 9, 15, 14, 32).getTime();
 
 export const CHECKED_WORDING = "2026-10-15 14:32";
 
-export function authorizationPayload(scenario: HarnessScenario): JsonValue {
-  return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
-}
-
 export function refreshPayload(scenario: HarnessScenario): JsonValue {
   return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }
@@ -130,4 +124,9 @@ export const STATUS_PAYLOAD: JsonValue = {
     generation: { label: 1, harnessCommit: "abc123", status: "ready" },
     epoch: 3,
   },
+};
+
+export const CHATGPT_PAYLOAD: JsonValue = {
+  ok: true,
+  chatgpt: { connection: { state: "disconnected" }, login: null, model: "gpt-6.1-sol" },
 };

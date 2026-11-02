@@ -3,19 +3,12 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { OWNER_PAGE_SCRIPT_FILE, ownerPageHtml } from "../../src/page/index.js";
 import {
   NEW_PROJECT,
-  authorizationPayload,
   connectPayload,
   projectsPayload,
   refreshPayload,
+  CHATGPT_PAYLOAD,
   STATUS_PAYLOAD,
 } from "./fixtures.mjs";
-import {
-  disconnect,
-  finishLogin,
-  readConnection,
-  startLogin,
-  type ChatGPTAnswer,
-} from "./fixtures-chatgpt.mjs";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import type { ScenarioState } from "./server-state.mjs";
 
@@ -91,26 +84,6 @@ function connect(state: ScenarioState, body: JsonValue): RouteAnswer {
   return { status: 200, payload: connectPayload(state.scenario, already) };
 }
 
-function chatgptRoute(
-  next: (state: ScenarioState, body: JsonValue) => ChatGPTAnswer,
-): (state: ScenarioState, body: JsonValue) => RouteAnswer {
-  return (state, body) => {
-    const answer = next(state, body);
-    state.chatgpt = answer.next;
-
-    return { status: answer.status, payload: answer.payload };
-  };
-}
-
-function finishChatGPT(state: ScenarioState, body: JsonValue): ChatGPTAnswer {
-  const attemptId = readString(body, "attemptId");
-  const callbackUrl = readString(body, "callbackUrl");
-
-  return attemptId === undefined || callbackUrl === undefined || !URL.canParse(callbackUrl)
-    ? { status: 400, payload: INVALID_REQUEST.payload, next: state.chatgpt }
-    : finishLogin(state.chatgpt, attemptId, callbackUrl);
-}
-
 const JSON_ROUTES: readonly Readonly<{
   method: string;
   path: string;
@@ -129,18 +102,7 @@ const JSON_ROUTES: readonly Readonly<{
   {
     method: "GET",
     path: "/api/chatgpt/connection",
-    answer: chatgptRoute((state) => readConnection(state.chatgpt)),
-  },
-  {
-    method: "POST",
-    path: "/api/chatgpt/login",
-    answer: chatgptRoute((state) => startLogin(state.chatgpt)),
-  },
-  { method: "POST", path: "/api/chatgpt/login/complete", answer: chatgptRoute(finishChatGPT) },
-  {
-    method: "POST",
-    path: "/api/chatgpt/disconnect",
-    answer: chatgptRoute((state) => disconnect(state.chatgpt)),
+    answer: () => ({ status: 200, payload: CHATGPT_PAYLOAD }),
   },
   { method: "POST", path: "/api/projects/connect", answer: connect },
   {
@@ -152,16 +114,6 @@ const JSON_ROUTES: readonly Readonly<{
     method: "POST",
     path: "/api/github/connection/refresh",
     answer: (state) => ({ status: 200, payload: refreshPayload(state.scenario) }),
-  },
-  {
-    method: "POST",
-    path: "/api/github/authorization",
-    answer: (state) => ({ status: 200, payload: authorizationPayload(state.scenario) }),
-  },
-  {
-    method: "POST",
-    path: "/api/github/authorization/complete",
-    answer: (state) => ({ status: 200, payload: authorizationPayload(state.scenario) }),
   },
 ];
 

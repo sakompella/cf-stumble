@@ -30,7 +30,6 @@ export type HarnessServer = Readonly<{
   openEventStreams: (projectId: string) => number;
   entries: Conversations["entries"];
   projects: () => readonly ProjectEntry[];
-  chatgpt: () => ScenarioState["chatgpt"];
   close: () => Promise<void>;
 }>;
 
@@ -157,7 +156,6 @@ function controls(state: ScenarioState, url: string, close: () => Promise<void>)
     openEventStreams: (projectId) => state.openEventStreams.get(projectId) ?? 0,
     entries: (projectId) => state.conversations.entries(projectId),
     projects: () => [...state.projects],
-    chatgpt: () => state.chatgpt,
     close,
   };
 }
