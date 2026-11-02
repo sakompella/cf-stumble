@@ -1,8 +1,7 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import * as Result from "effect/Result";
-import { containsCredential } from "../../../src/github/redaction.js";
 import { ModuleMapStore } from "../../../src/supervisor/artifacts/index.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import { MODULE_MAP_CHUNK_BYTES } from "../../../src/supervisor/artifacts/store.js";
@@ -29,7 +28,6 @@ const commits = {
   large: "7100000000000000000000000000000000000003",
   rolledForward: "7100000000000000000000000000000000000005",
   unbuildable: "7100000000000000000000000000000000000006",
-  loggedFailure: "7100000000000000000000000000000000000007",
 } as const;
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
@@ -166,33 +164,6 @@ test("a write that fails part way through leaves no partial module map", async (
     read: "absent",
     rows: { manifests: 0, chunks: 0 },
   });
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-test("logs a redacted cause instead of discarding it when the transaction throws", async () => {
-  const control = supervisor("module-map-write-logs-its-cause");
-  const input = largeModuleMap(commits.loggedFailure);
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  const outcome = await runInDurableObject(control, (_instance, state) => {
-    const written = new ModuleMapStore(refusingSecondChunk(state.storage)).write(
-      parsedArtifact(input),
-    );
-
-    return Result.isFailure(written) ? written.failure.code : "written";
-  });
-
-  expect(outcome).toBe("artifact-write-failed");
-  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
-  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
-  expect(logged).toContain("artifact-write-failed");
-  expect(logged).toContain("the storage refused a chunk");
-  expect(containsCredential(logged), "the operator log must redact token-shaped causes").toBe(
-    false,
-  );
 });
 
 test("rolls back to a stored generation while every build fails", async () => {

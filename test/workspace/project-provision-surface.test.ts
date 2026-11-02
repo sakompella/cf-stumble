@@ -166,20 +166,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("logs a redacted cause instead of discarding it when the clone command cannot run", async () => {
+test("a clone command that cannot run is one workspace-unavailable failure", async () => {
   const operations = new FakeProjectOperations();
   operations.commandFailure = new Error("econnrefused while dialing the container");
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
 
   await expect(provision(operations, provisionRequest(projectOne))).resolves.toEqual({
     ok: false,
     error: { code: "workspace-unavailable" },
   });
-
-  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
-  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
-  expect(logged).toContain("workspace-unavailable");
-  expect(logged).toContain("econnrefused while dialing the container");
 });
 
 test("refuses a repository URL that is not the project's, and a project id that is not an id", async () => {

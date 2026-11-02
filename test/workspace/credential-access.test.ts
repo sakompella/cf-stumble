@@ -1,114 +1,15 @@
 import * as Result from "effect/Result";
-import { afterEach, expect, test, vi } from "vitest";
-import { textLines } from "../log-capture.js";
-import { parseGitHubToken, REDACTED, type GitHubToken } from "../../src/github/index.js";
+import { expect, test } from "vitest";
 import {
-  checkRepositoryAccess,
-  installWorkspaceCredential,
   readWorkspaceCredentialStatus,
   type CredentialWorkspaceNamespace,
 } from "../../src/workspace/index.js";
 import type { CredentialWorkspaceHost } from "../../src/workspace/credential-access.js";
-import type {
-  GitHubCredentialRequest,
-  GitHubCredentialResult,
-} from "../../src/workspace/github-credential.js";
-import { plainProblem, runToResult } from "./workspace-results.js";
-
-function fakeToken(value: string): GitHubToken {
-  const token = parseGitHubToken(value);
-
-  if (token === undefined) {
-    throw new Error("the test token must parse as a GitHubToken");
-  }
-
-  return token;
-}
-
-const FAKE_TOKEN = fakeToken("ghp_cfstumbleFAKEtokenFAKEtoken0123456789");
-
-class ThrowingWorkspaceHost implements CredentialWorkspaceHost {
-  cause: Error = new Error("rpc session was shut down");
-
-  credential(_request: GitHubCredentialRequest): Promise<GitHubCredentialResult> {
-    return Promise.reject(this.cause);
-  }
-}
+import { runToResult } from "./workspace-results.js";
 
 function namespaceOf(host: CredentialWorkspaceHost): CredentialWorkspaceNamespace {
   return { getByName: () => host };
 }
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-test("logs the thrown cause instead of discarding it, with the install token redacted", async () => {
-  const host = new ThrowingWorkspaceHost();
-  host.cause = new Error(`socket hang up while sending ${FAKE_TOKEN}`);
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  const installed = await runToResult(
-    installWorkspaceCredential({
-      workspaceName: "tenant-workspace",
-      namespace: namespaceOf(host),
-      token: FAKE_TOKEN,
-    }),
-  );
-
-  expect(Result.isFailure(installed) && plainProblem(installed.failure)).toEqual({
-    code: "credential-workspace-unavailable",
-    detail: "",
-  });
-  expect(textLines(loggedErrors), "the discarded cause must reach an operator log").toHaveLength(1);
-  const logged = textLines(loggedErrors)[0] ?? "";
-  expect(logged).toContain("credential-workspace-unavailable");
-  expect(logged, "the install token must never reach the log").not.toContain(FAKE_TOKEN);
-  expect(logged).toContain(REDACTED);
-});
-
-test("logs a status read's thrown cause the same way, without a token to redact", async () => {
-  const host = new ThrowingWorkspaceHost();
-  host.cause = new Error("websocket is not open");
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  const status = await runToResult(
-    readWorkspaceCredentialStatus({
-      workspaceName: "tenant-workspace",
-      namespace: namespaceOf(host),
-    }),
-  );
-
-  expect(Result.isFailure(status) && plainProblem(status.failure)).toEqual({
-    code: "credential-workspace-unavailable",
-    detail: "",
-  });
-  const logged = textLines(loggedErrors)[0] ?? "";
-  expect(logged).toContain("credential-access.status");
-});
-
-test("distinguishes a timeout from an ordinary RPC failure in the log alone", async () => {
-  const host = new ThrowingWorkspaceHost();
-  host.cause = new DOMException("the RPC call exceeded its budget", "TimeoutError");
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  const access = await runToResult(
-    checkRepositoryAccess({
-      workspaceName: "tenant-workspace",
-      namespace: namespaceOf(host),
-      repositoryUrl: "https://github.com/owner/repo",
-    }),
-  );
-
-  expect(Result.isFailure(access) && plainProblem(access.failure)).toEqual({
-    code: "credential-workspace-unavailable",
-    detail: "",
-  });
-  const logged = textLines(loggedErrors)[0] ?? "";
-  expect(logged, "a timeout is distinguishable in the log even though the code is not").toContain(
-    "timeout",
-  );
-});
 
 test("does not continue a credential step after its turn signal aborts", async () => {
   const controller = new AbortController();

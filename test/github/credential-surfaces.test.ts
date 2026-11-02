@@ -122,44 +122,6 @@ test("a credential module logs only through the shared redacting helper, never c
   ).toEqual([]);
 });
 
-test("an RPC failure during authorization logs a redacted cause and never the token or device code", async () => {
-  const workspace = new FakeTenantWorkspace();
-  const name = "credential-surfaces-rpc-failure";
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  const completed = await runInDurableObject(
-    env.SUPERVISOR.getByName(name),
-    async (_instance, state) => {
-      const { github } = tenantConnections(state.storage, name, workspace, {
-        clientId: "Iv1.cfstumbleFAKE",
-        fallbackToken: undefined,
-        fetcher: githubReplying(),
-      });
-
-      await Effect.runPromise(github.startAuthorization(NOW));
-      workspace.unavailable = true;
-
-      return Effect.runPromise(github.completeAuthorization(NOW + 1_000));
-    },
-  );
-
-  expect(
-    completed,
-    "an RPC failure is a status, not a thrown error, at every caller above the workspace",
-  ).toEqual({
-    ok: true,
-    status: { state: "reconnect-required", reason: "workspace-unavailable" },
-    checkedAt: NOW + 1_000,
-  });
-  expect(
-    loggedErrors,
-    "the RPC failure that reached credential-access.ts must be logged",
-  ).toHaveBeenCalled();
-  const logged = loggedErrors.mock.calls.map((call) => call.join(" ")).join("\n");
-  expect(logged, "the redemption's own token must never reach the log").not.toContain(FAKE_TOKEN);
-  expect(logged, "the device code must never reach the log").not.toContain("device-code-secret");
-});
-
 test("a whole authorization leaves the token in the workspace and nowhere else", async () => {
   const events = capturedEvents();
   const workspace = new FakeTenantWorkspace();

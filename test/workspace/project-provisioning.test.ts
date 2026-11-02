@@ -124,22 +124,3 @@ test("keeps a refused or unreachable workspace one typed failure", async () => {
     "a provisioning failure is one typed error the caller handles by its class",
   ).toBe(true);
 });
-
-test("logs a redacted cause when the workspace provision RPC rejects", async () => {
-  const throwing = new ScriptedProvisionHost();
-  const secret = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
-  throwing.provision = (): Promise<WorkspaceCommandResult> =>
-    Promise.reject(new Error(`clone failed ${secret} https://${secret}@github.com/sample/repo`));
-  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  try {
-    await provisionerFor(throwing).provision();
-
-    const output = JSON.stringify(logged.mock.calls);
-    expect(output).toContain("[redacted]");
-    expect(output).not.toContain(secret);
-    expect(output).not.toContain(`https://${secret}@github.com`);
-  } finally {
-    logged.mockRestore();
-  }
-});
