@@ -24,10 +24,8 @@ async function checkedWith(name: string, workspace: ProjectWorkspace) {
 }
 
 test("the built generation passes the Supervisor's startup check", async () => {
-  const started = Date.now();
   const { label, checked } = await checkedWith("generation-1-module-map", new ProjectWorkspace());
 
-  console.log("startup check took", Date.now() - started);
   expect(checked).toMatchObject({
     ok: true,
     report: { stage: "ready", generation: { label, status: "ready" } },
