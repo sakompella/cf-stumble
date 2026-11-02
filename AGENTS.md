@@ -16,11 +16,24 @@ When you create or edit prose documentation, read `docs/agents/writing-style.md`
 
 ### Verification
 
-Run `pnpm verify` before you claim anything works. It runs `verify:vendor` (the vendored Computer tarball digest), `verify:project-protocol`, `build:page`, typecheck, tools typecheck, format check, `knip`, lint, `test:tools`, `build:module-map`, `build:loaded-execution-env-fixture`, and the full test suite in that order. `test:tools` runs the tests under `tools/` (the vendored lint rules, the Foldkit lint rule decisions, the bundle budgets, and `ops:check`) with `node --test`, because Vitest only collects `test/`. It takes about 90 seconds on the Mac. `build:page` writes the ignored module that holds the owner page's script, so on a fresh checkout run it before `pnpm typecheck` or `pnpm test` alone. `knip` fails on any export under `src/` that production code never imports, and on any `src/` file production never reaches. Production is `src/worker.ts`, the page entry, the generation-1 facet entry, and the `tools/` scripts that `package.json` runs. A test that imports an export does not count. When a test exercises real logic through an export, add that file to `ignoreIssues` in `knip.json` with the issue type it needs (`exports` or `types`); otherwise delete the export or the re-export. The order matters: type errors make the type-aware lint rules report noise about `error` types instead of the real fault, and formatting changes what lint sees, since wrapping a long line has pushed a file over `max-lines` here before.
+Run `pnpm verify` before you claim anything works. It runs `verify:vendor` (the vendored Computer tarball digest), `verify:project-protocol`, `build:page`, typecheck, tools typecheck (both run `tsrs --noEmit`, the Rust port of the TypeScript compiler; the repo has no `typescript` package, and `tsrs` exits 2 on a type error where `tsc` exited 1), format check, `knip`, lint, `test:tools`, `build:module-map`, `build:loaded-execution-env-fixture`, and the full test suite in that order. `test:tools` runs the tests under `tools/` (the vendored lint rules, the Foldkit lint rule decisions, the bundle budgets, and `ops:check`) with `node --test`, because Vitest only collects `test/`. It takes about 90 seconds on the Mac. `build:page` writes the ignored module that holds the owner page's script, so on a fresh checkout run it before `pnpm typecheck` or `pnpm test` alone. `knip` fails on any export under `src/` that production code never imports, and on any `src/` file production never reaches. Production is `src/worker.ts`, the page entry, the generation-1 facet entry, and the `tools/` scripts that `package.json` runs. A test that imports an export does not count. When a test exercises real logic through an export, add that file to `ignoreIssues` in `knip.json` with the issue type it needs (`exports` or `types`); otherwise delete the export or the re-export. The order matters: type errors make the type-aware lint rules report noise about `error` types instead of the real fault, and formatting changes what lint sees, since wrapping a long line has pushed a file over `max-lines` here before.
 
 After a staging deploy or an e2e run, run `pnpm ops:check` (see `docs/agents/design/observability.md`, "Checking a running deployment") before you claim it works. `pnpm verify` cannot see runtime faults such as an idle container that keeps running. When the machine is busy, a test can exceed Vitest's default 5 s timeout; run that test again alone before you suspect your change.
 
 A tracked `.githooks/pre-commit` runs the same command and blocks the commit when it fails. `pnpm format` fixes formatting; nothing else in the gate is auto-fixable.
+
+### Editor setup
+
+The repo has no editor config. `pnpm typecheck` and `pnpm typecheck:tools` run `tsrs`, so point the editor at the same checker or it will disagree with `pnpm verify`. The language server is `pnpm exec tsrs --lsp -stdio`. In VS Code, install the TypeScript 7 extension (`TypeScriptTeam.native-preview`) and set this in your user or workspace settings (from tsrs's `docs/LSP.md`; use the `tsrs` version in `package.json`), then run "TypeScript 7: Restart Server":
+
+```jsonc
+{
+  "js/ts.experimental.useTsgo": true,
+  "js/ts.tsdk.path": "./node_modules/tsrs/tsdk",
+}
+```
+
+Other editors run `tsrs --lsp -stdio` as an LSP server for TypeScript files, and should turn off other TypeScript servers. The server passes 4,092 of 4,562 upstream editor-feature test groups, so a missing hover or fix is not proof of a type error: trust `pnpm typecheck`.
 
 ### Cloudflare operations
 
