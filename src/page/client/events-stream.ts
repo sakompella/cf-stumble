@@ -11,6 +11,8 @@ import type { Model } from "./model.js";
 
 const RECONNECT_PAUSE = "1 second";
 
+const STALL_TIMEOUT = "10 seconds";
+
 const EventsStream = Schema.Struct({ streamId: Schema.Number, projectId: Schema.String });
 
 type EventsStream = typeof EventsStream.Type;
@@ -48,6 +50,7 @@ function connection({ streamId, projectId }: EventsStream): Stream.Stream<Messag
     const { body } = response;
 
     return Stream.fromReadableStream({ evaluate: () => body, onError: transportDetail }).pipe(
+      Stream.timeout(STALL_TIMEOUT),
       Stream.decodeText,
       Stream.splitLines,
       Stream.filter((line) => line.trim() !== ""),

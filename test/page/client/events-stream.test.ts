@@ -40,6 +40,7 @@ function ndjson(body: string): Promise<Response> {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 test("the stream's dependencies stay equal while the conversation runs, the reader sends and clicks its project again", () => {
@@ -137,6 +138,51 @@ test("the page reads past blank lines and events it does not show, and reconnect
     "ReceivedEvent",
   ]);
   expect(paths).toEqual(["/api/projects/repo/events", "/api/projects/repo/events"]);
+});
+
+function oneTimerArmed(): Promise<void> {
+  return vi.waitFor(() => {
+    expect(vi.getTimerCount()).toBe(1);
+  });
+}
+
+test("a stream that falls silent for ten seconds is dropped and opened again", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  const paths: string[] = [];
+
+  vi.stubGlobal("fetch", (path: string) => {
+    paths.push(path);
+
+    const silent = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`${SNAPSHOT}\n`));
+      },
+    });
+
+    return Promise.resolve(
+      new Response(silent, { status: 200, headers: { "content-type": "application/x-ndjson" } }),
+    );
+  });
+
+  const dependencies = events.modelToDependencies(listedPage());
+
+  const messages = Effect.runPromise(
+    Stream.runCollect(events.dependenciesToStream(dependencies).pipe(Stream.take(3))),
+  );
+
+  await oneTimerArmed();
+  await vi.advanceTimersByTimeAsync(9_000);
+  expect(paths).toHaveLength(1);
+
+  await vi.advanceTimersByTimeAsync(1_000);
+  await oneTimerArmed();
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect([...(await messages)].map((message) => message._tag)).toEqual([
+    "ReceivedEvent",
+    "DisconnectedEvents",
+    "ReceivedEvent",
+  ]);
+  expect(paths).toHaveLength(2);
 });
 
 test("a refused stream says why, and a line it cannot read is reported", async () => {
