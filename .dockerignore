@@ -1,4 +1,4 @@
-# The container build context is the repository root (see `cloudflare.config.ts`). Send only what
+# The container build context is the repository root (see `infra/alchemy.run.ts`). Send only what
 # `containers/computerd.Dockerfile` copies, never node_modules, .git or local secrets.
 *
 !package.json
