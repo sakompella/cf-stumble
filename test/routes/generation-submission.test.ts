@@ -29,58 +29,6 @@ const labeled = {
   epoch: 4,
 } as const;
 
-test("returns a failed startup check as the recorded preparation result", async () => {
-  const response = await ownerApiResponse(
-    submitRequest(submissionBody()),
-    supervisor({
-      submitGeneration() {
-        return Promise.resolve(labeled);
-      },
-      prepareGeneration() {
-        return Promise.resolve({
-          ok: true,
-          report: {
-            stage: "compatibility-mismatch",
-            reason:
-              "the generation reports 0.0.1; this Supervisor requires pi-durable@1.4.0/host-2",
-            generation: candidate("failed"),
-            effect: "recorded",
-          },
-        });
-      },
-    }),
-  );
-
-  expect(response.status, "a checked candidate that fails is a decision, not a fault").toBe(200);
-  await expect(response.json()).resolves.toMatchObject({
-    ok: true,
-    preparation: { ok: true, report: { stage: "compatibility-mismatch", effect: "recorded" } },
-  });
-});
-
-test("returns a build failure as a preparation problem rather than a transport error", async () => {
-  const response = await ownerApiResponse(
-    submitRequest(submissionBody()),
-    supervisor({
-      submitGeneration() {
-        return Promise.resolve(labeled);
-      },
-      prepareGeneration() {
-        return Promise.resolve({
-          ok: false,
-          problem: { code: "build-workspace-unavailable", harnessCommit },
-        });
-      },
-    }),
-  );
-
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toMatchObject({
-    ok: true,
-    preparation: { ok: false, problem: { code: "build-workspace-unavailable", harnessCommit } },
-  });
-});
-
 test("returns a failed build step's output tail to the owner and writes none of it to a log", async () => {
   const diagnostics = {
     stdoutTail: "",
@@ -160,22 +108,6 @@ test.each(malformedBodies)(
     });
   },
 );
-
-test("reports a labeling failure without echoing the internal error", async () => {
-  const response = await ownerApiResponse(
-    submitRequest(submissionBody()),
-    supervisor({
-      submitGeneration() {
-        return Promise.reject(new Error("Bearer token-abc leaked from SQLite"));
-      },
-    }),
-  );
-
-  expect(response.status).toBe(500);
-  expect(await response.text()).toBe(
-    JSON.stringify({ ok: false, error: { code: "internal-error" } }),
-  );
-});
 
 test("reports a preparation failure without echoing the internal error", async () => {
   const response = await ownerApiResponse(

@@ -128,44 +128,49 @@ test("records a candidate that fails its startup check and keeps the active gene
   await expectActiveFixtureStillServing(control);
 });
 
-test("resubmitting the same passing commit returns the existing generation without labeling it twice", async () => {
-  const control = await activeSupervisor("submit-resubmit-passing");
-  await seedModuleMap(control, commits.resubmitted);
+type Resubmission = readonly [
+  name: string,
+  commit: string,
+  seeded: boolean,
+  expected: (first: GenerationSubmissionResult) => object,
+];
 
-  const first = await submission(control, commits.resubmitted);
-  const resubmitted = await submission(control, commits.resubmitted);
+const resubmissions: readonly Resubmission[] = [
+  [
+    "a passing commit returns the existing ready generation",
+    commits.resubmitted,
+    true,
+    (first) => ({
+      ok: true,
+      outcome: { generation: { ...first.outcome.generation, status: "ready" } },
+      preparation: { ok: true, report: { stage: "ready", effect: "no-op" } },
+    }),
+  ],
+  [
+    "an unbuildable commit returns the same build failure",
+    commits.resubmittedUnbuildable,
+    false,
+    (first) => first,
+  ],
+];
 
-  expect(resubmitted).toMatchObject({
-    ok: true,
-    outcome: {
-      generation: first.ok ? { ...first.outcome.generation, status: "ready" } : undefined,
-    },
-  });
-  expect(
-    (await readGenerations(control)).filter(
-      (generation) => generation.harnessCommit === commits.resubmitted,
-    ),
-    "resubmitting an already-labeled commit must not label it twice",
-  ).toHaveLength(1);
-  expect(resubmitted).toMatchObject({
-    preparation: { ok: true, report: { stage: "ready", effect: "no-op" } },
-  });
-  await expectActiveFixtureStillServing(control);
-});
+test.each(resubmissions)(
+  "resubmitting %s without labeling it twice",
+  async (_name, commit, seeded, expected) => {
+    const control = await activeSupervisor(`submit-resubmit-${seeded ? "passing" : "unbuildable"}`);
 
-test("resubmitting an unbuildable commit returns the same build failure, not a duplicate label", async () => {
-  const control = await activeSupervisor("submit-resubmit-unbuildable");
-  const commit = commits.resubmittedUnbuildable;
+    if (seeded) {
+      await seedModuleMap(control, commit);
+    }
 
-  const first = await submission(control, commit);
-  const resubmitted = await submission(control, commit);
+    const first = await submission(control, commit);
+    const resubmitted = await submission(control, commit);
 
-  expect(resubmitted, "an unbuildable commit reports the same failure on resubmission").toEqual(
-    first,
-  );
-  expect(
-    (await readGenerations(control)).filter((generation) => generation.harnessCommit === commit),
-    "resubmitting an unbuildable commit must not label it twice",
-  ).toHaveLength(1);
-  await expectActiveFixtureStillServing(control);
-});
+    expect(resubmitted).toMatchObject(expected(first));
+    expect(
+      (await readGenerations(control)).filter((generation) => generation.harnessCommit === commit),
+      "resubmitting a labeled commit must not label it twice",
+    ).toHaveLength(1);
+    await expectActiveFixtureStillServing(control);
+  },
+);

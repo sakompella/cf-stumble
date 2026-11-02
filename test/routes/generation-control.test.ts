@@ -103,32 +103,29 @@ test("activating the already-active generation with the current epoch is a no-op
   );
 });
 
-test("repeating an activation with the epoch it already used is rejected as stale", async () => {
-  const stub = await readyFixture("routes-activate-repeat-stale");
+test("an activation carrying an epoch the status route no longer reports is rejected as stale", async () => {
+  const stub = await readyFixture("routes-activate-stale");
   const label = await readySecond(stub, commits.second);
   const observedEpoch = await statusEpoch(stub);
-  const body = { observedEpoch, label };
 
-  await control(stub, "activate", body);
-  const repeated = await control(stub, "activate", body);
+  const beforeActivation = await control(stub, "activate", {
+    observedEpoch: observedEpoch - 1,
+    label,
+  });
 
-  expect(repeated.status).toBe(409);
-  await expect(repeated.json()).resolves.toEqual({
+  expect(beforeActivation.status).toBe(409);
+  await expect(beforeActivation.json()).resolves.toEqual({
     ok: false,
     problem: { code: "stale-epoch" },
   });
-});
-
-test("rejects an activation that carries a stale epoch", async () => {
-  const stub = await readyFixture("routes-stale-epoch");
-  const label = await readySecond(stub, commits.second);
-  const stale = (await statusEpoch(stub)) - 1;
-
-  const response = await control(stub, "activate", { observedEpoch: stale, label });
-
-  expect(response.status).toBe(409);
-  await expect(response.json()).resolves.toEqual({ ok: false, problem: { code: "stale-epoch" } });
   expect((await stub.getActiveGeneration()).generation?.label).toBe(0);
+
+  await control(stub, "activate", { observedEpoch, label });
+  const repeated = await control(stub, "activate", { observedEpoch, label });
+
+  expect(repeated.status).toBe(409);
+  await expect(repeated.json()).resolves.toEqual({ ok: false, problem: { code: "stale-epoch" } });
+  expect((await stub.getActiveGeneration()).generation?.label).toBe(label);
 });
 
 test("rolls back to a ready generation that ran before", async () => {

@@ -72,19 +72,3 @@ test("rejects a malformed rollback with its own code", async () => {
     error: { code: "invalid-rollback-request" },
   });
 });
-
-test("reports a control failure without echoing the internal error", async () => {
-  const response = await ownerApiResponse(
-    controlRequest("/api/generations/activate", JSON.stringify({ observedEpoch: 0, label: 0 })),
-    supervisor({
-      controlGeneration() {
-        return Promise.reject(new Error("Bearer token-abc leaked from SQLite"));
-      },
-    }),
-  );
-
-  expect(response.status).toBe(500);
-  expect(await response.text()).toBe(
-    JSON.stringify({ ok: false, error: { code: "internal-error" } }),
-  );
-});

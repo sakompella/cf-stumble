@@ -114,13 +114,17 @@ test("returns JSON 404 for unknown route and method pairs", async () => {
     supervisor(),
   );
 
-  expect(unknownPath.status).toBe(404);
-  await expect(unknownPath.json()).resolves.toEqual({ ok: false, error: { code: "not-found" } });
-  expect(unknownMethod.status).toBe(404);
-  await expect(unknownMethod.json()).resolves.toEqual({
-    ok: false,
-    error: { code: "not-found" },
-  });
+  const unknownProjectRoute = await ownerApiResponse(
+    new Request("https://cf-stumble.test/api/projects/sample-project-one/rename", {
+      method: "POST",
+    }),
+    supervisor(),
+  );
+
+  for (const response of [unknownPath, unknownMethod, unknownProjectRoute]) {
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ ok: false, error: { code: "not-found" } });
+  }
 });
 
 test("keeps the generation control routes POST-only", async () => {

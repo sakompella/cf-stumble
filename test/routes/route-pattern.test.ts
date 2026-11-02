@@ -37,15 +37,6 @@ test.each([
   expect(classOf(path)).toBe("workspace");
 });
 
-test("a route the table does not list is record-only, because the router answers it 404 without the Supervisor", async () => {
-  const path = "/api/projects/sample-project-one/rename";
-
-  expect(classOf(path)).toBe("record-only");
-
-  const response = await ownerApiResponse(
-    new Request(`https://cf-stumble.test${path}`, { method: "POST" }),
-    ownerApiSupervisor(),
-  );
-
-  expect(response.status).toBe(404);
+test("a route the table does not list is record-only", () => {
+  expect(classOf("/api/projects/sample-project-one/rename")).toBe("record-only");
 });

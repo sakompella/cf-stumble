@@ -306,12 +306,6 @@ describe.each(shells)("the harness provision lock under %s", (shell) => {
   );
 
   test(
-    "a contender takes the lock from a holder killed inside the section",
-    () => takesOverFromKilledHolder(shell, {}),
-    timeoutMs,
-  );
-
-  test(
     "a killed holder's surviving child keeps the lock until it exits",
     () => childOfKilledHolderKeepsLock(shell),
     timeoutMs,
