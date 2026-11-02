@@ -34,26 +34,6 @@ function bindingStreaming(lines: readonly string[]): FakeBinding {
   return fakeAiBinding(() => Promise.resolve(providerStreamOfLines(lines)));
 }
 
-type CredentialHolder = Readonly<{
-  chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
-  markChatGPTRefused(accessToken: string): Promise<void>;
-  markChatGPTUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
-}>;
-
-const NO_SUPERVISOR = {
-  getByName(): CredentialHolder {
-    throw new Error("a route no Supervisor created must not look for one");
-  },
-};
-
-function routeOver(binding: FakeBinding): ModelRoute {
-  return new ModelRoute(createExecutionContext(), {
-    AI: binding.ai,
-    SUPERVISOR: NO_SUPERVISOR,
-    CHATGPT_MODEL: "gpt-test",
-  });
-}
-
 function supervisedRoute(binding: FakeBinding, access: ChatGPTAccess): ModelRoute {
   const context = createExecutionContext();
   Object.defineProperty(context, "props", { value: { supervisor: "owner" } });
@@ -73,6 +53,10 @@ function supervisedRoute(binding: FakeBinding, access: ChatGPTAccess): ModelRout
     },
     CHATGPT_MODEL: "gpt-test",
   });
+}
+
+function routeOver(binding: FakeBinding): ModelRoute {
+  return supervisedRoute(binding, { kind: "not-connected" });
 }
 
 function streamOf(
@@ -137,9 +121,7 @@ test("the deployed entrypoint refuses a bad runStream request across its own ser
 test("with no ChatGPT credential connected, the Supervisor's route answers from Workers AI", async () => {
   const binding = bindingStreaming([sseLine({ response: "fallback" }), DONE_LINE]);
 
-  const events = await collectEvents(
-    streamOf(supervisedRoute(binding, { kind: "not-connected" }).runStream(REQUEST)),
-  );
+  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
 
   expect(binding.calls).toHaveLength(1);
   expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "fallback" } });

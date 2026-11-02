@@ -31,7 +31,7 @@ type ModelRouteEnv = Readonly<{
   CHATGPT_MODEL: string;
 }>;
 
-export type ModelRouteProps = Readonly<{ supervisor: string }> | undefined;
+export type ModelRouteProps = Readonly<{ supervisor: string }>;
 
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps> {
   runStream(request: RouteWire): ReadableStream<Uint8Array> | ValidationFailure {
@@ -45,13 +45,9 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
       validated,
     );
 
-    const credential = this.#chatgptCredential();
-
-    if (credential === undefined) return modelEventStream(workersAi);
-
     const chatgpt = chatgptTurn(
       {
-        credential,
+        credential: this.#chatgptCredential(),
         fetcher: (url, init) => fetch(url, init),
         model: this.env.CHATGPT_MODEL,
       },
@@ -73,11 +69,8 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
     return modelEventStream(turn);
   }
 
-  #chatgptCredential(): ChatGPTCredential | undefined {
-    const name = this.ctx.props?.supervisor;
-
-    if (name === undefined) return undefined;
-    const holder = this.env.SUPERVISOR.getByName(name);
+  #chatgptCredential(): ChatGPTCredential {
+    const holder = this.env.SUPERVISOR.getByName(this.ctx.props.supervisor);
 
     return {
       access: (rejected) => holder.chatgptAccess(rejected),
