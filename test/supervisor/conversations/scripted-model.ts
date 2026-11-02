@@ -77,5 +77,8 @@ export function scriptModel(...answers: readonly Answer[]) {
     return answer();
   });
 
-  return { inputs };
+  const asked = (count: number) =>
+    vi.waitUntil(() => inputs.length === count, { timeout: 10_000, interval: 10 });
+
+  return { inputs, asked };
 }

@@ -32,7 +32,7 @@ test("a run that starts in one project while another project runs gets its own f
   const control = await servingGeneration1("generation-1-own-deadline", workspace);
 
   await submitted(control, project, "wait", "r1");
-  await vi.waitUntil(() => model.inputs.length === 1);
+  await model.asked(1);
   advanceSupervisorClock(5 * MINUTE_MS);
   await submitted(control, otherProject, "read notes.txt", "r2");
   await untilAnswered(control, otherProject, 1);
@@ -50,7 +50,7 @@ test("a project's capability ends when its run settles while another project's r
   const control = await servingGeneration1("generation-1-capability-per-run", workspace);
 
   await submitted(control, otherProject, "wait", "r1");
-  await vi.waitUntil(() => model.inputs.length === 1);
+  await model.asked(1);
   const othersLeases = workspace.leases.length;
   await submitted(control, project, "read notes.txt", "r2");
   await untilAnswered(control, project, 1);
@@ -73,10 +73,10 @@ test("an alarm after a Supervisor reset aborts only the run past its own deadlin
   );
 
   await submitted(lost, project, "first", "r1");
-  await vi.waitUntil(() => model.inputs.length === 1);
+  await model.asked(1);
   advanceSupervisorClock(5 * MINUTE_MS);
   await submitted(lost, otherProject, "second", "r2");
-  await vi.waitUntil(() => model.inputs.length === 2);
+  await model.asked(2);
 
   await expect(
     runInDurableObject(lost, (_instance, state) => {

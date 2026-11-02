@@ -28,7 +28,7 @@ test("a run cut off by a Supervisor reset resumes from the Supervisor's alarm an
   const lost = await servingGeneration1("generation-1-resume", new ProjectWorkspace());
 
   await submitted(lost, project, "hello", "r1");
-  await vi.waitUntil(() => model.inputs.length === 1);
+  await model.asked(1);
 
   await expect(
     runInDurableObject(lost, (_instance, state) => {
@@ -40,7 +40,7 @@ test("a run cut off by a Supervisor reset resumes from the Supervisor's alarm an
   const control = env.SUPERVISOR.getByName("generation-1-resume");
 
   expect(await runDurableObjectAlarm(control)).toBe(true);
-  await vi.waitUntil(() => model.inputs.length === 2);
+  await model.asked(2);
 
   expect(await answeredLines(control, project, 1)).toEqual([
     { role: "user", text: "hello" },
@@ -70,7 +70,7 @@ test("a message sent while a run is busy is answered after the first", async () 
   const control = await servingGeneration1("generation-1-follow-up", new ProjectWorkspace());
 
   await submitted(control, project, "first", "r1");
-  await vi.waitUntil(() => model.inputs.length === 1);
+  await model.asked(1);
   await submitted(control, project, "second", "r2");
   first.release(says("first answer"));
 
