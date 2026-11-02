@@ -37,11 +37,15 @@ test("only the current epoch can change the selection, whatever the target", () 
     const target = tc.draw(labelValue);
     const status = tc.draw(gs.sampledFrom(["candidate", "ready", "failed"] as const));
 
-    const record = {
-      generation: generation(target, status),
-      wasActive: tc.draw(gs.booleans()),
-      compatibility: tc.draw(recordedCompatibility),
-    };
+    const stored = tc.draw(gs.booleans());
+
+    const record = stored
+      ? {
+          generation: generation(target, status),
+          wasActive: tc.draw(gs.booleans()),
+          compatibility: tc.draw(recordedCompatibility),
+        }
+      : undefined;
 
     const command = { kind: tc.draw(kind), label: label(target), observedEpoch };
 
@@ -56,9 +60,9 @@ test("only the current epoch can change the selection, whatever the target", () 
       expect(decision).toEqual({ ok: false, problem: { code: "stale-epoch" } });
     }
 
-    if (status !== "ready") expect(decision.ok).toBe(false);
+    if (record === undefined || status !== "ready") expect(decision.ok).toBe(false);
 
-    if (record.compatibility !== SUPERVISOR_COMPATIBILITY) expect(decision.ok).toBe(false);
+    if (record?.compatibility !== SUPERVISOR_COMPATIBILITY) expect(decision.ok).toBe(false);
   });
 });
 

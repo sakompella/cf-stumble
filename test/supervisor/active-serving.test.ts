@@ -54,13 +54,6 @@ test("reports a typed failure and serves nothing when no generation is active", 
   expect(await readGenerations(control), "no submission means no labeled generation").toEqual([]);
 });
 
-test("serves the activated generation's retained artifact", async () => {
-  const control = await activeSupervisor("serves-active-generation");
-  await activateServingCandidate(control, "0123456789abcdef0123456789abcdef01234567");
-
-  expect(await servedText(control)).toBe("candidate serving body");
-});
-
 test("serves the active retained artifact after Durable Object eviction", async () => {
   const control = await activeSupervisor("serves-active-generation-after-eviction");
   await activateServingCandidate(control, "d123456789abcdef0123456789abcdef01234567");

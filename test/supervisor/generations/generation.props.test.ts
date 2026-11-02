@@ -4,28 +4,20 @@ import { expect, test } from "vitest";
 
 import { isGenerationLabel } from "../../../src/supervisor/generations.js";
 
-test("classifies every safe integer by whether it is non-negative", () => {
+const safeIntegers = gs.integers().map((value) => ({ value, accepted: value >= 0 }));
+
+const fractions = gs
+  .integers({ minValue: -(2 ** 52 - 1), maxValue: 2 ** 52 - 1 })
+  .map((integer) => ({ value: integer + 0.5, accepted: false }));
+
+const nonFinite = gs
+  .sampledFrom([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])
+  .map((value) => ({ value, accepted: false }));
+
+test("accepts a number as a label exactly when it is a non-negative integer", () => {
   hegel.test((tc) => {
-    const value = tc.draw(gs.integers());
+    const { value, accepted } = tc.draw(gs.oneOf(safeIntegers, fractions, nonFinite));
 
-    expect(isGenerationLabel(value)).toBe(value >= 0);
-  });
-});
-
-test("rejects generated fractions", () => {
-  hegel.test((tc) => {
-    const integer = tc.draw(gs.integers({ minValue: -(2 ** 52 - 1), maxValue: 2 ** 52 - 1 }));
-
-    expect(isGenerationLabel(integer + 0.5)).toBe(false);
-  });
-});
-
-test("rejects non-finite numbers", () => {
-  hegel.test((tc) => {
-    const value = tc.draw(
-      gs.sampledFrom([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]),
-    );
-
-    expect(isGenerationLabel(value)).toBe(false);
+    expect(isGenerationLabel(value)).toBe(accepted);
   });
 });

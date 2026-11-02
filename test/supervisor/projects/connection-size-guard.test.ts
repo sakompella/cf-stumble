@@ -29,10 +29,37 @@ test("leaves the size decision to the clone, whatever GitHub's API reports", asy
   ).toHaveLength(1);
 });
 
-test("refuses a repository the clone measures as too large, and keeps it out of the catalog", async () => {
+test.each([
+  {
+    clone: "measures as too large",
+    arrange: (workspace: FakeTenantWorkspace) => {
+      workspace.cloneExitCode = 122;
+    },
+    code: "repository-too-large",
+  },
+  {
+    clone: "fails",
+    arrange: (workspace: FakeTenantWorkspace) => {
+      workspace.cloneExitCode = 128;
+    },
+    code: "provisioning-failed",
+  },
+  {
+    clone: "does not reach the durable store",
+    arrange: (workspace: FakeTenantWorkspace) => {
+      workspace.commandSync = "incomplete";
+    },
+    code: "provisioning-failed",
+  },
+])("refuses a repository whose clone $clone, and keeps it out of the catalog", async (row) => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
   const workspace = new FakeTenantWorkspace();
-  workspace.cloneExitCode = 122;
-  const subject = tenant("size-refused-by-clone", { workspace, fallbackToken: FAKE_TOKEN });
+  row.arrange(workspace);
+
+  const subject = tenant(`clone-refused-${row.clone.replaceAll(" ", "-")}`, {
+    workspace,
+    fallbackToken: FAKE_TOKEN,
+  });
 
   const refused = await subject.connections((connections) =>
     connections.connect(REPOSITORY, undefined, NOW),
@@ -42,6 +69,6 @@ test("refuses a repository the clone measures as too large, and keeps it out of 
     Effect.sync(() => connections.catalog()),
   );
 
-  expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
+  expect(refused).toMatchObject({ ok: false, problem: { code: row.code } });
   expect(listed).toEqual([HARNESS_PROJECT]);
 });

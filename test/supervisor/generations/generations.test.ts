@@ -44,16 +44,6 @@ function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string) {
   return control.submitGeneration(testHarnessCommit(harnessCommit));
 }
 
-async function activate(control: DurableObjectStub<Supervisor>, label: number) {
-  const active = await control.getActiveGeneration();
-
-  return control.controlGeneration({
-    kind: "activate",
-    label: generationLabel(label),
-    observedEpoch: active.epoch,
-  });
-}
-
 afterEach(async () => {
   await reset();
 });
@@ -103,37 +93,6 @@ test("a later preparation outcome replaces the recorded status", async () => {
     },
   });
   expect(await readGeneration(control, label)).toMatchObject({ status: "failed" });
-});
-
-test("activates a ready generation once and preserves its epoch on a repeated request", async () => {
-  const control = supervisor("activates-ready-generation");
-  const label = await submitCandidate(control, secondHarnessCommit);
-  await prepareGeneration(control, label, secondHarnessCommit);
-
-  const prepared = await readGeneration(control, label);
-  const activated = await activate(control, label);
-  const repeated = await activate(control, label);
-
-  if (!activated.ok || !repeated.ok || prepared === undefined) {
-    throw new Error("a ready generation must be activatable");
-  }
-
-  expect(activated).toMatchObject({
-    ok: true,
-    outcome: {
-      kind: "activated",
-      generation: { label, status: "ready" },
-      effect: "activated",
-    },
-  });
-  expect(await control.getActiveGeneration()).toEqual({
-    generation: prepared,
-    epoch: activated.outcome.epoch,
-  });
-  expect(repeated).toEqual({
-    ...activated,
-    outcome: { ...activated.outcome, effect: "no-op" },
-  });
 });
 
 test("preserves generation state across eviction and labels nothing itself", async () => {

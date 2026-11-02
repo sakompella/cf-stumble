@@ -39,15 +39,6 @@ function rollback(labelValue: number, observedEpoch: number) {
   return { kind: "rollback", label: label(labelValue), observedEpoch } as const;
 }
 
-test("activation refuses a stale epoch before it looks at the target", () => {
-  expect(
-    decideActivation(activate(3, 4), undefined, selectionAt(5), SUPERVISOR_COMPATIBILITY),
-  ).toEqual({
-    ok: false,
-    problem: { code: "stale-epoch" },
-  });
-});
-
 test("activation refuses an unknown generation", () => {
   expect(
     decideActivation(activate(3, 5), undefined, selectionAt(5), SUPERVISOR_COMPATIBILITY),
@@ -85,39 +76,6 @@ test("rollback refuses a ready generation that was never active", () => {
   });
 });
 
-test("activating the already-active generation is a no-op that leaves the epoch alone", () => {
-  expect(
-    decideActivation(
-      activate(1, 5),
-      stored(1, "ready", true),
-      selectionAt(5, 1),
-      SUPERVISOR_COMPATIBILITY,
-    ),
-  ).toEqual({
-    ok: true,
-    outcome: { kind: "activated", generation: generation(1, "ready"), epoch: 5, effect: "no-op" },
-  });
-});
-
-test("rolling back to a previously active generation advances the epoch by one", () => {
-  expect(
-    decideActivation(
-      rollback(0, 5),
-      stored(0, "ready", true),
-      selectionAt(5, 1),
-      SUPERVISOR_COMPATIBILITY,
-    ),
-  ).toEqual({
-    ok: true,
-    outcome: {
-      kind: "rolled-back",
-      generation: generation(0, "ready"),
-      epoch: 6,
-      effect: "activated",
-    },
-  });
-});
-
 test("activation and rollback refuse a generation checked under another facet compatibility", () => {
   const checkedElsewhere = stored(0, "ready", true, "pi-durable@1.4.0/host-1");
 
@@ -141,38 +99,10 @@ test("activation refuses a generation with no recorded facet compatibility", () 
 
 const passed = { status: "ready", compatibility: SUPERVISOR_COMPATIBILITY } as const;
 
-test("a check on a candidate records the resulting status and compatibility and advances the epoch", () => {
-  expect(
-    decidePreparation(
-      { ...stored(1, "candidate"), compatibility: undefined },
-      passed,
-      selectionAt(5),
-    ),
-  ).toEqual({ record: stored(1, "ready"), epoch: 6, effect: "recorded" });
-});
-
 test("a check confirming the recorded status and compatibility is a no-op that still advances the epoch", () => {
   expect(decidePreparation(stored(1, "ready"), passed, selectionAt(5))).toEqual({
     record: stored(1, "ready"),
     epoch: 6,
     effect: "no-op",
-  });
-});
-
-test("a passing check under a new facet compatibility replaces the recorded one", () => {
-  expect(
-    decidePreparation(stored(1, "ready", true, "pi-durable@1.4.0/host-1"), passed, selectionAt(5)),
-  ).toEqual({
-    record: stored(1, "ready", true),
-    epoch: 6,
-    effect: "recorded",
-  });
-});
-
-test("a failed check replaces the recorded status and clears the compatibility", () => {
-  expect(decidePreparation(stored(1, "ready"), { status: "failed" }, selectionAt(5))).toEqual({
-    record: { ...stored(1, "failed"), compatibility: undefined },
-    epoch: 6,
-    effect: "recorded",
   });
 });

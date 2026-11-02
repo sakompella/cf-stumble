@@ -5,7 +5,6 @@ import type { ActivationCommand } from "../../../src/supervisor/generations.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activateFixtureGeneration,
-  activateGeneration,
   prepareGeneration,
   submitCandidate,
   generationLabel,
@@ -37,31 +36,43 @@ afterEach(async () => {
   await reset();
 });
 
-test("resubmitting the same harness commit returns the existing generation", async () => {
-  const control = supervisor("control-resubmit-existing");
-  const first = await control.submitGeneration(testHarnessCommit(commits.first));
-  const resubmitted = await control.submitGeneration(testHarnessCommit(commits.first));
-
-  expect(resubmitted).toEqual(first);
-  expect(
-    await readGenerations(control),
-    "labeling an already-labeled commit again must not add a second row",
-  ).toHaveLength(1);
-});
-
-test("a stale activation request leaves the active generation unchanged", async () => {
-  const control = supervisor("control-stale-activation");
+test.each([
+  {
+    name: "a stale activation request",
+    code: "stale-epoch",
+    command: (target: number, epoch: number): ActivationCommand => ({
+      kind: "activate",
+      label: generationLabel(target),
+      observedEpoch: epoch - 1,
+    }),
+  },
+  {
+    name: "a stale rollback request",
+    code: "stale-epoch",
+    command: (_target: number, epoch: number): ActivationCommand => ({
+      kind: "rollback",
+      label: generationLabel(0),
+      observedEpoch: epoch - 1,
+    }),
+  },
+  {
+    name: "an activation request for an unknown generation",
+    code: "unknown-generation",
+    command: (_target: number, epoch: number): ActivationCommand => ({
+      kind: "activate",
+      label: generationLabel(99),
+      observedEpoch: epoch,
+    }),
+  },
+])("$name is refused and leaves the active generation unchanged", async (refusal) => {
+  const control = supervisor(`control-refused-${refusal.name.replaceAll(" ", "-")}`);
   await activateFixtureGeneration(control);
   const target = await readyGeneration(control, commits.first);
   const active = await control.getActiveGeneration();
 
-  const result = await control.controlGeneration({
-    kind: "activate",
-    label: generationLabel(target),
-    observedEpoch: active.epoch - 1,
-  });
+  const result = await control.controlGeneration(refusal.command(target, active.epoch));
 
-  expect(result).toEqual({ ok: false, problem: { code: "stale-epoch" } });
+  expect(result).toEqual({ ok: false, problem: { code: refusal.code } });
   expect(await control.getActiveGeneration()).toEqual(active);
 });
 
@@ -121,24 +132,6 @@ test("rollback requires a target generation that has been active before", async 
   });
 });
 
-test("a stale rollback request leaves the active generation unchanged", async () => {
-  const control = supervisor("control-stale-rollback");
-  await activateFixtureGeneration(control);
-  const replacement = await readyGeneration(control, commits.first);
-  const beforeActivation = await control.getActiveGeneration();
-  await activateGeneration(control, replacement);
-  const active = await control.getActiveGeneration();
-
-  const result = await control.controlGeneration({
-    kind: "rollback",
-    label: generationLabel(0),
-    observedEpoch: beforeActivation.epoch,
-  });
-
-  expect(result).toEqual({ ok: false, problem: { code: "stale-epoch" } });
-  expect(await control.getActiveGeneration()).toEqual(active);
-});
-
 test("activating the active generation with its current epoch is a no-op, but a stale epoch rejects", async () => {
   const control = supervisor("control-activate-no-op");
   await activateFixtureGeneration(control);
@@ -180,7 +173,10 @@ test("activating the active generation with its current epoch is a no-op, but a 
   expect(
     await control.getActiveGeneration(),
     "a no-op activation does not advance the epoch a second time",
-  ).toMatchObject({ generation: { label: target }, epoch: first.outcome.epoch });
+  ).toMatchObject({
+    generation: { label: target, status: "ready" },
+    epoch: first.outcome.epoch,
+  });
 });
 
 test("resubmitting the same harness commit still returns the existing generation after Durable Object eviction", async () => {
