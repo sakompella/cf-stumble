@@ -99,7 +99,11 @@ export function projectHandlers(
     }),
     ClickedProject: ({ projectId }) =>
       Option.match(
-        Array.findFirst(model.projects, (project) => project.id === projectId),
+        Array.findFirst(
+          model.projects,
+          (project) =>
+            project.id === projectId && !Option.contains(model.maybeProjectId, projectId),
+        ),
         { onNone: () => ({ model }), onSome: (project) => selectProject(model, project) },
       ),
     SucceededFetchProjects: ({ projects }) => listedProjects(model, projects),

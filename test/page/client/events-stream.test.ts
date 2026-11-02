@@ -42,7 +42,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("the stream's dependencies stay equal while the conversation runs and the reader sends", () => {
+test("the stream's dependencies stay equal while the conversation runs, the reader sends and clicks its project again", () => {
   const start = listedPage();
   const streamId = start.eventsStreamId;
   const opened = events.modelToDependencies(start);
@@ -53,6 +53,7 @@ test("the stream's dependencies stay equal while the conversation runs and the r
     Message.ClickedSendTurn(),
     Message.MintedRequestId({ projectId: "repo", requestId: "r", content: "follow up" }),
     Message.SucceededSend({ requestId: "r", submissionId: 2 }),
+    Message.ClickedProject({ projectId: "repo" }),
     Message.DisconnectedEvents({ streamId, detail: "the stream ended" }),
     Message.ReceivedEvent({ streamId, event: { type: "run_end", inputs: [1] } }),
   ];
@@ -72,7 +73,6 @@ test("leaving the project or starting a fresh thread opens another stream", () =
 
   const changes = [
     Message.ClickedProject({ projectId: "harness" }),
-    Message.ClickedProject({ projectId: "repo" }),
     Message.SucceededFreshThread({ streamId: start.eventsStreamId }),
   ];
 
