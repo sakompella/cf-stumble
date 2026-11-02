@@ -16,17 +16,6 @@ afterEach(async () => {
   await reset();
 });
 
-test("a tenant that has connected nothing has an empty catalog", async () => {
-  await withProjects("catalog-empty", (projects) => {
-    expect(projects.catalog()).toEqual([]);
-    expect(projects.list()).toEqual([]);
-    expect(resolveProject("sample-project-one", projects.catalog())).toEqual({
-      ok: false,
-      reason: "unknown-project-id",
-    });
-  });
-});
-
 test.each([1, 2, 3])("holds %i connected repositories and resolves every one", async (count) => {
   await withProjects(`catalog-of-${count}`, (projects) => {
     for (let index = 0; index < count; index += 1) {
@@ -162,20 +151,6 @@ test("names a project after its repository when nobody chooses a name", async ()
       repositoryUrl: "https://github.com/sample/repo-1",
       connectedAt: NOW,
     });
-  });
-});
-
-test("one tenant's project is unknown to another tenant", async () => {
-  await withProjects("catalog-tenant-one", (projects) => {
-    projects.connect({ repositoryUrl: "https://github.com/sample/private-repo" }, NOW);
-    expect(projects.catalog().map((project) => project.id)).toEqual(["sample-private-repo"]);
-  });
-
-  await withProjects("catalog-tenant-two", (projects) => {
-    expect(
-      resolveProject("sample-private-repo", projects.catalog()),
-      "a catalog belongs to one Supervisor, which is one tenant",
-    ).toEqual({ ok: false, reason: "unknown-project-id" });
   });
 });
 

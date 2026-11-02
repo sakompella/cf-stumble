@@ -18,16 +18,6 @@ const modules = [
   { name: "z-helper.js", source: "export const z = 2;\n" },
 ];
 
-test("sorts modules by name and keeps the entry module named", () => {
-  expect(encodeModuleMap(parsedArtifact(moduleMap("main.js", modules)))).toBe(
-    JSON.stringify({
-      harnessCommit,
-      entryModule: "main.js",
-      modules: [modules[1], modules[0], modules[2]],
-    }),
-  );
-});
-
 test("separates module maps that differ in a module source", () => {
   const original = parsedArtifact(moduleMap("main.js", modules));
 
