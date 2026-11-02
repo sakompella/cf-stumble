@@ -14,6 +14,8 @@ export const ProviderErrorField = lenient(
   Schema.Union([ProviderErrorFields, Schema.NonEmptyString]),
 );
 
+const isString = Schema.is(Schema.String);
+
 export type TokenUsage = Readonly<{ inputTokens: number; outputTokens: number }>;
 
 export type ParsedProviderChunk = Readonly<{
@@ -24,7 +26,7 @@ export type ParsedProviderChunk = Readonly<{
 }>;
 
 export type ProviderPayload =
-  | Readonly<{ failed: true }>
+  | Readonly<{ failed: true; detail: string | undefined }>
   | Readonly<{ failed: false; chunk: ParsedProviderChunk }>;
 
 const ToolCallEntry = Schema.Struct({
@@ -113,10 +115,16 @@ function chunkOf(event: ProviderEvent): ParsedProviderChunk {
   };
 }
 
+function errorDetail(error: NonNullable<ProviderEvent["error"]>): string | undefined {
+  return isString(error) ? error : (error.code ?? error.type);
+}
+
 export function parseProviderPayload(payload: string): ProviderPayload | undefined {
   return decodeProviderEvent(payload).pipe(
     Option.map((event): ProviderPayload =>
-      event.error === undefined ? { failed: false, chunk: chunkOf(event) } : { failed: true },
+      event.error === undefined
+        ? { failed: false, chunk: chunkOf(event) }
+        : { failed: true, detail: errorDetail(event.error) },
     ),
     Option.getOrUndefined,
   );

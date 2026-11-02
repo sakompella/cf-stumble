@@ -14,7 +14,9 @@ import type {
 import { resolveUsage, type ProviderResult } from "./model-route-usage.js";
 import {
   modelUnavailable,
+  modelUnavailableBecause,
   pumpSseStream,
+  type ModelTurnFailed,
   type ModelTurn,
   type ModelTurnAnswer,
 } from "./model-route-turn.js";
@@ -60,7 +62,7 @@ export class ProviderStreamAccumulator {
   private readonly toolCalls = new Map<number, ToolCallAccumulator>();
   private readonly emit: (event: ModelStreamEvent) => void;
   private reportedUsage: TokenUsage | undefined;
-  providerFailed = false;
+  providerFailure: Readonly<{ detail: string | undefined }> | undefined;
   truncated = false;
 
   constructor(emit: (event: ModelStreamEvent) => void) {
@@ -91,7 +93,7 @@ export class ProviderStreamAccumulator {
     if (parsed === undefined) return false;
 
     if (parsed.failed) {
-      this.providerFailed = true;
+      this.providerFailure = { detail: parsed.detail };
 
       return true;
     }
@@ -147,6 +149,10 @@ export function finishedTurn(
   return accumulator.truncated ? { ...answer, truncated: true } : answer;
 }
 
+function providerFailure(detail: string | undefined): ModelTurnFailed {
+  return detail === undefined ? modelUnavailable() : modelUnavailableBecause(detail);
+}
+
 export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteRequest): ModelTurn {
   return (emit) => {
     const accumulator = new ProviderStreamAccumulator(emit);
@@ -159,9 +165,9 @@ export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteReque
         pumpSseStream(providerStream, (line) => accumulator.handleLine(line)),
       ),
       Effect.flatMap(() =>
-        accumulator.providerFailed
-          ? Effect.fail(modelUnavailable())
-          : Effect.succeed(finishedTurn(accumulator, request)),
+        accumulator.providerFailure === undefined
+          ? Effect.succeed(finishedTurn(accumulator, request))
+          : Effect.fail(providerFailure(accumulator.providerFailure.detail)),
       ),
     );
   };

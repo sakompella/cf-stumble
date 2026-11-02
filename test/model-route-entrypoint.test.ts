@@ -124,9 +124,17 @@ test("a request that names its own model is refused as a plain value and never r
 });
 
 test("a binding call that rejects becomes exactly one terminal error event", async () => {
-  const binding = fakeAiBinding(() => Promise.reject(new Error("provider secret leaked")));
+  const binding = fakeAiBinding(() =>
+    Promise.reject(new Error("3040: Capacity temporarily exceeded")),
+  );
+
   const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
-  expect(events).toEqual([{ type: "error", error: { code: "model-unavailable" } }]);
+  expect(events).toEqual([
+    {
+      type: "error",
+      error: { code: "model-unavailable", detail: "3040: Capacity temporarily exceeded" },
+    },
+  ]);
 });
 
 test("a provider stream that stops before its terminal marker keeps the text it sent, then errors", async () => {
@@ -134,7 +142,10 @@ test("a provider stream that stops before its terminal marker keeps the text it 
   const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
   expect(events).toEqual([
     { type: "text-delta", delta: "partial" },
-    { type: "error", error: { code: "model-unavailable" } },
+    {
+      type: "error",
+      error: { code: "model-unavailable", detail: "the stream ended without a terminal event" },
+    },
   ]);
 });
 

@@ -41,7 +41,7 @@ export type ModelStreamEvent =
   | Readonly<{ type: "text-delta"; delta: string }>
   | Readonly<{ type: "tool-call-delta"; delta: ToolCallDelta }>
   | Readonly<{ type: "done"; message: AssistantMessage; usage: ModelUsage; truncated?: true }>
-  | Readonly<{ type: "error"; error: Readonly<{ code: ModelRouteErrorCode }> }>
+  | Readonly<{ type: "error"; error: Readonly<{ code: ModelRouteErrorCode; detail?: string }> }>
   | ProviderFallback;
 
 type ProviderFallback = Readonly<{

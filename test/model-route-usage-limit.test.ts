@@ -107,7 +107,10 @@ test("a usage limit after output ends the call with one error and never asks Wor
 
   expect(events).toEqual([
     { type: "text-delta", delta: "part" },
-    { type: "error", error: { code: "model-unavailable" } },
+    {
+      type: "error",
+      error: { code: "model-unavailable", detail: "subscription_sharing_usage_limit_exceeded" },
+    },
   ]);
   expect(binding.calls).toEqual([]);
 });
