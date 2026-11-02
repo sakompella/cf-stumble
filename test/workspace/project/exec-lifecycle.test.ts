@@ -1,10 +1,12 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
+import type { ProjectResult } from "../../../src/workspace/project/protocol.js";
 import { withDecodedEvents } from "./decoded-events.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
   FakeProjectTransactions,
+  type ManualExecHandle,
 } from "./fakes.js";
 
 function makeTarget() {
@@ -83,80 +85,76 @@ test("two staggered operations time out independently", async () => {
   expect(execBackend.handles[1]?.killCalls).toBe(1);
 });
 
-test("a timeout settles and closes even when the backend kill call hangs forever", async () => {
-  vi.useFakeTimers();
-  const { execBackend, target } = makeTarget();
-  const started = await target.startExec({ command: "x", timeoutMs: 50 });
+test.each<readonly [string, () => Promise<void>, number]>([
+  ["hangs forever", () => new Promise(() => {}), 1],
+  ["rejects", () => Promise.reject(new Error("kill failed")), 1],
+])(
+  "a timeout settles and closes even when the backend kill call %s",
+  async (_case, killBehavior, kills) => {
+    vi.useFakeTimers();
+    const { execBackend, target } = makeTarget();
+    const started = await target.startExec({ command: "x", timeoutMs: 50 });
 
-  if (!started.ok) throw new Error("expected startExec to succeed");
-  const handle = execBackend.handles[0]!;
-  handle.killBehavior = () => new Promise(() => {});
-  const reader = started.value.events.getReader();
+    if (!started.ok) throw new Error("expected startExec to succeed");
+    const handle = execBackend.handles[0]!;
+    handle.killBehavior = killBehavior;
+    const reader = started.value.events.getReader();
 
-  await vi.advanceTimersByTimeAsync(50);
-  await expect(reader.read()).resolves.toEqual({
-    done: false,
-    value: { kind: "terminal", seq: 0, outcome: "timed-out" },
-  });
-  await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
-  expect(handle.killCalls).toBe(1);
-});
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(reader.read()).resolves.toEqual({
+      done: false,
+      value: { kind: "terminal", seq: 0, outcome: "timed-out" },
+    });
+    await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
+    expect(handle.killCalls).toBe(kills);
+  },
+);
 
-test("a timeout settles even when the backend kill call rejects", async () => {
-  vi.useFakeTimers();
-  const { execBackend, target } = makeTarget();
-  const started = await target.startExec({ command: "x", timeoutMs: 50 });
+test.each<
+  readonly [
+    string,
+    (handle: ManualExecHandle, kill: () => Promise<ProjectResult<null>>) => Promise<void>,
+    object,
+    number,
+  ]
+>([
+  [
+    "an exit",
+    (handle) => {
+      handle.push({ name: "exit", exitCode: 3 });
 
-  if (!started.ok) throw new Error("expected startExec to succeed");
-  const handle = execBackend.handles[0]!;
-  handle.killBehavior = () => Promise.reject(new Error("kill failed"));
-  const reader = started.value.events.getReader();
+      return Promise.resolve();
+    },
+    { kind: "terminal", seq: 0, outcome: "exited", exitCode: 3 },
+    0,
+  ],
+  [
+    "a manual kill",
+    async (_handle, kill) => {
+      await expect(kill()).resolves.toEqual({ ok: true, value: null });
+    },
+    { kind: "terminal", seq: 0, outcome: "killed" },
+    1,
+  ],
+])(
+  "%s before the deadline suppresses the later timeout",
+  async (_case, settle, terminal, kills) => {
+    vi.useFakeTimers();
+    const { execBackend, target } = makeTarget();
+    const started = await target.startExec({ command: "x", timeoutMs: 100 });
 
-  await vi.advanceTimersByTimeAsync(50);
-  await expect(reader.read()).resolves.toEqual({
-    done: false,
-    value: { kind: "terminal", seq: 0, outcome: "timed-out" },
-  });
-});
+    if (!started.ok) throw new Error("expected startExec to succeed");
+    const handle = execBackend.handles[0]!;
+    const reader = started.value.events.getReader();
 
-test("an exit before the deadline suppresses the later timeout", async () => {
-  vi.useFakeTimers();
-  const { execBackend, target } = makeTarget();
-  const started = await target.startExec({ command: "x", timeoutMs: 100 });
+    await settle(handle, () => target.kill(started.value.operationId));
+    await expect(reader.read()).resolves.toEqual({ done: false, value: terminal });
 
-  if (!started.ok) throw new Error("expected startExec to succeed");
-  const handle = execBackend.handles[0]!;
-  const reader = started.value.events.getReader();
-
-  handle.push({ name: "exit", exitCode: 3 });
-  await expect(reader.read()).resolves.toEqual({
-    done: false,
-    value: { kind: "terminal", seq: 0, outcome: "exited", exitCode: 3 },
-  });
-
-  await vi.advanceTimersByTimeAsync(200);
-  await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
-  expect(handle.killCalls).toBe(0);
-});
-
-test("a manual kill before the deadline suppresses the later timeout", async () => {
-  vi.useFakeTimers();
-  const { execBackend, target } = makeTarget();
-  const started = await target.startExec({ command: "x", timeoutMs: 100 });
-
-  if (!started.ok) throw new Error("expected startExec to succeed");
-  const reader = started.value.events.getReader();
-
-  await expect(target.kill(started.value.operationId)).resolves.toEqual({ ok: true, value: null });
-  await expect(reader.read()).resolves.toEqual({
-    done: false,
-    value: { kind: "terminal", seq: 0, outcome: "killed" },
-  });
-
-  await vi.advanceTimersByTimeAsync(200);
-  await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
-  expect(execBackend.handles[0]?.killCalls).toBe(1);
-});
+    await vi.advanceTimersByTimeAsync(200);
+    await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
+    expect(handle.killCalls).toBe(kills);
+  },
+);
 
 test("stops reading backend output while one event is buffered", async () => {
   const { execBackend, target } = makeTarget();
@@ -198,7 +196,20 @@ test("cancelling the consumer stream kills the running command", async () => {
   expect(handle.killCalls).toBe(1);
 });
 
-test("EOF without an exit event is a failed terminal outcome", async () => {
+test.each<readonly [string, (handle: ManualExecHandle) => void]>([
+  [
+    "EOF without an exit event",
+    (handle) => {
+      handle.end();
+    },
+  ],
+  [
+    "a backend read failure",
+    (handle) => {
+      handle.fail(new Error("stream broke"));
+    },
+  ],
+])("%s is a failed terminal outcome", async (_case, ending) => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
 
@@ -206,7 +217,7 @@ test("EOF without an exit event is a failed terminal outcome", async () => {
   const handle = execBackend.handles[0]!;
   const reader = started.value.events.getReader();
 
-  handle.end();
+  ending(handle);
   await expect(reader.read()).resolves.toEqual({
     done: false,
     value: { kind: "terminal", seq: 0, outcome: "failed", error: { code: "backend-unavailable" } },
@@ -214,23 +225,10 @@ test("EOF without an exit event is a failed terminal outcome", async () => {
   expect(handle.killCalls).toBe(1);
 });
 
-test("a backend read failure is a failed terminal outcome", async () => {
-  const { execBackend, target } = makeTarget();
-  const started = await target.startExec({ command: "x" });
-
-  if (!started.ok) throw new Error("expected startExec to succeed");
-  const handle = execBackend.handles[0]!;
-  handle.fail(new Error("stream broke"));
-  const reader = started.value.events.getReader();
-
-  await expect(reader.read()).resolves.toEqual({
-    done: false,
-    value: { kind: "terminal", seq: 0, outcome: "failed", error: { code: "backend-unavailable" } },
-  });
-  expect(handle.killCalls).toBe(1);
-});
-
-test("kill on a stale, already-settled operation id is a successful no-op", async () => {
+test.each<readonly [string, (settledId: string) => string]>([
+  ["a stale, already-settled operation id", (settledId) => settledId],
+  ["a well-formed but unknown operation id", () => "00000000-0000-0000-0000-000000000000:0"],
+])("kill on %s is a successful no-op", async (_case, operationIdFor) => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
 
@@ -240,14 +238,9 @@ test("kill on a stale, already-settled operation id is a successful no-op", asyn
   handle.push({ name: "exit", exitCode: 0 });
   await reader.read();
 
-  await expect(target.kill(started.value.operationId)).resolves.toEqual({ ok: true, value: null });
-  expect(handle.killCalls).toBe(0);
-});
-
-test("kill on a well-formed but unknown operation id is a successful no-op", async () => {
-  const { target } = makeTarget();
-  await expect(target.kill("00000000-0000-0000-0000-000000000000:0")).resolves.toEqual({
+  await expect(target.kill(operationIdFor(started.value.operationId))).resolves.toEqual({
     ok: true,
     value: null,
   });
+  expect(handle.killCalls).toBe(0);
 });

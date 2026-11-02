@@ -42,33 +42,18 @@ function gated(phase: "close" | "destroy") {
   return { idle, clock, calls, release };
 }
 
-test("work that arrives in the same step the stop begins waits for it", async () => {
-  const { idle, clock, release } = gated("close");
-  idle.begin()();
-  clock.now = 11_000;
-
-  const alarm = idle.onAlarm();
-  let stopFinished = false;
-  void idle.settled().then(() => {
-    stopFinished = true;
-  });
-  await tick();
-  expect(stopFinished).toBe(false);
-
-  release.open();
-  await alarm;
-  await tick();
-  expect(stopFinished).toBe(true);
-});
-
 test.each(["close", "destroy"] as const)(
-  "an exec that starts during the %s waits for the stop, then runs",
+  "work that starts during the %s waits for the stop, then runs",
   async (phase) => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const { idle, clock, calls, release } = gated(phase);
     idle.begin()();
     clock.now = 11_000;
     const alarm = idle.onAlarm();
+    let stopFinished = false;
+    void idle.settled().then(() => {
+      stopFinished = true;
+    });
     await tick();
     const started: string[] = [];
 
@@ -91,11 +76,15 @@ test.each(["close", "destroy"] as const)(
     await tick();
 
     expect(started, "the exec does not start while the stop is in progress").toEqual([]);
+    expect(stopFinished, "the stop has not settled while it is in progress").toBe(false);
 
     release.open();
     await alarm;
     await exec;
     end();
+    await tick();
+
+    expect(stopFinished).toBe(true);
 
     expect(started).toEqual(["exec"]);
     expect(calls).toEqual(phase === "close" ? ["close"] : ["close", "destroy"]);

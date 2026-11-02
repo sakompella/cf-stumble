@@ -53,19 +53,7 @@ function withHost<T>(
   });
 }
 
-test("a Host RPC arms the idle alarm one limit after it ends", async () => {
-  const armed = await withHost("host-seam-rpc", async (host, state) => {
-    const before = Date.now();
-    await host.build(REFUSED_BUILD);
-
-    return { alarm: await state.storage.getAlarm(), before };
-  });
-
-  expect(armed.alarm).not.toBeNull();
-  expect((armed.alarm ?? 0) - armed.before).toBeGreaterThanOrEqual(WORKSPACE_IDLE_STOP_MS);
-});
-
-test("each tracked RPC arms the idle alarm when it ends", async () => {
+test("each tracked RPC arms the idle alarm one limit after it ends", async () => {
   const requests = {
     build: (host: WorkspaceHost) => host.build(REFUSED_BUILD),
     provision: (host: WorkspaceHost) => host.provision(REFUSED_PROVISION),
@@ -76,12 +64,17 @@ test("each tracked RPC arms the idle alarm when it ends", async () => {
 
   for (const [rpc, call] of Object.entries(requests)) {
     const alarm = await withHost(`host-seam-${rpc}`, async (host, state) => {
+      const before = Date.now();
       await call(host);
 
-      return state.storage.getAlarm();
+      return { alarm: await state.storage.getAlarm(), before };
     });
 
-    expect(alarm, `${rpc} arms the alarm`).not.toBeNull();
+    expect(alarm.alarm, `${rpc} arms the alarm`).not.toBeNull();
+    expect(
+      (alarm.alarm ?? 0) - alarm.before,
+      `${rpc} arms it one idle limit after it ends`,
+    ).toBeGreaterThanOrEqual(WORKSPACE_IDLE_STOP_MS);
   }
 });
 
@@ -134,27 +127,36 @@ test("a past-due alarm closes the Workspace and destroys the container for being
   expect(destroyed).toEqual(["idle"]);
 });
 
-test("a reset deletes the store and stops the container without starting another", async () => {
-  const seen = await withHost("host-seam-reset", async (host, _state, container) => {
-    await host.build(REFUSED_BUILD);
-    const answer = await host.reset();
+test.each([
+  [true, 1],
+  [false, 0],
+] as const)(
+  "a reset with the container running=%s deletes the store, destroys %i containers and starts none",
+  async (running, destroyedCount) => {
+    const seen = await withHost(
+      `host-seam-reset-${String(running)}`,
+      async (host, _state, container) => {
+        container.running = running;
+        await host.build(REFUSED_BUILD);
+        const answer = await host.reset();
 
-    return { answer, starts: container.starts, running: container.running };
-  });
+        return {
+          answer,
+          starts: container.starts,
+          running: container.running,
+          destroyed: container.destroyed.length,
+        };
+      },
+    );
 
-  expect(seen).toEqual({ answer: { ok: true, reset: "workspace" }, starts: 0, running: false });
-});
-
-test("a reset while the container is stopped destroys nothing", async () => {
-  const destroyed = await withHost("host-seam-reset-stopped", async (host, _state, container) => {
-    container.running = false;
-    await host.reset();
-
-    return container.destroyed;
-  });
-
-  expect(destroyed).toEqual([]);
-});
+    expect(seen).toEqual({
+      answer: { ok: true, reset: "workspace" },
+      starts: 0,
+      running: false,
+      destroyed: destroyedCount,
+    });
+  },
+);
 
 const tick = () =>
   new Promise<void>((resolve) => {
@@ -194,7 +196,7 @@ test("an exec started while the idle stop destroys the container waits for it", 
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
-test("a reset refuses while a file change or credential install is in flight and leaves the store alone", async () => {
+test("a reset refuses while a file change or credential request is in flight and leaves the store alone", async () => {
   const changes = {
     provision: (host: WorkspaceHost) =>
       host.provision({
@@ -204,6 +206,8 @@ test("a reset refuses while a file change or credential install is in flight and
       }),
     credentialInstall: (host: WorkspaceHost) =>
       host.credential({ kind: "github-credential", step: "install", token: FAKE_TOKEN }),
+    credentialStatus: (host: WorkspaceHost) =>
+      host.credential({ kind: "github-credential", step: "status" }),
     ensureManagedInstructions: (host: WorkspaceHost) => host.ensureManagedInstructions(),
   };
 

@@ -56,22 +56,6 @@ class FakeOperations implements WorkspaceOperations {
   }
 }
 
-test("derives project removal paths from the project id", () => {
-  const parsed = parseProjectRemovalRequest(request);
-
-  expect(parsed).toEqual(request);
-
-  if ("ok" in parsed) throw new Error("the valid removal request must parse");
-
-  const plan = planProjectRemovalRequest(parsed);
-
-  expect(plan.kind).toBe("run-command");
-  expect(plan.cwd).toBe("/");
-  expect(plan.timeoutMs).toBe(WORKSPACE_COMMAND_TIMEOUT_MS);
-  expect(plan.source).toContain(projectDirectory(sampleProjectOne.id));
-  expect(plan.source).toContain(`${projectDirectory(sampleProjectOne.id)}.provisioning`);
-});
-
 test("refuses an invalid project id and the harness", async () => {
   const operations = new FakeOperations();
 
@@ -89,7 +73,19 @@ test("refuses an invalid project id and the harness", async () => {
   expect(operations.sources).toEqual([]);
 });
 
-test("removes only the clone and staging directory", async () => {
+test("derives the removal from the project id and removes only the clone and staging directory", async () => {
+  const parsed = parseProjectRemovalRequest(request);
+
+  expect(parsed).toEqual(request);
+
+  if ("ok" in parsed) throw new Error("the valid removal request must parse");
+
+  const plan = planProjectRemovalRequest(parsed);
+
+  expect(plan.kind).toBe("run-command");
+  expect(plan.cwd).toBe("/");
+  expect(plan.timeoutMs).toBe(WORKSPACE_COMMAND_TIMEOUT_MS);
+
   const operations = new FakeOperations();
 
   await expect(

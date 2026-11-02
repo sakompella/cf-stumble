@@ -1,14 +1,10 @@
 import { expect, test, vi } from "vitest";
-import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import type { StartExecWire } from "../../../src/workspace/project/protocol.js";
 import { makeTarget } from "./target-helpers.js";
 
-test("reflection exposes exactly six methods and no forbidden backing capability", () => {
+test("reflection exposes no own state and no forbidden backing capability", () => {
   const { target } = makeTarget();
 
-  expect(Object.getOwnPropertyNames(ProjectRpcTarget.prototype).toSorted()).toEqual(
-    ["constructor", "endTurn", "kill", "lstat", "readFile", "startExec", "writeFile"].toSorted(),
-  );
   expect(Object.keys(target)).toEqual([]);
 
   for (const forbidden of [

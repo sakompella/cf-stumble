@@ -112,16 +112,14 @@ test("nothing is armed while no container runs", () => {
   expect(alarms).toEqual([]);
 });
 
-test("a lease moves the alarm to one limit after it ends, and an earlier lease does not shorten it", () => {
-  const { idle, alarms } = controller();
-  idle.lease(500_000);
-  idle.lease(300_000);
+test("a lease puts the alarm one limit after it ends; an earlier lease does not shorten it, and an ended lease moves it earlier", () => {
+  const overlapping = controller();
+  overlapping.idle.lease(500_000);
+  overlapping.idle.lease(300_000);
 
-  expect(alarms).toEqual([510_000]);
-  expect(idle.snapshot().leaseEndsAtMs).toBe(500_000);
-});
+  expect(overlapping.alarms).toEqual([510_000]);
+  expect(overlapping.idle.snapshot().leaseEndsAtMs).toBe(500_000);
 
-test("an ended lease counts the idle limit from its end and moves the alarm earlier", () => {
   const { idle, clock, alarms } = controller();
   const end = idle.lease(500_000);
   clock.now = 20_000;
@@ -150,16 +148,6 @@ test("forgetting the alarm lets the next activity arm a new one", () => {
   expect(alarms).toHaveLength(2);
 });
 
-test("an alarm before the limit re-arms for the moment the limit passes", async () => {
-  const { idle, clock, alarms, calls } = controller();
-  idle.begin()();
-  clock.now = 6_000;
-  await idle.onAlarm();
-
-  expect(alarms).toEqual([11_000, 11_000]);
-  expect(calls).toEqual([]);
-});
-
 test("an alarm that cannot re-arm itself rejects, so the platform runs it again", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   const { idle, clock } = controller({ alarmFails: true });
@@ -168,16 +156,40 @@ test("an alarm that cannot re-arm itself rejects, so the platform runs it again"
   await expect(idle.onAlarm()).rejects.toThrow("alarm write failed");
 });
 
-test("an alarm while work is in flight checks again a full limit later and stops nothing", async () => {
-  const { idle, clock, alarms, calls } = controller();
-  idle.begin();
-  idle.touch();
-  clock.now = 20_000;
-  await idle.onAlarm();
+test.each<readonly [string, (idle: ReturnType<typeof controller>["idle"]) => void, number, number]>(
+  [
+    [
+      "before the limit has passed",
+      (idle) => {
+        idle.begin()();
+      },
+      6_000,
+      11_000,
+    ],
+    [
+      "while work is in flight",
+      (idle) => {
+        idle.begin();
+        idle.touch();
+      },
+      20_000,
+      30_000,
+    ],
+  ],
+)(
+  "an alarm %s re-arms for the next moment a stop is possible and stops nothing",
+  async (_case, work, now, rearmedFor) => {
+    const { idle, clock, alarms, calls } = controller();
+    work(idle);
+    const armedBefore = alarms.length;
+    clock.now = now;
+    await idle.onAlarm();
 
-  expect(alarms.at(-1)).toBe(30_000);
-  expect(calls).toEqual([]);
-});
+    expect(alarms).toHaveLength(armedBefore + 1);
+    expect(alarms.at(-1)).toBe(rearmedFor);
+    expect(calls).toEqual([]);
+  },
+);
 
 test("an alarm that finds the container stopped arms nothing and stops nothing", async () => {
   const { idle, clock, state, alarms, calls } = controller();

@@ -152,26 +152,34 @@ test("logs a redacted cause instead of discarding it when a build step cannot ru
   expect(logged).toContain("container exited before the command could run");
 });
 
-test("reads the module map the build wrote, through the shell that wrote it", async () => {
+test("reads the module map the build wrote, through the shell that wrote it, and refuses a symbolic link", async () => {
   const operations = new FakeBuildOperations();
   operations.stdout = '{"entryModule":"main.js","modules":[]}';
 
-  await expect(build(operations, { kind: "build-output", harnessCommit: commit })).resolves.toEqual(
-    {
-      ok: true,
-      result: {
-        kind: "command",
-        stdout: '{"entryModule":"main.js","modules":[]}',
-        stderr: "",
-        exitCode: 0,
-      },
+  const result = await build(operations, { kind: "build-output", harnessCommit: commit });
+
+  expect(result).toEqual({
+    ok: true,
+    result: {
+      kind: "command",
+      stdout: '{"entryModule":"main.js","modules":[]}',
+      stderr: "",
+      exitCode: 0,
     },
+  });
+  expect(Object.getPrototypeOf(result), "the result crosses RPC as a plain value").toBe(
+    Object.prototype,
   );
   const read = operations.calls.at(0) ?? "";
   expect(read, "the read names the commit's own module map and no other path").toContain(
     moduleMapPath,
   );
   expect(read, "and reads it rather than searching for it").toContain('cat -- "$path"');
+  expect(read, "a symbolic link is refused before anything is read").toContain(
+    'if [ -L "$path" ]; then',
+  );
+  expect(read.indexOf('if [ -L "$path" ]; then')).toBeLessThan(read.indexOf('cat -- "$path"'));
+  expect(read, "and the refusal is a failing exit rather than empty output").toContain("exit 3");
 });
 
 test("rejects a commit that is not a harness commit, so no path can escape the build root", async () => {
@@ -187,21 +195,6 @@ test("rejects a commit that is not a harness commit, so no path can escape the b
   }
 
   expect(operations.calls).toEqual([]);
-});
-
-test("refuses a module map reached through a symbolic link", () => {
-  const planned = planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, {
-    kind: "build-output",
-    harnessCommit: commit,
-  });
-
-  const source = planned.kind === "run-command" ? planned.source : "";
-
-  expect(source, "a symbolic link is refused before anything is read").toContain(
-    'if [ -L "$path" ]; then',
-  );
-  expect(source.indexOf('if [ -L "$path" ]; then')).toBeLessThan(source.indexOf('cat -- "$path"'));
-  expect(source, "and the refusal is a failing exit rather than empty output").toContain("exit 3");
 });
 
 test("the checkout step fails on its own when the archive fails", () => {
