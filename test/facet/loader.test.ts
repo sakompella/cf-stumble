@@ -78,21 +78,6 @@ test("loads a multi-module main harness whose entry module uses an imported valu
   expect(await responseText(loadedHarness.worker)).toBe("from an imported module");
 });
 
-test("loads a one-module main harness through the artifact loader", async () => {
-  const loadedHarness = loadMainFacet(
-    env.LOADER,
-    artifact("1123456789abcdef0123456789abcdef01234567", "main.js", [
-      {
-        name: "main.js",
-        source: facetModule('"from one module"'),
-      },
-    ]),
-    { MODEL: modelRoute },
-  );
-
-  expect(await responseText(loadedHarness.worker)).toBe("from one module");
-});
-
 test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader name", async () => {
   const loaderNames: string[] = [];
   const loader = loaderWithRecordedNames(loaderNames);

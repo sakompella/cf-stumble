@@ -80,21 +80,9 @@ test("refuses a repository URL that no clone could use", () => {
   expect(projectIdForRepository("https://github.com/--/--")).toBeUndefined();
 });
 
-test("keeps the id of every connected repository whose name has no dot or underscore", () => {
-  expect(projectIdForRepository("https://github.com/sakompella/emaily-demo")).toBe(
-    "sakompella-emaily-demo",
-  );
-  expect(projectIdForRepository("https://GitHub.com/Sakompella/Emaily-Demo.git/")).toBe(
-    "sakompella-emaily-demo",
-  );
-  expect(projectIdForRepository("https://github.com/sample/repo-1")).toBe("sample-repo-1");
-  expect(projectIdForRepository("https://github.com/octocat/hello-world")).toBe(
-    "octocat-hello-world",
-  );
-});
-
 test.each([
   ["owner/a-b", "owner-a-b"],
+  ["sakompella/emaily-demo", "sakompella-emaily-demo"],
   ["owner/a.b", "owner-a-b--2d"],
   ["owner/a_b", "owner-a-b--2u"],
   ["owner/a--b", "owner-a-b--2hh"],

@@ -68,14 +68,13 @@ test("accepts a request comfortably under the byte-size limit even with multi-by
   );
 });
 
-test.each(["model", "reasoning_effort", "credentials", "endpoint", "provider"] as const)(
-  "rejects a request that includes %s",
-  (field) => {
-    expect(parseRequest({ messages: [USER], [field]: "forbidden" })).toEqual(
+test("rejects a request that includes a field that picks the provider", () => {
+  for (const field of ["model", "reasoning_effort", "credentials", "endpoint", "provider"]) {
+    expect(parseRequest({ messages: [USER], [field]: "forbidden" }), field).toEqual(
       rejected(`request must not include provider field: ${field}`),
     );
-  },
-);
+  }
+});
 
 test.each([
   { name: "no messages", request: {} },

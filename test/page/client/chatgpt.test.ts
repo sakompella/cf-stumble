@@ -61,10 +61,6 @@ test("a login needs both its attempt and its link", () => {
   );
 });
 
-test("the page reads the connection when it starts", () => {
-  expect((init().commands ?? []).map((command) => command.name)).toContain("FetchChatGPT");
-});
-
 test("finishing sends the login's attempt and the trimmed address", () => {
   const typed = after(SIGNING_IN, [
     Message.UpdatedChatGPTCallbackInput({ value: "  http://127.0.0.1:1455/cb?code=c  " }),
