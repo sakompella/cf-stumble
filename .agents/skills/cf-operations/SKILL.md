@@ -46,7 +46,7 @@ Compare against what you recorded before step 2. The container application keeps
 
 ### 1. Run the command
 
-Give `ops:check` a credential: it reads only `CLOUDFLARE_API_TOKEN` or the file named by `--token-file` (the `cf` login JSON, `~/.config/cloudflare/config/default.json`, works after `pnpm exec cf auth whoami` refreshed it; an API token with Account Analytics Read is better for repeated runs). See `docs/agents/design/observability.md`, "Checking a running deployment", "Credentials". Then run `pnpm ops:check --token-file <file>` (or without the flag when the variable is set). The account is `--account`, then `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. Use `--worker <worker>` for another Worker, `--since 90m|2h|1d` or `--from <ISO> [--to <ISO>]` for the window, and `--json` for parsing.
+Give `ops:check` a credential: it reads only `CLOUDFLARE_API_TOKEN` or the file named by `--token-file` (the `cf` login JSON, `~/.config/cloudflare/config/default.json`, works after `pnpm exec cf auth whoami` refreshed it; an API token with Account Analytics Read is better for repeated runs). See `docs/agents/design/observability.md`, "Checking a running deployment", "Credentials". Then run `pnpm ops:check --token-file <file>` (or without the flag when the variable is set). The account is `--account`, then `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. Use `--worker <worker>` for another Worker, `--since 90m|2h|1d` or `--from <ISO> [--to <ISO>]` for the window.
 
 ### 2. Read the result
 
