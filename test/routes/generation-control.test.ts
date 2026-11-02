@@ -169,3 +169,19 @@ test("refuses to roll back to a generation that never ran or is not ready", asyn
   await expect(notReady.json()).resolves.toEqual({ ok: false, problem: { code: "not-ready" } });
   expect((await stub.getActiveGeneration()).generation?.label).toBe(0);
 });
+
+test("refuses to activate a generation that does not exist", async () => {
+  const stub = await readyFixture("routes-activate-unknown");
+
+  const response = await control(stub, "activate", {
+    observedEpoch: await statusEpoch(stub),
+    label: 99,
+  });
+
+  expect(response.status).toBe(404);
+  await expect(response.json()).resolves.toEqual({
+    ok: false,
+    problem: { code: "unknown-generation" },
+  });
+  expect((await stub.getActiveGeneration()).generation?.label).toBe(0);
+});

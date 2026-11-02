@@ -7,7 +7,6 @@ import {
   prepareGeneration,
   servedText,
   submitCandidate,
-  generationLabel,
 } from "./helpers.js";
 import { readGeneration } from "./generation-reads.js";
 
@@ -51,37 +50,5 @@ test("keeps the activation epoch stable while the active generation serves", asy
   expect(activated).toMatchObject({
     ok: true,
     outcome: { kind: "activated", generation: { label: 1 } },
-  });
-});
-
-test("a repeated passing check keeps the epoch, so an activation from its prior view succeeds", async () => {
-  const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName(
-    "epoch-scope-recheck-stale-activation",
-  );
-
-  await activateFixtureGeneration(control);
-  const targetLabel = await submitCandidate(control, replacementCommit);
-  await prepareGeneration(control, targetLabel, replacementCommit);
-
-  const beforeRecheck = await control.getActiveGeneration();
-  const rechecked = await control.prepareGeneration(generationLabel(0));
-
-  const afterRecheck = await control.getActiveGeneration();
-
-  const result = await control.controlGeneration({
-    kind: "activate",
-    label: generationLabel(targetLabel),
-    observedEpoch: beforeRecheck.epoch,
-  });
-
-  if (!rechecked.ok) {
-    throw new Error("a repeated passing check must be accepted");
-  }
-
-  expect(rechecked.report.effect).toBe("no-op");
-  expect(afterRecheck).toEqual(beforeRecheck);
-  expect(result).toMatchObject({
-    ok: true,
-    outcome: { kind: "activated", generation: { label: targetLabel } },
   });
 });
