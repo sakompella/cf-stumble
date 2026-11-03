@@ -8,7 +8,11 @@ import {
 } from "@earendil-works/pi-durable";
 import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
-import type { ConversationHost, GenerationControl } from "../conversation-protocol.js";
+import type {
+  ConversationHost,
+  GenerationControl,
+  RunningConversation,
+} from "../conversation-protocol.js";
 import type { ModelCapability } from "./capabilities.js";
 import { computerEnv } from "./computer-env.js";
 import { CfStumblePrompt } from "./prompt.js";
@@ -74,13 +78,13 @@ async function relayRunningConversations(
   abort: (reason: string) => void,
 ): Promise<void> {
   const graph = await harness.watchTaskGraph(BACKGROUND_CONTEXT);
-  let reported = runningConversations(graph.value);
+  let reported = await runningConversations(harness, graph.value);
 
   await host.running(reported);
   graph.start(async (value) => {
-    const running = runningConversations(value);
+    const running = await runningConversations(harness, value);
 
-    if (running.join(" ") === reported.join(" ")) return;
+    if (JSON.stringify(running) === JSON.stringify(reported)) return;
 
     reported = running;
     await host.running(running).catch(() => {
@@ -89,10 +93,23 @@ async function relayRunningConversations(
   });
 }
 
-function runningConversations(graph: TaskGraph): readonly string[] {
+async function runningConversations(
+  harness: Harness,
+  graph: TaskGraph,
+): Promise<readonly RunningConversation[]> {
+  const { submissions } = await harness.inspect(BACKGROUND_CONTEXT);
+
   const conversations = Object.values(graph.tasks)
     .filter((task) => !task.background)
-    .map((task) => String(task.conversationId));
+    .map((task) => task.conversationId);
 
-  return [...new Set(conversations)].toSorted();
+  return [...new Set(conversations)]
+    .toSorted((a, b) => a - b)
+    .map((conversationId) => ({
+      conversationId: String(conversationId),
+      run: submissions.find(
+        (submission) =>
+          submission.conversationId === conversationId && submission.status === "placed",
+      )?.id,
+    }));
 }

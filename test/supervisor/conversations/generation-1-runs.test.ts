@@ -42,6 +42,34 @@ test("a run that starts in one project while another project runs gets its own f
   first.release(says("done"));
 });
 
+test("a queued follow-up run gets its own full deadline and a fresh capability", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const workspace = new ProjectWorkspace();
+  workspace.seedFile(`/workspace/projects/${project}/notes.txt`, "notes\n");
+  const first = held();
+
+  const model = scriptModel(
+    calls("read", { path: "notes.txt" }),
+    first.respond,
+    calls("read", { path: "notes.txt" }),
+    says("read it again"),
+  );
+
+  const control = await servingGeneration1("generation-1-follow-up-deadline", workspace);
+
+  await submitted(control, project, "read notes.txt and wait", "r1");
+  await model.asked(2);
+  advanceSupervisorClock(7 * MINUTE_MS);
+  await submitted(control, project, "read it again", "r2");
+  first.release(says("done"));
+  await untilAnswered(control, project, 2);
+
+  const [previous, followUp] = workspace.leases;
+  expect(workspace.leases).toHaveLength(2);
+  expect(previous?.ended).toBe(true);
+  expect(followUp?.remainingMs).toBeGreaterThan(PROJECT_RUN_DEADLINE_MS - MINUTE_MS);
+});
+
 test("a project's capability ends when its run settles while another project's run goes on", async () => {
   const workspace = new ProjectWorkspace();
   workspace.seedFile(`/workspace/projects/${project}/notes.txt`, "notes\n");

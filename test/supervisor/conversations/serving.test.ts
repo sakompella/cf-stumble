@@ -42,7 +42,7 @@ export class MainFacet extends DurableObject {
   }
   async submit(conversationId, content) {
     if (content === "refuse the next attach") this.ctx.storage.kv.put("refuse-attach", 1);
-    await this.host.running([conversationId]);
+    await this.host.running([{ conversationId }]);
     await this.host.arm({ active: true });
     const submitted = (this.ctx.storage.kv.get("submitted") ?? 0) + 1;
     this.ctx.storage.kv.put("submitted", submitted);

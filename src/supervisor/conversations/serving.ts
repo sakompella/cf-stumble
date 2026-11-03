@@ -13,7 +13,11 @@ import {
   type MountedFacet,
 } from "../artifacts/index.js";
 import { HeldWorkspaces, type ObtainWorkspace } from "./held-workspaces.js";
-import { ConversationHostTarget, type GenerationHostTarget } from "./host-target.js";
+import {
+  ConversationHostTarget,
+  type GenerationHostTarget,
+  type RunningConversation,
+} from "./host-target.js";
 import { ProjectConversations } from "./project-conversations.js";
 import { ConversationRuns } from "./runs.js";
 
@@ -41,7 +45,7 @@ export class ServingConversations {
     this.#runs = new ConversationRuns(ports.ctx.storage);
     this.#host = new ConversationHostTarget({
       arm: (wake) => this.#runs.arm(wake, Date.now()),
-      running: (conversationIds) => this.#running(conversationIds),
+      running: (conversations) => this.#running(conversations),
       workspace: (conversationId) => this.#workspace(conversationId),
     });
   }
@@ -257,10 +261,10 @@ export class ServingConversations {
     return readable;
   }
 
-  async #running(conversationIds: readonly string[]): Promise<void> {
+  async #running(conversations: readonly RunningConversation[]): Promise<void> {
     const now = Date.now();
 
-    for (const conversationId of this.#runs.reconcile(conversationIds, now)) {
+    for (const conversationId of this.#runs.reconcile(conversations, now)) {
       this.#workspaces.end(conversationId);
     }
 

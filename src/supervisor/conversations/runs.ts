@@ -1,4 +1,5 @@
 import type { Wake } from "@earendil-works/pi-durable";
+import type { RunningConversation } from "../../facet/index.js";
 import { logEvent } from "../../diagnostics.js";
 import { PROJECT_RUN_DEADLINE_MS } from "../../turn-budget.js";
 
@@ -6,7 +7,14 @@ const HEARTBEAT_MS = 60_000;
 
 const WAKE_KEY = "conversations.wake";
 
-type Run = Readonly<{ conversation_id: string; deadline: number }>;
+type Run = Readonly<{ conversation_id: string; run: number | null; deadline: number }>;
+
+function continues(run: Run, reported: RunningConversation): boolean {
+  return (
+    reported.conversationId === run.conversation_id &&
+    (reported.run === undefined || reported.run === run.run)
+  );
+}
 
 export class ConversationRuns {
   readonly #storage: DurableObjectStorage;
@@ -16,9 +24,18 @@ export class ConversationRuns {
     storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS conversation_runs (
         conversation_id TEXT PRIMARY KEY,
+        run INTEGER,
         deadline INTEGER NOT NULL
       );
     `);
+
+    if (
+      storage.sql
+        .exec("SELECT 1 FROM pragma_table_info('conversation_runs') WHERE name = 'run'")
+        .toArray().length === 0
+    ) {
+      storage.sql.exec("ALTER TABLE conversation_runs ADD COLUMN run INTEGER");
+    }
   }
 
   running(now: number): boolean {
@@ -37,19 +54,10 @@ export class ConversationRuns {
       .map((run) => run.conversation_id);
   }
 
-  reconcile(running: readonly string[], now: number): readonly string[] {
+  reconcile(running: readonly RunningConversation[], now: number): readonly string[] {
     const runs = this.#runs();
-    const recorded = new Set(runs.map((run) => run.conversation_id));
-    const settled = runs.filter((run) => !running.includes(run.conversation_id));
-
-    for (const conversationId of running.filter((id) => !recorded.has(id))) {
-      this.#storage.sql.exec(
-        "INSERT INTO conversation_runs (conversation_id, deadline) VALUES (?, ?)",
-        conversationId,
-        now + PROJECT_RUN_DEADLINE_MS,
-      );
-      logEvent("info", "run.started");
-    }
+    const settled = runs.filter((run) => !running.some((reported) => continues(run, reported)));
+    const started = running.filter((reported) => !runs.some((run) => continues(run, reported)));
 
     for (const run of settled) {
       this.#storage.sql.exec(
@@ -57,6 +65,16 @@ export class ConversationRuns {
         run.conversation_id,
       );
       logEvent("info", "run.settled", { totalMs: now - (run.deadline - PROJECT_RUN_DEADLINE_MS) });
+    }
+
+    for (const { conversationId, run } of started) {
+      this.#storage.sql.exec(
+        "INSERT INTO conversation_runs (conversation_id, run, deadline) VALUES (?, ?, ?)",
+        conversationId,
+        run ?? null,
+        now + PROJECT_RUN_DEADLINE_MS,
+      );
+      logEvent("info", "run.started");
     }
 
     return settled.map((run) => run.conversation_id);
@@ -85,7 +103,7 @@ export class ConversationRuns {
 
   #runs(): readonly Run[] {
     return this.#storage.sql
-      .exec<Run>("SELECT conversation_id, deadline FROM conversation_runs")
+      .exec<Run>("SELECT conversation_id, run, deadline FROM conversation_runs")
       .toArray();
   }
 }
