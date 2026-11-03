@@ -5,16 +5,10 @@ const CAUSE_TEXT_LIMIT = 400;
 const TIMEOUT_MESSAGE_PATTERN = /\btime(?:d)?[ -]?out\b/iu;
 
 export function isTimeoutFailure(cause: unknown): boolean {
-  try {
-    if (!(cause instanceof Error)) return false;
+  if (!(cause instanceof Error)) return false;
 
-    return cause.name === "TimeoutError" || TIMEOUT_MESSAGE_PATTERN.test(cause.message);
-  } catch {
-    return false;
-  }
+  return cause.name === "TimeoutError" || TIMEOUT_MESSAGE_PATTERN.test(cause.message);
 }
-
-const UNPRINTABLE_CAUSE = "[unprintable cause]";
 
 const JWT_PATTERN = /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]*/gu;
 
@@ -27,13 +21,9 @@ export function redactedExcerpt(text: string, knownToken?: string): string {
 }
 
 function causeText(cause: unknown, knownToken: string | undefined): string {
-  try {
-    const message = cause instanceof Error ? cause.message : String(cause);
+  const message = cause instanceof Error ? cause.message : String(cause);
 
-    return redactedExcerpt(message, knownToken);
-  } catch {
-    return UNPRINTABLE_CAUSE;
-  }
+  return redactedExcerpt(message, knownToken);
 }
 
 export function logRedactedCause(context: string, cause: unknown, knownToken?: string): void {

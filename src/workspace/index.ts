@@ -23,6 +23,6 @@ export { waitForWorkspaceProvision, clearWorkspaceProvision } from "./provision-
 
 export { WorkspaceHost } from "./host.js";
 
-export { type WorkspaceResetResult } from "./workspace-reset.js";
+export { WORKSPACE_BUSY, type WorkspaceResetResult } from "./workspace-reset.js";
 
 export { type ProjectRemovalWorkspaceNamespace } from "./project-removal.js";

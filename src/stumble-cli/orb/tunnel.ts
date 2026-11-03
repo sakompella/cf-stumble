@@ -12,7 +12,7 @@ export type RequestHead = Readonly<{ method: string; path: string; headers: read
 
 export type WorkerTarget = Readonly<{ url: URL; token: string }>;
 
-export function splitHead(buffered: Buffer): { head: RequestHead; rest: Buffer } | undefined {
+function splitHead(buffered: Buffer): { head: RequestHead; rest: Buffer } | undefined {
   const end = buffered.indexOf(HEAD_END);
 
   if (end === -1) return undefined;
