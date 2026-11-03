@@ -7,7 +7,9 @@ const INLINE = /`([^`\n]+)`|\*\*(?=\S)(.+?)\*\*|\*(?=[^\s*])([^*\n]+?)\*|\[/gu;
 
 const LINK_TARGET_START = /\]\(https?:\/\//uy;
 
-const FENCE = /^```/u;
+const FENCE = /^`{3,}/u;
+
+const FENCE_CLOSE = /^(`{3,})\s*$/u;
 
 const HEADING = /^(#{1,6})\s+(.*)$/u;
 
@@ -109,10 +111,13 @@ export function markdownBlocks<Message>(text: string, h: HtmlBuilder<Message>): 
     const heading = HEADING.exec(line);
     const item = ITEM.exec(line);
 
-    if (FENCE.test(line)) {
+    const fence = FENCE.exec(line)?.[0];
+
+    if (fence !== undefined) {
+      const closes = (next: string) => (FENCE_CLOSE.exec(next)?.[1] ?? "").length >= fence.length;
       const body: string[] = [];
 
-      for (index += 1; index < lines.length && !FENCE.test(lines[index] ?? ""); index += 1) {
+      for (index += 1; index < lines.length && !closes(lines[index] ?? ""); index += 1) {
         body.push(lines[index] ?? "");
       }
 

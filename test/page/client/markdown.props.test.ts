@@ -103,9 +103,21 @@ test("a long run of unmatched brackets renders without a quadratic slowdown", ()
 test("fenced and inline code keep their content exactly", () => {
   hegel.test(
     (tc) => {
-      const lines = tc.draw(gs.arrays(gs.text({ maxSize: 12 }), { minSize: 1, maxSize: 5 }));
-      const body = lines.filter((line) => !line.includes("\n") && !line.startsWith("```"));
-      const fenced = render(`\`\`\`ts\n${body.join("\n")}\n\`\`\``);
+      const fence = "`".repeat(tc.draw(gs.integers({ minValue: 3, maxValue: 6 })));
+
+      const closes = (line: string) =>
+        /^`+\s*$/u.test(line) && line.trimEnd().length >= fence.length;
+
+      const lines = Array.from({ length: tc.draw(gs.integers({ minValue: 1, maxValue: 5 })) }, () =>
+        tc.draw(gs.booleans())
+          ? "`".repeat(tc.draw(gs.integers({ minValue: 1, maxValue: 8 }))) +
+            tc.draw(gs.text({ alphabet: "js ", maxSize: 4 }))
+          : tc.draw(gs.text({ maxSize: 12 })),
+      );
+
+      const body = lines.filter((line) => !line.includes("\n") && !closes(line));
+      const closing = fence + tc.draw(gs.sampledFrom(["", "`", " ", "`` "]));
+      const fenced = render(`${fence}ts\n${body.join("\n")}\n${closing}`);
 
       expect(fenced.map((node) => node.sel)).toStrictEqual(["pre"]);
       expect(fenced.map(textOf)).toStrictEqual([body.join("\n")]);
