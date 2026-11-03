@@ -4,6 +4,7 @@
     "src/worker.ts!",
     "src/page/client/entry.ts!",
     "src/facet/generation-1/main-facet.ts!",
+    "src/stumble-cli/orb/main.ts!",
     "tools/*.mts!",
     "tools/ops-check/run.mts!",
     "infra/alchemy.run.ts!"
@@ -23,6 +24,7 @@
     "src/selectable-projects.ts": ["exports"],
     "src/supervisor/artifacts/store.ts": ["exports"],
     "src/supervisor/generations.ts": ["exports", "types"],
+    "src/stumble-cli/orb/tunnel.ts": ["exports", "types"],
     "src/supervisor/supervisor-env.ts": ["types"],
     "src/workspace/computer-operations.ts": ["exports"],
     "src/workspace/credential-access.ts": ["types"],
