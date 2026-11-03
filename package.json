@@ -35,8 +35,8 @@
     "esbuild": "0.28.2"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.4.12",
-    "@cloudflare/workers-types": "^5.20261102.1",
+    "@cloudflare/vitest-plugin": "^1.5.0",
+    "@cloudflare/workers-types": "^5.20261103.1",
     "@effect/platform-browser": "4.1.1",
     "@foldkit/oxlint-plugin": "0.15.4",
     "@hegeldev/hegel": "0.4.12",
@@ -52,7 +52,7 @@
     "tsrs": "0.20.1-ts7.1.0-beta",
     "tsx": "4.23.15",
     "vitest": "^5.0.5",
-    "wrangler": "^4.149.0"
+    "wrangler": "^4.156.2"
   },
   "packageManager": "pnpm@11.18.0"
 }
