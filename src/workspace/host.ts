@@ -124,8 +124,24 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
+  mintProviderToken(): Promise<string> {
+    return this.#platform.mintProviderToken();
+  }
+
   override fetch(request: Request): Promise<Response> {
     return this.#platform.handleFetch(request);
+  }
+
+  override webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
+    this.#platform.provider.received(socket, message);
+  }
+
+  override webSocketClose(socket: WebSocket): void {
+    this.#platform.provider.closed(socket);
+  }
+
+  override webSocketError(socket: WebSocket): void {
+    this.#platform.provider.closed(socket);
   }
 
   override alarm(): Promise<void> {
