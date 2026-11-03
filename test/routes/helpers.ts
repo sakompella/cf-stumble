@@ -38,6 +38,7 @@ export function ownerApiSupervisor(
     },
     submitProjectMessage: notCalled("submit a message"),
     projectEvents: notCalled("watch a conversation"),
+    projectEntries: notCalled("page a conversation"),
     abortProjectRun: notCalled("abort a run"),
     freshProjectConversation: notCalled("start a fresh thread"),
     controlGeneration() {

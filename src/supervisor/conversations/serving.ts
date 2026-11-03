@@ -15,6 +15,7 @@ import {
 import { HeldWorkspaces, type ObtainWorkspace } from "./held-workspaces.js";
 import {
   ConversationHostTarget,
+  type EntriesRequest,
   type GenerationHostTarget,
   type RunningConversation,
 } from "./host-target.js";
@@ -83,15 +84,28 @@ export class ServingConversations {
     );
   }
 
-  events(projectId: string) {
+  events(projectId: string, from?: number) {
     return answered(
       Effect.gen({ self: this }, function* () {
         const project = yield* this.#project(projectId);
         const facet = yield* this.#facet();
         const conversationId = yield* this.#conversation(facet, project);
-        const events = yield* this.#call(() => facet.events(conversationId));
+        const events = yield* this.#call(() => facet.events(conversationId, from));
 
         return { events: this.#endedWhenReplaced(conversationId, events) };
+      }),
+    );
+  }
+
+  entries(projectId: string, request: EntriesRequest) {
+    return answered(
+      Effect.gen({ self: this }, function* () {
+        const project = yield* this.#project(projectId);
+        const facet = yield* this.#facet();
+        const conversationId = yield* this.#conversation(facet, project);
+        const page = yield* this.#call(() => facet.entries(conversationId, request));
+
+        return { page };
       }),
     );
   }
@@ -251,7 +265,9 @@ export class ServingConversations {
       cancel: (reason) => {
         forget();
 
-        return source.cancel(reason);
+        source.releaseLock();
+
+        return events.cancel(reason);
       },
     });
 

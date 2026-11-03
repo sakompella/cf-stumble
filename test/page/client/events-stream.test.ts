@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -8,6 +7,7 @@ import { subscriptions } from "../../../src/page/client/events-stream.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { received, running, viewing } from "./views.js";
 
 const PROJECTS = [
   { id: "repo", displayName: "hello-world", isHarness: false, location: "https://github.com/o/r" },
@@ -22,7 +22,9 @@ if (events === undefined) {
 
 const sameDependencies = Schema.toEquivalence(events.dependenciesSchema);
 
-const SNAPSHOT = '{"type":"snapshot","entries":[],"tools":[],"inbox":[],"agent":{}}';
+const FIRST_VIEW = JSON.stringify([["r", { conversation: { id: 1 }, entries: [], docs: {} }]]);
+
+const SNAPSHOT = FIRST_VIEW;
 
 function after(start: Model, messages: readonly Message[]): Model {
   return messages.reduce((model, message) => update(model, message).model, start);
@@ -49,14 +51,14 @@ test("the stream's dependencies stay equal while the conversation runs, the read
   const opened = events.modelToDependencies(start);
 
   const messages = [
-    Message.ReceivedEvent({ streamId, event: { type: "run_start", inputs: [1] } }),
+    received(start, running()),
     Message.UpdatedPrompt({ value: "follow up" }),
     Message.ClickedSendTurn(),
     Message.MintedRequestId({ projectId: "repo", requestId: "r", content: "follow up" }),
     Message.SucceededSend({ requestId: "r", submissionId: 2 }),
     Message.ClickedProject({ projectId: "repo" }),
     Message.DisconnectedEvents({ streamId, detail: "the stream ended" }),
-    Message.ReceivedEvent({ streamId, event: { type: "run_end", inputs: [1] } }),
+    received(start, viewing()),
   ];
 
   let model = start;
@@ -109,20 +111,24 @@ test("stopping the stream aborts its request and cancels the response body", asy
   });
 
   const dependencies = events.modelToDependencies(listedPage());
-  const firstEvent = Effect.runFork(events.dependenciesToStream(dependencies).pipe(Stream.runHead));
-  const first = await Effect.runPromise(Fiber.join(firstEvent));
 
-  expect(Option.map(first, (message) => message._tag)).toEqual(Option.some("ReceivedEvent"));
+  const first = await Effect.runPromise(
+    events.dependenciesToStream(dependencies).pipe(Stream.runHead),
+  );
+
+  expect(Option.map(first, (message) => message._tag)).toEqual(Option.some("ReceivedConversation"));
   expect(seen).toEqual({ aborted: true, bodyCancelled: true });
 });
 
-test("the page reads past blank lines and events it does not show, and reconnects when the stream ends", async () => {
+test("the page reads past blank lines, and reconnects when the stream ends", async () => {
   const paths: string[] = [];
 
   vi.stubGlobal("fetch", (path: string) => {
     paths.push(path);
 
-    return ndjson(`\n${SNAPSHOT}\n\n{"type":"turn_start"}\n{"type":"run_start","inputs":[1]}\n`);
+    return ndjson(
+      `\n${SNAPSHOT}\n\n${JSON.stringify([["s", ["docs", "pi.live"], { run: { inputs: [1] } }]])}\n`,
+    );
   });
 
   const dependencies = events.modelToDependencies(listedPage());
@@ -132,10 +138,10 @@ test("the page reads past blank lines and events it does not show, and reconnect
   );
 
   expect([...messages].map((message) => message._tag)).toEqual([
-    "ReceivedEvent",
-    "ReceivedEvent",
+    "ReceivedConversation",
+    "ReceivedConversation",
     "DisconnectedEvents",
-    "ReceivedEvent",
+    "ReceivedConversation",
   ]);
   expect(paths).toEqual(["/api/projects/repo/events", "/api/projects/repo/events"]);
 });
@@ -178,9 +184,9 @@ test("a stream that falls silent for ten seconds is dropped and opened again", a
   await oneTimerArmed();
   await vi.advanceTimersByTimeAsync(1_000);
   expect([...(await messages)].map((message) => message._tag)).toEqual([
-    "ReceivedEvent",
+    "ReceivedConversation",
     "DisconnectedEvents",
-    "ReceivedEvent",
+    "ReceivedConversation",
   ]);
   expect(paths).toHaveLength(2);
 });

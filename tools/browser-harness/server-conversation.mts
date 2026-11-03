@@ -2,6 +2,7 @@ import type { ServerResponse } from "node:http";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import type { ConversationApiSupervisor } from "../../src/routes/conversations.js";
 import type { ConversationProblem } from "../../src/supervisor/conversations/conversation-result.js";
+import { entriesRequest, eventsFrom } from "../../src/routes/entries-request.js";
 import { sendJson } from "./server-routes.mjs";
 import type { RequestRecord, ScenarioState } from "./server-state.mjs";
 
@@ -11,20 +12,24 @@ type SupervisorAnswer<Call extends keyof ConversationApiSupervisor> = Awaited<
 
 const PROJECT_ROUTE = /^\/api\/projects\/([^/]+)\/(.+)$/u;
 
-const ACTIONS = ["messages", "events", "abort", "thread/fresh"] as const;
+const ACTIONS = ["messages", "events", "entries", "abort", "thread/fresh"] as const;
 
-type ConversationRoute = Readonly<{ projectId: string; action: (typeof ACTIONS)[number] }>;
+type ConversationRoute = Readonly<{
+  projectId: string;
+  action: (typeof ACTIONS)[number];
+  params: URLSearchParams;
+}>;
 
-export function conversationRoute(method: string, path: string): ConversationRoute | undefined {
-  const [, projectId, suffix] = PROJECT_ROUTE.exec(path) ?? [];
+export function conversationRoute(method: string, url: URL): ConversationRoute | undefined {
+  const [, projectId, suffix] = PROJECT_ROUTE.exec(url.pathname) ?? [];
   const action = ACTIONS.find((known) => known === suffix);
 
   if (projectId === undefined || action === undefined) {
     return undefined;
   }
 
-  return (method === "GET") === (action === "events")
-    ? { projectId: decodeURIComponent(projectId), action }
+  return (method === "GET") === (action === "events" || action === "entries")
+    ? { projectId: decodeURIComponent(projectId), action, params: url.searchParams }
     : undefined;
 }
 
@@ -53,8 +58,9 @@ async function streamEvents(
   res: ServerResponse,
   state: ScenarioState,
   projectId: string,
+  from: number | undefined,
 ): Promise<void> {
-  const stream = await state.conversations.watch(projectId);
+  const stream = await state.conversations.watch(projectId, from);
   const counts = state.openEventStreams;
   counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
 
@@ -67,14 +73,34 @@ async function streamEvents(
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
   });
-  res.write(`${JSON.stringify(stream.snapshot)}\n`);
-  stream.start((events) => {
-    for (const event of events) {
-      res.write(`${JSON.stringify(event)}\n`);
-    }
+  res.write(`${JSON.stringify([["r", stream.value]])}\n`);
+  stream.start((call) => {
+    if (call.kind === "value") res.write(`${JSON.stringify(call.ops)}\n`);
 
     return Promise.resolve();
   });
+}
+
+async function serveEntries(
+  res: ServerResponse,
+  state: ScenarioState,
+  projectId: string,
+  params: URLSearchParams,
+  record: RequestRecord,
+): Promise<void> {
+  const request = entriesRequest(params);
+
+  if (request === undefined) {
+    record.status = 400;
+    sendJson(res, 400, { ok: false, error: { code: "invalid-entries-request" } });
+
+    return;
+  }
+
+  const page = await state.conversations.page(projectId, request);
+  record.status = 200;
+  res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+  res.end(page);
 }
 
 function refuse(
@@ -104,7 +130,7 @@ export async function serveConversation(
   body: JsonValue,
   record: RequestRecord,
 ): Promise<void> {
-  const { projectId, action } = route;
+  const { projectId, action, params } = route;
 
   if (!knownProject(state, projectId)) {
     refuse(res, record, 404, "unknown-project-id");
@@ -114,7 +140,13 @@ export async function serveConversation(
 
   if (action === "events") {
     record.status = 200;
-    await streamEvents(res, state, projectId);
+    await streamEvents(res, state, projectId, eventsFrom(params) ?? undefined);
+
+    return;
+  }
+
+  if (action === "entries") {
+    await serveEntries(res, state, projectId, params, record);
 
     return;
   }

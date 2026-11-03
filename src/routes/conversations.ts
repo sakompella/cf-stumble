@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type { EntriesRequest } from "../entries-request.js";
+import { entriesRequest, eventsFrom } from "./entries-request.js";
 import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
 import { projectIdFromPath, type ProjectRouteSuffix } from "./route-pattern.js";
 import type {
@@ -15,7 +17,12 @@ export type ConversationApiSupervisor = Readonly<{
   ) => Promise<ConversationResult<{ submissionId: number }>>;
   projectEvents: (
     projectId: string,
+    from: number | undefined,
   ) => Promise<ConversationResult<{ events: ReadableStream<Uint8Array> }>>;
+  projectEntries: (
+    projectId: string,
+    request: EntriesRequest,
+  ) => Promise<ConversationResult<{ page: string }>>;
   abortProjectRun: (projectId: string) => Promise<ConversationResult<object>>;
   freshProjectConversation: (
     projectId: string,
@@ -42,6 +49,16 @@ function eventsResponse(events: ReadableStream<Uint8Array>): Response {
   return new Response(events, {
     headers: {
       "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+function entriesPageResponse(page: string): Response {
+  return new Response(page, {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
     },
@@ -91,9 +108,27 @@ export function routeConversationRequest(
   const events = routeFor(request, "GET", "/events");
 
   if (events !== undefined) {
-    return callSupervisor(() => supervisor.projectEvents(events)).pipe(
+    const from = eventsFrom(new URL(request.url).searchParams);
+
+    if (from === null) return Effect.succeed(jsonError(400, "invalid-events-request"));
+
+    return callSupervisor(() => supervisor.projectEvents(events, from)).pipe(
       Effect.map((result) =>
         result.ok ? eventsResponse(result.events) : problemResponse(result.problem),
+      ),
+    );
+  }
+
+  const entries = routeFor(request, "GET", "/entries");
+
+  if (entries !== undefined) {
+    const query = entriesRequest(new URL(request.url).searchParams);
+
+    if (query === undefined) return Effect.succeed(jsonError(400, "invalid-entries-request"));
+
+    return callSupervisor(() => supervisor.projectEntries(entries, query)).pipe(
+      Effect.map((result) =>
+        result.ok ? entriesPageResponse(result.page) : problemResponse(result.problem),
       ),
     );
   }

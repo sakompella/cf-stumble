@@ -4,10 +4,10 @@ import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
-import { FollowTranscript } from "../../../src/page/client/mount.js";
 import type { ChatGPTConnection, Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
+import { entryItem, followResolved, pageShowing, running } from "./views.js";
 
 type Rendered = NonNullable<ReturnType<typeof view>>;
 
@@ -47,7 +47,7 @@ function textsRendered(model: Model, ids: readonly string[]): readonly string[] 
     Scene.tap((simulation) => {
       texts = ids.map((id) => textOf(findById(simulation.html, id) ?? ""));
     }),
-    Scene.Mount.resolve(FollowTranscript, Message.CompletedFollowTranscript()),
+    followResolved,
   );
 
   return texts;
@@ -74,7 +74,7 @@ function idsRendered(model: Model): readonly string[] {
     Scene.tap((simulation) => {
       ids = renderedIds(simulation.html);
     }),
-    Scene.Mount.resolve(FollowTranscript, Message.CompletedFollowTranscript()),
+    followResolved,
   );
 
   return ids;
@@ -156,41 +156,18 @@ function classesOf(node: Rendered | string): readonly string[] {
 }
 
 function modelShowingToolOutput(output: string): Model {
-  const listed = update(
-    init().model,
-    Message.SucceededFetchProjects({
-      projects: [
-        { id: "repo", displayName: "repo", isHarness: false, location: "/workspace/repo" },
+  return pageShowing(
+    running({
+      items: [
+        entryItem(1, {
+          role: "assistant",
+          content: [{ type: "toolCall", id: "t", name: "read", arguments: { path: "a" } }],
+          stopReason: "toolUse",
+        }),
       ],
+      tools: [{ callId: "t", name: "read", status: "running", output }],
     }),
-  ).model;
-
-  const model = update(
-    listed,
-    Message.ReceivedEvent({
-      streamId: listed.eventsStreamId,
-      event: {
-        type: "snapshot",
-        entries: [
-          {
-            id: 1,
-            kind: "pi.test",
-            model: [
-              {
-                role: "assistant",
-                content: [{ type: "toolCall", id: "t", name: "read", arguments: { path: "a" } }],
-                stopReason: "toolUse",
-              },
-            ],
-          },
-        ],
-        tools: [{ callId: "t", name: "read", status: "running", output }],
-        inbox: [],
-      },
-    }),
-  ).model;
-
-  return model;
+  );
 }
 
 function diffLinesRendered(output: string): readonly (readonly [string, readonly string[]])[] {
@@ -214,7 +191,7 @@ function diffLinesRendered(output: string): readonly (readonly [string, readonly
     Scene.tap((simulation) => {
       lines = collect(simulation.html);
     }),
-    Scene.Mount.resolve(FollowTranscript, Message.CompletedFollowTranscript()),
+    followResolved,
   );
 
   return lines;

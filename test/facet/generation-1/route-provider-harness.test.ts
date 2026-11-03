@@ -1,5 +1,6 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createModels, Type } from "@earendil-works/pi-ai";
+import { createModels } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import {
   AssistantEntry,
   createRegistry,
@@ -30,7 +31,7 @@ if (!("WeakRef" in globalThis)) Object.defineProperty(globalThis, "WeakRef", { v
 const echo = defineTool({
   name: "echo",
   description: "Echo text back",
-  parameters: Type.Object({ text: Type.String() }),
+  parameters: obj({ text: str() }),
   replay: "safe",
   execute: (args) => Promise.resolve({ output: [{ type: "text", text: `echoed ${args.text}` }] }),
 });

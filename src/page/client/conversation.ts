@@ -1,178 +1,80 @@
-import * as Array from "effect/Array";
-import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import {
-  AssistantMessage,
-  Entry,
-  ToolSlot,
-  type AgentEvent,
-  type Block,
-  type MessageChange,
-  type ToolOutputChange,
-} from "./agent-event.js";
+import type { TranscriptView } from "@earendil-works/pi-durable";
+import { AssistantMessage, Block, blocksText, Entry, ToolSlot } from "./pi-message.js";
+
+const ViewItem = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("entry"), entry: Entry }),
+  Schema.Struct({ kind: Schema.Literal("gap"), after: Schema.Number, upTo: Schema.Number }),
+  Schema.Struct({ kind: Schema.Literal("earlier") }),
+]);
+
+type ViewItem = typeof ViewItem.Type;
+
+const LiveDoc = Schema.Struct({
+  run: Schema.optionalKey(Schema.Struct({ inputs: Schema.Array(Schema.Number) })),
+  generation: Schema.optionalKey(Schema.Struct({ message: Schema.optionalKey(AssistantMessage) })),
+  tools: Schema.optionalKey(Schema.Array(ToolSlot)),
+  runFailure: Schema.optionalKey(Schema.Struct({ reason: Schema.String })),
+});
+
+const InboxDoc = Schema.Struct({
+  items: Schema.Array(
+    Schema.Struct({
+      id: Schema.Number,
+      content: Schema.Union([Schema.String, Schema.Array(Block)]),
+    }),
+  ),
+});
+
+const TranscriptDoc = Schema.Struct({
+  items: Schema.Array(ViewItem),
+  docs: Schema.Struct({
+    "pi.live": Schema.optionalKey(LiveDoc),
+    "pi.inbox": Schema.optionalKey(InboxDoc),
+  }),
+});
+
+const QueuedInput = Schema.Struct({ id: Schema.Number, text: Schema.String });
 
 export const Conversation = Schema.Struct({
-  entries: Schema.Array(Entry),
+  items: Schema.Array(ViewItem),
   maybePartial: Schema.Option(AssistantMessage),
   tools: Schema.Array(ToolSlot),
   isRunning: Schema.Boolean,
-  inbox: Schema.Array(Schema.Number),
+  maybeRunFailure: Schema.Option(Schema.String),
+  inbox: Schema.Array(QueuedInput),
 });
 
 export type Conversation = typeof Conversation.Type;
 
 export const EMPTY_CONVERSATION: Conversation = {
-  entries: [],
+  items: [],
   maybePartial: Option.none(),
   tools: [],
   isRunning: false,
+  maybeRunFailure: Option.none(),
   inbox: [],
 };
 
-function withEntry(conversation: Conversation, entry: Entry): Conversation {
-  const isNew = Option.match(Array.last(conversation.entries), {
-    onNone: () => true,
-    onSome: (last) => entry.id > last.id,
-  });
-
-  return isNew ? { ...conversation, entries: [...conversation.entries, entry] } : conversation;
+export function conversationOf(view: TranscriptView): Option.Option<Conversation> {
+  return Option.map(Schema.decodeUnknownOption(TranscriptDoc)(view), ({ items, docs }) => ({
+    items,
+    maybePartial: Option.fromUndefinedOr(docs["pi.live"]?.generation?.message),
+    tools: docs["pi.live"]?.tools ?? [],
+    isRunning: docs["pi.live"]?.run !== undefined,
+    maybeRunFailure: Option.fromUndefinedOr(docs["pi.live"]?.runFailure?.reason),
+    inbox: (docs["pi.inbox"]?.items ?? []).map(({ id, content }) => ({
+      id,
+      text: Predicate.isString(content) ? content : blocksText(content),
+    })),
+  }));
 }
 
-function changedBlock(maybeBlock: Block | undefined, delta: string): Block | undefined {
-  if (maybeBlock?.type === "text" && "text" in maybeBlock) {
-    return { ...maybeBlock, text: `${maybeBlock.text}${delta}` };
-  }
-
-  return maybeBlock;
-}
-
-function withChange(message: AssistantMessage, change: MessageChange): AssistantMessage {
-  if (change.type === "message") {
-    return change.message;
-  }
-
-  const content = [...message.content];
-  const current = content[change.contentIndex];
-  const next = "block" in change ? change.block : changedBlock(current, change.delta);
-
-  if (next === undefined) {
-    return message;
-  }
-
-  content[change.contentIndex] = next;
-
-  return { ...message, content };
-}
-
-function withOutput(output: string | undefined, change: ToolOutputChange): string {
-  if ("set" in change) {
-    return change.set;
-  }
-
-  return `${(output ?? "").slice(change.trimStart ?? 0)}${change.append ?? ""}`;
-}
-
-function withTool(
-  conversation: Conversation,
-  callId: string,
-  change: (slot: ToolSlot) => ToolSlot,
-): Conversation {
-  return {
-    ...conversation,
-    tools: conversation.tools.map((slot) => (slot.callId === callId ? change(slot) : slot)),
-  };
-}
-
-function withMessage(conversation: Conversation, event: MessageEvent): Conversation {
-  return Match.value(event).pipe(
-    Match.discriminatorsExhaustive("type")({
-      message_start: ({ message }) =>
-        Schema.is(AssistantMessage)(message)
-          ? { ...conversation, maybePartial: Option.some(message) }
-          : conversation,
-      message_update: ({ changes }) => ({
-        ...conversation,
-        maybePartial: Option.map(conversation.maybePartial, (partial) =>
-          changes.reduce(withChange, partial),
-        ),
-      }),
-      message_end: ({ entry }) => withEndedMessage(conversation, entry),
-      entry_appended: ({ entry }) => withEndedMessage(conversation, entry),
-    }),
-  );
-}
-
-function withEndedMessage(conversation: Conversation, entry: Entry): Conversation {
-  const appended = withEntry(conversation, entry);
-  const isAnswer = entry.model?.some((message) => Schema.is(AssistantMessage)(message)) === true;
-
-  return isAnswer ? { ...appended, maybePartial: Option.none() } : appended;
-}
-
-function withToolEvent(conversation: Conversation, event: ToolEvent): Conversation {
-  return Match.value(event).pipe(
-    Match.discriminatorsExhaustive("type")({
-      tool_execution_start: ({ toolCallId, toolName }) => ({
-        ...conversation,
-        tools: [
-          ...conversation.tools.filter((slot) => slot.callId !== toolCallId),
-          { callId: toolCallId, name: toolName, status: "running" as const },
-        ],
-      }),
-      tool_execution_update: ({ toolCallId, output }) =>
-        output === undefined
-          ? conversation
-          : withTool(conversation, toolCallId, (slot) => ({
-              ...slot,
-              output: withOutput(slot.output, output),
-            })),
-      tool_execution_end: ({ toolCallId, entry }) => {
-        const ended = withTool(conversation, toolCallId, (slot) => ({ ...slot, status: "done" }));
-
-        return entry === undefined ? ended : withEntry(ended, entry);
-      },
-    }),
-  );
-}
-
-type MessageEvent = Extract<
-  AgentEvent,
-  Readonly<{ type: "message_start" | "message_update" | "message_end" | "entry_appended" }>
->;
-
-type ToolEvent = Extract<
-  AgentEvent,
-  Readonly<{ type: "tool_execution_start" | "tool_execution_update" | "tool_execution_end" }>
->;
-
-export function applyEvent(conversation: Conversation, event: AgentEvent): Conversation {
-  return Match.value(event).pipe(
-    Match.discriminatorsExhaustive("type")({
-      snapshot: (snapshot) => ({
-        entries: snapshot.entries,
-        maybePartial: Option.fromUndefinedOr(snapshot.generation?.message),
-        tools: snapshot.tools,
-        isRunning: snapshot.run !== undefined,
-        inbox: snapshot.inbox.map((item) => item.id),
-      }),
-      run_start: () => ({ ...conversation, isRunning: true }),
-      run_end: () => ({
-        ...conversation,
-        isRunning: false,
-        maybePartial: Option.none(),
-        tools: [],
-      }),
-      message_start: (message) => withMessage(conversation, message),
-      message_update: (message) => withMessage(conversation, message),
-      message_end: (message) => withMessage(conversation, message),
-      entry_appended: (message) => withMessage(conversation, message),
-      tool_execution_start: (tool) => withToolEvent(conversation, tool),
-      tool_execution_update: (tool) => withToolEvent(conversation, tool),
-      tool_execution_end: (tool) => withToolEvent(conversation, tool),
-      inbox_update: ({ items }) => ({ ...conversation, inbox: items.map((item) => item.id) }),
-      submission: () => conversation,
-      task_failed: () => conversation,
-    }),
+export function newestEntryId(conversation: Conversation): number {
+  return conversation.items.reduce(
+    (newest, item) => (item.kind === "entry" ? Math.max(newest, item.entry.id) : newest),
+    0,
   );
 }

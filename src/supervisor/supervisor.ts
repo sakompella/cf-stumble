@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { ActivationCommand, GenerationLabel } from "./generations.js";
 import { WORKSPACE_BUSY } from "../workspace/index.js";
+import type { EntriesRequest } from "../entries-request.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import {
   checkGenerationStartup,
@@ -163,8 +164,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return runAtEntryPoint(this.#parts.serving.submit(projectId, content, requestId));
   }
 
-  projectEvents(projectId: string) {
-    return runAtEntryPoint(this.#parts.serving.events(projectId));
+  projectEvents(projectId: string, from?: number) {
+    return runAtEntryPoint(this.#parts.serving.events(projectId, from));
+  }
+
+  projectEntries(projectId: string, request: EntriesRequest) {
+    return runAtEntryPoint(this.#parts.serving.entries(projectId, request));
   }
 
   abortProjectRun(projectId: string) {

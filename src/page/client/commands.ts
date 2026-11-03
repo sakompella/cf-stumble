@@ -18,12 +18,15 @@ import {
   projects,
   requestJson,
   sendRefusalText,
+  transportDetail,
   text,
   truthy,
 } from "./api.js";
 import { Message } from "./message.js";
 import { ControlKind } from "./model.js";
 import { sentMessage } from "./sent-message.js";
+import { loadIntoTranscript } from "./transcript-store.js";
+import { conversationOf } from "./conversation.js";
 
 export const FetchStatus = Command.define("FetchStatus", {
   messages: [Message.SucceededFetchStatus, Message.RejectedFetchStatus, Message.FailedFetchStatus],
@@ -218,6 +221,26 @@ export const ReplaceThread = Command.define("ReplaceThread", {
           : Message.RejectedFreshThread({ streamId, wording: problemText(answer) }),
       ),
       Effect.catch((detail) => Effect.succeed(Message.FailedFreshThread({ streamId, detail }))),
+    ),
+});
+
+export const LoadTranscript = Command.define("LoadTranscript", {
+  args: { streamId: Schema.Number, maybeGapIndex: Schema.Option(Schema.Number) },
+  messages: [Message.LoadedTranscript, Message.FailedLoadTranscript],
+  execute: ({ streamId, maybeGapIndex }) =>
+    Effect.tryPromise({
+      try: () => loadIntoTranscript(streamId, Option.getOrUndefined(maybeGapIndex)),
+      catch: transportDetail,
+    }).pipe(
+      Effect.map((loaded) =>
+        Message.LoadedTranscript({
+          streamId,
+          maybeItems: Option.flatMap(Option.fromUndefinedOr(loaded), (view) =>
+            Option.map(conversationOf(view), (conversation) => conversation.items),
+          ),
+        }),
+      ),
+      Effect.catch((detail) => Effect.succeed(Message.FailedLoadTranscript({ streamId, detail }))),
     ),
 });
 

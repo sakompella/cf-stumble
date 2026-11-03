@@ -5,7 +5,8 @@ import type { Conversation } from "./conversation.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
 import { statusText } from "./view-parts.js";
-import { transcriptOf, type OutboxItem } from "./transcript.js";
+import type { OutboxItem } from "./outbox.js";
+import { transcriptOf } from "./transcript.js";
 import { transcriptView } from "./view-transcript.js";
 
 const lazyTranscript = createLazy();

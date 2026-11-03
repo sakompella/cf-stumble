@@ -1,31 +1,32 @@
+import { ConversationTranscript } from "@earendil-works/pi-durable";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
+import type { Conversation } from "../../../src/page/client/conversation.js";
 import {
-  AgentEvent,
   AssistantMessage,
+  blocksText,
   type Entry,
   type PiMessage,
-} from "../../../src/page/client/agent-event.js";
+} from "../../../src/page/client/pi-message.js";
+import { viewReader } from "../../../src/page/client/view-reader.js";
 
-export function transcript(events: readonly AgentEvent[]): readonly Entry[] {
-  const entries = new Map<number, Entry>();
+export function openReader() {
+  const transcript = new ConversationTranscript(() => Promise.reject(new Error("no history")));
+  const read = viewReader({ transcript, latest: undefined });
+  let latest = Option.none<Conversation>();
 
-  for (const event of events) {
-    const ended =
-      event.type === "snapshot"
-        ? event.entries
-        : (event.type === "message_end" ||
-              event.type === "tool_execution_end" ||
-              event.type === "entry_appended") &&
-            event.entry !== undefined
-          ? [event.entry]
-          : [];
-
-    for (const entry of ended) entries.set(entry.id, entry);
-  }
-
-  return [...entries.values()].toSorted((a, b) => a.id - b.id);
+  return {
+    feed: (line: string) => {
+      latest = read(line);
+    },
+    isRunning: () => Option.exists(latest, (value) => value.isRunning),
+    entries: (): readonly Entry[] =>
+      Option.match(latest, {
+        onNone: () => [],
+        onSome: ({ items }) => items.flatMap((item) => (item.kind === "entry" ? [item.entry] : [])),
+      }),
+  };
 }
 
 export type Line = Readonly<{ role: string; text: string }>;
@@ -35,9 +36,7 @@ const isAssistantMessage = Schema.is(AssistantMessage);
 function messageText(message: PiMessage): string {
   if (!("content" in message)) return "";
 
-  return Predicate.isString(message.content)
-    ? message.content
-    : message.content.flatMap((block) => ("text" in block ? [block.text] : [])).join("");
+  return Predicate.isString(message.content) ? message.content : blocksText(message.content);
 }
 
 export function lines(entries: readonly Entry[]): readonly Line[] {
@@ -54,10 +53,4 @@ export function answerCount(entries: readonly Entry[]): number {
       (message) => isAssistantMessage(message) && message.stopReason === "stop",
     ),
   ).length;
-}
-
-const decodeEvent = Schema.decodeUnknownOption(Schema.fromJsonString(AgentEvent));
-
-export function readEvent(line: string): readonly AgentEvent[] {
-  return Option.toArray(decodeEvent(line));
 }

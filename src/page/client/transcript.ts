@@ -3,7 +3,8 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import type { Conversation } from "./conversation.js";
-import type { AssistantMessage, Block, PiMessage } from "./agent-event.js";
+import { undisplayedOutbox, type OutboxItem } from "./outbox.js";
+import { blocksText, type AssistantMessage, type PiMessage } from "./pi-message.js";
 
 export const TranscriptEntry = defineTaggedUnion({
   Text: { role: Schema.String, who: Schema.String, text: Schema.String },
@@ -14,6 +15,8 @@ export const TranscriptEntry = defineTaggedUnion({
     isFailed: Schema.Boolean,
   },
   Terminal: { wording: Schema.String, isProblem: Schema.Boolean },
+  Earlier: {},
+  Gap: { itemIndex: Schema.Number },
 });
 
 export type TranscriptEntry = typeof TranscriptEntry.Type;
@@ -72,18 +75,6 @@ function toolStartEntry(toolCallId: string, summary: string): ToolEntry {
   });
 }
 
-export const OutboxItem = Schema.Struct({
-  requestId: Schema.String,
-  text: Schema.String,
-  maybeSubmissionId: Schema.Option(Schema.Number),
-});
-
-export type OutboxItem = typeof OutboxItem.Type;
-
-function blocksText(blocks: readonly Block[]): string {
-  return blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("");
-}
-
 function finishedTool(
   tool: ToolEntry,
   result: Readonly<{ toolName: string; text: string; isError: boolean }>,
@@ -139,6 +130,59 @@ function withLiveOutput(entry: TranscriptEntry, conversation: Conversation): Tra
   return output === undefined ? entry : { ...entry, maybeOutput: Option.some(output) };
 }
 
+function addMessage(
+  entries: TranscriptEntry[],
+  toolBlocks: Map<string, number>,
+  message: PiMessage,
+): void {
+  if ("stopReason" in message) {
+    for (const entry of assistantEntries(message)) {
+      if (entry._tag === "Tool") {
+        toolBlocks.set(entry.toolCallId, entries.length);
+      }
+
+      entries.push(entry);
+    }
+
+    return;
+  }
+
+  if ("toolCallId" in message) {
+    const index = toolBlocks.get(message.toolCallId) ?? entries.length;
+    const start = toolStartEntry(message.toolCallId, message.toolName);
+
+    entries[index] = finishedTool(start, {
+      toolName: message.toolName,
+      text: blocksText(message.content),
+      isError: message.isError,
+    });
+    toolBlocks.set(message.toolCallId, index);
+
+    return;
+  }
+
+  if ("content" in message) {
+    const { content } = message;
+
+    entries.push(
+      textEntry("user", "you", Predicate.isString(content) ? content : blocksText(content)),
+    );
+  }
+}
+
+function waitingRows(conversation: Conversation, outbox: readonly OutboxItem[]) {
+  return [
+    ...conversation.inbox.map(({ text }) => textEntry("user", "you · queued", text)),
+    ...undisplayedOutbox(conversation, outbox).map((item) =>
+      textEntry(
+        "user",
+        Option.isSome(item.maybeSubmissionId) ? "you · queued" : "you · sending",
+        item.text,
+      ),
+    ),
+  ];
+}
+
 export function transcriptOf(
   conversation: Conversation,
   outbox: readonly OutboxItem[],
@@ -147,55 +191,23 @@ export function transcriptOf(
   const toolBlocks = new Map<string, number>();
 
   const add = (message: PiMessage) => {
-    if ("stopReason" in message) {
-      for (const entry of assistantEntries(message)) {
-        if (entry._tag === "Tool") {
-          toolBlocks.set(entry.toolCallId, entries.length);
-        }
-
-        entries.push(entry);
-      }
-
-      return;
-    }
-
-    if ("toolCallId" in message) {
-      const index = toolBlocks.get(message.toolCallId) ?? entries.length;
-      const start = toolStartEntry(message.toolCallId, message.toolName);
-
-      entries[index] = finishedTool(start, {
-        toolName: message.toolName,
-        text: blocksText(message.content),
-        isError: message.isError,
-      });
-      toolBlocks.set(message.toolCallId, index);
-
-      return;
-    }
-
-    if ("content" in message) {
-      const { content } = message;
-
-      entries.push(
-        textEntry("user", "you", Predicate.isString(content) ? content : blocksText(content)),
-      );
-    }
+    addMessage(entries, toolBlocks, message);
   };
 
-  for (const entry of conversation.entries) {
-    entry.model?.forEach(add);
+  for (const [itemIndex, item] of conversation.items.entries()) {
+    if (item.kind === "entry") {
+      item.entry.model?.forEach(add);
+    } else if (item.kind === "gap") {
+      entries.push(TranscriptEntry.Gap({ itemIndex }));
+    } else {
+      entries.push(TranscriptEntry.Earlier());
+    }
   }
 
   Option.map(conversation.maybePartial, add);
 
   return [
     ...entries.map((entry) => withLiveOutput(entry, conversation)),
-    ...outbox.map((item) =>
-      textEntry(
-        "user",
-        Option.isSome(item.maybeSubmissionId) ? "you · queued" : "you · sending",
-        item.text,
-      ),
-    ),
+    ...waitingRows(conversation, outbox),
   ];
 }

@@ -1,12 +1,8 @@
 import * as Option from "effect/Option";
 import { afterEach, expect, test } from "vitest";
-import {
-  applyEvent,
-  EMPTY_CONVERSATION,
-  type Conversation,
-} from "../../../src/page/client/conversation.js";
-import { eventLine } from "../../../src/page/client/events.js";
+import { type Conversation } from "../../../src/page/client/conversation.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
+import { folded, lastFolded } from "./folded.js";
 import { context, openPiRun, type PiRun } from "./pi-run.js";
 
 let run: PiRun | undefined;
@@ -16,35 +12,14 @@ afterEach(async () => {
   run = undefined;
 });
 
-function folded(lines: readonly string[]): readonly Conversation[] {
-  const states: Conversation[] = [];
-
-  lines.reduce((conversation, line) => {
-    const read = eventLine(line);
-
-    if (read._tag === "Unreadable") {
-      throw new Error(`the page could not read ${line}`);
-    }
-
-    const next = read._tag === "Event" ? applyEvent(conversation, read.event) : conversation;
-    states.push(next);
-
-    return next;
-  }, EMPTY_CONVERSATION);
-
-  return states;
-}
-
-async function settled(piRun: PiRun): Promise<Conversation> {
-  const states = folded(await piRun.snapshotLine().then((line) => [line]));
-
-  return states[0] ?? EMPTY_CONVERSATION;
+async function joined(piRun: PiRun): Promise<Conversation> {
+  return lastFolded([await piRun.joinedLines()]);
 }
 
 function isAnswering(state: Conversation): boolean {
   return (
     Option.isSome(state.maybePartial) &&
-    state.entries.some((entry) => entry.kind === "pi.tool-result")
+    state.items.some((item) => item.kind === "entry" && item.entry.kind === "pi.tool-result")
   );
 }
 
@@ -54,7 +29,9 @@ function texts(conversation: Conversation): readonly string[] {
       ? `${entry.who}: ${entry.text}`
       : entry._tag === "Tool"
         ? entry.summary
-        : entry.wording,
+        : entry._tag === "Terminal"
+          ? entry.wording
+          : entry._tag,
   );
 }
 
@@ -76,8 +53,8 @@ test("folding every event of a run with a tool and a follow-up shows what a fres
   await run.conversation.waitForIdle(context);
 
   const states = folded(run.lines);
-  const live = states.at(-1) ?? EMPTY_CONVERSATION;
-  const reconnected = await settled(run);
+  const live = lastFolded(run.lines);
+  const reconnected = await joined(run);
 
   expect(live).toEqual(reconnected);
   expect(texts(live)).toEqual([
@@ -133,9 +110,9 @@ test("an aborted run reads as cancelled, live and after a reconnect", async () =
   await run.conversation.abort(context);
   await submission.wait(context);
 
-  const live = folded(run.lines).at(-1) ?? EMPTY_CONVERSATION;
+  const live = lastFolded(run.lines);
 
-  expect(live).toEqual(await settled(run));
+  expect(live).toEqual(await joined(run));
   expect(live.isRunning).toBe(false);
   expect(texts(live).at(-1)).toBe("cancelled");
 });

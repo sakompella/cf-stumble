@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
-import { AgentEvent } from "./agent-event.js";
+import { Conversation } from "./conversation.js";
 import {
   ChatGPTConnection,
   ControlKind,
@@ -82,7 +82,14 @@ export const Message = defineMessageUnion({
   RejectedControl: { kind: ControlKind, sentEpoch: Schema.Number, wording: Schema.String },
   FailedControl: { kind: ControlKind, sentEpoch: Schema.Number, detail: Schema.String },
 
-  ReceivedEvent: { streamId: Schema.Number, event: AgentEvent },
+  ReceivedConversation: { streamId: Schema.Number, conversation: Conversation },
+  ClickedLoadEarlier: {},
+  ClickedFillGap: { itemIndex: Schema.Number },
+  LoadedTranscript: {
+    streamId: Schema.Number,
+    maybeItems: Schema.Option(Conversation.fields.items),
+  },
+  FailedLoadTranscript: { streamId: Schema.Number, detail: Schema.String },
   ReceivedUnreadableEvent: { streamId: Schema.Number },
   RefusedEvents: { streamId: Schema.Number, wording: Schema.String },
   DisconnectedEvents: { streamId: Schema.Number, detail: Schema.String },

@@ -5,9 +5,14 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Subscription } from "foldkit";
 import { answerOf, fetchEffect, problemText, projectPath, transportDetail } from "./api.js";
-import { EventLine, eventLine } from "./events.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
+import {
+  closeTranscript,
+  openTranscript,
+  viewReader,
+  type HeldTranscript,
+} from "./transcript-store.js";
 
 const RECONNECT_PAUSE = "1 second";
 
@@ -17,15 +22,16 @@ const EventsStream = Schema.Struct({ streamId: Schema.Number, projectId: Schema.
 
 type EventsStream = typeof EventsStream.Type;
 
-function lineMessages(streamId: number, line: string): readonly Message[] {
-  return EventLine.match<readonly Message[]>(eventLine(line), {
-    Event: ({ event }) => [Message.ReceivedEvent({ streamId, event })],
-    Unread: () => [],
-    Unreadable: () => [Message.ReceivedUnreadableEvent({ streamId })],
-  });
+function resumePath(projectId: string, held: HeldTranscript): string {
+  const from = held.transcript.resume?.from;
+
+  return `${projectPath(projectId, "/events")}${from === undefined ? "" : `?from=${from}`}`;
 }
 
-function connection({ streamId, projectId }: EventsStream): Stream.Stream<Message> {
+function connection(
+  { streamId, projectId }: EventsStream,
+  held: HeldTranscript,
+): Stream.Stream<Message> {
   const opened = Effect.gen(function* () {
     const controller = yield* Effect.acquireRelease(
       Effect.sync(() => new AbortController()),
@@ -36,7 +42,7 @@ function connection({ streamId, projectId }: EventsStream): Stream.Stream<Messag
     );
 
     const response = yield* fetchEffect(
-      projectPath(projectId, "/events"),
+      resumePath(projectId, held),
       { method: "GET", accept: "application/x-ndjson", maybeBody: Option.none() },
       controller.signal,
     );
@@ -44,18 +50,23 @@ function connection({ streamId, projectId }: EventsStream): Stream.Stream<Messag
     if (!response.ok || response.body === null) {
       const wording = problemText(yield* answerOf(response));
 
-      return Stream.make(Message.RefusedEvents({ streamId, wording }));
+      return Stream.make<Message[]>(Message.RefusedEvents({ streamId, wording }));
     }
 
     const { body } = response;
+    const read = viewReader(held);
 
     return Stream.fromReadableStream({ evaluate: () => body, onError: transportDetail }).pipe(
       Stream.timeout(STALL_TIMEOUT),
       Stream.decodeText,
       Stream.splitLines,
       Stream.filter((line) => line.trim() !== ""),
-      Stream.map((line) => lineMessages(streamId, line)),
-      Stream.flattenIterable,
+      Stream.map((line): Message =>
+        Option.match(read(line), {
+          onNone: () => Message.ReceivedUnreadableEvent({ streamId }),
+          onSome: (conversation) => Message.ReceivedConversation({ streamId, conversation }),
+        }),
+      ),
       Stream.concat(
         Stream.make(Message.DisconnectedEvents({ streamId, detail: "the stream ended" })),
       ),
@@ -81,7 +92,19 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
         Option.match(maybeStream, {
           onNone: () => Stream.empty,
           onSome: (stream) =>
-            connection(stream).pipe(Stream.repeat(Schedule.spaced(RECONNECT_PAUSE))),
+            Stream.unwrap(
+              Effect.acquireRelease(
+                Effect.sync(() => openTranscript(stream.streamId, stream.projectId)),
+                () =>
+                  Effect.sync(() => {
+                    closeTranscript(stream.streamId);
+                  }),
+              ).pipe(
+                Effect.map((held) =>
+                  connection(stream, held).pipe(Stream.repeat(Schedule.spaced(RECONNECT_PAUSE))),
+                ),
+              ),
+            ),
         }),
     },
   ),

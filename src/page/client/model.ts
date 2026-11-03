@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import { Conversation } from "./conversation.js";
-import { OutboxItem } from "./transcript.js";
+import { OutboxItem } from "./outbox.js";
 
 export const Project = Schema.Struct({
   id: Schema.String,

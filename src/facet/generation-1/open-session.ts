@@ -81,8 +81,10 @@ async function relayRunningConversations(
   let reported = await runningConversations(harness, graph.value);
 
   await host.running(reported);
-  graph.start(async (value) => {
-    const running = await runningConversations(harness, value);
+  graph.start(async (call) => {
+    if (call.kind !== "value") return;
+
+    const running = await runningConversations(harness, call.value);
 
     if (JSON.stringify(running) === JSON.stringify(reported)) return;
 

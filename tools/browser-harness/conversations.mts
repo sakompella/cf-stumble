@@ -1,5 +1,6 @@
 import { awaitWithContext, BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
-import { createModels, Type, type AssistantMessage, type Message } from "@earendil-works/pi-ai";
+import { createModels, type AssistantMessage, type Message } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -14,13 +15,14 @@ import {
   defineTool,
   Harness,
   MemoryStorage,
-  watchEvents,
-  type AgentEventStream,
   type Conversation,
+  type ConversationWatch,
   type EntryRecord,
   type Extension,
 } from "@earendil-works/pi-durable";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { EntriesRequest } from "../../src/entries-request.js";
+import { entriesQuery, entryId } from "../../src/facet/entries-query.js";
 import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 import {
   CONNECTED_PROJECT_URL,
@@ -123,7 +125,7 @@ function stubTools(scenario: HarnessScenario, barrier: Barrier): Extension {
   const bash = defineTool({
     name: "bash",
     description: "Run a shell command in the project",
-    parameters: Type.Object({ command: Type.String() }),
+    parameters: obj({ command: str() }),
     execute: async (_args, api, toolContext) => {
       const [first, second] = TOOL_OUTPUT;
       api.output(first);
@@ -146,7 +148,8 @@ function stubTools(scenario: HarnessScenario, barrier: Barrier): Extension {
 export type Conversations = Readonly<{
   barrier: Barrier;
   submit: (projectId: string, content: string, requestId: string) => Promise<number>;
-  watch: (projectId: string) => Promise<AgentEventStream>;
+  watch: (projectId: string, from: number | undefined) => Promise<ConversationWatch>;
+  page: (projectId: string, request: EntriesRequest) => Promise<string>;
   abort: (projectId: string) => Promise<void>;
   fresh: (projectId: string) => Promise<number>;
   entries: (projectId: string) => Promise<readonly EntryRecord[]>;
@@ -187,9 +190,12 @@ async function openHarness(scenario: HarnessScenario, barrier: Barrier) {
   return { harness, create };
 }
 
-export async function openConversations(scenario: HarnessScenario): Promise<Conversations> {
-  const barrier = freshBarrier();
-  const { harness, create } = await openHarness(scenario, barrier);
+type Registry = Readonly<{
+  conversationOf: (projectId: string) => Promise<Conversation>;
+  replace: (projectId: string, conversation: Promise<Conversation>) => void;
+}>;
+
+function conversationRegistry(create: () => Promise<Conversation>): Registry {
   const byProject = new Map<string, Promise<Conversation>>();
 
   const seeded = async (projectId: string): Promise<Conversation> => {
@@ -201,43 +207,72 @@ export async function openConversations(scenario: HarnessScenario): Promise<Conv
     return conversation;
   };
 
-  const conversationOf = (projectId: string): Promise<Conversation> => {
-    const known = byProject.get(projectId);
+  return {
+    conversationOf: (projectId) => {
+      const known = byProject.get(projectId);
 
-    if (known !== undefined) {
-      return known;
-    }
+      if (known !== undefined) {
+        return known;
+      }
 
-    const opened = seeded(projectId);
-    byProject.set(projectId, opened);
+      const opened = seeded(projectId);
+      byProject.set(projectId, opened);
 
-    return opened;
+      return opened;
+    },
+    replace: (projectId, conversation) => {
+      byProject.set(projectId, conversation);
+    },
   };
+}
+
+function readers({ conversationOf }: Registry) {
+  return {
+    watch: async (projectId: string, from: number | undefined) => {
+      const start = entryId(from);
+
+      return (await conversationOf(projectId)).watch(
+        context,
+        start === undefined ? undefined : { from: start },
+      );
+    },
+    page: async (projectId: string, request: EntriesRequest) =>
+      JSON.stringify(
+        await (
+          await conversationOf(projectId)
+        ).entries(entriesQuery(request), request.limit, undefined, context),
+      ),
+    entries: async (projectId: string) =>
+      (
+        await (
+          await conversationOf(projectId)
+        ).entries({ order: "ascending" }, 1_000, undefined, context)
+      ).items,
+  };
+}
+
+export async function openConversations(scenario: HarnessScenario): Promise<Conversations> {
+  const barrier = freshBarrier();
+  const { harness, create } = await openHarness(scenario, barrier);
+  const registry = conversationRegistry(create);
 
   return {
     barrier,
+    ...readers(registry),
     submit: async (projectId, content, requestId) => {
-      const conversation = await conversationOf(projectId);
+      const conversation = await registry.conversationOf(projectId);
       const submission = await conversation.submit({ type: "input", content, requestId }, context);
 
       return submission.id;
     },
-    watch: async (projectId) => watchEvents(harness, (await conversationOf(projectId)).id, context),
     abort: async (projectId) => {
-      await (await conversationOf(projectId)).abort(context);
+      await (await registry.conversationOf(projectId)).abort(context);
     },
     fresh: async (projectId) => {
       const conversation = create();
-      byProject.set(projectId, conversation);
+      registry.replace(projectId, conversation);
 
       return (await conversation).id;
-    },
-    entries: async (projectId) => {
-      const view = await (await conversationOf(projectId)).viewState(context);
-      const { entries } = view.value;
-      view.dispose();
-
-      return entries;
     },
     close: async () => {
       barrier.release();

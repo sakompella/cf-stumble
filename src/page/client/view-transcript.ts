@@ -1,7 +1,7 @@
 import * as Option from "effect/Option";
 import { createKeyedLazy, type Html, type HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_CLASSES as CLASS } from "../element-ids.js";
-import type { Message } from "./message.js";
+import { Message } from "./message.js";
 import { markdownBlocks } from "./markdown.js";
 import { FollowTranscript } from "./mount.js";
 import { boundedLines, diffLineKind, looksLikeDiff, TranscriptEntry } from "./transcript.js";
@@ -98,6 +98,13 @@ function terminalRow(
   );
 }
 
+function loadRow(label: string, onClick: Message, key: string, h: HtmlBuilder<Message>): Html {
+  return h.li(
+    [h.Key(key), h.Class(`${CLASS.message} load`)],
+    [h.button([h.Type("button"), h.OnClick(onClick)], [label])],
+  );
+}
+
 const lazyRow = createKeyedLazy();
 
 function entryView(item: TranscriptEntry, index: number, h: HtmlBuilder<Message>): Html {
@@ -108,6 +115,9 @@ function entryView(item: TranscriptEntry, index: number, h: HtmlBuilder<Message>
     Tool: ({ summary, isFailed, maybeOutput }) =>
       lazyRow(key, toolRow, [summary, isFailed, Option.getOrUndefined(maybeOutput), key, h]),
     Terminal: ({ wording, isProblem }) => lazyRow(key, terminalRow, [wording, isProblem, key, h]),
+    Earlier: () => loadRow("Load earlier messages", Message.ClickedLoadEarlier(), key, h),
+    Gap: ({ itemIndex }) =>
+      loadRow("Load missing messages", Message.ClickedFillGap({ itemIndex }), key, h),
   });
 }
 

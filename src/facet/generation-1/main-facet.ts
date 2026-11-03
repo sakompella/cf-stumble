@@ -1,12 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import {
-  watchEvents,
-  type AgentEvent,
-  type Conversation,
-  type ConversationId,
-} from "@earendil-works/pi-durable";
+import type { Conversation, ConversationId } from "@earendil-works/pi-durable";
 import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
+import { entriesQuery, entryId } from "../entries-query.js";
+import type { EntriesRequest } from "../../entries-request.js";
 import type {
   ConversationFacet,
   ConversationHost,
@@ -95,30 +92,64 @@ export class MainFacet
     return submission.id;
   }
 
-  async events(conversationId: string): Promise<ReadableStream<Uint8Array>> {
-    const { harness } = await this.#opened();
-    const { id } = await this.#conversation(conversationId);
-    const watch = await watchEvents(harness, id, context);
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-    const writer = writable.getWriter();
-    const write = (event: AgentEvent) => writer.write(encoder.encode(`${JSON.stringify(event)}\n`));
+  async events(conversationId: string, from?: number): Promise<ReadableStream<Uint8Array>> {
+    const conversation = await this.#conversation(conversationId);
 
-    const keepalive = setInterval(() => {
-      void writer.write(KEEPALIVE_LINE).catch(() => {});
-    }, KEEPALIVE_MS);
+    const start = entryId(from);
 
-    void write(watch.snapshot).catch(() => {});
-    watch.start(async (events) => {
-      for (const event of events) await write(event);
-    });
-    void writer.closed
-      .catch(() => watch.stop())
-      .finally(() => {
+    const watch = await conversation.watch(
+      context,
+      start === undefined ? undefined : { from: start },
+    );
+
+    let keepalive: ReturnType<typeof setInterval> | undefined;
+
+    return new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        const send = (bytes: Uint8Array) => {
+          try {
+            controller.enqueue(bytes);
+          } catch {
+            void watch.stop();
+          }
+        };
+
+        send(encoder.encode(`${JSON.stringify([["r", watch.value]])}\n`));
+        keepalive = setInterval(() => {
+          send(KEEPALIVE_LINE);
+        }, KEEPALIVE_MS);
+        watch.start((call) => {
+          if (call.kind === "value") send(encoder.encode(`${JSON.stringify(call.ops)}\n`));
+
+          return Promise.resolve();
+        });
+        void watch.closed
+          .then(() => {
+            controller.close();
+          })
+          .catch(() => {})
+          .finally(() => {
+            clearInterval(keepalive);
+          });
+      },
+      cancel: () => {
         clearInterval(keepalive);
-      });
-    void watch.closed.then(() => writer.close()).catch(() => {});
+        void watch.stop();
+      },
+    });
+  }
 
-    return readable;
+  async entries(conversationId: string, request: EntriesRequest): Promise<string> {
+    const conversation = await this.#conversation(conversationId);
+
+    const page = await conversation.entries(
+      entriesQuery(request),
+      request.limit,
+      undefined,
+      context,
+    );
+
+    return JSON.stringify(page);
   }
 
   async abort(conversationId: string): Promise<void> {

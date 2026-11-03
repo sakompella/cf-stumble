@@ -2,11 +2,11 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { expect, test } from "vitest";
 import { checkedWording, generationReading, gitHubReport } from "../../../src/page/client/api.js";
-import type { AgentEvent } from "../../../src/page/client/agent-event.js";
 import { Message } from "../../../src/page/client/message.js";
 import { ControlRequest, type Model } from "../../../src/page/client/model.js";
 import { controlLabel } from "../../../src/page/client/update-generation.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { entryItem, received, running, viewing, whoShown, type Conversation } from "./views.js";
 
 const PROJECTS = [
   { id: "repo", displayName: "hello-world", isHarness: false, location: "https://github.com/o/r" },
@@ -31,16 +31,11 @@ function commandNames(model: Model, message: Message): readonly string[] {
 function readyPage(): Model {
   const listed = after(init().model, [Message.SucceededFetchProjects({ projects: PROJECTS })]);
 
-  return after(listed, [
-    Message.ReceivedEvent({
-      streamId: listed.eventsStreamId,
-      event: { type: "snapshot", entries: [], tools: [], inbox: [] },
-    }),
-  ]);
+  return after(listed, [received(listed, viewing())]);
 }
 
-function event(value: AgentEvent): (model: Model) => Message {
-  return (model) => Message.ReceivedEvent({ streamId: model.eventsStreamId, event: value });
+function conversation(value: Conversation): (model: Model) => Message {
+  return (model) => received(model, value);
 }
 
 function sentPage(model: Model) {
@@ -114,39 +109,42 @@ test("sending trims the prompt, clears it, and posts it under a minted request i
   expect(minted.commands?.[0]?.name).toBe("SendMessage");
   expect(minted.commands?.[0]?.args).toEqual(MINTED);
   expect(minted.model.outbox).toEqual([
-    { requestId: "r1", text: "do it", maybeSubmissionId: Option.none() },
+    { requestId: "r1", text: "do it", maybeSubmissionId: Option.none(), afterEntry: 0 },
   ]);
 });
 
 test("a message sent while a run is active is accepted, shown as queued, then placed", () => {
-  const running = after(readyPage(), [event({ type: "run_start", inputs: [1] })]);
-  const sent = sentPage(running);
+  const busy = after(readyPage(), [conversation(running())]);
+  const sent = sentPage(busy);
 
   expect(sent.commands?.[0]?.name).toBe("SendMessage");
 
+  const queuedView = running({ inbox: [{ id: 5, text: "do it" }] });
+
   const queued = after(sent.model, [
     Message.SucceededSend({ requestId: "r1", submissionId: 5 }),
-    event({ type: "submission", record: { id: 5, requestId: "r1", status: "queued" } }),
-    event({ type: "inbox_update", items: [{ id: 5 }] }),
+    conversation(queuedView),
   ]);
 
   expect(queued.outbox.map((item) => item.maybeSubmissionId)).toEqual([Option.some(5)]);
+  expect(whoShown(queued)).toEqual(["you · queued"]);
 
   const placed = after(queued, [
-    event({ type: "submission", record: { id: 5, requestId: "r1", status: "placed" } }),
+    conversation(running({ items: [entryItem(7, { role: "user", content: "do it" })] })),
   ]);
 
   expect(placed.outbox).toEqual([]);
+  expect(whoShown(placed)).toEqual(["you"]);
 });
 
-test("a reconnect keeps only the sent messages its snapshot still holds queued", () => {
+test("a reconnect keeps only the sent messages its view still holds queued", () => {
   const page = after(readyPage(), [
     Message.MintedRequestId({ ...MINTED, requestId: "placed" }),
     Message.MintedRequestId({ ...MINTED, requestId: "queued" }),
     Message.MintedRequestId({ ...MINTED, requestId: "sending" }),
     Message.SucceededSend({ requestId: "placed", submissionId: 1 }),
     Message.SucceededSend({ requestId: "queued", submissionId: 2 }),
-    event({ type: "snapshot", entries: [], tools: [], inbox: [{ id: 2 }] }),
+    conversation(viewing({ inbox: [{ id: 2, text: "do it" }] })),
   ]);
 
   expect(page.outbox.map((item) => item.requestId)).toEqual(["queued", "sending"]);
@@ -192,13 +190,18 @@ test("two refused sends both keep their text in the prompt", () => {
   expect(refused.outbox).toEqual([]);
 });
 
-const noteAfter = (record: Readonly<{ id: number; status: string; reason?: string }>) =>
-  after(readyPage(), [event({ type: "submission", record })]).runNote;
+const noteAfterRun = (ending: Conversation) => {
+  const busy = after(readyPage(), [conversation(running())]);
 
-test("a settled submission says how the run ended", () => {
-  expect(noteAfter({ id: 1, status: "done" })).toBe("answered");
-  expect(noteAfter({ id: 1, status: "unanswered", reason: "aborted" })).toBe("stopped: aborted");
-  expect(noteAfter({ id: 1, status: "placed" })).toBe("");
+  return after(busy, [conversation(ending)]).runNote;
+};
+
+test("a run's end says how it ended", () => {
+  expect(noteAfterRun(viewing())).toBe("answered");
+  expect(noteAfterRun(viewing({ maybeRunFailure: Option.some("aborted") }))).toBe(
+    "stopped: aborted",
+  );
+  expect(after(readyPage(), [conversation(viewing())]).runNote).toBe("");
 });
 
 test("cancelling posts an abort for the selected project", () => {
@@ -209,14 +212,14 @@ test("cancelling posts an abort for the selected project", () => {
 });
 
 test("a dropped stream says it is reconnecting and keeps the conversation it showed", () => {
-  const running = after(readyPage(), [event({ type: "run_start", inputs: [1] })]);
+  const busy = after(readyPage(), [conversation(running())]);
 
-  const dropped = after(running, [
-    Message.DisconnectedEvents({ streamId: running.eventsStreamId, detail: "the stream ended" }),
+  const dropped = after(busy, [
+    Message.DisconnectedEvents({ streamId: busy.eventsStreamId, detail: "the stream ended" }),
   ]);
 
   expect(dropped.conversationState).toBe("reconnecting: the stream ended");
-  expect(dropped.conversation).toEqual(running.conversation);
+  expect(dropped.conversation).toEqual(busy.conversation);
 });
 
 test("a fresh thread needs two clicks and no active run, then opens a new stream", () => {
@@ -225,20 +228,20 @@ test("a fresh thread needs two clicks and no active run, then opens a new stream
   expect(armed.isFreshArmed).toBe(true);
   expect(commandNames(armed, Message.ClickedFreshThread())).toEqual(["ReplaceThread"]);
 
-  const running = after(armed, [event({ type: "run_start", inputs: [1] })]);
+  const busy = after(armed, [conversation(running())]);
 
-  expect(commandNames(running, Message.ClickedFreshThread())).toEqual([]);
-  expect(update(running, Message.ClickedFreshThread()).model.freshThreadStatus).toBe(
+  expect(commandNames(busy, Message.ClickedFreshThread())).toEqual([]);
+  expect(update(busy, Message.ClickedFreshThread()).model.freshThreadStatus).toBe(
     "a run is active; cancel it first",
   );
 
   const fresh = after(armed, [
-    event({ type: "message_end", entry: { id: 3, kind: "pi.user" } }),
+    conversation(viewing({ items: [entryItem(3, { role: "user", content: "hi" })] })),
     Message.SucceededFreshThread({ streamId: armed.eventsStreamId }),
   ]);
 
   expect(fresh.eventsStreamId).toBe(armed.eventsStreamId + 1);
-  expect(fresh.conversation.entries).toEqual([]);
+  expect(fresh.conversation.items).toEqual([]);
   expect(fresh.freshThreadStatus).toBe("fresh thread started; repository files are untouched");
 });
 

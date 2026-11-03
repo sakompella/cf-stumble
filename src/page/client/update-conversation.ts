@@ -1,9 +1,9 @@
-import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import { AbortRun, FetchChatGPT, MintRequestId, ReplaceThread, SendMessage } from "./commands.js";
-import { applyEvent, EMPTY_CONVERSATION } from "./conversation.js";
-import type { AgentEvent } from "./agent-event.js";
+import { EMPTY_CONVERSATION, newestEntryId, type Conversation } from "./conversation.js";
 import type { Model } from "./model.js";
+import { unseenOutbox, type OutboxItem } from "./outbox.js";
+import { transcriptHandlers } from "./update-transcript.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 function send(model: Model): UpdateReturn {
@@ -42,56 +42,40 @@ function withUnsentRequestInPrompt(model: Model, requestId: string): Model {
   };
 }
 
-function settledNote(status: string, reason: string | undefined): Option.Option<string> {
-  switch (status) {
-    case "done":
-      return Option.some("answered");
-    case "unanswered":
-      return Option.some(`stopped: ${reason ?? "unanswered"}`);
-    default:
-      return Option.none();
-  }
-}
+function runEndNote(previous: Conversation, next: Conversation): Option.Option<string> {
+  if (!previous.isRunning || next.isRunning) return Option.none();
 
-function withEventFacts(model: Model, event: AgentEvent): Model {
-  return Match.value(event).pipe(
-    Match.discriminators("type")({
-      snapshot: ({ inbox }) => ({
-        ...model,
-        conversationState: "live",
-        outbox: model.outbox.filter((item) =>
-          Option.match(item.maybeSubmissionId, {
-            onNone: () => true,
-            onSome: (id) => inbox.some((queued) => queued.id === id),
-          }),
-        ),
-      }),
-      submission: ({ record }) => {
-        const placed =
-          record.requestId === undefined || record.status === "queued"
-            ? model
-            : withoutRequest(model, record.requestId);
-
-        return Option.match(settledNote(record.status, record.reason), {
-          onNone: () => placed,
-          onSome: (runNote) => ({ ...placed, runNote }),
-        });
-      },
-      task_failed: ({ message }) => ({ ...model, runNote: `failed: ${message}` }),
+  return Option.some(
+    Option.match(next.maybeRunFailure, {
+      onNone: () => "answered",
+      onSome: (reason) => `stopped: ${reason}`,
     }),
-    Match.orElse(() => model),
   );
 }
 
-function receivedEvent(model: Model, event: AgentEvent): UpdateReturn {
-  const next = withEventFacts(
-    { ...model, conversation: applyEvent(model.conversation, event) },
-    event,
+function settledOutbox(model: Model, conversation: Conversation): readonly OutboxItem[] {
+  return unseenOutbox(conversation, model.outbox).filter((item) =>
+    Option.match(item.maybeSubmissionId, {
+      onNone: () => true,
+      onSome: (id) =>
+        conversation.isRunning || conversation.inbox.some((queued) => queued.id === id),
+    }),
   );
+}
+
+function receivedConversation(model: Model, conversation: Conversation): UpdateReturn {
+  const note = runEndNote(model.conversation, conversation);
+  const ended = Option.isSome(note);
 
   return {
-    model: next,
-    commands: event.type === "run_end" && model.chatgpt.isConnected ? [FetchChatGPT()] : [],
+    model: {
+      ...model,
+      conversation,
+      conversationState: "live",
+      outbox: settledOutbox(model, conversation),
+      runNote: Option.getOrElse(note, () => model.runNote),
+    },
+    commands: ended && model.chatgpt.isConnected ? [FetchChatGPT()] : [],
   };
 }
 
@@ -137,7 +121,12 @@ function mintedRequest(
     return { model };
   }
 
-  const item = { requestId, text: content, maybeSubmissionId: Option.none() };
+  const item = {
+    requestId,
+    text: content,
+    maybeSubmissionId: Option.none(),
+    afterEntry: newestEntryId(model.conversation),
+  };
 
   return {
     model: { ...model, runNote: "", outbox: [...model.outbox, item] },
@@ -223,7 +212,11 @@ export function streamHandlers(
   | "SucceededFreshThread"
   | "RejectedFreshThread"
   | "FailedFreshThread"
-  | "ReceivedEvent"
+  | "ReceivedConversation"
+  | "ClickedLoadEarlier"
+  | "ClickedFillGap"
+  | "LoadedTranscript"
+  | "FailedLoadTranscript"
   | "ReceivedUnreadableEvent"
   | "RefusedEvents"
   | "DisconnectedEvents"
@@ -232,6 +225,7 @@ export function streamHandlers(
     streamId === model.eventsStreamId ? { model: next() } : { model };
 
   return {
+    ...transcriptHandlers(model),
     ClickedFreshThread: () => startFreshThread(model),
     SucceededFreshThread: ({ streamId }) => forStream(streamId, () => freshThread(model)),
     RejectedFreshThread: ({ streamId, wording }) =>
@@ -241,8 +235,8 @@ export function streamHandlers(
         ...withError(model, "the fresh thread request", detail),
         freshThreadStatus: "request failed",
       })),
-    ReceivedEvent: ({ streamId, event }) =>
-      streamId === model.eventsStreamId ? receivedEvent(model, event) : { model },
+    ReceivedConversation: ({ streamId, conversation }) =>
+      streamId === model.eventsStreamId ? receivedConversation(model, conversation) : { model },
     ReceivedUnreadableEvent: ({ streamId }) =>
       forStream(streamId, () => ({
         ...model,

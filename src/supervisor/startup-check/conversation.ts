@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { MainFacetTarget } from "../../facet/index.js";
-import { AgentEvent, AssistantMessage } from "../../page/index.js";
+import { AssistantMessage, readFirstView, type Conversation } from "../../page/index.js";
 import { STARTUP_CHECK_REPLY } from "../../startup-check-script.js";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import { ConversationHostTarget, endWorkspaceTurn } from "../conversations/index.js";
@@ -12,10 +12,6 @@ import type { StartupCheckOutcome } from "./candidate.js";
 const PROBE_MESSAGE = "Run the startup check.";
 
 const POLL_MS = 100;
-
-const decodeEvent = Schema.decodeUnknownOption(Schema.fromJsonString(AgentEvent));
-
-type Snapshot = Extract<AgentEvent, { type: "snapshot" }>;
 
 const isAssistantMessage = Schema.is(AssistantMessage);
 
@@ -84,13 +80,13 @@ function settledAnswer(
 ): Effect.Effect<AssistantMessage, string> {
   return candidateCall(() => snapshotLine(candidate, conversationId)).pipe(
     Effect.flatMap((line) => {
-      const event = Option.getOrUndefined(decodeEvent(line));
+      const conversation = readFirstView(line);
 
-      if (event?.type !== "snapshot") {
-        return Effect.fail("the startup-check conversation did not open with a readable snapshot");
+      if (Option.isNone(conversation)) {
+        return Effect.fail("the startup-check conversation did not open with a readable view");
       }
 
-      const answer = finalAnswer(event);
+      const answer = finalAnswer(conversation.value);
 
       return answer === undefined
         ? Effect.sleep(POLL_MS).pipe(Effect.andThen(settledAnswer(candidate, conversationId)))
@@ -121,9 +117,12 @@ async function snapshotLine(
   return read.slice(0, read.indexOf("\n"));
 }
 
-function finalAnswer(snapshot: Snapshot): AssistantMessage | undefined {
-  if (snapshot.run !== undefined) return undefined;
-  const last = snapshot.entries.flatMap((entry) => entry.model ?? []).at(-1);
+function finalAnswer(conversation: Conversation): AssistantMessage | undefined {
+  if (conversation.isRunning) return undefined;
+
+  const last = conversation.items
+    .flatMap((item) => (item.kind === "entry" ? (item.entry.model ?? []) : []))
+    .at(-1);
 
   return isAssistantMessage(last) && last.stopReason !== "toolUse" ? last : undefined;
 }

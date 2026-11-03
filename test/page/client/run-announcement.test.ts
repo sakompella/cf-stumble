@@ -1,12 +1,13 @@
 import * as Predicate from "effect/Predicate";
 import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
-import type { AgentEvent } from "../../../src/page/client/agent-event.js";
+import type { Conversation } from "../../../src/page/client/conversation.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
+import { received, running, streaming as streamingText, viewing } from "./views.js";
 
 type Rendered = NonNullable<ReturnType<typeof view>>;
 
@@ -16,19 +17,10 @@ function after(start: Model, messages: readonly Message[]): Model {
   return messages.reduce((model, message) => update(model, message).model, start);
 }
 
-function runWithEvents(events: readonly AgentEvent[]): Model {
+function runWith(conversation: Conversation): Model {
   const listed = after(init().model, [Message.SucceededFetchProjects({ projects: [PROJECT] })]);
-  const streamId = listed.eventsStreamId;
 
-  const opening: readonly AgentEvent[] = [
-    { type: "snapshot", entries: [], tools: [], inbox: [] },
-    { type: "run_start", inputs: [1] },
-  ];
-
-  return after(
-    listed,
-    [...opening, ...events].map((event) => Message.ReceivedEvent({ streamId, event })),
-  );
+  return after(listed, [received(listed, conversation)]);
 }
 
 function liveRegions(node: Rendered | string): readonly Rendered[] {
@@ -66,38 +58,17 @@ function announced(model: Model): readonly Readonly<{ politeness: unknown; text:
 }
 
 test("the run's ending is the one polite announcement", () => {
-  const ended = runWithEvents([
-    { type: "run_end", inputs: [1] },
-    { type: "submission", record: { id: 1, status: "done" } },
-  ]);
+  const busy = runWith(running());
+  const ended = after(busy, [received(busy, viewing())]);
 
   expect(announced(ended)).toEqual([{ politeness: "polite", text: "answered" }]);
 });
 
 test("streamed text does not change what the live region holds", () => {
-  const running = announced(runWithEvents([]));
+  const waiting = announced(runWith(running()));
 
-  const streaming = announced(
-    runWithEvents([
-      {
-        type: "message_start",
-        message: {
-          role: "assistant",
-          content: [{ type: "text", text: "" }],
-          stopReason: "pending",
-        },
-      },
-      {
-        type: "message_update",
-        changes: [{ type: "text_delta", contentIndex: 0, delta: "first" }],
-      },
-      {
-        type: "message_update",
-        changes: [{ type: "text_delta", contentIndex: 0, delta: " second" }],
-      },
-    ]),
-  );
+  const streaming = announced(runWith(running({ maybePartial: streamingText("first second") })));
 
-  expect(streaming).toEqual(running);
+  expect(streaming).toEqual(waiting);
   expect(streaming).toEqual([{ politeness: "polite", text: "running" }]);
 });

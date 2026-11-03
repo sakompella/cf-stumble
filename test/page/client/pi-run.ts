@@ -1,12 +1,13 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
-import { createModels, Type } from "@earendil-works/pi-ai";
+import { createModels } from "@earendil-works/pi-ai";
 import {
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
   fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
+import { obj, str } from "@earendil-works/pi-schema";
 import {
   configure,
   createRegistry,
@@ -14,14 +15,13 @@ import {
   defineTool,
   Harness,
   MemoryStorage,
-  watchEvents,
   type Conversation,
 } from "@earendil-works/pi-durable";
 
 export type PiRun = Readonly<{
   conversation: Conversation;
   lines: string[];
-  snapshotLine: () => Promise<string>;
+  joinedLines: () => Promise<string>;
   close: () => Promise<void>;
 }>;
 
@@ -33,7 +33,7 @@ async function openConversation(faux: ReturnType<typeof fauxProvider>) {
   const bash = defineTool({
     name: "bash",
     description: "Run a command",
-    parameters: Type.Object({ command: Type.String() }),
+    parameters: obj({ command: str() }),
     execute: async (_args, api) => {
       api.output("line one\n");
       await sleep(150);
@@ -74,10 +74,10 @@ export async function openPiRun(answers: readonly string[]): Promise<PiRun> {
     ...answers.map((answer) => fauxAssistantMessage(answer)),
   ]);
 
-  const stream = await watchEvents(harness, conversation.id, context);
-  const lines = [JSON.stringify(stream.snapshot)];
-  stream.start((events) => {
-    lines.push(...events.map((event) => JSON.stringify(event)));
+  const watch = await conversation.watch(context);
+  const lines = [JSON.stringify([["r", watch.value]])];
+  watch.start((call) => {
+    if (call.kind === "value") lines.push(JSON.stringify(call.ops));
 
     return Promise.resolve();
   });
@@ -85,15 +85,14 @@ export async function openPiRun(answers: readonly string[]): Promise<PiRun> {
   return {
     conversation,
     lines,
-    snapshotLine: async () => {
-      const again = await watchEvents(harness, conversation.id, context);
+    joinedLines: async () => {
+      const joined = await conversation.watch(context);
+      await joined.stop();
 
-      await again.stop();
-
-      return JSON.stringify(again.snapshot);
+      return JSON.stringify([["r", joined.value]]);
     },
     close: async () => {
-      await stream.stop();
+      await watch.stop();
       await harness.close(context);
     },
   };
