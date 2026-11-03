@@ -32,8 +32,6 @@ The normal path for production is a push or merge to `main`. GitHub Actions runs
 
 Deploy from a machine with `pnpm run deploy` only when CI cannot. Never deploy the Worker with another tool. If anything changed the Worker outside Alchemy (the dashboard, `cf deploy`), run `pnpm run deploy --force` from a machine: a plain deploy is then a no-op. If the image push fails with "use of closed network connection", run the deploy again on a steady network.
 
-The first Alchemy deploy of a production that `cf deploy` deployed follows `docs/deploy.md`, "Switch production from `cf deploy` to Alchemy", and needs Aditya's go-ahead. In CI it is a manual run of the Deploy workflow from `main` with `adopt` ticked.
-
 **Complete when:** the Deploy run (or the local command) succeeded and the deployment list (`pnpm exec cf workers deployments list --worker <worker>`) shows a new version at 100%.
 
 ### 3. Compare

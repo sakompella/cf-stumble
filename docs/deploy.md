@@ -76,7 +76,7 @@ GitHub Actions deploys production. Two workflows in `.github/workflows/` do the 
 
 The normal deploy path is therefore a push or merge to `main`. The runner has Docker, so it builds the Container image and pushes it to the account's registry. Pushing that image from the Mac through OrbStack failed with "use of closed network connection" during the staging rehearsal, which is why deploys moved to CI.
 
-You can also start a deploy by hand from `main`: open **Actions** > **Deploy** > **Run workflow**, or run `gh workflow run deploy.yml --ref main`. Tick `adopt` (`-f adopt=true`) only for the one-time switch from `cf deploy` (see "Switch production from `cf deploy` to Alchemy"). Set `stage` (`-f stage=<stage>`) to deploy a staging copy, the Worker `cf-stumble-<stage>`, from CI; destroy it from a machine afterwards, which needs no Docker. The workflow skips the job when you start it from any other branch.
+You can also start a deploy by hand from `main`: open **Actions** > **Deploy** > **Run workflow**, or run `gh workflow run deploy.yml --ref main`. Set `stage` (`-f stage=<stage>`) to deploy a staging copy, the Worker `cf-stumble-<stage>`, from CI; destroy it from a machine afterwards, which needs no Docker. The workflow skips the job when you start it from any other branch.
 
 A runner has no terminal, so Alchemy cannot ask you to approve its plan. `--yes` approves it, and a push to `main` applies whatever the plan contains. Review changes to `infra/` in the pull request, and read the plan in the job log afterwards.
 
@@ -132,28 +132,6 @@ After the deploy, compare against what you had before:
 For a risky change, stage it first on a separate stage with its own Worker and container, then destroy it. The procedure, with the cleanup list and the proof that only the production Worker remains, is in `.agents/skills/cf-operations/SKILL.md`, "Stage a risky change".
 
 Workers Logs keeps events for 7 days. After a deploy that changes lifecycle behavior, copy out the events you need as evidence before they expire.
-
-## Switch production from `cf deploy` to Alchemy
-
-Production was deployed with `cf deploy` from `cloudflare.config.ts` until the commit that added `infra/alchemy.run.ts`. The first Alchemy deploy adopts the existing Worker `cf-stumble` and its container application instead of creating new ones. Treat the Durable Object data as lost: the staging rehearsal kept the namespace ids, but production holds nothing that needs to survive, so this procedure does not depend on it. The instance secrets do survive (see "Instance secrets").
-
-1. Record what is there now: `pnpm exec cf workers deployments list --worker cf-stumble`, `pnpm exec cf workers secrets list --worker cf-stumble`, the container application id and version, and the Worker's bindings and settings (`GET /accounts/<account-id>/workers/scripts/cf-stumble/settings`). Find the commit before the switch, which the rollback deploys: `git rev-parse "$(git log --diff-filter=A --format=%H -- infra/alchemy.run.ts)~1"`.
-2. Set the credentials on a machine (see "Configuration files"); the plan in step 3 runs there. A deploy from a machine, instead of CI, also needs Docker and a steady network.
-3. Run `pnpm run build:page`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod --adopt`. The first plan on the account also creates the state store. Expect the Worker as a create (Alchemy adopts it when it finds a Worker with that name) and the container application as adopted. Stop if the plan shows anything else.
-4. Run the Deploy workflow from `main` with `adopt` ticked: `gh workflow run deploy.yml --ref main -f adopt=true`. From a machine, the same step is `pnpm run deploy --adopt`.
-5. Check the result against step 1. The secrets list has the same names. The bindings are `AI`, `CHATGPT_MODEL`, `LOADER`, `SUPERVISOR`, and `WORKSPACE_HOST`, plus the `ALCHEMY_*` variables. The route is `stumble.akompella.dev/*`, the `workers.dev` subdomain is off, and the container application id is unchanged. `GET /health` returns `{"ok":true}`. Submit and activate a generation (see "First run"), send a message, and check that its turn runs a tool call. Then run `pnpm ops:check --since 1h`.
-
-To roll back, deploy the commit from step 1 with `cf deploy`:
-
-```sh
-git worktree add --detach /tmp/cf-stumble-rollback <commit>
-cd /tmp/cf-stumble-rollback
-pnpm install --frozen-lockfile
-pnpm exec cf auth whoami
-pnpm exec cf deploy
-```
-
-Run `cf deploy` in a terminal. It warns that the Worker was last updated through the script API and asks whether to continue; answer yes. Without a terminal it answers no for you, prints "Aborting the upload operation because of conflicts", and exits 1. A rehearsal on a throwaway Worker without a container (Alchemy deploy, then `cf deploy`, then `pnpm alchemy deploy --force`) kept the Worker's secret through both switches; a rollback of the container application is untested. To return to Alchemy after a rollback, run `pnpm run deploy --force`, because Alchemy does not see that the Worker changed.
 
 ## Container image
 
@@ -247,9 +225,7 @@ The first generation does not happen by itself. Submit it, then activate it. Wit
 1. Send `POST /api/generations/submit` with `{"harnessCommit":"<full commit ID>"}`. Read `outcome.generation.label` from its response. The Supervisor creates the workspace as part of this submission and clones or reconciles the harness repository in `/workspace/harness`.
 2. Read the epoch from `GET /api/status`, then send `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`. Use the label from the submission response and the epoch from the status response. A refused activation answers with a 4xx status and `{"ok":false,"problem":{"code":...}}`: 409 `stale-epoch` means the epoch moved, so read it again and resend; 409 `not-ready` means that generation has not passed its startup check; 404 `unknown-generation` means no generation has that label.
 
-One submission extracts the requested commit, installs dependencies, bundles the module map, and stores that map in the Supervisor's SQLite storage. These are separate build steps, so a failure reports its phase. The startup check then cold-starts the candidate and asks it for its facet compatibility key within 5 seconds. It fails the candidate unless the answer equals the key the deployed Worker holds: the pinned Pi Durable version and the host protocol revision (ADR-0048). The candidate must then answer one scripted conversation within 90 seconds: a scripted model asks it to run one command in a scratch directory of the workspace, then the candidate must finish with the scripted reply. That conversation never reaches ChatGPT or Workers AI. A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
-
-A generation built before the Pi Durable migration has no conversation methods. After you deploy a Worker from the migration onward, submit and activate a harness commit from the migration onward before you send a message; until then messages answer 503 `generation-failed`. Activation and rollback refuse an older generation that was not checked under the current facet compatibility key, with HTTP 409 `facet-compatibility-mismatch`. Turn history from before the migration is not carried over.
+One submission extracts the requested commit, installs dependencies, bundles the module map, and stores that map in the Supervisor's SQLite storage. These are separate build steps, so a failure reports its phase. The startup check then cold-starts the candidate and asks it for its facet compatibility key. It fails the candidate unless the answer equals the key the deployed Worker holds: the pinned Pi Durable version and the host protocol revision (ADR-0048). The candidate must then answer one scripted conversation: a scripted model asks it to run one command in a scratch directory of the workspace, then the candidate must finish with the scripted reply. That conversation never reaches ChatGPT or Workers AI. A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
 
 ## Point the instance at your own fork
 

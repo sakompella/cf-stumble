@@ -42,9 +42,9 @@ A project's conversation runs in that project's directory. The project capabilit
 
 A run asks the Supervisor for a capability through its host's `workspace`, naming its conversation, and the capability lasts only as long as that run. The Supervisor refuses a conversation whose run it has no record of or whose deadline has passed. The Supervisor asks the Host for it with the run's remaining time before its deadline, so the Host ends it at the deadline, and the Supervisor ends it again when the run settles. After that, `lstat`, `readFile`, `writeFile`, and `startExec` answer `turn-ended`, also through a duplicate the generation kept, so a generation that ignores the end of its run cannot keep editing the workspace while a later run works. A refused call does not count as workspace activity, so late calls cannot keep the idle container running. `kill` and `endTurn` still answer. A container replacement refuses only the next command of a live run, with `container-restarted`, and file calls go on because the files are durable (`src/workspace/project/target.ts`).
 
-The generation's `ExecutionEnv` (`src/facet/generation-1/execution-env.ts`) calls only this capability. It implements only the members that the installed tools (Pi Durable 1.4.0's coding tools) and the prompt call. The other thirteen (`readBinaryFile`, `appendFile`, `openTextLineReader`, `readTextLines`, `truncateFile`, `flushFile`, `renameFile`, `listDir`, `openDirReader`, `watch`, `createDir`, `remove` and `createTempDir`, which only Pi Durable's code mode calls) answer a `not_supported` `FileError`, and the optional `listFiles` is left out. The capability has no open file handle, so a binary reader reads the whole file into memory when it opens, which limits it to `MAX_FILE_BYTES`.
+The generation's `ExecutionEnv` (`src/facet/generation-1/execution-env.ts`) calls only this capability. It implements only the members that the installed tools (Pi Durable 1.4.0's coding tools) and the prompt call. Every other member answers a `not_supported` `FileError`, and the optional `listFiles` is left out. The capability has no open file handle, so a binary reader reads the whole file into memory when it opens, which limits it to `MAX_FILE_BYTES`.
 
-When you bump Pi Durable, search the new version for calls to those twelve members before you deploy, and implement any member it now calls:
+When you bump Pi Durable, search the new version for calls to the members that file stubs out before you deploy, and implement any member it now calls:
 
 ```sh
 cd node_modules/@earendil-works/pi-durable/dist && rg -n -g '*.js' -g '!storage/jsonl' -g '!testing' \
@@ -53,7 +53,7 @@ cd node_modules/@earendil-works/pi-durable/dist && rg -n -g '*.js' -g '!storage/
 
 In 1.4.0 it finds only Pi's own Node environment calling itself (`env/node.js`) and two unrelated `watch` methods in `harness/harness.js`.
 
-A generation must also speak the Supervisor's current facet-to-Supervisor protocol. `FACET_COMPATIBILITY` in `src/facet-compatibility.ts` is `pi-durable@<version>/host-<N>`, the facet reports it from `compatibility()`, and the startup check, activation and rollback compare it exactly. Bump `host-N` when the facet-to-Supervisor RPC contract changes: a host call the facet makes (`arm`, `running`, `workspace`) or a facet method the Supervisor calls. `host-2` added `running`; `host-3` added the generation control the serving facet receives in `attach`; `host-4` reports each running conversation with its run. A Pi Durable bump changes the key by itself.
+A generation must also speak the Supervisor's current facet-to-Supervisor protocol. `FACET_COMPATIBILITY` in `src/facet-compatibility.ts` is `pi-durable@<version>/host-<N>`, the facet reports it from `compatibility()`, and the startup check, activation and rollback compare it exactly. Bump `host-N` when the facet-to-Supervisor RPC contract changes: a host call the facet makes (`arm`, `running`, `workspace`) or a facet method the Supervisor calls. A Pi Durable bump changes the key by itself.
 
 ## Harness execution
 
