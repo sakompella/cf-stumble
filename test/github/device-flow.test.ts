@@ -78,6 +78,16 @@ test("asks GitHub for a device code and keeps the codes apart", async () => {
   expect(new URLSearchParams(calls[0]?.body).get("client_id")).toBe(CLIENT_ID);
 });
 
+test("asks for the scopes the workspace's gh auth login --with-token requires of a token", async () => {
+  const { fetcher, calls } = provider(["error"]);
+
+  await startAuthorization(CLIENT_ID, fetcher);
+
+  const scopes = new URLSearchParams(calls[0]?.body).get("scope")?.split(" ") ?? [];
+  expect(scopes).toContain("repo");
+  expect(scopes.some((scope) => ["read:org", "write:org", "admin:org"].includes(scope))).toBe(true);
+});
+
 test("refuses to start without a configured client id, and never calls the provider", async () => {
   const { fetcher, calls } = provider([]);
 
