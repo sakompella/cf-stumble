@@ -16,7 +16,9 @@ const START = Date.parse("2026-10-01T00:00:00Z");
 
 const IDLE_LIMIT_MS = 10 * MINUTE_MS;
 
-const WORKSPACE_ROUTE = "/api/projects/:projectId/messages";
+const WORKSPACE_ROUTE = "/api/projects/connect";
+
+const RUN_ROUTE = "/api/projects/:projectId/messages";
 
 const request = (afterMinutes: number, route = WORKSPACE_ROUTE): Invocation => ({
   endMs: START + afterMinutes * MINUTE_MS,
@@ -107,6 +109,19 @@ describe("route classes", () => {
     };
 
     assert.deepEqual(rules(check([stream], runningBetween(0, 120))), ["ran-past-idle"]);
+  });
+
+  it("allows a message's run its eight-minute deadline before the idle limit starts", () => {
+    assert.deepEqual(rules(check([request(0, RUN_ROUTE)], runningBetween(0, 25))), []);
+    assert.deepEqual(rules(check([request(0, RUN_ROUTE)], runningBetween(0, 30))), [
+      "ran-past-idle",
+    ]);
+  });
+
+  it("allows back-to-back message runs to keep the container running between them", () => {
+    const messages = [request(0, RUN_ROUTE), request(17, RUN_ROUTE)];
+
+    assert.deepEqual(rules(check(messages, runningBetween(0, 35))), []);
   });
 
   it("flags a container that runs with no request at all", () => {

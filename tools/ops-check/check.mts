@@ -1,4 +1,5 @@
 import { routeClass } from "../../src/routes/route-pattern.ts";
+import { PROJECT_RUN_DEADLINE_MS } from "../../src/turn-budget.ts";
 
 export const MINUTE_MS = 60_000;
 
@@ -9,6 +10,8 @@ export const OVERRUN_SLACK_MS = 10 * MINUTE_MS;
 export const METRICS_LAG_MS = 10 * MINUTE_MS;
 
 const RECENT_REQUESTS = 3;
+
+const RUN_ADMISSION_ROUTE = "/api/projects/:projectId/messages";
 
 export interface TimeWindow {
   readonly fromMs: number;
@@ -93,6 +96,10 @@ function completeUntilMs(input: CheckInput): number {
   return Math.min(input.window.toMs, input.nowMs - METRICS_LAG_MS);
 }
 
+function workspaceUseEndMs(call: Invocation): number {
+  return call.endMs + (call.route === RUN_ADMISSION_ROUTE ? PROJECT_RUN_DEADLINE_MS : 0);
+}
+
 function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] {
   const { window, idleLimitMs } = input;
   const { usage } = activity;
@@ -102,7 +109,7 @@ function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] 
   const allowed = mergeSpans(
     workspaceCalls.map((call) => ({
       beginMs: call.endMs - call.wallTimeMs,
-      endMs: call.endMs + idleLimitMs,
+      endMs: workspaceUseEndMs(call) + idleLimitMs,
     })),
   );
 

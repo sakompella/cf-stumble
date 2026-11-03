@@ -90,14 +90,16 @@ finding otherwise, and exits 1 on any finding or `unknown`.
   running minutes. A bucket counts at most five minutes.
 
 **Rule `ran-past-idle`.** Each `workspace` request allows the container to run from its start until
-its end plus the idle limit (`WORKSPACE_IDLE_STOP_MS`). A run of consecutive
+its end plus the idle limit (`WORKSPACE_IDLE_STOP_MS`). A messages request answers 202 when its run
+is admitted, so its allowance also covers the run's deadline (`PROJECT_RUN_DEADLINE_MS`) before the
+idle limit. A run of consecutive
 running buckets that exceeds that allowance by more than 10 minutes is a finding. Buckets newer
 than 10 minutes are still filling and do not count. The check mark names the window up to the last
 complete bucket, not up to now, and a window with nothing complete prints `unknown`. The finding lists the routes and end times of
 the last three requests before the run ended, which shows what kept the container awake.
 
-**Limits.** A run that holds the container after its request ended is covered only by the 10-minute slack. A stuck container shows up about 30
-minutes after the last request with the defaults.
+**Limits.** Other work that holds the container after its request ended is covered only by the 10-minute slack. A stuck container shows up about 30
+minutes after the last request with the defaults, or about 40 after a message.
 
 **Credentials.** `CLOUDFLARE_API_TOKEN`, or `--token-file` with a bare token or the `cf` login JSON
 (`~/.config/cloudflare/config/default.json`, after `pnpm exec cf auth whoami` refreshed it). GraphQL
