@@ -8,11 +8,11 @@ Production is the Worker `cf-stumble`, deployed by Alchemy since 2026-11-03: the
 
 On 2026-11-03 production runs `6366009` (Worker version `25fc40e8`), with generation 7 (`6366009`) active at epoch 25. Checked on production that day: `/health` answered, the page loaded with no CSP errors, and one harness turn wrote a file with `bash`, read it back with a later `bash` call and with the `read` tool, and saved its answer. `pnpm ops:check` passed.
 
-The Worker has no authentication: every request reaches one Supervisor named `owner`. GitHub is connected through the `GH_TOKEN` secret, and only the harness project exists. ChatGPT is not connected, so runs answer from Workers AI. Checked on production that day: a run with a `bash` tool call saved; a retried `requestId` returned the same submission; an abort answered in 0.9 s and killed a running `sleep 120` within about 2 s; the container stopped 600 s after the last run settled.
+Every request except `GET /health` needs HTTP Basic auth with the `OWNER_PASSWORD` secret (ADR-0051), and then reaches one Supervisor named `owner`. GitHub is connected through the `GH_TOKEN` secret, and only the harness project exists. ChatGPT is not connected, so runs answer from Workers AI. Checked on production that day: a run with a `bash` tool call saved; a retried `requestId` returned the same submission; an abort answered in 0.9 s and killed a running `sleep 120` within about 2 s; the container stopped 600 s after the last run settled.
 
 ## Decided outside an ADR
 
-- **No authentication** (Aditya, 2026-10-30). Anyone who finds the URL can run turns, which use the GitHub token and cost container time. State under the old per-identity Supervisor name was abandoned, and `GH_TOKEN` reinstalls the GitHub credential on the fresh workspace.
+- **No Cloudflare Access** (Aditya, 2026-10-30; Basic auth added 2026-11-03, ADR-0051). State under the old per-identity Supervisor name was abandoned, and `GH_TOKEN` reinstalls the GitHub credential on the fresh workspace.
 - **No Bombadil for now** (Aditya, 2026-09-28). Do not add it to `pnpm verify` or run a pilot.
 - **Skip Cloudflare Artifacts for now** (Aditya, 2026-10-02). See `design/computer-integration.md`, "Artifacts (deferred)".
 - **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance secrets".

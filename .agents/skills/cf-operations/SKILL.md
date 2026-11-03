@@ -9,7 +9,7 @@ Placeholders: `<worker>` is `cf-stumble` for the stage `prod` and `cf-stumble-<s
 
 Run Alchemy from the repository root as `pnpm alchemy <command> --config infra/alchemy.run.ts --stage <stage>`, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set (`docs/deploy.md`, "Configuration files"). Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live `cf`, `wrangler`, or Alchemy call: it shows the account and refreshes the login that `cf` keeps in its config. `pnpm ops:check` does not use that login by itself; see the Check branch.
 
-The owner API needs no credential: call it with plain `curl`.
+Every request except `GET /health` needs HTTP Basic auth with the user name `aditya` and the `OWNER_PASSWORD` secret. Read the password from the environment, never from a tracked file: `curl -u "aditya:$CF_STUMBLE_PASSWORD" https://<hostname>/api/status`. A Worker without `OWNER_PASSWORD` answers 503.
 
 ## Choose the branch
 
