@@ -210,6 +210,7 @@ export class ResponsesStreamReader {
 
     switch (event.type ?? "") {
       case "response.output_text.delta":
+      case "response.refusal.delta":
         if (event.delta !== undefined && event.delta !== "") {
           this.accumulator.apply({ textDelta: event.delta });
         }
