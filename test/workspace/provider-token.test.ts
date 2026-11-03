@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import { ORB_PROVIDER_PATH, ORB_TOKEN_HEADER } from "../../src/orb-protocol.js";
 import { providerTokenMatches } from "../../src/workspace/provider-token.js";
 import worker from "../../src/worker.js";
+import { ownerRequest } from "../owner-credentials.js";
 
 const SECRET = "4f1c0d2e9a7b";
 
@@ -26,7 +27,9 @@ test("a Worker without ORB_PROVIDER_TOKEN refuses every provider connection", as
 });
 
 test("the Worker does not mint provider tokens over HTTP", async () => {
-  const request = new Request("https://cf-stumble.test/api/orb/provider-token", { method: "POST" });
+  const request = ownerRequest("https://cf-stumble.test/api/orb/provider-token", {
+    method: "POST",
+  });
 
   expect((await worker.fetch(request, env)).status).toBe(404);
 });
