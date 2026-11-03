@@ -54,7 +54,7 @@ export class ProviderLink {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(ORB_PING, ORB_PONG));
   }
 
-  disconnect(reason: string): void {
+  #closeAll(reason: string): void {
     for (const socket of this.#sockets()) {
       this.closed(socket);
       socket.close(REPLACED, reason);
@@ -62,7 +62,7 @@ export class ProviderLink {
   }
 
   accept(): Response {
-    this.disconnect("replaced by a new provider");
+    this.#closeAll("replaced by a new provider");
 
     const { 0: client, 1: server } = new WebSocketPair();
     this.#ctx.acceptWebSocket(server, [PROVIDER_TAG]);

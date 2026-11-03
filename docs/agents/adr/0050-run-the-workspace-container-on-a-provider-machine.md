@@ -38,11 +38,17 @@ WebSocket server in the provider and no relay in the Host. While computerd is co
 request keeps the Host active, exactly as on Cloudflare, and the idle stop (ADR-0043) applies
 unchanged: it sends a `stop` job.
 
-**Token.** `POST /api/orb/provider-token` mints a random token, stores only its SHA-256 in the
-Host, disconnects any provider that used the previous one, and returns it once. The provider reads
-it from `STUMBLE_ORB_TOKEN`. The token is required because a provider runs code on Aditya's
-machine and receives the whole workspace, including the GitHub credential. Until owner
-authentication exists, the mint route is as open as every other owner route.
+**Token.** The provider token is the Worker secret `ORB_PROVIDER_TOKEN`. Aditya sets it out of
+band with `cf workers secrets update`, or from CI, and the Alchemy stack never declares it, so a
+deploy keeps it (`docs/deploy.md`, "Instance secrets"). The provider presents it from
+`STUMBLE_ORB_TOKEN`, and the Host compares the SHA-256 digests of the two values with
+`crypto.subtle.timingSafeEqual`. When the secret is unset or empty, both `/orb/provider` and
+`/orb/computerd` refuse every request, so a deploy without the secret behaves as before this ADR. A
+workspace reset leaves the secret alone. The token is required because a provider runs code on
+Aditya's machine and receives the whole workspace, including the GitHub credential. There is no
+HTTP route that mints or reads it, because owner routes have no authentication yet. To revoke a
+provider, change the secret. That deploys a new Worker version, which closes the provider's
+socket, and the old value no longer connects.
 
 **Failure.** When the provider's socket closes, the Host fails every request it sent on it, marks
 the container exited, and the next connect falls back to the Cloudflare container. Files in

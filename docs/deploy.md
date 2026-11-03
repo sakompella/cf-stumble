@@ -46,13 +46,14 @@ Do not rename or remove `Supervisor` or `WorkspaceHost`, or their bindings. Alch
 
 ## Instance secrets
 
-Values that differ per instance are Worker secrets, set once per instance and never committed. No file declares them, and an Alchemy deploy keeps secrets that the stack does not declare: the staging rehearsal set all three below, deployed a changed Worker, and found all three afterwards. The only plain-text variable the stack declares is `CHATGPT_MODEL`, which is the same for every deployment.
+Values that differ per instance are Worker secrets, set once per instance and never committed. No file declares them, and an Alchemy deploy keeps secrets that the stack does not declare: the staging rehearsal set the first three below, deployed a changed Worker, and found all three afterwards. The only plain-text variable the stack declares is `CHATGPT_MODEL`, which is the same for every deployment.
 
 | Secret                   | Required by the Worker | Purpose                                        |
 | ------------------------ | ---------------------- | ---------------------------------------------- |
 | `HARNESS_REPOSITORY_URL` | No                     | The fork the instance builds its harness from. |
 | `GITHUB_OAUTH_CLIENT_ID` | No                     | The GitHub OAuth app for the device flow.      |
 | `GH_TOKEN`               | No                     | An unattended-run GitHub credential.           |
+| `ORB_PROVIDER_TOKEN`     | No                     | The token a workspace provider presents.       |
 
 Set each one after the first deploy, when the Worker exists:
 
@@ -261,6 +262,40 @@ pnpm exec cf workers secrets update HARNESS_REPOSITORY_URL --worker cf-stumble -
 An empty value means the repository named in `src/harness-build.ts`, which is this project's own. Leave it empty and your instance will build this repository rather than your fork, so your own harness commits will never be reachable from it. Nothing else about a fork needs changing.
 
 A wrong URL fails safely. The first build step tries to clone it, fails, and reports a failed candidate; the generation that was serving keeps serving.
+
+## Run the workspace container on your own machine
+
+A machine you own, such as a Mac with OrbStack, can run the workspace container instead of Cloudflare
+(ADR-0050). The machine opens every connection itself, so it needs no inbound port. While no
+provider is connected, the instance uses the Cloudflare container.
+
+1. Make a random token and keep it in a file outside the repository, for example
+   `openssl rand -hex 32 > ~/.config/cf-stumble/orb-token`.
+2. Set it as the `ORB_PROVIDER_TOKEN` secret (see "Instance secrets"):
+
+   ```sh
+   pnpm exec cf workers secrets update ORB_PROVIDER_TOKEN --worker cf-stumble --type secret_text --text "$(cat ~/.config/cf-stumble/orb-token)"
+   ```
+
+3. On the machine, build the workspace image from `containers/computerd.Dockerfile` for
+   linux/amd64 as `cf-stumble-workspace:orbs`, or set `STUMBLE_IMAGE` to another tag.
+4. Run the provider from a checkout:
+
+   ```sh
+   STUMBLE_ORB_URL=https://stumble.akompella.dev \
+   STUMBLE_ORB_TOKEN="$(cat ~/.config/cf-stumble/orb-token)" \
+   pnpm stumble orb provider src/stumble-cli/orb/docker-dispatch.sh
+   ```
+
+The provider reconnects by itself after a deploy. It stops its container on SIGINT or SIGTERM.
+
+Without the secret, `/orb/provider` and `/orb/computerd` answer 401 to every request. No route
+mints or shows the token, and a workspace reset leaves it in place. To revoke a machine, set a new
+value; the provider's socket closes when the new Worker version starts, and the old value no longer
+connects. Delete the secret to turn the feature off.
+
+The provider receives the whole workspace, including the GitHub credential. Give the token only to
+a machine you trust with that.
 
 ## Cost and cleanup
 

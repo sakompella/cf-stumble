@@ -11,7 +11,7 @@ import { WORKSPACE_CONTAINER_INSTANCE } from "./container-instance.js";
 import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH, ORB_TOKEN_HEADER } from "../orb-protocol.js";
 import { ProviderContainerAPI } from "./provider-container.js";
 import { ProviderLink } from "./provider-link.js";
-import { mintProviderToken, providerTokenMatches } from "./provider-token.js";
+import { providerTokenMatches } from "./provider-token.js";
 
 type WorkspaceHostBackend = HostedBackend<Parameters<WorkspaceBackend["connect"]>[0]>;
 
@@ -35,14 +35,16 @@ export class WorkspacePlatform {
   readonly provider: ProviderLink;
   readonly #providerContainer: ProviderContainerAPI;
   readonly #state: DurableObjectState;
+  readonly #providerToken: string | undefined;
   readonly #platformContainer: DurableObjectState["container"];
   readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   #providerBackend: ProviderBackend | undefined;
   #workspace: Workspace;
 
-  constructor(state: DurableObjectState) {
+  constructor(state: DurableObjectState, providerToken: string | undefined) {
     this.#state = state;
+    this.#providerToken = providerToken;
     this.#platformContainer = state.container;
     this.provider = new ProviderLink(state);
     this.#providerContainer = new ProviderContainerAPI(this.provider, state.id.toString());
@@ -81,13 +83,6 @@ export class WorkspacePlatform {
     this.lifecycle.stoppedByHost();
   }
 
-  async mintProviderToken(): Promise<string> {
-    const token = await mintProviderToken(this.#state.storage);
-    this.provider.disconnect("the provider token was replaced");
-
-    return token;
-  }
-
   async handleFetch(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
 
@@ -96,7 +91,7 @@ export class WorkspacePlatform {
 
     const token = request.headers.get(ORB_TOKEN_HEADER);
 
-    if (!(await providerTokenMatches(this.#state.storage, token)))
+    if (!(await providerTokenMatches(this.#providerToken, token)))
       return new Response("unauthorized", { status: 401 });
 
     if (request.headers.get("upgrade") !== "websocket")

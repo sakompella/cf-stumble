@@ -30,7 +30,7 @@ async function provide(script: string, ports: OrbPorts): Promise<CommandOutput> 
   if (url === undefined) return refused("set STUMBLE_ORB_URL to the Worker's http(s) URL");
 
   if (token === undefined || token === "")
-    return refused("set STUMBLE_ORB_TOKEN to a token from POST /api/orb/provider-token");
+    return refused("set STUMBLE_ORB_TOKEN to the Worker's ORB_PROVIDER_TOKEN secret");
 
   const provider = new OrbProvider({ url, token, script: resolve(script), log: ports.log });
   const listenHost = ports.env["STUMBLE_ORB_LISTEN_HOST"] ?? DEFAULT_LISTEN_HOST;
