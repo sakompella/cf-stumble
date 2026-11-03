@@ -64,3 +64,34 @@ test.each(["unavailable", "tooling-missing"] as const)(
     );
   },
 );
+
+test("a credential install held across a reset leaves the cleared record alone", async () => {
+  vi.spyOn(console, "info").mockImplementation(() => {});
+
+  await runInDurableObject(
+    env.SUPERVISOR.getByName("install-across-reset"),
+    async (_instance, state) => {
+      const workspace = new FakeTenantWorkspace();
+      const install = workspace.holdNext("gh auth login");
+
+      const github = new GitHubConnection({
+        store: new GitHubConnectionStore(state.storage),
+        workspaceName: "install-across-reset",
+        namespace: workspace.namespace,
+        environment: {
+          clientId: undefined,
+          fallbackToken: "ghp_cfstumbleFAKEtokenFAKEtoken0123456789",
+          fetcher: () => Promise.reject(new Error("no GitHub request is expected")),
+        },
+      });
+
+      const ensuring = Effect.runPromise(github.ensureCredential(NOW));
+      await install.reached;
+      github.resetWorkspace();
+      install.release();
+      await ensuring;
+
+      expect(github.lastKnown(NOW + 1)).toEqual({ github: null, checkedAt: null });
+    },
+  );
+});
