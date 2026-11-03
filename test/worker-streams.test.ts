@@ -1,7 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
 import worker from "../src/worker.js";
-import { ownerRequest } from "./owner-credentials.js";
 import { sampleProjectOne } from "./project-fixtures.js";
 
 const ORIGIN = "https://cf-stumble.test";
@@ -64,7 +63,7 @@ test("a conversation's events reach the client while they commit, and a cancel r
   });
 
   const response = await worker.fetch(
-    ownerRequest(`${ORIGIN}/api/projects/${sampleProjectOne.id}/events`),
+    new Request(`${ORIGIN}/api/projects/${sampleProjectOne.id}/events`),
     env,
   );
 

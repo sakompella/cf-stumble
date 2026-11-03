@@ -5,9 +5,6 @@ if ! command -v pnpm >/dev/null 2>&1; then
   exit 1
 fi
 
-# Git exports GIT_DIR, GIT_INDEX_FILE and friends to hooks. Tests that run git in
-# scratch directories inherit them and act on this repository instead: a scratch
-# `git init` once set core.bare=true here and a scratch commit landed on the branch.
 unset $(git rev-parse --local-env-vars)
 
 printf 'pre-commit: verifying... '

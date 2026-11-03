@@ -3,14 +3,13 @@ import { expect, test } from "vitest";
 import { OWNER_PAGE_FAVICON, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
 import { OWNER_PAGE_IDS } from "../../src/page/element-ids.js";
 import worker from "../../src/worker.js";
-import { ownerRequest } from "../owner-credentials.js";
 
 const BROWSER_ACCEPT =
   "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
 
 function pageFetch(path: string, accept: string, method = "GET"): Promise<Response> {
   return worker.fetch(
-    ownerRequest(`https://cf-stumble.test${path}`, { method, headers: { accept } }),
+    new Request(`https://cf-stumble.test${path}`, { method, headers: { accept } }),
     env,
   );
 }

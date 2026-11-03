@@ -14,7 +14,7 @@ Add an ADR only for a decision that is expensive to reverse, has a real alternat
 - **[ADR-0037](0037-stream-real-turns-to-the-browser.md)**: version 0 streams Pi turns to the browser and credits only terminal, saved success.
 - **[ADR-0038](0038-one-thread-per-project-one-shared-workspace.md)**: each GitHub project has one current Pi thread, while one Computer workspace contains all of the owner's repositories.
 - **[ADR-0039](0039-treat-the-workspace-as-a-development-machine.md)**: the shared workspace has unrestricted internet, normal development tools, and local GitHub credentials.
-- **[ADR-0051](0051-gate-the-worker-with-http-basic-auth.md)**: every request except `GET /health` needs HTTP Basic auth with the `OWNER_PASSWORD` secret, and a state-changing request must also come from the Worker's own origin.
+- **[ADR-0051](0051-check-the-origin-of-state-changing-requests.md)**: a state-changing request must come from the Worker's own origin; the Worker has no login.
 
 ## Agent-only decisions
 
