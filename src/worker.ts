@@ -1,8 +1,9 @@
 import * as Effect from "effect/Effect";
-import { ownerPageResponse, routeOwnerApiRequest } from "./routes/index.js";
+import { ownerPageResponse, routeOrbRequest, routeOwnerApiRequest } from "./routes/index.js";
 import { runAtEntryPoint } from "./run-entry-point.js";
 import { Supervisor } from "./supervisor/supervisor.js";
 import { WorkspaceHost } from "./workspace/index.js";
+import { tenantWorkspaceName } from "./workspace-names.js";
 
 export { Supervisor, WorkspaceHost };
 
@@ -30,6 +31,14 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
 
   if (request.method === "GET" && pathname === "/health") {
     return Effect.succeed(noStore(Response.json({ ok: true })));
+  }
+
+  const orb = routeOrbRequest(request, () =>
+    env.WORKSPACE_HOST.getByName(tenantWorkspaceName(SUPERVISOR_NAME)),
+  );
+
+  if (orb !== undefined) {
+    return orb;
   }
 
   const page = ownerPageResponse(request);

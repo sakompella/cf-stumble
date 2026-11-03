@@ -35,6 +35,7 @@ const CREDENTIAL_REFUSED = {
 
 interface WorkspaceHostEnv {
   readonly HARNESS_REPOSITORY_URL?: string;
+  readonly ORB_PROVIDER_TOKEN?: string;
 }
 
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
@@ -44,7 +45,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
-    this.#platform = new WorkspacePlatform(ctx);
+    this.#platform = new WorkspacePlatform(ctx, env.ORB_PROVIDER_TOKEN);
     this.#idle = new WorkspaceIdleController({
       nowMs: () => Date.now(),
       idleLimitMs: WORKSPACE_IDLE_STOP_MS,
@@ -126,6 +127,18 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   override fetch(request: Request): Promise<Response> {
     return this.#platform.handleFetch(request);
+  }
+
+  override webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
+    this.#platform.provider.received(socket, message);
+  }
+
+  override webSocketClose(socket: WebSocket): void {
+    this.#platform.provider.closed(socket);
+  }
+
+  override webSocketError(socket: WebSocket): void {
+    this.#platform.provider.closed(socket);
   }
 
   override alarm(): Promise<void> {
