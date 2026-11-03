@@ -18,7 +18,7 @@ test("loading the page asks only for routes the Supervisor answers without the w
 
     return Promise.resolve(
       path.endsWith("/events")
-        ? new Response('{"type":"snapshot","entries":[],"tools":[],"inbox":[]}\n')
+        ? new Response('[["r",{"conversation":{},"entries":[],"docs":{}}]]\n')
         : Response.json({ ok: true, projects: [] }),
     );
   });

@@ -163,7 +163,7 @@ test("an idle events stream writes a line now and then, so a reader that left is
     await reader.cancel();
   }
 
-  expect(read.split("\n")[0]).toContain('"type":"snapshot"');
+  expect(read.split("\n")[0]).toContain('[["r",{');
 });
 
 test("reading a project's events, aborting an idle project and starting a fresh thread never reach the workspace container", async () => {

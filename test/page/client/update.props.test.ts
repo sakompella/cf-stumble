@@ -2,10 +2,11 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
-import type { AgentEvent } from "../../../src/page/client/agent-event.js";
+import type { Conversation } from "../../../src/page/client/conversation.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { entryItem, running, viewing } from "./views.js";
 
 const PROJECT_IDS = ["repo", "harness"] as const;
 
@@ -14,16 +15,12 @@ const PROJECTS = [
   { id: "harness", displayName: "harness", isHarness: true, location: "/workspace/harness" },
 ];
 
-const EVENTS: readonly AgentEvent[] = [
-  { type: "snapshot", entries: [], tools: [], inbox: [] },
-  { type: "run_start", inputs: [1] },
-  {
-    type: "message_end",
-    entry: { id: 7, kind: "pi.user", model: [{ role: "user", content: "OLD" }] },
-  },
-  { type: "inbox_update", items: [{ id: 2 }] },
-  { type: "submission", record: { id: 2, requestId: "r", status: "done" } },
-  { type: "run_end", inputs: [1] },
+const VIEWS: readonly Conversation[] = [
+  viewing(),
+  running(),
+  viewing({ items: [entryItem(7, { role: "user", content: "OLD" })] }),
+  running({ inbox: [{ id: 2, text: "queued" }] }),
+  viewing({ maybeRunFailure: Option.some("aborted") }),
 ];
 
 type Step = (model: Model, tc: hegel.TestCase) => Message;
@@ -35,19 +32,22 @@ const STEPS: readonly Step[] = [
   () => Message.ClickedCancelTurn(),
   () => Message.ClickedFreshThread(),
   (model, tc) =>
-    Message.ReceivedEvent({
+    Message.ReceivedConversation({
       streamId: model.eventsStreamId,
-      event: tc.draw(gs.sampledFrom(EVENTS)),
+      conversation: tc.draw(gs.sampledFrom(VIEWS)),
     }),
   (model) => Message.SucceededFreshThread({ streamId: model.eventsStreamId }),
 ];
 
 const STALE: readonly Step[] = [
   (model, tc) =>
-    Message.ReceivedEvent({
+    Message.ReceivedConversation({
       streamId: staleStream(model, tc),
-      event: tc.draw(gs.sampledFrom(EVENTS)),
+      conversation: tc.draw(gs.sampledFrom(VIEWS)),
     }),
+  (model, tc) =>
+    Message.LoadedTranscript({ streamId: staleStream(model, tc), maybeItems: Option.some([]) }),
+  (model, tc) => Message.FailedLoadTranscript({ streamId: staleStream(model, tc), detail: "x" }),
   (model, tc) => Message.ReceivedUnreadableEvent({ streamId: staleStream(model, tc) }),
   (model, tc) => Message.RefusedEvents({ streamId: staleStream(model, tc), wording: "busy" }),
   (model, tc) => Message.DisconnectedEvents({ streamId: staleStream(model, tc), detail: "x" }),

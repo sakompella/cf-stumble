@@ -1,17 +1,14 @@
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
-import type { Entry, PiMessage } from "../../../src/page/client/agent-event.js";
+import type { PiMessage } from "../../../src/page/client/pi-message.js";
 import { boundedLines, transcriptOf } from "../../../src/page/client/transcript.js";
+import { entryItem } from "./views.js";
 
 function conversationOf(...messages: readonly PiMessage[]): Conversation {
-  const entries: Entry[] = messages.map((message, index) => ({
-    id: index + 1,
-    kind: "pi.test",
-    model: [message],
-  }));
+  const items = messages.map((message, index) => entryItem(index + 1, message));
 
-  return { ...EMPTY_CONVERSATION, entries };
+  return { ...EMPTY_CONVERSATION, items };
 }
 
 function answer(
@@ -102,8 +99,8 @@ test("the streaming answer and the messages this page has not seen placed follow
   };
 
   const outbox = [
-    { requestId: "a", text: "queued one", maybeSubmissionId: Option.some(9) },
-    { requestId: "b", text: "sending one", maybeSubmissionId: Option.none() },
+    { requestId: "a", text: "queued one", maybeSubmissionId: Option.some(9), afterEntry: 0 },
+    { requestId: "b", text: "sending one", maybeSubmissionId: Option.none(), afterEntry: 0 },
   ];
 
   expect(transcriptOf(conversation, outbox)).toMatchObject([

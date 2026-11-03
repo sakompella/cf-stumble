@@ -211,13 +211,9 @@ test("records a candidate that never reports its compatibility as failed at the 
 });
 
 test("records a candidate whose startup-check conversation never settles as failed at the deadline", async () => {
-  const running = JSON.stringify({
-    type: "snapshot",
-    entries: [],
-    run: { inputs: [1] },
-    tools: [],
-    inbox: [],
-  });
+  const running = JSON.stringify([
+    ["r", { conversation: { id: 1 }, entries: [], docs: { "pi.live": { run: { inputs: [1] } } } }],
+  ]);
 
   const { control, label, result } = await checked(
     "startup-check-unsettled",

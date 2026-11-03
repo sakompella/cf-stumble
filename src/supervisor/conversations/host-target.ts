@@ -2,7 +2,7 @@ import { RpcTarget } from "cloudflare:workers";
 import type { Wake } from "@earendil-works/pi-durable";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { ConversationHost, RunningConversation } from "../../facet/index.js";
+import type { ConversationHost, EntriesRequest, RunningConversation } from "../../facet/index.js";
 import {
   GenerationControlRequest,
   GenerationControlTarget,
@@ -16,7 +16,7 @@ import type { GenerationControlResult, Submission } from "../generations.js";
 import type { StartupCheckResult } from "../startup-check/index.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 
-export type { RunningConversation };
+export type { EntriesRequest, RunningConversation };
 
 type HostPorts = Readonly<{
   arm: (wake: Wake) => Promise<void>;

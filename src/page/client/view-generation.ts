@@ -180,7 +180,12 @@ function detailsView(model: Model, h: HtmlBuilder<Message>): Html {
       valueRow("last read", ID.statusStatus, statusReadWording(model.statusRead), h),
       valueRow("run active", ID.threadRunActive, model.conversation.isRunning ? "yes" : "no", h),
       valueRow("queued", ID.threadQueued, String(model.conversation.inbox.length), h),
-      valueRow("entries", ID.threadMessageCount, String(model.conversation.entries.length), h),
+      valueRow(
+        "entries",
+        ID.threadMessageCount,
+        String(model.conversation.items.filter((item) => item.kind === "entry").length),
+        h,
+      ),
     ],
   );
 }

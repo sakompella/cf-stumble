@@ -1,6 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import { normalizeContext, Type } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import type {
   AssistantMessage,
   Context,
@@ -48,10 +49,8 @@ function drawTools(tc: hegel.TestCase): Tool[] {
   return Array.from({ length: count }, (_, index) => ({
     name: `tool_${index}`,
     description: tc.draw(text),
-    parameters: Type.Object(
-      Object.fromEntries(
-        tc.draw(gs.arrays(identifier, { maxSize: 2 })).map((key) => [key, Type.String()]),
-      ),
+    parameters: obj(
+      Object.fromEntries(tc.draw(gs.arrays(identifier, { maxSize: 2 })).map((key) => [key, str()])),
     ),
   }));
 }

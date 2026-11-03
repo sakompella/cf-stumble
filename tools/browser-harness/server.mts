@@ -49,7 +49,7 @@ async function handle(
   const record = { method: req.method ?? "", path, body: parsed, status: 0 };
   state.requests.push(record);
 
-  const conversation = conversationRoute(req.method ?? "", path);
+  const conversation = conversationRoute(req.method ?? "", url);
 
   if (conversation !== undefined) {
     await serveConversation(res, state, conversation, parsed, record);

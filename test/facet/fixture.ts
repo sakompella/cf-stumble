@@ -19,24 +19,29 @@ export const FACET_COMPATIBILITY_METHOD = `compatibility() { return ${JSON.strin
 
 export const STARTUP_CHECK_CONVERSATION = `conversation:${WORKSPACE_ROOT}`;
 
-const startupCheckAnswered = `${JSON.stringify({
-  type: "snapshot",
-  entries: [
+const startupCheckAnswered = `${JSON.stringify([
+  [
+    "r",
     {
-      id: 1,
-      kind: "message",
-      model: [
+      conversation: { id: 1 },
+      entries: [
         {
-          role: "assistant",
-          content: [{ type: "text", text: STARTUP_CHECK_REPLY }],
-          stopReason: "stop",
+          id: 1,
+          conversationId: 1,
+          kind: "message",
+          model: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: STARTUP_CHECK_REPLY }],
+              stopReason: "stop",
+            },
+          ],
         },
       ],
+      docs: {},
     },
   ],
-  tools: [],
-  inbox: [],
-})}\n`;
+])}\n`;
 
 export const ANSWER_STARTUP_CHECK = `if (conversationId.split(":")[1] === ${JSON.stringify(WORKSPACE_ROOT)}) return new Response(${JSON.stringify(startupCheckAnswered)}).body;`;
 

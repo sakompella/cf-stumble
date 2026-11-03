@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import type { Context } from "@earendil-works/pi-ai";
 import { expect, test } from "vitest";
 import { ROUTE_MODEL } from "../../../src/facet/generation-1/route-provider.js";
@@ -12,7 +12,7 @@ const TRANSCRIPT: Context = {
     {
       name: "bash",
       description: "Run a command",
-      parameters: Type.Object({ cmd: Type.String() }),
+      parameters: obj({ cmd: str() }),
     },
   ],
   messages: [
@@ -87,6 +87,7 @@ test("a transcript becomes one route request: system prompt, tools, tool results
               type: "object",
               properties: { cmd: { type: "string" } },
               required: ["cmd"],
+              additionalProperties: false,
             },
           },
         },

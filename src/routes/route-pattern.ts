@@ -23,6 +23,7 @@ const API_ROUTES: ReadonlyMap<string, RouteClass> = new Map([
 const PROJECT_ROUTE_SUFFIXES = [
   "/messages",
   "/events",
+  "/entries",
   "/abort",
   "/thread/fresh",
   "/disconnect",

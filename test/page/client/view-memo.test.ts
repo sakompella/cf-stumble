@@ -1,13 +1,12 @@
 import * as Predicate from "effect/Predicate";
 import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
-import type { AgentEvent } from "../../../src/page/client/agent-event.js";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
-import type { Model } from "../../../src/page/client/model.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
+import { entryItem, received, running, streaming, viewing } from "./views.js";
 
 type Rendered = NonNullable<ReturnType<typeof view>>;
 
@@ -21,10 +20,6 @@ function findById(node: Rendered | string, id: string): Rendered | undefined {
     : (node.children ?? []).map((child) => findById(child, id)).find(Predicate.isNotUndefined);
 }
 
-function received(model: Model, event: AgentEvent): Message {
-  return Message.ReceivedEvent({ streamId: model.eventsStreamId, event });
-}
-
 const listed = update(
   init().model,
   Message.SucceededFetchProjects({
@@ -32,44 +27,32 @@ const listed = update(
   }),
 ).model;
 
-const withHistory = update(
-  listed,
-  received(listed, {
-    type: "snapshot",
-    entries: [
-      {
-        id: 1,
-        kind: "pi.test",
-        model: [
-          { role: "user", content: "show the diff" },
-          {
-            role: "assistant",
-            content: [
-              { type: "text", text: "Here is **the** diff." },
-              { type: "toolCall", id: "t", name: "bash", arguments: { command: "git diff" } },
-            ],
-            stopReason: "toolUse",
-          },
-          {
-            role: "toolResult",
-            toolCallId: "t",
-            toolName: "bash",
-            content: [{ type: "text", text: "diff --git a/f b/f\n@@ -1 +1 @@\n-old\n+new" }],
-            isError: false,
-          },
-        ],
-      },
-    ],
-    tools: [],
-    inbox: [],
-  }),
-).model;
+const history = [
+  entryItem(
+    1,
+    { role: "user", content: "show the diff" },
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "Here is **the** diff." },
+        { type: "toolCall", id: "t", name: "bash", arguments: { command: "git diff" } },
+      ],
+      stopReason: "toolUse",
+    },
+    {
+      role: "toolResult",
+      toolCallId: "t",
+      toolName: "bash",
+      content: [{ type: "text", text: "diff --git a/f b/f\n@@ -1 +1 @@\n-old\n+new" }],
+      isError: false,
+    },
+  ),
+];
 
-function delta(text: string): Message {
-  return received(withHistory, {
-    type: "message_update",
-    changes: [{ type: "text_delta", contentIndex: 0, delta: text }],
-  });
+const withHistory = update(listed, received(listed, viewing({ items: history }))).model;
+
+function streamed(text: string): Message {
+  return received(withHistory, running({ items: history, maybePartial: streaming(text) }));
 }
 
 function rows(simulation: Readonly<{ html: Rendered }>): readonly (Rendered | string)[] {
@@ -104,17 +87,12 @@ test("streaming a reply reuses the rendered rows that did not change", () => {
     { update, view },
     Scene.given(withHistory),
     Scene.Mount.resolve(FollowTranscript, Message.CompletedFollowTranscript()),
-    Scene.Subscription.emit(
-      received(withHistory, {
-        type: "message_start",
-        message: { role: "assistant", content: [{ type: "text", text: "" }], stopReason: "" },
-      }),
-    ),
-    Scene.Subscription.emit(delta("Hel")),
+    Scene.Subscription.emit(streamed("")),
+    Scene.Subscription.emit(streamed("Hel")),
     Scene.tap((simulation) => {
       before = rows(simulation);
     }),
-    Scene.Subscription.emit(delta("lo")),
+    Scene.Subscription.emit(streamed("Hello")),
     Scene.tap((simulation) => {
       after = rows(simulation);
     }),

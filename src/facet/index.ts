@@ -7,6 +7,8 @@ export { MainHarnessArtifact } from "./artifact.js";
 
 export type { HarnessModule, MainHarnessArtifactProblem } from "./artifact.js";
 
+export type { EntriesRequest } from "../entries-request.js";
+
 export type MainFacetTarget = Rpc.DurableObjectBranded & ConversationFacet;
 
 function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] {

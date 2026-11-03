@@ -1,12 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import {
-  watchEvents,
-  type AgentEvent,
-  type Conversation,
-  type ConversationId,
-} from "@earendil-works/pi-durable";
+import type { Conversation, ConversationId } from "@earendil-works/pi-durable";
 import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
+import { PacedStream } from "./paced-stream.js";
+import { entriesQuery, entryId } from "../entries-query.js";
 import type {
   ConversationFacet,
   ConversationHost,
@@ -95,30 +92,57 @@ export class MainFacet
     return submission.id;
   }
 
-  async events(conversationId: string): Promise<ReadableStream<Uint8Array>> {
-    const { harness } = await this.#opened();
-    const { id } = await this.#conversation(conversationId);
-    const watch = await watchEvents(harness, id, context);
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-    const writer = writable.getWriter();
-    const write = (event: AgentEvent) => writer.write(encoder.encode(`${JSON.stringify(event)}\n`));
+  async events(conversationId: string, from?: number): Promise<ReadableStream<Uint8Array>> {
+    const conversation = await this.#conversation(conversationId);
+
+    const start = entryId(from);
+
+    const watch = await conversation.watch(
+      context,
+      start === undefined ? undefined : { from: start },
+    );
+
+    const out = new PacedStream(() => {
+      clearInterval(keepalive);
+      void watch.stop();
+    });
 
     const keepalive = setInterval(() => {
-      void writer.write(KEEPALIVE_LINE).catch(() => {});
+      out.sendIfIdle(KEEPALIVE_LINE);
     }, KEEPALIVE_MS);
 
-    void write(watch.snapshot).catch(() => {});
-    watch.start(async (events) => {
-      for (const event of events) await write(event);
-    });
-    void writer.closed
-      .catch(() => watch.stop())
+    void out.send(encoder.encode(`${JSON.stringify([["r", watch.value]])}\n`));
+    watch.start((call) =>
+      call.kind === "value"
+        ? out.send(encoder.encode(`${JSON.stringify(call.ops)}\n`))
+        : Promise.resolve(),
+    );
+    void watch.closed
+      .then(() => {
+        out.close();
+      })
+      .catch(() => {})
       .finally(() => {
         clearInterval(keepalive);
       });
-    void watch.closed.then(() => writer.close()).catch(() => {});
 
-    return readable;
+    return out.readable;
+  }
+
+  async entries(
+    conversationId: string,
+    request: Parameters<typeof entriesQuery>[0],
+  ): Promise<string> {
+    const conversation = await this.#conversation(conversationId);
+
+    const page = await conversation.entries(
+      entriesQuery(request),
+      request.limit,
+      undefined,
+      context,
+    );
+
+    return JSON.stringify(page);
   }
 
   async abort(conversationId: string): Promise<void> {

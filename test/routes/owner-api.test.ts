@@ -63,13 +63,13 @@ test("streams a conversation's events as JSON lines", async () => {
       projectEvents: () =>
         Promise.resolve({
           ok: true,
-          events: new Response('{"type":"snapshot"}\n').body ?? new ReadableStream(),
+          events: new Response('[["r",{}]]\n').body ?? new ReadableStream(),
         }),
     }),
   );
 
   expect(response.headers.get("content-type")).toContain("application/x-ndjson");
-  await expect(response.text()).resolves.toBe('{"type":"snapshot"}\n');
+  await expect(response.text()).resolves.toBe('[["r",{}]]\n');
 });
 
 test.each([

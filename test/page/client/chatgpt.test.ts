@@ -4,6 +4,7 @@ import { chatGPTConnection } from "../../../src/page/client/api.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { received, running, viewing } from "./views.js";
 
 const LOGIN = { attemptId: "attempt-1", authorizeUrl: "https://auth.example/authorize?state=s" };
 
@@ -161,12 +162,9 @@ test("a usage limit is worded with its end when OpenAI named one, and the connec
 });
 
 function commandsAfterRun(start: Model): readonly string[] {
-  const ended = Message.ReceivedEvent({
-    streamId: start.eventsStreamId,
-    event: { type: "run_end", inputs: [1] },
-  });
+  const busy = update(start, received(start, running())).model;
 
-  return (update(start, ended).commands ?? []).map((command) => command.name);
+  return (update(busy, received(busy, viewing())).commands ?? []).map((command) => command.name);
 }
 
 test("a run that ends while ChatGPT is connected reads the connection again", () => {

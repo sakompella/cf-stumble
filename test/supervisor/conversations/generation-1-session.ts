@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { ChatGPTCredentialStore } from "../../../src/chatgpt/index.js";
 import type { SupervisorWorkspaceHost } from "../../../src/supervisor/supervisor-env.js";
-import type { AgentEvent, Entry } from "../../../src/page/client/agent-event.js";
+import type { Entry } from "../../../src/page/client/pi-message.js";
 import { builtGeneration } from "../../facet/generation-1/built-module-map.js";
 import { replaceWorkspaceHost } from "../../workspace-host-spy.js";
 import {
@@ -11,7 +11,7 @@ import {
   prepareWithModuleMap,
   submitCandidate,
 } from "../helpers.js";
-import { answerCount, lines, readEvent, transcript, type Line } from "./generation-1-transcript.js";
+import { answerCount, lines, openReader, type Line } from "./generation-1-transcript.js";
 import type { ProjectWorkspace } from "./project-workspace.js";
 
 type Control = Awaited<ReturnType<typeof connectedSupervisor>>;
@@ -78,24 +78,24 @@ export async function untilAnswered(
 
   if (!opened.ok) throw new Error(`the events must open: ${opened.problem.code}`);
   const reader = opened.events.pipeThrough(new TextDecoderStream()).getReader();
-  const events: AgentEvent[] = [];
+  const view = openReader();
   let buffer = "";
 
   try {
-    while (answerCount(transcript(events)) < count) {
+    while (answerCount(view.entries()) < count) {
       const next = await reader.read();
 
       if (next.done) throw new Error("the event stream ended before the answers arrived");
       const split = (buffer + next.value).split("\n");
       buffer = split.pop() ?? "";
-      const received = split.filter((line) => line !== "");
-      events.push(...received.flatMap(readEvent));
+
+      for (const line of split.filter((received) => received !== "")) view.feed(line);
     }
   } finally {
     await reader.cancel();
   }
 
-  return transcript(events);
+  return view.entries();
 }
 
 export async function answeredLines(
@@ -117,14 +117,15 @@ export async function hasRun(control: Control, projectId: string): Promise<boole
     while (!read.includes("\n")) {
       const next = await reader.read();
 
-      if (next.done) throw new Error("the event stream ended before its snapshot");
+      if (next.done) throw new Error("the event stream ended before its first view");
       read += next.value;
     }
   } finally {
     await reader.cancel();
   }
 
-  return readEvent(read.split("\n")[0] ?? "").some(
-    (event) => event.type === "snapshot" && event.run !== undefined,
-  );
+  const view = openReader();
+  view.feed(read.split("\n")[0] ?? "");
+
+  return view.isRunning();
 }

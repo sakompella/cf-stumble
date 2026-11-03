@@ -8,6 +8,8 @@ type ApiErrorCode =
   | "invalid-rollback-request"
   | "invalid-connect-request"
   | "invalid-message-request"
+  | "invalid-events-request"
+  | "invalid-entries-request"
   | "invalid-chatgpt-request"
   | "cross-origin-request"
   | "not-found"

@@ -2,7 +2,8 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 import { EMPTY_CONVERSATION } from "../../../src/page/client/conversation.js";
-import type { PiMessage } from "../../../src/page/client/agent-event.js";
+import type { PiMessage } from "../../../src/page/client/pi-message.js";
+import { entryItem } from "./views.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
 
 type Drawn = Readonly<{ isCall: boolean; id: string; isError: boolean }>;
@@ -41,13 +42,9 @@ test("each tool result finishes the latest block of its call, or opens one at th
         isError: tc.draw(gs.booleans()),
       }));
 
-      const entries = drawn.map((item, index) => ({
-        id: index + 1,
-        kind: "pi.test",
-        model: [message(item)],
-      }));
+      const items = drawn.map((item, index) => entryItem(index + 1, message(item)));
 
-      const shown = transcriptOf({ ...EMPTY_CONVERSATION, entries }, []).map((entry) =>
+      const shown = transcriptOf({ ...EMPTY_CONVERSATION, items }, []).map((entry) =>
         entry._tag === "Tool" ? `${entry.toolCallId}: ${entry.summary}` : entry._tag,
       );
 
