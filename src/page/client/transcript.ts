@@ -18,7 +18,7 @@ export const TranscriptEntry = defineTaggedUnion({
 
 export type TranscriptEntry = typeof TranscriptEntry.Type;
 
-export type ToolEntry = typeof TranscriptEntry.Tool.Type;
+type ToolEntry = typeof TranscriptEntry.Tool.Type;
 
 const DISPLAY_MAX_CHARACTERS = 20_000;
 
