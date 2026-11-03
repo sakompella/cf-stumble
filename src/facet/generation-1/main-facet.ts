@@ -2,8 +2,8 @@ import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Conversation, ConversationId } from "@earendil-works/pi-durable";
 import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
+import { pacedStream } from "./paced-stream.js";
 import { entriesQuery, entryId } from "../entries-query.js";
-import type { EntriesRequest } from "../../entries-request.js";
 import type {
   ConversationFacet,
   ConversationHost,
@@ -102,44 +102,37 @@ export class MainFacet
       start === undefined ? undefined : { from: start },
     );
 
-    let keepalive: ReturnType<typeof setInterval> | undefined;
-
-    return new ReadableStream<Uint8Array>({
-      start: (controller) => {
-        const send = (bytes: Uint8Array) => {
-          try {
-            controller.enqueue(bytes);
-          } catch {
-            void watch.stop();
-          }
-        };
-
-        send(encoder.encode(`${JSON.stringify([["r", watch.value]])}\n`));
-        keepalive = setInterval(() => {
-          send(KEEPALIVE_LINE);
-        }, KEEPALIVE_MS);
-        watch.start((call) => {
-          if (call.kind === "value") send(encoder.encode(`${JSON.stringify(call.ops)}\n`));
-
-          return Promise.resolve();
-        });
-        void watch.closed
-          .then(() => {
-            controller.close();
-          })
-          .catch(() => {})
-          .finally(() => {
-            clearInterval(keepalive);
-          });
-      },
-      cancel: () => {
-        clearInterval(keepalive);
-        void watch.stop();
-      },
+    const out = pacedStream(() => {
+      clearInterval(keepalive);
+      void watch.stop();
     });
+
+    const keepalive = setInterval(() => {
+      out.sendIfIdle(KEEPALIVE_LINE);
+    }, KEEPALIVE_MS);
+
+    void out.send(encoder.encode(`${JSON.stringify([["r", watch.value]])}\n`));
+    watch.start((call) =>
+      call.kind === "value"
+        ? out.send(encoder.encode(`${JSON.stringify(call.ops)}\n`))
+        : Promise.resolve(),
+    );
+    void watch.closed
+      .then(() => {
+        out.close();
+      })
+      .catch(() => {})
+      .finally(() => {
+        clearInterval(keepalive);
+      });
+
+    return out.readable;
   }
 
-  async entries(conversationId: string, request: EntriesRequest): Promise<string> {
+  async entries(
+    conversationId: string,
+    request: Parameters<typeof entriesQuery>[0],
+  ): Promise<string> {
     const conversation = await this.#conversation(conversationId);
 
     const page = await conversation.entries(

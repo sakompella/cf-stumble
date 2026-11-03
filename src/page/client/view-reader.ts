@@ -2,6 +2,7 @@ import { applyImmutable, assertValidOp, type Op } from "@earendil-works/chord/de
 import {
   ConversationTranscript,
   type ConversationView,
+  type EntryLoader,
   type TranscriptView,
 } from "@earendil-works/pi-durable";
 import * as Option from "effect/Option";
@@ -47,9 +48,20 @@ function applied(
 }
 
 export type HeldTranscript = {
-  readonly transcript: ConversationTranscript;
+  readonly load: EntryLoader;
+  transcript: ConversationTranscript;
+  conversationId: number | undefined;
   latest: TranscriptView | undefined;
 };
+
+export function heldTranscript(load: EntryLoader): HeldTranscript {
+  return {
+    load,
+    transcript: new ConversationTranscript(load),
+    conversationId: undefined,
+    latest: undefined,
+  };
+}
 
 export type ViewReader = (line: string) => Option.Option<Conversation>;
 
@@ -66,6 +78,12 @@ export function viewReader(held: HeldTranscript): ViewReader {
     if (Option.isNone(maybeNext)) return Option.none();
 
     view = maybeNext.value;
+
+    if (held.conversationId !== undefined && held.conversationId !== view.conversation.id) {
+      held.transcript = new ConversationTranscript(held.load);
+    }
+
+    held.conversationId = view.conversation.id;
     held.latest = held.transcript.merge(maybeNext.value);
 
     return conversationOf(held.latest);
@@ -73,7 +91,5 @@ export function viewReader(held: HeldTranscript): ViewReader {
 }
 
 export function readFirstView(line: string): Option.Option<Conversation> {
-  const transcript = new ConversationTranscript(() => Promise.reject(new Error("no history")));
-
-  return viewReader({ transcript, latest: undefined })(line);
+  return viewReader(heldTranscript(() => Promise.reject(new Error("no history"))))(line);
 }

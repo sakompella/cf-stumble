@@ -204,6 +204,19 @@ test("a run's end says how it ended", () => {
   expect(after(readyPage(), [conversation(viewing())]).runNote).toBe("");
 });
 
+test("a failure the page never saw the run for is still shown, once", () => {
+  const failed = viewing({ maybeRunFailure: Option.some("no_model") });
+
+  const first = update(init().model, received(init().model, failed)).model;
+
+  expect(first.runNote).toBe("stopped: no_model");
+
+  const idle = after(readyPage(), [conversation(failed)]);
+
+  expect(idle.runNote).toBe("stopped: no_model");
+  expect(after(idle, [conversation(failed)]).runNote).toBe("stopped: no_model");
+});
+
 test("cancelling posts an abort for the selected project", () => {
   const cancelled = update(readyPage(), Message.ClickedCancelTurn());
 

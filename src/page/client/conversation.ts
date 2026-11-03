@@ -29,6 +29,7 @@ const InboxDoc = Schema.Struct({
 });
 
 const TranscriptDoc = Schema.Struct({
+  conversation: Schema.Struct({ id: Schema.Number }),
   items: Schema.Array(ViewItem),
   docs: Schema.Struct({
     "pi.live": Schema.optionalKey(LiveDoc),
@@ -39,6 +40,7 @@ const TranscriptDoc = Schema.Struct({
 const QueuedInput = Schema.Struct({ id: Schema.Number, text: Schema.String });
 
 export const Conversation = Schema.Struct({
+  maybeId: Schema.Option(Schema.Number),
   items: Schema.Array(ViewItem),
   maybePartial: Schema.Option(AssistantMessage),
   tools: Schema.Array(ToolSlot),
@@ -50,6 +52,7 @@ export const Conversation = Schema.Struct({
 export type Conversation = typeof Conversation.Type;
 
 export const EMPTY_CONVERSATION: Conversation = {
+  maybeId: Option.none(),
   items: [],
   maybePartial: Option.none(),
   tools: [],
@@ -59,17 +62,21 @@ export const EMPTY_CONVERSATION: Conversation = {
 };
 
 export function conversationOf(view: TranscriptView): Option.Option<Conversation> {
-  return Option.map(Schema.decodeUnknownOption(TranscriptDoc)(view), ({ items, docs }) => ({
-    items,
-    maybePartial: Option.fromUndefinedOr(docs["pi.live"]?.generation?.message),
-    tools: docs["pi.live"]?.tools ?? [],
-    isRunning: docs["pi.live"]?.run !== undefined,
-    maybeRunFailure: Option.fromUndefinedOr(docs["pi.live"]?.runFailure?.reason),
-    inbox: (docs["pi.inbox"]?.items ?? []).map(({ id, content }) => ({
-      id,
-      text: Predicate.isString(content) ? content : blocksText(content),
-    })),
-  }));
+  return Option.map(
+    Schema.decodeUnknownOption(TranscriptDoc)(view),
+    ({ conversation, items, docs }) => ({
+      maybeId: Option.some(conversation.id),
+      items,
+      maybePartial: Option.fromUndefinedOr(docs["pi.live"]?.generation?.message),
+      tools: docs["pi.live"]?.tools ?? [],
+      isRunning: docs["pi.live"]?.run !== undefined,
+      maybeRunFailure: Option.fromUndefinedOr(docs["pi.live"]?.runFailure?.reason),
+      inbox: (docs["pi.inbox"]?.items ?? []).map(({ id, content }) => ({
+        id,
+        text: Predicate.isString(content) ? content : blocksText(content),
+      })),
+    }),
+  );
 }
 
 export function newestEntryId(conversation: Conversation): number {

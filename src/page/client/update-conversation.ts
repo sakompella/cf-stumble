@@ -43,14 +43,21 @@ function withUnsentRequestInPrompt(model: Model, requestId: string): Model {
 }
 
 function runEndNote(previous: Conversation, next: Conversation): Option.Option<string> {
-  if (!previous.isRunning || next.isRunning) return Option.none();
+  if (next.isRunning) return Option.none();
 
-  return Option.some(
-    Option.match(next.maybeRunFailure, {
-      onNone: () => "answered",
-      onSome: (reason) => `stopped: ${reason}`,
-    }),
-  );
+  if (Option.isSome(next.maybeRunFailure)) {
+    const reason = next.maybeRunFailure.value;
+
+    return previous.isRunning || !Option.contains(previous.maybeRunFailure, reason)
+      ? Option.some(`stopped: ${reason}`)
+      : Option.none();
+  }
+
+  return previous.isRunning ? Option.some("answered") : Option.none();
+}
+
+function isReplacement(previous: Conversation, next: Conversation): boolean {
+  return Option.isSome(previous.maybeId) && !Option.contains(next.maybeId, previous.maybeId.value);
 }
 
 function settledOutbox(model: Model, conversation: Conversation): readonly OutboxItem[] {
@@ -63,9 +70,15 @@ function settledOutbox(model: Model, conversation: Conversation): readonly Outbo
   );
 }
 
-function receivedConversation(model: Model, conversation: Conversation): UpdateReturn {
+function receivedConversation(held: Model, conversation: Conversation): UpdateReturn {
+  const replaced = isReplacement(held.conversation, conversation);
+
+  const model = replaced
+    ? { ...held, conversation: EMPTY_CONVERSATION, outbox: [], runNote: "" }
+    : held;
+
   const note = runEndNote(model.conversation, conversation);
-  const ended = Option.isSome(note);
+  const ended = model.conversation.isRunning && !conversation.isRunning;
 
   return {
     model: {

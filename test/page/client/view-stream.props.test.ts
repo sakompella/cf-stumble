@@ -2,18 +2,15 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import type { JsonValue } from "@earendil-works/chord";
 import { diffRevisions } from "@earendil-works/chord/delta";
-import { ConversationTranscript } from "@earendil-works/pi-durable";
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
-import { viewReader } from "../../../src/page/client/view-reader.js";
+import { heldTranscript, viewReader } from "../../../src/page/client/view-reader.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
 
 type Revision = JsonValue;
 
 function reader() {
-  const transcript = new ConversationTranscript(() => Promise.reject(new Error("no history")));
-
-  return viewReader({ transcript, latest: undefined });
+  return viewReader(heldTranscript(() => Promise.reject(new Error("no history"))));
 }
 
 function userEntry(id: number) {

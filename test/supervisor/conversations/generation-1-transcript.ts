@@ -1,4 +1,3 @@
-import { ConversationTranscript } from "@earendil-works/pi-durable";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
@@ -9,11 +8,10 @@ import {
   type Entry,
   type PiMessage,
 } from "../../../src/page/client/pi-message.js";
-import { viewReader } from "../../../src/page/client/view-reader.js";
+import { heldTranscript, viewReader } from "../../../src/page/client/view-reader.js";
 
 export function openReader() {
-  const transcript = new ConversationTranscript(() => Promise.reject(new Error("no history")));
-  const read = viewReader({ transcript, latest: undefined });
+  const read = viewReader(heldTranscript(() => Promise.reject(new Error("no history"))));
   let latest = Option.none<Conversation>();
 
   return {

@@ -1,6 +1,5 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
-  ConversationTranscript,
   type Cursor,
   type EntryLoader,
   type EntryRecord,
@@ -10,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { answerOf, fetchEffect, field, projectPath } from "./api.js";
-import type { HeldTranscript } from "./view-reader.js";
+import { heldTranscript, type HeldTranscript } from "./view-reader.js";
 
 export { viewReader, type HeldTranscript } from "./view-reader.js";
 
@@ -52,9 +51,9 @@ function loaderFor(projectId: string): EntryLoader {
       }).pipe(
         Effect.flatMap(answerOf),
         Effect.flatMap(({ payload }) => {
-          const items = field(payload, "page", "items");
+          const items = field(payload, "items");
 
-          const next = field(payload, "page", "next");
+          const next = field(payload, "next");
 
           return Array.isArray(items) && items.every(isEntryRecord)
             ? Effect.succeed(isCursor(next) ? { items, next } : { items })
@@ -69,10 +68,7 @@ export function openTranscript(streamId: number, projectId: string): HeldTranscr
 
   if (existing !== undefined) return existing;
 
-  const opened = {
-    transcript: new ConversationTranscript(loaderFor(projectId)),
-    latest: undefined,
-  };
+  const opened = heldTranscript(loaderFor(projectId));
 
   held.set(streamId, opened);
 
@@ -85,7 +81,7 @@ export function closeTranscript(streamId: number): void {
 
 export async function loadIntoTranscript(
   streamId: number,
-  itemIndex: number | undefined,
+  itemIndex?: number,
 ): Promise<TranscriptView | undefined> {
   const current = held.get(streamId);
 
@@ -93,10 +89,14 @@ export async function loadIntoTranscript(
 
   const gap = itemIndex === undefined ? undefined : current.latest?.items[itemIndex];
 
+  const { transcript } = current;
+
   const loaded =
     gap?.kind === "gap"
-      ? await current.transcript.fillGap(gap, BACKGROUND_CONTEXT)
-      : await current.transcript.loadEarlier(BACKGROUND_CONTEXT);
+      ? await transcript.fillGap(gap, BACKGROUND_CONTEXT)
+      : await transcript.loadEarlier(BACKGROUND_CONTEXT);
+
+  if (current.transcript !== transcript) return undefined;
 
   current.latest = loaded;
 
