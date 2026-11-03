@@ -2,7 +2,7 @@
 
 Deploy a cf-stumble instance to your Cloudflare account.
 
-cf-stumble is a coding agent that runs in your Cloudflare account. It has no authentication: anyone who can reach its hostname can use it.
+cf-stumble is a coding agent that runs in your Cloudflare account. Every request except `GET /health` needs HTTP Basic auth: the user name `aditya` and the password in the `OWNER_PASSWORD` secret. The Worker answers 503 until that secret is set.
 
 ## Before you start
 
@@ -46,10 +46,11 @@ Do not rename or remove `Supervisor` or `WorkspaceHost`, or their bindings. Alch
 
 ## Instance secrets
 
-Values that differ per instance are Worker secrets, set once per instance and never committed. No file declares them, and an Alchemy deploy keeps secrets that the stack does not declare: the staging rehearsal set all three below, deployed a changed Worker, and found all three afterwards. The only plain-text variable the stack declares is `CHATGPT_MODEL`, which is the same for every deployment.
+Values that differ per instance are Worker secrets, set once per instance and never committed. No file declares them, and an Alchemy deploy keeps secrets that the stack does not declare: the staging rehearsal set the three optional ones below, deployed a changed Worker, and found all three afterwards. The only plain-text variable the stack declares is `CHATGPT_MODEL`, which is the same for every deployment.
 
 | Secret                   | Required by the Worker | Purpose                                        |
 | ------------------------ | ---------------------- | ---------------------------------------------- |
+| `OWNER_PASSWORD`         | Yes                    | The password for HTTP Basic auth.              |
 | `HARNESS_REPOSITORY_URL` | No                     | The fork the instance builds its harness from. |
 | `GITHUB_OAUTH_CLIENT_ID` | No                     | The GitHub OAuth app for the device flow.      |
 | `GH_TOKEN`               | No                     | An unattended-run GitHub credential.           |
@@ -63,6 +64,17 @@ pnpm exec cf workers secrets update <NAME> --worker <worker> --type secret_text 
 The value appears in the command line and the shell history. For a credential such as `GH_TOKEN`, keep the value in a file outside the repository, pass `--text "$(cat <file>)"`, and delete the file afterward.
 
 Every later deploy keeps them.
+
+Set `OWNER_PASSWORD` right after the first deploy, because until then every request but `GET /health` answers 503. Push to `main` only after the secret exists on `cf-stumble`, because that push deploys. Generate the password into a file outside the repository and pipe the file into `cf`, which reads the value from standard input when you omit `--text`:
+
+```sh
+openssl rand -base64 24 > ~/cf-stumble-owner-password
+pnpm exec cf workers secrets update OWNER_PASSWORD --worker cf-stumble --type secret_text < ~/cf-stumble-owner-password
+```
+
+Keep the file in a password manager or delete it. The browser asks for the user name `aditya` and this password. For `curl` and scripts, export the password as `CF_STUMBLE_PASSWORD` and pass `-u "aditya:$CF_STUMBLE_PASSWORD"`.
+
+A request that changes state (any method but `GET` and `HEAD`) must also come from the instance's own page: if its `Origin` header names another origin, or its `Sec-Fetch-Site` header is anything but `same-origin`, the Worker answers 403 `cross-origin-request`. `curl` sends neither header, so the Basic credential is enough.
 
 ## Deploying from CI
 
@@ -239,7 +251,7 @@ The page shows one of three states:
 
 Before you submit a generation, `GET /api/status` returns `{"activeGeneration":{"generation":null,"epoch":0}}`, and a message answers 503 `no-active-generation`. That is normal on a new instance. It does not mean that the deployment failed. `GET /` serves the owner page and `GET /health` returns `{"ok":true}` before any generation exists. Any path that is not the page or the owner API answers 404.
 
-The first generation does not happen by itself. Submit it, then activate it:
+The first generation does not happen by itself. Submit it, then activate it. With `curl`, send each request as `curl -u "aditya:$CF_STUMBLE_PASSWORD" -H 'content-type: application/json' -d '<body>' https://<your-hostname>/api/generations/submit`:
 
 1. Send `POST /api/generations/submit` with `{"harnessCommit":"<full commit ID>"}`. Read `outcome.generation.label` from its response. The Supervisor creates the workspace as part of this submission and clones or reconciles the harness repository in `/workspace/harness`.
 2. Read the epoch from `GET /api/status`, then send `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`. Use the label from the submission response and the epoch from the status response. A refused activation answers with a 4xx status and `{"ok":false,"problem":{"code":...}}`: 409 `stale-epoch` means the epoch moved, so read it again and resend; 409 `not-ready` means that generation has not passed its startup check; 404 `unknown-generation` means no generation has that label.

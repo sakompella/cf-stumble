@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { ownerPageResponse, routeOwnerApiRequest } from "./routes/index.js";
 import { runAtEntryPoint } from "./run-entry-point.js";
+import { ownerGateRefusal } from "./owner-gate.js";
 import { Supervisor } from "./supervisor/supervisor.js";
 import { WorkspaceHost } from "./workspace/index.js";
 
@@ -43,8 +44,16 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
   );
 }
 
+function gatedRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Response> {
+  return Effect.promise(() => ownerGateRefusal(request, env.OWNER_PASSWORD)).pipe(
+    Effect.flatMap((refusal) =>
+      refusal === undefined ? ownerRequest(request, env) : Effect.succeed(noStore(refusal)),
+    ),
+  );
+}
+
 export default {
   fetch(request: Request, env: Cloudflare.Env): Promise<Response> {
-    return runAtEntryPoint(Effect.suspend(() => ownerRequest(request, env)));
+    return runAtEntryPoint(Effect.suspend(() => gatedRequest(request, env)));
   },
 };

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { HarnessScenario } from "./fixtures.mjs";
+import { HARNESS_CREDENTIALS, type HarnessScenario } from "./fixtures.mjs";
 import { openConversations, type Conversations } from "./conversations.mjs";
 import { parseJsonRecordText, type JsonValue } from "../json.mjs";
 import { ownerPageResponse } from "../../src/routes/page.js";
@@ -37,11 +37,35 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+const OWNER_AUTHORIZATION = `Basic ${Buffer.from(
+  `${HARNESS_CREDENTIALS.username}:${HARNESS_CREDENTIALS.password}`,
+).toString("base64")}`;
+
+function gateRefusal(req: IncomingMessage): 401 | 403 | undefined {
+  if (req.headers.authorization !== OWNER_AUTHORIZATION) return 401;
+
+  const mutation = req.method !== "GET" && req.method !== "HEAD";
+  const origin = req.headers.origin;
+
+  return mutation && origin !== undefined && origin !== `http://${req.headers.host ?? ""}`
+    ? 403
+    : undefined;
+}
+
 async function handle(
   req: IncomingMessage,
   res: ServerResponse,
   state: ScenarioState,
 ): Promise<void> {
+  const refused = gateRefusal(req);
+
+  if (refused !== undefined) {
+    const challenge = { "www-authenticate": 'Basic realm="cf-stumble", charset="UTF-8"' };
+    res.writeHead(refused, refused === 401 ? challenge : {}).end();
+
+    return;
+  }
+
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
   const path = url.pathname;
   const body = await readBody(req);
