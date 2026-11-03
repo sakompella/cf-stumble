@@ -71,11 +71,11 @@ Every later deploy keeps them.
 GitHub Actions deploys production. Two workflows in `.github/workflows/` do the work:
 
 - `verify.yml` runs `pnpm verify` on Ubuntu for every push and every pull request.
-- `deploy.yml` runs `pnpm run deploy --yes` for the stage `prod` when Verify passes on a push to `main`. It checks out the commit that Verify tested. A concurrency group lets only one deploy run at a time; a second deploy waits for the first to finish.
+- `deploy.yml` runs the same steps as `pnpm run deploy --yes` for the stage `prod` when Verify passes on a push to `main`. It checks out the commit that Verify tested. A concurrency group per stage lets only one deploy of a stage run at a time; a second deploy waits for the first to finish.
 
 The normal deploy path is therefore a push or merge to `main`. The runner has Docker, so it builds the Container image and pushes it to the account's registry. Pushing that image from the Mac through OrbStack failed with "use of closed network connection" during the staging rehearsal, which is why deploys moved to CI.
 
-You can also start a deploy by hand from `main`: open **Actions** > **Deploy** > **Run workflow**, or run `gh workflow run deploy.yml --ref main`. Tick `adopt` (`-f adopt=true`) only for the one-time switch from `cf deploy` (see "Switch production from `cf deploy` to Alchemy"). The workflow skips the job when you start it from any other branch.
+You can also start a deploy by hand from `main`: open **Actions** > **Deploy** > **Run workflow**, or run `gh workflow run deploy.yml --ref main`. Tick `adopt` (`-f adopt=true`) only for the one-time switch from `cf deploy` (see "Switch production from `cf deploy` to Alchemy"). Set `stage` (`-f stage=<stage>`) to deploy a staging copy, the Worker `cf-stumble-<stage>`, from CI; destroy it from a machine afterwards, which needs no Docker. The workflow skips the job when you start it from any other branch.
 
 A runner has no terminal, so Alchemy cannot ask you to approve its plan. `--yes` approves it, and a push to `main` applies whatever the plan contains. Review changes to `infra/` in the pull request, and read the plan in the job log afterwards.
 
