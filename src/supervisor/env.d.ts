@@ -15,7 +15,6 @@ declare global {
       readonly WORKSPACE_HOST: DurableObjectNamespace<WorkspaceHost>;
       readonly GITHUB_OAUTH_CLIENT_ID?: string;
       readonly GH_TOKEN?: string;
-      readonly OWNER_PASSWORD?: string;
       readonly CHATGPT_MODEL: string;
     }
   }

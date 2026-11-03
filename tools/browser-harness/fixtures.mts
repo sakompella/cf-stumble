@@ -7,8 +7,6 @@ export type HarnessScenario =
   | "github-disconnected"
   | "github-awaiting-authorization";
 
-export const HARNESS_CREDENTIALS = { username: "aditya", password: "harness-password" } as const;
-
 export const HARNESS_PROJECT_ID = "octocat-hello-world";
 
 export const HARNESS_PROJECT_URL = "https://github.com/octocat/hello-world";
