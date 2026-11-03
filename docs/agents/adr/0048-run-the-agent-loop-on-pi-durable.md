@@ -6,7 +6,18 @@ The main harness runs its agent loop on Pi Durable (`@earendil-works/pi-durable`
 `chord`), pinned to one exact version. Pi Durable replaces the vendored Pi core, the Supervisor's
 thread store, its turn leases and the turn stream the browser held open. A run now outlives the
 browser: the browser sends a message, the generation works on it in the background, and the
-browser watches the conversation's events.
+browser watches the conversation.
+
+**The page watches Pi Durable's committed view.** The facet streams `conversation.watch()`, Pi
+Durable 1.5.0's committed conversation view, instead of the event stream of 1.4.0 (`watchEvents`,
+removed in 1.5.0). The stream is JSON lines. The first line is `[["r", view]]`, a replace of the whole
+view; each later line is the array of delta ops that turns the previous view into the next (Chord's
+`delta` format, applied on the page with `applyImmutable`). The view holds a window of entries and
+the documents `pi.live` (the active run: partial answer, tool calls and their output, retry state)
+and `pi.inbox` (queued messages). The page merges each view into a `ConversationTranscript`, which
+keeps every entry it has seen. After a dropped stream the page asks for `?from=<entry id>`, so the
+facet starts the window after the newest entry the page holds. "Load earlier" and gap filling read
+`GET /api/projects/{id}/entries`, which the Supervisor relays to the facet's `entries` call.
 
 **One serving facet name holds the session.** Pi Durable keeps its conversations, entries, tasks
 and submissions in SQLite. That SQLite is the serving facet's own storage, under one facet name that
