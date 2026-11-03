@@ -8,7 +8,7 @@ import { logEvent } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore, type HostedBackend } from "./backend-sync-ignore.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
 import { WORKSPACE_CONTAINER_INSTANCE } from "./container-instance.js";
-import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH, ORB_TOKEN_HEADER } from "./orb-protocol.js";
+import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH, ORB_TOKEN_HEADER } from "../orb-protocol.js";
 import { ProviderContainerAPI } from "./provider-container.js";
 import { ProviderLink } from "./provider-link.js";
 import { mintProviderToken, providerTokenMatches } from "./provider-token.js";

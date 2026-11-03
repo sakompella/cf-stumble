@@ -3,7 +3,7 @@ import type {
   ContainerRuntimeInfo,
   IWorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
-import { decodeBody, encodeBody } from "./orb-protocol.js";
+import { decodeBody, encodeBody } from "../orb-protocol.js";
 import type { ProviderLink } from "./provider-link.js";
 import type { ProviderExit } from "./provider-state.js";
 

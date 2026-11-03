@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH } from "../workspace/orb-protocol.js";
+import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH } from "../orb-protocol.js";
 
 const ORB_TOKEN_PATH = "/api/orb/provider-token";
 

@@ -1,6 +1,6 @@
 import { connect as connectTcp, createServer, type Server, type Socket } from "node:net";
 import { connect as connectTls } from "node:tls";
-import { ORB_COMPUTERD_PATH, ORB_TOKEN_HEADER } from "../../workspace/orb-protocol.js";
+import { ORB_COMPUTERD_PATH, ORB_TOKEN_HEADER } from "../../orb-protocol.js";
 
 const HEAD_END = "\r\n\r\n";
 

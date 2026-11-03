@@ -13,7 +13,7 @@ import {
   type HostFrame,
   type OrbJob,
   type ProviderFrame,
-} from "../../workspace/orb-protocol.js";
+} from "../../orb-protocol.js";
 import { dispatch, lastLine, type DispatchJob } from "./dispatch.js";
 import { serveEgress, type WorkerTarget } from "./tunnel.js";
 

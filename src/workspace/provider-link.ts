@@ -7,7 +7,7 @@ import {
   type HostRequest,
   type OrbJob,
   type ProviderReply,
-} from "./orb-protocol.js";
+} from "../orb-protocol.js";
 import {
   NEW_PROVIDER,
   nextProviderState,

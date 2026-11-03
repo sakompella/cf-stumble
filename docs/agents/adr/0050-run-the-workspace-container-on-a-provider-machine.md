@@ -17,7 +17,7 @@ stop and a reset stop whichever container is running.
 **The provider's socket.** One outbound WebSocket from the provider to the Host, at
 `GET /orb/provider` with a provider token. The Host accepts it with WebSocket hibernation and
 answers the provider's `ping` with an automatic `pong`, so a connected provider with no container
-costs nothing. JSON frames (`src/workspace/orb-protocol.ts`) carry:
+costs nothing. JSON frames (`src/orb-protocol.ts`) carry:
 
 - jobs from the Host: `start` (with the container's environment), `stop` (idle stop) and `delete`
   (reset). The provider runs the dispatch script once per job, with the job in environment

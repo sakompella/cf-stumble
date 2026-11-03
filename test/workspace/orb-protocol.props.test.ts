@@ -10,7 +10,7 @@ import {
   encodeFrame,
   type HostFrame,
   type ProviderFrame,
-} from "../../src/workspace/orb-protocol.js";
+} from "../../src/orb-protocol.js";
 
 const id = gs.integers({ minValue: 0, maxValue: 1_000_000 });
 
