@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Conversation, ConversationId } from "@earendil-works/pi-durable";
 import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
-import { pacedStream } from "./paced-stream.js";
+import { PacedStream } from "./paced-stream.js";
 import { entriesQuery, entryId } from "../entries-query.js";
 import type {
   ConversationFacet,
@@ -102,7 +102,7 @@ export class MainFacet
       start === undefined ? undefined : { from: start },
     );
 
-    const out = pacedStream(() => {
+    const out = new PacedStream(() => {
       clearInterval(keepalive);
       void watch.stop();
     });
