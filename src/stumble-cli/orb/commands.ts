@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { printed, refused, type CommandNode, type CommandOutput } from "../tree.js";
 import { OrbProvider } from "./provider.js";
 
@@ -9,6 +10,12 @@ export type OrbPorts = Readonly<{
 }>;
 
 const DEFAULT_LISTEN_HOST = "127.0.0.1";
+
+const FIRST_RETRY_MS = 1_000;
+
+const LAST_RETRY_MS = 30_000;
+
+const STEADY_CONNECTION_MS = 60_000;
 
 function workerUrl(text: string | undefined): URL | undefined {
   const url = text === undefined ? undefined : URL.parse(text);
@@ -27,9 +34,20 @@ async function provide(script: string, ports: OrbPorts): Promise<CommandOutput> 
 
   const provider = new OrbProvider({ url, token, script: resolve(script), log: ports.log });
   const listenHost = ports.env["STUMBLE_ORB_LISTEN_HOST"] ?? DEFAULT_LISTEN_HOST;
-  const ended = await provider.run(listenHost, ports.signal);
+  let retryMs = FIRST_RETRY_MS;
 
-  return ports.signal.aborted ? printed(`stopped: ${ended}`) : refused(ended);
+  for (;;) {
+    const connectedAt = Date.now();
+    const ended = await provider.run(listenHost, ports.signal);
+
+    if (ports.signal.aborted) return printed(`stopped: ${ended}`);
+
+    if (Date.now() - connectedAt > STEADY_CONNECTION_MS) retryMs = FIRST_RETRY_MS;
+
+    ports.log(`${ended}; connecting again in ${retryMs / 1_000}s`);
+    await sleep(retryMs, null, { signal: ports.signal }).catch(() => null);
+    retryMs = Math.min(retryMs * 2, LAST_RETRY_MS);
+  }
 }
 
 export const orbCommands: CommandNode<OrbPorts> = {
