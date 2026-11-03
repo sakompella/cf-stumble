@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../diagnostics.js";
 import type { HarnessBuildRequest } from "../harness-build.js";
 import type { HarnessCommit } from "../harness-commit.js";
-import type { Project } from "../project-catalog.js";
+import type { Project, ProjectId } from "../project-catalog.js";
 import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import type {
   InstructionsWriteResult,
@@ -99,6 +99,7 @@ export function provisionProjectWorkspace(
 
   return provisionInWorkspace({
     workspaceName: input.workspaceName,
+    projectId: project.id,
     signal,
     aborted: new ProvisionUnavailable(),
     run: Effect.gen(function* () {
@@ -120,6 +121,7 @@ export function provisionProjectWorkspace(
 export function provisionHarnessWorkspace(
   input: Readonly<{
     workspaceName: string;
+    projectId: ProjectId;
     harnessCommit: HarnessCommit;
     namespace: HarnessProvisionWorkspaceNamespace;
     signal?: AbortSignal | undefined;
@@ -129,6 +131,7 @@ export function provisionHarnessWorkspace(
 
   return provisionInWorkspace({
     workspaceName: input.workspaceName,
+    projectId: input.projectId,
     signal,
     aborted: new ProvisionUnavailable(),
     run: Effect.gen(function* () {

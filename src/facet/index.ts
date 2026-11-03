@@ -35,4 +35,4 @@ export function loadMainFacet(
   return { worker, facetClass: worker.getDurableObjectClass<MainFacetTarget>("MainFacet") };
 }
 
-export type { ConversationHost } from "./conversation-protocol.js";
+export type { ConversationHost, RunningConversation } from "./conversation-protocol.js";

@@ -72,7 +72,7 @@ export class GitHubConnection {
       const pending = this.pendingStatus(now);
 
       return pending === undefined
-        ? this.observed(now, undefined, options)
+        ? this.observed(this.store.revision(), now, undefined, options)
         : Effect.succeed(pending);
     });
   }
@@ -231,7 +231,7 @@ export class GitHubConnection {
       const status: CheckedStatus =
         installed.success === "tooling-missing"
           ? this.record(revision, now, signal, statusOnly({ state: "tooling-missing" }))
-          : yield* this.observed(now, source, { signal });
+          : yield* this.observed(revision, now, source, { signal });
 
       logCredentialInstall(source, status);
 
@@ -240,33 +240,30 @@ export class GitHubConnection {
   }
 
   private observed(
+    revision: number,
     now: number,
     installedBy?: CredentialSource,
     options: StatusReadOptions = {},
   ): Effect.Effect<CheckedStatus> {
-    return Effect.suspend(() => {
-      const revision = this.store.revision();
-
-      return readWorkspaceCredentialStatus({
-        workspaceName: this.workspaceName,
-        namespace: this.namespace,
-        ...options,
-      }).pipe(
-        Effect.match({
-          onFailure: () =>
-            this.record(
-              revision,
-              now,
-              options.signal,
-              statusOnly(reconnect("workspace-unavailable")),
-            ),
-          onSuccess: (answer) =>
-            this.record(revision, now, options.signal, (previous) =>
-              learned(answer, installedBy, previous, now),
-            ),
-        }),
-      );
-    });
+    return readWorkspaceCredentialStatus({
+      workspaceName: this.workspaceName,
+      namespace: this.namespace,
+      ...options,
+    }).pipe(
+      Effect.match({
+        onFailure: () =>
+          this.record(
+            revision,
+            now,
+            options.signal,
+            statusOnly(reconnect("workspace-unavailable")),
+          ),
+        onSuccess: (answer) =>
+          this.record(revision, now, options.signal, (previous) =>
+            learned(answer, installedBy, previous, now),
+          ),
+      }),
+    );
   }
 
   private record(

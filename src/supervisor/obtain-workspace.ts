@@ -28,7 +28,7 @@ export function obtainProjectWorkspace(
   const { workspaceName, namespace, generations, connections } = sources;
 
   return Effect.gen(function* () {
-    if (!(yield* waitForWorkspaceProvision(workspaceName, signal))) return null;
+    if (!(yield* waitForWorkspaceProvision(workspaceName, project.id, signal))) return null;
     const { generation } = generations.active();
 
     if (
@@ -36,6 +36,7 @@ export function obtainProjectWorkspace(
       generation !== undefined &&
       !(yield* provisionHarnessWorkspace({
         workspaceName,
+        projectId: project.id,
         harnessCommit: generation.harnessCommit,
         namespace,
         signal,
@@ -65,11 +66,7 @@ export function obtainScratchWorkspace(
   remainingMs: number,
   signal: AbortSignal,
 ): Effect.Effect<ProjectCapabilityStub | null> {
-  return waitForWorkspaceProvision(sources.workspaceName, signal).pipe(
-    Effect.flatMap((ready) =>
-      ready ? workspaceCapability(sources, remainingMs) : Effect.succeed(null),
-    ),
-  );
+  return signal.aborted ? Effect.succeed(null) : workspaceCapability(sources, remainingMs);
 }
 
 function workspaceCapability(

@@ -52,7 +52,7 @@ Computer applies a copy in batches, so a copy that ends `pending` can leave part
 
 ## The owner authorization
 
-The Supervisor uses GitHub's OAuth device flow. It asks GitHub for a device code, the page shows only the verification URL and the short user code, and the owner signs in there. The Supervisor then redeems the authorization and installs the token into the workspace. The device code is deleted when it is redeemed, denied, or expires, so a replay finds nothing to redeem, and GitHub's answer for a code that a newer authorization replaced is discarded, token included.
+The Supervisor uses GitHub's OAuth device flow. It asks GitHub for a device code with the scopes `repo` and `read:org`, the minimum `gh auth login --with-token` accepts for a token that reports its scopes (a `GH_TOKEN` classic token needs the same), the page shows only the verification URL and the short user code, and the owner signs in there. The Supervisor then redeems the authorization and installs the token into the workspace. The device code is deleted when it is redeemed, denied, or expires, so a replay finds nothing to redeem, and GitHub's answer for a code that a newer authorization replaced is discarded, token included.
 
 ## Reading the connection status
 

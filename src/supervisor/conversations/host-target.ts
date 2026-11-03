@@ -2,7 +2,7 @@ import { RpcTarget } from "cloudflare:workers";
 import type { Wake } from "@earendil-works/pi-durable";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { ConversationHost } from "../../facet/index.js";
+import type { ConversationHost, RunningConversation } from "../../facet/index.js";
 import {
   GenerationControlRequest,
   GenerationControlTarget,
@@ -16,9 +16,11 @@ import type { GenerationControlResult, Submission } from "../generations.js";
 import type { StartupCheckResult } from "../startup-check/index.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 
+export type { RunningConversation };
+
 type HostPorts = Readonly<{
   arm: (wake: Wake) => Promise<void>;
-  running: (conversationIds: readonly string[]) => Promise<void>;
+  running: (conversations: readonly RunningConversation[]) => Promise<void>;
   workspace: (conversationId: string) => Promise<ProjectRpcTargetContract & Disposable>;
 }>;
 
@@ -33,7 +35,11 @@ const isFiniteNumber = Schema.is(Schema.Finite);
 
 const isString = Schema.is(Schema.String);
 
-const isConversationIds = Schema.is(Schema.Array(Schema.String));
+const isRunningConversations = Schema.is(
+  Schema.Array(
+    Schema.Struct({ conversationId: Schema.String, run: Schema.optional(Schema.Finite) }),
+  ),
+);
 
 export class ConversationHostTarget extends RpcTarget implements ConversationHost {
   readonly #ports: HostPorts;
@@ -47,12 +53,12 @@ export class ConversationHostTarget extends RpcTarget implements ConversationHos
     return this.#ports.arm(parseWake(wake));
   }
 
-  running(conversationIds: readonly string[]): Promise<void> {
-    if (!isConversationIds(conversationIds)) {
-      return Promise.reject(new Error("running conversations must be conversation ids"));
+  running(conversations: readonly RunningConversation[]): Promise<void> {
+    if (!isRunningConversations(conversations)) {
+      return Promise.reject(new Error("running conversations must be conversation ids and runs"));
     }
 
-    return this.#ports.running(conversationIds);
+    return this.#ports.running(conversations);
   }
 
   workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable> {

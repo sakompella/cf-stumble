@@ -59,7 +59,22 @@ export function buildModuleMap(
     { discard: true },
   );
 
-  return steps.pipe(Effect.andThen(readModuleMap(workspace, harnessCommit)));
+  return steps.pipe(
+    Effect.andThen(readModuleMap(workspace, harnessCommit)),
+    Effect.ensuring(discardScratch(workspace, harnessCommit)),
+  );
+}
+
+function discardScratch(
+  workspace: () => BuildWorkspaceHost,
+  harnessCommit: HarnessCommit,
+): Effect.Effect<void> {
+  return Effect.tryPromise({
+    try: () => command(workspace, { kind: "build-discard", harnessCommit }, "the scratch cleanup"),
+    catch: (error) => {
+      logRedactedCause(`harness-build.discard ${harnessCommit}: scratch-left-behind`, error);
+    },
+  }).pipe(Effect.ignore);
 }
 
 async function command(

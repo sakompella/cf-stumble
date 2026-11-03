@@ -37,7 +37,9 @@ export class FakeBuildHost implements BuildWorkspaceHost {
       );
     }
 
-    return answered(this.answers[request.step] ?? { stdout: "", stderr: "", exitCode: 0 });
+    const answer = request.kind === "build-step" ? this.answers[request.step] : undefined;
+
+    return answered(answer ?? { stdout: "", stderr: "", exitCode: 0 });
   }
 
   steps(): readonly string[] {

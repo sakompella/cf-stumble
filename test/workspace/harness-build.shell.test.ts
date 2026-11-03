@@ -7,6 +7,7 @@ import {
   planHarnessBuild,
   type HarnessBuildStepName,
 } from "../../src/harness-build.js";
+import { planHarnessBuildRequest } from "../../src/workspace/harness-build.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { writeExecutable } from "./planned-shell-fixture.js";
 import {
@@ -74,6 +75,33 @@ describe("the isolate step", () => {
 
     expect(existsSync(stale)).toBe(false);
     expect(existsSync(buildDirectory(head))).toBe(true);
+    expect(survivors.filter((path) => !existsSync(path))).toEqual([]);
+  });
+});
+
+describe("the discard request", () => {
+  test("removes its own scratch tree, dependencies included, and nothing else", () => {
+    const built = [
+      keep(join(buildDirectory(head), "node_modules", ".pnpm", "dependency.js")),
+      keep(join(buildDirectory(head), "build", "module-map.json")),
+    ];
+
+    const survivors = [
+      keep(join(harness(), "edited.txt")),
+      keep(join(layout.workspace, "projects", "one", "edited.txt")),
+      keep(join(buildDirectory("2".repeat(40)), "other-build.txt")),
+    ];
+
+    const plan = planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, {
+      kind: "build-discard",
+      harnessCommit: head,
+    });
+
+    const ran = runRooted(layout, rooted(plan.source, layout));
+
+    expect(ran.status, ran.stderr).toBe(0);
+    expect(built.filter((path) => existsSync(path))).toEqual([]);
+    expect(existsSync(buildDirectory(head))).toBe(false);
     expect(survivors.filter((path) => !existsSync(path))).toEqual([]);
   });
 });

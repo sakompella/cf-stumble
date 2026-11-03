@@ -1,13 +1,18 @@
+import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
-import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
+import { projectIdOf, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
+import {
+  clearWorkspaceProvision,
+  waitForWorkspaceProvision,
+} from "../../src/workspace/provision-exclusion.js";
 import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
 import { delayedProvisionHost, NeverSettlingProvisionHost } from "./provisioning-fakes.js";
 import { runToResult } from "./workspace-results.js";
 
-test("serializes different projects in one shared workspace", async () => {
+test("provisions different projects in one shared workspace side by side", async () => {
   const delayed = delayedProvisionHost();
   const namespace = namespaceFor(delayed.host);
   const sharedWorkspace = tenantWorkspaceName("different-projects-shared-workspace");
@@ -22,7 +27,7 @@ test("serializes different projects in one shared workspace", async () => {
 
   await delayed.started;
 
-  const second = runToResult(
+  const second = await runToResult(
     provisionProjectWorkspace({
       workspaceName: sharedWorkspace,
       project: sampleProjectTwo,
@@ -30,19 +35,45 @@ test("serializes different projects in one shared workspace", async () => {
     }),
   );
 
-  await Promise.resolve();
-
-  expect(delayed.host.steps).toEqual(["clone"]);
+  expect(Result.isSuccess(second)).toBe(true);
+  expect(delayed.host.steps).toEqual(["clone", "clone", "instructions"]);
 
   delayed.release();
 
   expect(Result.isSuccess(await first)).toBe(true);
-  expect(Result.isSuccess(await second)).toBe(true);
   expect(delayed.host.requests.map((request) => request.projectId)).toEqual([
     sampleProjectOne.id,
     sampleProjectTwo.id,
   ]);
-  expect(delayed.host.steps).toEqual(["clone", "instructions", "clone", "instructions"]);
+});
+
+test("holds a project's turns during its own provision only, until a reset clears them all", async () => {
+  const delayed = delayedProvisionHost();
+  const workspaceName = tenantWorkspaceName("provision-holds-its-project");
+
+  const admitted = (projectId: typeof sampleProjectOne.id) =>
+    Effect.runPromise(waitForWorkspaceProvision(workspaceName, projectId, AbortSignal.timeout(50)));
+
+  const provisioning = runToResult(
+    provisionProjectWorkspace({
+      workspaceName,
+      project: sampleProjectOne,
+      namespace: namespaceFor(delayed.host),
+    }),
+  );
+
+  await delayed.started;
+
+  expect(await admitted(sampleProjectTwo.id)).toBe(true);
+  expect(await admitted(projectIdOf("harness"))).toBe(true);
+  expect(await admitted(sampleProjectOne.id)).toBe(false);
+
+  clearWorkspaceProvision(workspaceName);
+
+  expect(await admitted(sampleProjectOne.id)).toBe(true);
+
+  delayed.release();
+  await provisioning;
 });
 
 test("serializes replacement provisioning until an aborted run has finished", async () => {

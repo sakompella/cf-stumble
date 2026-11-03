@@ -64,8 +64,6 @@ The value appears in the command line and the shell history. For a credential su
 
 Every later deploy keeps them.
 
-`scripts/deploy/check-config.sh` checks that `CF_STUMBLE_HARNESS_COMMIT` is in your shell.
-
 ## Deploying from CI
 
 GitHub Actions deploys production. Two workflows in `.github/workflows/` do the work:

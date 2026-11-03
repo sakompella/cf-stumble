@@ -1,22 +1,30 @@
 import * as Effect from "effect/Effect";
+import type { ProjectId } from "../project-catalog.js";
 
-const activeProvisions = new Map<string, Promise<void>>();
+const activeProvisions = new Map<string, Map<ProjectId, Promise<void>>>();
 
 export function clearWorkspaceProvision(workspaceName: string): void {
   activeProvisions.delete(workspaceName);
 }
 
+function activeProvision(workspaceName: string, projectId: ProjectId): Promise<void> | undefined {
+  return activeProvisions.get(workspaceName)?.get(projectId);
+}
+
 export function provisionInWorkspace<A, E>(
   input: Readonly<{
     workspaceName: string;
+    projectId: ProjectId;
     signal?: AbortSignal | undefined;
     run: Effect.Effect<A, E>;
     aborted: E;
   }>,
 ): Effect.Effect<A, E> {
+  const { workspaceName, projectId } = input;
+
   return Effect.gen(function* () {
     for (;;) {
-      const active = activeProvisions.get(input.workspaceName);
+      const active = activeProvision(workspaceName, projectId);
 
       if (active !== undefined) {
         const wait = yield* Effect.promise(() => settleActiveProvision(active, input.signal));
@@ -35,12 +43,14 @@ export function provisionInWorkspace<A, E>(
         settled.settle = resolve;
       });
 
-      activeProvisions.set(input.workspaceName, tracked);
+      const provisions = activeProvisions.get(workspaceName) ?? new Map<ProjectId, Promise<void>>();
+      provisions.set(projectId, tracked);
+      activeProvisions.set(workspaceName, provisions);
 
       return yield* Effect.uninterruptible(input.run).pipe(
         Effect.ensuring(
           Effect.sync(() => {
-            removeActiveProvision(input.workspaceName, tracked);
+            removeActiveProvision(workspaceName, projectId, tracked);
             settled.settle();
           }),
         ),
@@ -49,8 +59,17 @@ export function provisionInWorkspace<A, E>(
   });
 }
 
-function removeActiveProvision(workspaceName: string, active: Promise<void>): void {
-  if (activeProvisions.get(workspaceName) === active) activeProvisions.delete(workspaceName);
+function removeActiveProvision(
+  workspaceName: string,
+  projectId: ProjectId,
+  active: Promise<void>,
+): void {
+  const provisions = activeProvisions.get(workspaceName);
+
+  if (provisions?.get(projectId) !== active) return;
+  provisions.delete(projectId);
+
+  if (provisions.size === 0) activeProvisions.delete(workspaceName);
 }
 
 type ProvisionWait = "settled" | "aborted";
@@ -76,10 +95,11 @@ function settleActiveProvision(
 
 export function waitForWorkspaceProvision(
   workspaceName: string,
+  projectId: ProjectId,
   signal?: AbortSignal,
 ): Effect.Effect<boolean> {
   return Effect.gen(function* () {
-    const active = activeProvisions.get(workspaceName);
+    const active = activeProvision(workspaceName, projectId);
 
     if (active === undefined) return signal?.aborted !== true;
 

@@ -210,6 +210,7 @@ export class ResponsesStreamReader {
 
     switch (event.type ?? "") {
       case "response.output_text.delta":
+      case "response.refusal.delta":
         if (event.delta !== undefined && event.delta !== "") {
           this.accumulator.apply({ textDelta: event.delta });
         }
@@ -225,16 +226,21 @@ export class ResponsesStreamReader {
         }
 
         return false;
-      case "response.completed": {
-        const usage = usageOf(event);
-
-        if (usage !== undefined) this.accumulator.apply({ usage });
+      case "response.completed":
+        this.accumulator.apply({ usage: usageOf(event) });
 
         return true;
-      }
-
-      case "response.failed":
       case "response.incomplete":
+        if (event.response?.incomplete_details?.reason === "max_output_tokens") {
+          this.accumulator.apply({ usage: usageOf(event), truncated: true });
+
+          return true;
+        }
+
+        this.failure = providerError(event);
+
+        return true;
+      case "response.failed":
       case "error":
         this.failure = providerError(event);
 

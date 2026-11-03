@@ -4,9 +4,11 @@ import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js"
 
 export type { GenerationControl };
 
+export type RunningConversation = Readonly<{ conversationId: string; run?: number | undefined }>;
+
 export interface ConversationHost {
   arm(wake: Wake): Promise<void>;
-  running(conversationIds: readonly string[]): Promise<void>;
+  running(conversations: readonly RunningConversation[]): Promise<void>;
   workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable>;
 }
 

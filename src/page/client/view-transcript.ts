@@ -1,16 +1,10 @@
 import * as Option from "effect/Option";
-import type { Html, HtmlBuilder } from "foldkit/html";
+import { createKeyedLazy, type Html, type HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_CLASSES as CLASS } from "../element-ids.js";
 import type { Message } from "./message.js";
 import { markdownBlocks } from "./markdown.js";
 import { FollowTranscript } from "./mount.js";
-import {
-  boundedLines,
-  diffLineKind,
-  looksLikeDiff,
-  TranscriptEntry,
-  type ToolEntry,
-} from "./transcript.js";
+import { boundedLines, diffLineKind, looksLikeDiff, TranscriptEntry } from "./transcript.js";
 
 function note(text: string, h: HtmlBuilder<Message>): Html {
   return h.span([h.Class("note")], [text]);
@@ -44,41 +38,76 @@ function entry(
   );
 }
 
-function toolView(tool: ToolEntry, h: HtmlBuilder<Message>): Html {
-  const output = Option.match(tool.maybeOutput, {
-    onNone: () => ["running…"],
-    onSome: (content) => outputChildren(content, h),
-  });
-
-  return h.details(
+function toolRow(
+  summary: string,
+  isFailed: boolean,
+  output: string | undefined,
+  key: string,
+  h: HtmlBuilder<Message>,
+): Html {
+  return entry(
+    "tool",
+    "tool call",
     [
-      h.Class(tool.isFailed ? `${CLASS.toolCall} failed` : CLASS.toolCall),
-      ...(tool.isFailed ? [h.Attribute("open", "")] : []),
+      h.details(
+        [
+          h.Class(isFailed ? `${CLASS.toolCall} failed` : CLASS.toolCall),
+          ...(isFailed ? [h.Attribute("open", "")] : []),
+        ],
+        [
+          h.summary([], [summary]),
+          h.pre(
+            [h.Class(CLASS.toolOutput)],
+            output === undefined ? ["running…"] : outputChildren(output, h),
+          ),
+        ],
+      ),
     ],
-    [h.summary([], [tool.summary]), h.pre([h.Class(CLASS.toolOutput)], output)],
+    key,
+    h,
   );
 }
 
+function textRow(
+  role: string,
+  who: string,
+  text: string,
+  key: string,
+  h: HtmlBuilder<Message>,
+): Html {
+  const body =
+    role === "assistant"
+      ? h.div([h.Class("text markdown")], markdownBlocks(text, h))
+      : h.pre([h.Class("text")], [text]);
+
+  return entry(role, who, [body], key, h);
+}
+
+function terminalRow(
+  wording: string,
+  isProblem: boolean,
+  key: string,
+  h: HtmlBuilder<Message>,
+): Html {
+  return entry(
+    isProblem ? "terminal problem" : "terminal",
+    "run",
+    [h.pre([h.Class("text")], [wording])],
+    key,
+    h,
+  );
+}
+
+const lazyRow = createKeyedLazy();
+
 function entryView(item: TranscriptEntry, index: number, h: HtmlBuilder<Message>): Html {
   const key = String(index);
-  const pre = (children: readonly (Html | string)[]) => h.pre([h.Class("text")], children);
 
   return TranscriptEntry.match<Html>(item, {
-    Text: ({ role, who, text }) =>
-      entry(
-        role,
-        who,
-        [
-          role === "assistant"
-            ? h.div([h.Class("text markdown")], markdownBlocks(text, h))
-            : pre([text]),
-        ],
-        key,
-        h,
-      ),
-    Tool: (tool) => entry("tool", "tool call", [toolView(tool, h)], key, h),
-    Terminal: ({ wording, isProblem }) =>
-      entry(isProblem ? "terminal problem" : "terminal", "run", [pre([wording])], key, h),
+    Text: ({ role, who, text }) => lazyRow(key, textRow, [role, who, text, key, h]),
+    Tool: ({ summary, isFailed, maybeOutput }) =>
+      lazyRow(key, toolRow, [summary, isFailed, Option.getOrUndefined(maybeOutput), key, h]),
+    Terminal: ({ wording, isProblem }) => lazyRow(key, terminalRow, [wording, isProblem, key, h]),
   });
 }
 

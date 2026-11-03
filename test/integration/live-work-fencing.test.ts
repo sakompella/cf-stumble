@@ -40,7 +40,7 @@ export class MainFacet extends DurableObject {
 
   async submit(conversationId) {
     if (conversationId === ${JSON.stringify(STARTUP_CHECK_CONVERSATION)}) return "startup check";
-    await this.host.running([conversationId]);
+    await this.host.running([{ conversationId }]);
     await this.host.arm({ active: true });
     this.run = (async () => {
       const capability = await this.host.workspace(conversationId);

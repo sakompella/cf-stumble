@@ -24,7 +24,7 @@ const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
-const GITHUB_DEVICE_SCOPE = "repo";
+const GITHUB_DEVICE_SCOPE = "repo read:org";
 
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
