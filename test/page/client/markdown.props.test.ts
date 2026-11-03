@@ -78,6 +78,28 @@ test("text without markup comes out as the same words in the same order", () => 
   );
 });
 
+test("brackets that form no link stay in the text as written", () => {
+  const bracketHeavy = "[]() ab\n".split("");
+
+  hegel.test(
+    (tc) => {
+      const text = tc.draw(gs.arrays(gs.sampledFrom(bracketHeavy), { maxSize: 60 })).join("");
+
+      expect(words(render(text).map(textOf).join(" "))).toStrictEqual(words(text));
+    },
+    { testCases: 300 },
+  );
+});
+
+test("a long run of unmatched brackets renders without a quadratic slowdown", () => {
+  const text = "[".repeat(100_000);
+  const started = performance.now();
+  const blocks = render(text);
+
+  expect(performance.now() - started).toBeLessThan(1000);
+  expect(blocks.map(textOf)).toStrictEqual([text]);
+});
+
 test("fenced and inline code keep their content exactly", () => {
   hegel.test(
     (tc) => {
