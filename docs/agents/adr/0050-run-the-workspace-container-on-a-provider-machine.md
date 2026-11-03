@@ -10,10 +10,9 @@ self-hosted orbs. When no provider is connected, the Host uses the Cloudflare co
 **Seam.** Computer 0.8.0's `ContainerBackend` drives a container only through
 `IWorkspaceContainerAPI`. `ProviderContainerAPI` (`src/workspace/provider-container.ts`) implements
 it over the provider's socket, and the Host builds a second `ContainerBackend` on top of it. The
-Workspace sees one backend, `ContainerChoice` (`src/workspace/container-choice.ts`), which picks
-the provider when one is connected and the Cloudflare container otherwise, each time the Workspace
-connects. The choice holds until that connection closes, so the idle stop and a reset stop the
-container the Workspace is using.
+Workspace sees one backend (`src/workspace/workspace-platform.ts`), which picks the provider when
+one is connected and the Cloudflare container otherwise, each time the Workspace connects. The idle
+stop and a reset stop whichever container is running.
 
 **The provider's socket.** One outbound WebSocket from the provider to the Host, at
 `GET /orb/provider` with a provider token. The Host accepts it with WebSocket hibernation and
@@ -22,7 +21,7 @@ costs nothing. JSON frames (`src/workspace/orb-protocol.ts`) carry:
 
 - jobs from the Host: `start` (with the container's environment), `stop` (idle stop) and `delete`
   (reset). The provider runs the dispatch script once per job, with the job in environment
-  variables, and answers `job-done` or `job-failed`. `start` prints the address of the container's
+  variables, and answers `job-done` or `failed`. `start` prints the address of the container's
   port 8080.
 - `fetch` from the Host: the setup calls `ContainerBackend` makes to port 8080 (`/health`, the
   `/api` auth check, `POST /connect`, `/__computerd/info`), answered with `fetch-result`.
@@ -49,7 +48,8 @@ authentication exists, the mint route is as open as every other owner route.
 the container exited, and the next connect falls back to the Cloudflare container. Files in
 SQLite survive, as after any container replacement; files under ignored segments do not. The
 provider stops its container when its socket closes or when it receives SIGINT or SIGTERM, because
-every later connect launches a fresh container anyway.
+every later connect launches a fresh container anyway. It then connects again, waiting from 1 to 30
+seconds between attempts, so a Worker deploy does not end it.
 
 **Alternatives.** Carrying computerd's WebSocket frames on the job socket would need a WebSocket
 server in the provider and an in-memory relay in the Host, which keeps the Host awake just the same.
