@@ -123,6 +123,8 @@ export class ProviderLink {
   closed(socket: WebSocket): void {
     const exit = { exitedAt: Date.now(), reason: "the workspace provider disconnected" };
 
+    if (socket.readyState !== WebSocket.CLOSED) socket.close(1000, "provider disconnected");
+
     this.#updateOn(socket, { _tag: "disconnected", exit });
 
     for (const [id, pending] of this.#pending) {

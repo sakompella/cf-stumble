@@ -69,19 +69,27 @@ export class OrbProvider {
       headers: { [ORB_TOKEN_HEADER]: this.#options.token },
     });
 
-    const send = (frame: ProviderFrame): void => {
-      socket.send(encodeFrame(frame));
+    const send = (frame: ProviderFrame | typeof ORB_PING): void => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+
+      socket.send(frame === ORB_PING ? frame : encodeFrame(frame));
     };
 
     const ping = setInterval(() => {
-      socket.send(ORB_PING);
+      send(ORB_PING);
     }, PING_INTERVAL_MS);
 
-    const stop = (): void => {
-      socket.close(1000, "provider stopping");
-    };
-
     return new Promise<string>((resolve) => {
+      const finish = (reason: string): void => {
+        clearInterval(ping);
+        resolve(reason);
+      };
+
+      const stop = (): void => {
+        socket.close(1000, "provider stopping");
+        finish("the provider is stopping");
+      };
+
       signal.addEventListener("abort", stop, { once: true });
       socket.addEventListener("open", () => {
         this.#options.log("connected to the Workspace Host");
@@ -93,8 +101,8 @@ export class OrbProvider {
         if (Option.isSome(frame)) void this.#handle(frame.value, send);
       });
       socket.addEventListener("close", (event) => {
-        clearInterval(ping);
-        resolve(`the Workspace Host connection closed (${event.code} ${event.reason})`);
+        signal.removeEventListener("abort", stop);
+        finish(`the Workspace Host connection closed (${event.code} ${event.reason})`);
       });
     });
   }
