@@ -37,7 +37,7 @@ An HTTP client with a default user agent may get 403 from the API; set your own 
 ## Expect
 
 - A deploy builds the image with Docker and takes about 10 minutes the first time. A change to a trailing `ENV` line rebuilds in about a minute because layers are cached.
-- On the Mac, the push of the image's 1 GB layer through OrbStack can fail with "use of closed network connection"; run the deploy again.
+- On the Mac, the push of the image's 1 GB layer through OrbStack can fail with "use of closed network connection". Deploy the stage from CI instead: `gh workflow run deploy.yml --ref main -f stage=<stage>`.
 - A new container application can take minutes to place its first instance, and the first launches often fail with "no container instance can be provided"; retry the request.
 - The generation build clones `HARNESS_REPOSITORY_URL`, so only commits on a public GitHub repository can build.
 

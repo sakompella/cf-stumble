@@ -11,12 +11,16 @@ on:
         description: Adopt the Worker and container application that `cf deploy` created (the one-time switch)
         type: boolean
         default: false
+      stage:
+        description: The Alchemy stage; any stage other than prod is a separate Worker cf-stumble-<stage>
+        type: string
+        default: prod
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-prod
+  group: deploy-${{ inputs.stage || 'prod' }}
   cancel-in-progress: false
 
 jobs:
@@ -44,7 +48,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # --yes approves the plan without a terminal. It also lets Alchemy create
       # or upgrade the state store, which it refuses in CI without it.
-      - run: pnpm run deploy --yes ${{ inputs.adopt && '--adopt' || '' }}
+      - run: >-
+          pnpm run install:infra && pnpm run build:page &&
+          pnpm alchemy deploy --config infra/alchemy.run.ts --stage "$STAGE" --yes
+          ${{ inputs.adopt && '--adopt' || '' }}
         env:
+          STAGE: ${{ inputs.stage || 'prod' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
