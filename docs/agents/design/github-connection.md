@@ -62,16 +62,9 @@ The Supervisor uses GitHub's OAuth device flow. It asks GitHub for a device code
 
 On load the page reads the recorded status with `GET /api/github/connection`, which does not reach the workspace. It sends the refresh only when the owner presses **Check again**, never on a timer. Each check runs container commands, and the Host counts every call as work, so a client that repeated a status read once kept the container running all day (`docs/agents/incident-2026-09-container-cost.md`).
 
-## Configuration
-
-| Name                     | Kind          | Purpose                                                                                                                         |
-| ------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `GITHUB_OAUTH_CLIENT_ID` | Worker secret | The GitHub OAuth app the device flow belongs to. Not sensitive. Without it, starting an authorization answers `not-configured`. |
-| `GH_TOKEN`               | Worker secret | The credential source for automated tests and unsupervised runs.                                                                |
-
-Set both with `cf workers secrets update`. See `docs/deploy.md`, "Instance secrets".
-
 ## The `GH_TOKEN` fallback
+
+See `docs/deploy.md`, "Instance secrets", for `GITHUB_OAUTH_CLIENT_ID` and `GH_TOKEN`.
 
 When the workspace has no usable credential and `GH_TOKEN` is set, cf-stumble installs that token exactly as it installs one from the device flow and records the connection with the source `configured-token`, so the status says which credential is in use. A deployment that sets neither `GITHUB_OAUTH_CLIENT_ID` nor `GH_TOKEN` reports `disconnected`.
 

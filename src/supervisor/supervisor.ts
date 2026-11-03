@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { ActivationCommand, GenerationLabel } from "./generations.js";
+import { WORKSPACE_BUSY } from "../workspace/index.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import {
   checkGenerationStartup,
@@ -14,8 +15,6 @@ import type {
   SupervisorEnv,
   SupervisorWorkspaceReset,
 } from "./supervisor-env.js";
-
-const WORKSPACE_BUSY = { ok: false, problem: { code: "workspace-busy" } } as const;
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
   readonly #parts: SupervisorParts;

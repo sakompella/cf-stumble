@@ -93,35 +93,6 @@ function eventsOf(frames: readonly Uint8Array[]): DecodedEvent[] {
   });
 }
 
-test("reassembles stdout and stderr after arbitrary UTF-8 backend chunking", async () => {
-  await hegel.testAsync(
-    async (tc) => {
-      const offsets = tc.draw(
-        gs.arrays(gs.integers({ minValue: 0, maxValue: 300_000 }), { maxSize: 10 }),
-      );
-
-      const stdout = payload(tc, offsets);
-
-      const stderr = payload(tc, offsets);
-      const events = eventsOf(await runOperation(stdout, stderr));
-
-      expect(
-        events
-          .filter((event) => event.kind === "stdout")
-          .map((event) => event.data ?? "")
-          .join(""),
-      ).toBe(stdout.data);
-      expect(
-        events
-          .filter((event) => event.kind === "stderr")
-          .map((event) => event.data ?? "")
-          .join(""),
-      ).toBe(stderr.data);
-    },
-    { testCases: 60 },
-  );
-});
-
 test("keeps every frame bounded and emits one ordered terminal event", async () => {
   await hegel.testAsync(
     async (tc) => {
@@ -181,9 +152,14 @@ async function runToEnd(
 }
 
 const cutBytes = gs
-  .tuples(text, gs.integers({ minValue: 0, maxValue: 200 }), gs.binary({ maxSize: 3 }))
-  .map(([value, keep, tail]) => {
-    const encoded = new TextEncoder().encode(value);
+  .tuples(
+    text,
+    gs.integers({ minValue: 1, maxValue: 3000 }),
+    gs.integers({ minValue: 0, maxValue: 300_000 }),
+    gs.binary({ maxSize: 3 }),
+  )
+  .map(([value, repeated, keep, tail]) => {
+    const encoded = new TextEncoder().encode(value.repeat(repeated));
 
     return new Uint8Array([...encoded.slice(0, keep % (encoded.length + 1)), ...tail]);
   });
@@ -195,7 +171,7 @@ test("output equals a one-shot decode of the bytes, however they are cut and how
       const stderr = tc.draw(cutBytes);
 
       const offsets = tc.draw(
-        gs.arrays(gs.integers({ minValue: 0, maxValue: 200 }), { maxSize: 6 }),
+        gs.arrays(gs.integers({ minValue: 0, maxValue: 300_000 }), { maxSize: 6 }),
       );
 
       const ending = tc.draw(gs.sampledFrom(["exit", "eof"] as const));

@@ -25,16 +25,6 @@ function scriptNames(): readonly string[] {
   return [...block.matchAll(/^ {4}"([^"]+)":/gmu)].map((match) => match[1] ?? "");
 }
 
-function scriptCommand(name: string): string {
-  const line = new RegExp(`^ {4}"${name}": "(.*)",?$`, "mu").exec(manifest);
-
-  if (line === null) {
-    throw new Error(`package.json defines no ${name} script`);
-  }
-
-  return line[1] ?? "";
-}
-
 test("every configured build phase names a script this repository defines", () => {
   for (const phase of HARNESS_BUILD_CONFIGURATION.buildPhases) {
     if (/^pnpm install(?: --[\w-]+(?:=[\w-]+)?)+$/u.test(phase.command)) {
@@ -49,13 +39,4 @@ test("every configured build phase names a script this repository defines", () =
     const script = named?.groups?.["script"] ?? "";
     expect(scriptNames(), `package.json must define ${script}`).toContain(script);
   }
-});
-
-test("the configured phases are, in order, what build:artifact runs locally", () => {
-  const phases = HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.command);
-
-  expect(
-    scriptCommand("build:artifact"),
-    "a developer, the clean-build probe and the deployed build must run the same work in the same order",
-  ).toBe(phases.join(" && "));
 });

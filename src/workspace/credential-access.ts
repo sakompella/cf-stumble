@@ -3,8 +3,7 @@ import * as Effect from "effect/Effect";
 import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
-import { WORKSPACE_SHORT_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import { workspaceRpc } from "./workspace-rpc.js";
+import { boundedRpc, WORKSPACE_SHORT_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
 
 export type CredentialWorkspaceHost = Readonly<{
   credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult>;
@@ -61,20 +60,22 @@ function ask(
   return Effect.gen(function* () {
     if (signalAborted(input.signal)) return yield* unavailable();
 
-    const answered = yield* workspaceRpc(
-      () => input.namespace.getByName(input.workspaceName).credential(request),
-      WORKSPACE_SHORT_RPC_TIMEOUT_MS,
-    ).pipe(
-      Effect.catchTag("WorkspaceRpcFailed", ({ cause }) => {
+    const answered = yield* Effect.tryPromise({
+      try: () =>
+        boundedRpc(
+          () => input.namespace.getByName(input.workspaceName).credential(request),
+          WORKSPACE_SHORT_RPC_TIMEOUT_MS,
+        ),
+      catch: (cause) => {
         logRedactedCause(
           `credential-access.${request.step}: ${isTimeoutFailure(cause) ? "timeout" : "credential-workspace-unavailable"}`,
           cause,
           request.step === "install" ? request.token : undefined,
         );
 
-        return Effect.fail(unavailable());
-      }),
-    );
+        return unavailable();
+      },
+    });
 
     return signalAborted(input.signal) ? yield* unavailable() : answered;
   });

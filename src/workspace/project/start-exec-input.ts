@@ -20,7 +20,7 @@ function isBytes(value: unknown): value is Uint8Array {
 
 const WriteModeText = Schema.Literals(["overwrite", "append", "create-exclusive"]);
 
-export const WriteFileInput = Schema.Struct({
+const WriteFileInput = Schema.Struct({
   path: AddressedPathText,
   bytes: Schema.declare(isBytes),
   mode: WriteModeText,
@@ -34,7 +34,7 @@ export function parseWriteFileInput(input: WriteFileWire): ProjectResult<WriteFi
   return Result.isFailure(decoded) ? fail("invalid-request") : ok(decoded.success);
 }
 
-export const OperationIdText = Schema.String.check(Schema.isPattern(OPERATION_ID_PATTERN));
+const OperationIdText = Schema.String.check(Schema.isPattern(OPERATION_ID_PATTERN));
 
 const decodeOperationId = Schema.decodeResult(OperationIdText);
 
@@ -51,7 +51,7 @@ const CommandText = Schema.String.check(
   ),
 );
 
-export const StartExecInput = Schema.Struct({
+const StartExecInput = Schema.Struct({
   command: CommandText,
   cwd: Schema.optional(Schema.String),
   timeoutMs: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))),

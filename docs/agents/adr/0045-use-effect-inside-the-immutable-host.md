@@ -54,13 +54,6 @@ Worker bundle. The Vitest workers pool loads each module again in every test fil
 to that bundle. Importing the `effect` index in the Worker's `fetch` path nearly doubled the full
 suite's time; the prebundled module path costs about 23 ms per isolate.
 
-**Versions.** `effect` is pinned at exactly 4.0.0, because Foldkit 0.168.0 declares exact peers on
-`effect` 4.0.0 and `@effect/platform-browser` 4.0.0 (ADR-0046). The three move together.
-
-**Cost.** The Effect runtime, errors, services, and layers add about 30 KiB gzip to the Worker, and
-any use of `Schema` adds about 45 KiB more, so `Schema` appears only where it parses untrusted
-input. `tools/bundle-budgets.test.ts` holds the upload within its gzip limit.
-
 **Alternatives.** Keeping better-result for results and adding Effect only for concurrency would
 leave two systems for composing failures. Publishing Effect RPC or schema envelopes across Workers
 RPC would change contracts that callers depend on, with no product need. Neither is adopted.

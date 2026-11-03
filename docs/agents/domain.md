@@ -16,7 +16,7 @@ Read the other files below when their topic comes up.
 
 Everything in `docs/agents/` is agent-authored. `docs/` outside that directory is for human-written documentation.
 
-- `adr/` records current durable decisions. Add an ADR only when a decision is expensive to reverse, has a real alternative, and would surprise a future reader. Add every ADR to `adr/README.md`, which `test/docs/adr-index.test.ts` checks, and delete an ADR when it no longer applies.
+- `adr/` records current durable decisions. Add an ADR only when a decision is expensive to reverse, has a real alternative, and would surprise a future reader. Delete an ADR when it no longer applies.
 - `design/overview.md` describes the product, its two harnesses, the workspace, and the self-improvement loop.
 - `design/computer-integration.md` records the pinned Computer pair, the workspace layout, and the harness build.
 - `design/github-connection.md` records how a repository is connected and where the GitHub credential lives.

@@ -45,7 +45,7 @@ function isPublicRepositoryUrl(value: string): value is PublicRepositoryUrl {
   );
 }
 
-export function parsePublicRepositoryUrl(value: string): PublicRepositoryUrl | undefined {
+function parsePublicRepositoryUrl(value: string): PublicRepositoryUrl | undefined {
   return isPublicRepositoryUrl(value) ? value : undefined;
 }
 
