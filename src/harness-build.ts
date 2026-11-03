@@ -67,7 +67,8 @@ export type HarnessBuildPlan = Readonly<{
 
 export type HarnessBuildRequest =
   | Readonly<{ kind: "build-step"; harnessCommit: string; step: HarnessBuildStepName }>
-  | Readonly<{ kind: "build-output"; harnessCommit: string }>;
+  | Readonly<{ kind: "build-output"; harnessCommit: string }>
+  | Readonly<{ kind: "build-discard"; harnessCommit: string }>;
 
 export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
   "provision",

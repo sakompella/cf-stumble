@@ -45,6 +45,7 @@ test("runs every step by name, reads the output, and parses it under the request
     { kind: "build-step", harnessCommit: BUILD_COMMIT, step: "install" },
     { kind: "build-step", harnessCommit: BUILD_COMMIT, step: "build-module-map" },
     { kind: "build-output", harnessCommit: BUILD_COMMIT },
+    { kind: "build-discard", harnessCommit: BUILD_COMMIT },
   ]);
   expect(
     host.requests.every((request) => !JSON.stringify(request).includes("git ")),
@@ -68,7 +69,7 @@ test("takes a fresh workspace stub for every call in one build", async () => {
   expect(
     hosts.length,
     "a build that held one stub died with the Workspace Host it was taken from, minutes earlier",
-  ).toBe(HARNESS_BUILD_STEP_NAMES.length + 1);
+  ).toBe(HARNESS_BUILD_STEP_NAMES.length + 2);
   expect(hosts.every((host) => host.requests.length === 1)).toBe(true);
 });
 
@@ -85,10 +86,42 @@ test("a failing step names that step, and the steps after it never run", async (
       exitCode: 7,
       diagnostics: { stdoutTail: "", stderrTail: `${failing} failed`, truncated: false },
     });
-    expect(host.steps(), "a build stops at the step that failed").toEqual(
-      HARNESS_BUILD_STEP_NAMES.slice(0, HARNESS_BUILD_STEP_NAMES.indexOf(failing) + 1),
-    );
+    expect(host.steps(), "a build stops at the step that failed").toEqual([
+      ...HARNESS_BUILD_STEP_NAMES.slice(0, HARNESS_BUILD_STEP_NAMES.indexOf(failing) + 1),
+      "build-discard",
+    ]);
   }
+});
+
+test("asks the workspace to discard the commit's scratch tree once, last, however the build ends", async () => {
+  const unreadable = new FakeBuildHost();
+  unreadable.output = undefined;
+
+  const hosts = [
+    new FakeBuildHost(),
+    unreadable,
+    ...HARNESS_BUILD_STEP_NAMES.map((step) => failingAt(step, {})),
+  ];
+
+  for (const host of hosts) {
+    await built(host);
+
+    expect(host.steps().filter((step) => step === "build-discard")).toHaveLength(1);
+    expect(host.requests.at(-1)).toEqual({ kind: "build-discard", harnessCommit: BUILD_COMMIT });
+  }
+});
+
+test("a scratch cleanup the workspace cannot run does not change the build's result", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const host = new FakeBuildHost();
+  const build = host.build.bind(host);
+
+  host.build = (request) =>
+    request.kind === "build-discard"
+      ? Promise.reject(new Error("the container stopped"))
+      : build(request);
+
+  expect(Result.isSuccess(await built(host))).toBe(true);
 });
 
 test("reports missing and invalid build output as plain typed failures", async () => {

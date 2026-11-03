@@ -13,7 +13,7 @@ import { WORKSPACE_ROOT } from "../workspace-layout.js";
 
 type ParsedHarnessBuildRequest =
   | Readonly<{ kind: "build-step"; harnessCommit: HarnessCommit; step: HarnessBuildStepName }>
-  | Readonly<{ kind: "build-output"; harnessCommit: HarnessCommit }>;
+  | Readonly<{ kind: "build-output" | "build-discard"; harnessCommit: HarnessCommit }>;
 
 function invalidRequest(): WorkspaceFailure {
   return { ok: false, error: { code: "invalid-request" } };
@@ -28,7 +28,7 @@ export function parseHarnessBuildRequest(
 
   return request.kind === "build-step"
     ? { kind: "build-step", harnessCommit, step: request.step }
-    : { kind: "build-output", harnessCommit };
+    : { kind: request.kind, harnessCommit };
 }
 
 function readModuleMapSource(plan: HarnessBuildPlan): string {
@@ -49,10 +49,13 @@ export function planHarnessBuildRequest(
 ): WorkspacePlan {
   const plan = planHarnessBuild(configuration, request.harnessCommit);
 
-  if (request.kind === "build-output") {
+  if (request.kind !== "build-step") {
     return {
       kind: "run-command",
-      source: readModuleMapSource(plan),
+      source:
+        request.kind === "build-output"
+          ? readModuleMapSource(plan)
+          : `rm -rf -- ${shellQuote(plan.directory)}`,
       cwd: WORKSPACE_ROOT,
       timeoutMs: configuration.stepTimeoutMs,
     };
