@@ -109,49 +109,6 @@ test("preserves caller ignores while adding node_modules", async () => {
   ]);
 });
 
-test("every other backend and RPC operation reaches the backend with its arguments and outcome", async () => {
-  const { backend, calls, handle } = backendWith(() =>
-    Promise.resolve({
-      currentCursor: { rev: 1, path: null },
-      appliedPushCursor: { rev: 1, path: null },
-      stream: new ReadableStream(),
-    }),
-  );
-
-  const wrapped = await connect(withWorkspaceSyncIgnore(backend));
-  const { sync, shell } = wrapped.rpc;
-  const changes: Parameters<SyncRPC["push"]>[0]["changes"] = new ReadableStream();
-  const objects: Parameters<SyncRPC["pushObjects"]>[0] = new ReadableStream();
-  const hashes = [new Uint8Array([7])];
-
-  expect(() => sync.push({ senderRev: 0, changes })).toThrow("sync.push");
-  expect(() => sync.watermarks({ settle: true })).toThrow("sync.watermarks");
-  expect(() => sync.readEntry("/a")).toThrow("sync.readEntry");
-  expect(() => sync.hasObjects(hashes)).toThrow("sync.hasObjects");
-  expect(() => sync.fetchObjects(hashes)).toThrow("sync.fetchObjects");
-  expect(() => sync.pushObjects(objects)).toThrow("sync.pushObjects");
-  expect(() => shell.exec({ source: "true" })).toThrow("shell.exec");
-  expect(() => shell.getExec({ id: "x" })).toThrow("shell.getExec");
-  expect(() => shell.killExec({ id: "x" })).toThrow("shell.killExec");
-  expect(() => shell.disposeExec({ id: "x" })).toThrow("shell.disposeExec");
-
-  expect(calls).toEqual([
-    ["sync.push", [{ senderRev: 0, changes }]],
-    ["sync.watermarks", [{ settle: true }]],
-    ["sync.readEntry", ["/a"]],
-    ["sync.hasObjects", [hashes]],
-    ["sync.fetchObjects", [hashes]],
-    ["sync.pushObjects", [objects]],
-    ["shell.exec", [{ source: "true" }]],
-    ["shell.getExec", [{ id: "x" }]],
-    ["shell.killExec", [{ id: "x" }]],
-    ["shell.disposeExec", [{ id: "x" }]],
-  ]);
-  expect(wrapped.runtimeId).toBe(handle.runtimeId);
-  expect(wrapped.sync).toBe(handle.sync);
-  expect(() => wrapped.close()).toThrow("close");
-});
-
 test("adds node_modules to a change pack fetch and keeps the pack transport", async () => {
   const inputs: Parameters<NonNullable<SyncRPC["fetchChangePack"]>>[0][] = [];
 

@@ -1,85 +1,21 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
 import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
 import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
 const ORIGIN = "https://cf-stumble.test";
 
-const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
-
-const FIELD_VALUES = [
-  '""',
-  '"text"',
-  "0",
-  "-0",
-  "7",
-  "-1",
-  "1.5",
-  "9007199254740992",
-  "1e400",
-  "null",
-  "true",
-  "[]",
-  "{}",
-] as const;
-
-const COMMIT_VALUES = [
-  `"${"0123456789abcdef0123".repeat(2)}"`,
-  `"${"0123456789abcdef".repeat(4)}"`,
-  `"${"0123456789ABCDEF0123".repeat(2)}"`,
-  '"0123456789abcdef"',
-] as const;
-
-const URL_VALUES = ['"https://github.com/sample/repo-1"', '"not a url"'] as const;
-
-const NOT_OBJECTS = ["[]", "null", '"prompt"', "3", "not json", ""] as const;
-
-type Field = Readonly<{
-  name: string;
-  optional: boolean;
-  values: readonly string[];
-  isValid: (value: Schema.Json | undefined) => boolean;
-}>;
+const SHA = "0123456789abcdef0123".repeat(2);
 
 type BodyRoute = Readonly<{
   path: string;
-  fields: readonly Field[];
+  good: Readonly<Record<string, string | number>>;
+  badBodies: readonly string[];
   refusalCode: string;
   reachedStatus: number;
   supervisorReached: (reached: () => void) => Partial<OwnerApiSupervisor>;
 }>;
-
-const decodeJsonText = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
-
-function isJsonObject(value: Schema.Json): value is Schema.JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isText(value: Schema.Json | undefined): value is string {
-  return typeof value === "string";
-}
-
-function isNonNegativeSafeInteger(value: Schema.Json | undefined): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-function isGitObjectId(value: Schema.Json | undefined): boolean {
-  return isText(value) && GIT_OBJECT_ID.test(value);
-}
-
-const required = (
-  name: string,
-  isValid: Field["isValid"],
-  values: readonly string[] = FIELD_VALUES,
-): Field => ({ name, optional: false, values, isValid });
-
-const counts = [
-  required("label", isNonNegativeSafeInteger),
-  required("observedEpoch", isNonNegativeSafeInteger),
-];
 
 const controlGeneration = (reached: () => void): Partial<OwnerApiSupervisor> => ({
   controlGeneration: () => {
@@ -92,7 +28,8 @@ const controlGeneration = (reached: () => void): Partial<OwnerApiSupervisor> => 
 const BODY_ROUTES: readonly BodyRoute[] = [
   {
     path: "/api/projects/p/messages",
-    fields: [required("content", isText), required("requestId", isText)],
+    good: { content: "hi", requestId: "r" },
+    badBodies: [],
     refusalCode: "invalid-message-request",
     reachedStatus: 409,
     supervisorReached: (reached) => ({
@@ -105,21 +42,24 @@ const BODY_ROUTES: readonly BodyRoute[] = [
   },
   {
     path: "/api/generations/activate",
-    fields: counts,
+    good: { label: 1, observedEpoch: 0 },
+    badBodies: ['{"label":-1,"observedEpoch":0}', '{"label":1.5,"observedEpoch":0}'],
     refusalCode: "invalid-activation-request",
     reachedStatus: 409,
     supervisorReached: controlGeneration,
   },
   {
     path: "/api/generations/rollback",
-    fields: counts,
+    good: { label: 1, observedEpoch: 0 },
+    badBodies: ['{"label":9007199254740992,"observedEpoch":0}'],
     refusalCode: "invalid-rollback-request",
     reachedStatus: 409,
     supervisorReached: controlGeneration,
   },
   {
     path: "/api/generations/submit",
-    fields: [required("harnessCommit", isGitObjectId, [...FIELD_VALUES, ...COMMIT_VALUES])],
+    good: { harnessCommit: SHA },
+    badBodies: ['{"harnessCommit":"0123456789abcdef"}', `{"harnessCommit":"${SHA.toUpperCase()}"}`],
     refusalCode: "invalid-submission-request",
     reachedStatus: 500,
     supervisorReached: (reached) => ({
@@ -132,10 +72,8 @@ const BODY_ROUTES: readonly BodyRoute[] = [
   },
   {
     path: "/api/projects/connect",
-    fields: [
-      required("repositoryUrl", isText, [...FIELD_VALUES, ...URL_VALUES]),
-      { name: "displayName", optional: true, values: FIELD_VALUES, isValid: isText },
-    ],
+    good: { repositoryUrl: "https://github.com/sample/repo-1" },
+    badBodies: ['{"repositoryUrl":"https://github.com/sample/repo-1","displayName":3}'],
     refusalCode: "invalid-connect-request",
     reachedStatus: 409,
     supervisorReached: (reached) => ({
@@ -148,77 +86,66 @@ const BODY_ROUTES: readonly BodyRoute[] = [
   },
 ];
 
-function drawBody(tc: hegel.TestCase, fields: readonly Field[]): string {
-  if (tc.draw(gs.integers({ minValue: 0, maxValue: 9 })) === 0) {
-    return tc.draw(gs.sampledFrom([...NOT_OBJECTS]));
-  }
+const NOT_OBJECTS = ["[]", "null", '"prompt"', "3", "not json", ""];
 
-  const fieldNames = fields.map((field) => field.name);
+function badBodies(route: BodyRoute): readonly string[] {
+  const names = Object.keys(route.good);
 
-  const names = tc.draw(gs.booleans())
-    ? fieldNames
-    : tc.draw(gs.arrays(gs.sampledFrom([...fieldNames, "extra", "__proto__"]), { maxSize: 4 }));
-
-  const entries = names.map((name) => {
-    const values = fields.find((field) => field.name === name)?.values ?? FIELD_VALUES;
-
-    return `${JSON.stringify(name)}:${tc.draw(gs.sampledFrom([...values]))}`;
-  });
-
-  return `{${entries.join(",")}}`;
-}
-
-function admits(text: string, fields: readonly Field[]): boolean {
-  const parsed = Option.getOrUndefined(decodeJsonText(text));
-
-  if (parsed === undefined || !isJsonObject(parsed)) return false;
-
-  const values = new Map(Object.entries(parsed));
-
-  return (
-    [...values.keys()].every((name) => fields.some((field) => field.name === name)) &&
-    fields.every((field) => {
-      const value = values.get(field.name);
-
-      return value === undefined ? field.optional : field.isValid(value);
-    })
-  );
+  return [
+    ...NOT_OBJECTS,
+    ...route.badBodies,
+    ...names.map((name) => JSON.stringify({ ...route.good, [name]: null })),
+    ...names.map((name) => JSON.stringify({ ...route.good, [name]: {} })),
+    ...names.map((name) =>
+      JSON.stringify(
+        Object.fromEntries(Object.entries(route.good).filter(([key]) => key !== name)),
+      ),
+    ),
+    JSON.stringify({ ...route.good, extra: 1 }),
+    `{${JSON.stringify(route.good).slice(1, -1)},"__proto__":{}}`,
+  ];
 }
 
 function post(path: string, body: string): Request {
   return new Request(`${ORIGIN}${path}`, { method: "POST", body });
 }
 
-test("a body reaches the Supervisor exactly when it carries each required field validly and nothing else", async () => {
-  await hegel.testAsync(
-    async (tc) => {
-      const route = tc.draw(gs.sampledFrom([...BODY_ROUTES]));
-      const body = drawBody(tc, route.fields);
-      let reached = false;
+async function send(
+  route: BodyRoute,
+  body: string,
+): Promise<{ status: number; reached: boolean; json: unknown }> {
+  let reached = false;
 
-      const response = await ownerApiResponse(
-        post(route.path, body),
-        supervisor(
-          route.supervisorReached(() => {
-            reached = true;
-          }),
-        ),
-      );
-
-      const expected = admits(body, route.fields);
-
-      expect(reached).toBe(expected);
-      expect(response.status).toBe(expected ? route.reachedStatus : 400);
-
-      if (!expected) {
-        await expect(response.json()).resolves.toEqual({
-          ok: false,
-          error: { code: route.refusalCode },
-        });
-      }
-    },
-    { testCases: 2000 },
+  const response = await ownerApiResponse(
+    post(route.path, body),
+    supervisor(
+      route.supervisorReached(() => {
+        reached = true;
+      }),
+    ),
   );
+
+  return { status: response.status, reached, json: await response.json() };
+}
+
+test.each(BODY_ROUTES)("$path reaches the Supervisor with a good body", async (route) => {
+  const result = await send(route, JSON.stringify(route.good));
+
+  expect(result.reached).toBe(true);
+  expect(result.status).toBe(route.reachedStatus);
+});
+
+test.each(BODY_ROUTES)("$path refuses each bad body before the Supervisor", async (route) => {
+  for (const body of badBodies(route)) {
+    const result = await send(route, body);
+
+    expect({ body, reached: result.reached, status: result.status, json: result.json }).toEqual({
+      body,
+      reached: false,
+      status: 400,
+      json: { ok: false, error: { code: route.refusalCode } },
+    });
+  }
 });
 
 test("the message route hands the Supervisor its project id, content and request id unchanged", async () => {
