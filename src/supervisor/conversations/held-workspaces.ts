@@ -17,6 +17,7 @@ type HeldWorkspace = Readonly<{
 export class HeldWorkspaces {
   readonly #obtain: ObtainWorkspace;
   readonly #held = new Map<string, HeldWorkspace>();
+  #retirement: (() => void) | undefined;
 
   constructor(obtain: ObtainWorkspace) {
     this.#obtain = obtain;
@@ -41,20 +42,48 @@ export class HeldWorkspaces {
     if (held === undefined) return;
 
     this.#held.delete(conversationId);
-    held.release.abort();
-    void held.capability.then((capability) => {
-      if (capability !== null) endWorkspaceTurn(capability);
-    });
+    release(held);
   }
 
   endAll(): void {
-    for (const conversationId of this.#held.keys()) this.end(conversationId);
+    this.#detach()();
+  }
+
+  retire(alsoRetire: () => void): void {
+    this.flushRetirement();
+
+    const ending = this.#detach();
+
+    const once = () => {
+      if (this.#retirement !== once) return;
+
+      this.#retirement = undefined;
+      alsoRetire();
+      ending();
+    };
+
+    this.#retirement = once;
+    setTimeout(once, 0);
+  }
+
+  flushRetirement(): void {
+    this.#retirement?.();
+  }
+
+  #detach(): () => void {
+    const detached = [...this.#held.values()];
+
+    this.#held.clear();
+
+    return () => {
+      for (const held of detached) release(held);
+    };
   }
 
   #hold(conversationId: string, project: SelectableProject, remainingMs: number): HeldWorkspace {
-    const release = new AbortController();
-    const capability = Effect.runPromise(this.#obtain(project, remainingMs, release.signal));
-    const held = { capability, release };
+    const controller = new AbortController();
+    const capability = Effect.runPromise(this.#obtain(project, remainingMs, controller.signal));
+    const held = { capability, release: controller };
 
     this.#held.set(conversationId, held);
     void capability.then((obtained) => {
@@ -65,6 +94,13 @@ export class HeldWorkspaces {
 
     return held;
   }
+}
+
+function release(held: HeldWorkspace): void {
+  held.release.abort();
+  void held.capability.then((capability) => {
+    if (capability !== null) endWorkspaceTurn(capability);
+  });
 }
 
 export function endWorkspaceTurn(capability: ProjectCapabilityStub): void {
