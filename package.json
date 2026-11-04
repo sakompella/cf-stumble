@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "pnpm build:page && cf dev --mode test",
     "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run",
     "test:tools": "node --import tsx --test 'tools/**/*.test.ts'",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",
@@ -36,6 +37,7 @@
     "esbuild": "0.28.2"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.11",
     "@cloudflare/vitest-plugin": "^1.5.1",
     "@cloudflare/workers-types": "^5.20261104.1",
     "@effect/platform-browser": "4.1.2",
@@ -52,6 +54,7 @@
     "oxlint-tsgolint": "^7.0.2005",
     "tsrs": "0.20.1-ts7.1.0-beta",
     "tsx": "4.23.15",
+    "vite": "^8.3.5",
     "vitest": "5.1.0"
   },
   "packageManager": "pnpm@11.18.0"
