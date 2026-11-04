@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "cf dev --mode test",
     "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run",
     "test:tools": "node --import tsx --test 'tools/**/*.test.ts'",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",

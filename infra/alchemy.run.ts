@@ -5,9 +5,13 @@ import * as Effect from "effect/Effect";
 import {
   compatibility,
   durableObjectClasses,
+  observability,
   plainTextBindings,
   PRODUCTION_STAGE,
+  productionRoute,
+  workerEntrypoint,
   workerName,
+  workspaceContainer,
 } from "./worker-settings.js";
 
 export default Alchemy.Stack(
@@ -20,23 +24,17 @@ export default Alchemy.Stack(
 
     const worker = yield* Cloudflare.Worker("Worker", {
       name,
-      main: "src/worker.ts",
+      main: workerEntrypoint,
       compatibility: {
         date: compatibility.date,
         flags: [...compatibility.flags, "legacy_module_registry"],
       },
       workersDev: isProduction ? false : { enabled: true, previewsEnabled: false },
       routes: isProduction
-        ? [{ pattern: "stumble.akompella.dev/*", zoneName: "akompella.dev" }]
+        ? [{ pattern: productionRoute.pattern, zoneName: productionRoute.zone }]
         : [],
       cache: { enabled: false },
-      observability: {
-        enabled: true,
-        headSamplingRate: 1,
-        logs: { enabled: true, headSamplingRate: 1, invocationLogs: true, persist: true },
-        traces: { enabled: isProduction, headSamplingRate: 1, persist: true },
-        issues: { enabled: true },
-      },
+      observability: observability(isProduction),
       env: {
         ...plainTextBindings,
         SUPERVISOR: Cloudflare.DurableObject(durableObjectClasses.SUPERVISOR),
@@ -44,8 +42,8 @@ export default Alchemy.Stack(
           containers: [
             Cloudflare.Container("app", {
               schedulingPolicy: "durable_object",
-              dockerfile: "containers/computerd.Dockerfile",
-              context: ".",
+              dockerfile: workspaceContainer.dockerfile,
+              context: workspaceContainer.context,
             }),
           ],
         }),
