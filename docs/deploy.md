@@ -260,8 +260,10 @@ provider is connected, the instance uses the Cloudflare container.
 2. Set it as the `ORB_PROVIDER_TOKEN` secret (see "Instance secrets"):
 
    ```sh
-   pnpm exec cf workers secrets update ORB_PROVIDER_TOKEN --worker cf-stumble --type secret_text --text "$(cat ~/.config/cf-stumble/orb-token)"
+   pnpm exec cf workers secrets update ORB_PROVIDER_TOKEN --worker cf-stumble --type secret_text < ~/.config/cf-stumble/orb-token
    ```
+
+   `cf` reads the value from stdin, so the token stays out of the command line.
 
 3. On the machine, build the workspace image from `containers/computerd.Dockerfile` for
    linux/amd64 as `cf-stumble-workspace:orbs`, or set `STUMBLE_IMAGE` to another tag.
@@ -274,6 +276,39 @@ provider is connected, the instance uses the Cloudflare container.
    ```
 
 The provider reconnects by itself after a deploy. It stops its container on SIGINT or SIGTERM.
+
+### Rootless podman on Linux (hp)
+
+hp runs the provider with `podman-dispatch.sh`. Rootless podman's host gateway is not the host's
+loopback, so the script runs the container on `pasta` with `--map-host-loopback`, and
+`computer.internal` reaches the provider's `127.0.0.1` listener.
+
+1. Build the image: `podman build --platform linux/amd64 -f containers/computerd.Dockerfile -t cf-stumble-workspace:orbs .`
+2. Keep the token in `~/.config/cf-stumble/orb-provider-token` (mode 0600), and a wrapper
+   `~/.config/cf-stumble/orb-provider.sh` that reads it, so the token never appears in the unit or
+   the journal:
+
+   ```sh
+   #!/usr/bin/env bash
+   set -euo pipefail
+   STUMBLE_ORB_TOKEN="$(cat "$HOME/.config/cf-stumble/orb-provider-token")"
+   export STUMBLE_ORB_TOKEN
+   cd /path/to/cf-stumble
+   exec pnpm stumble orb provider src/stumble-cli/orb/podman-dispatch.sh
+   ```
+
+3. Run it as a user service, and check that it logs `connected to the Workspace Host`:
+
+   ```sh
+   systemd-run --user --unit stumble-orb --property=Restart=always --property=RestartSec=5 \
+     --setenv=PATH="$PATH" --setenv=STUMBLE_ORB_URL=https://stumble.akompella.dev \
+     ~/.config/cf-stumble/orb-provider.sh
+   journalctl --user -u stumble-orb
+   ```
+
+The user needs lingering (`loginctl show-user $USER -p Linger`) for the service to outlive a
+logout. A `systemd-run` unit is transient: it does not come back after a reboot. Stop it with
+`systemctl --user stop stumble-orb`; the instance then uses the Cloudflare container.
 
 Without the secret, `/orb/provider` and `/orb/computerd` answer 401 to every request. No route
 mints or shows the token, and a workspace reset leaves it in place. To revoke a machine, set a new
