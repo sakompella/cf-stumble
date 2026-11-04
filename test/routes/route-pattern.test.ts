@@ -8,10 +8,9 @@ import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspac
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 
 function spyOnWorkspaceLookups() {
-  return replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "project" | "reset">>(
-    env.WORKSPACE_HOST,
-    new FakeTenantWorkspace(),
-  );
+  return replaceWorkspaceHost<
+    Omit<SupervisorWorkspaceHost, "project" | "reset" | "backend" | "setBackend">
+  >(env.WORKSPACE_HOST, new FakeTenantWorkspace());
 }
 
 afterEach(async () => {

@@ -79,7 +79,8 @@ finding otherwise, and exits 1 on any finding or `unknown`.
 - Workers Logs (`workers/observability/telemetry/query`): every fetch invocation of the Worker, with
   its end time, `$workers.wallTimeMs`, and URL, from one idle limit before the window starts. Only
   owner API routes that can reach the workspace count as work. `src/routes/route-pattern.ts` lists
-  each route as `record-only` (status, project list, GitHub and ChatGPT connection, and a
+  each route as `record-only` (status, project list, GitHub and ChatGPT connection, the backend
+  setting (a change stops the container and never keeps it awake), and a
   project's events, abort and fresh thread: the Supervisor and the facet answer without the
   workspace; the page keeps an events stream open) or `workspace` (messages, disconnect, connect,
   GitHub refresh and authorization, generation submit, activate and rollback, workspace reset). The page and Durable Object fetches never reach the

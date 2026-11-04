@@ -12,8 +12,10 @@ import {
 } from "./startup-check/index.js";
 import { supervisorParts, type SupervisorParts } from "./supervisor-parts.js";
 import type {
+  BackendSetting,
   ResetWorkspaceNamespace,
   SupervisorEnv,
+  SupervisorWorkspaceBackendChange,
   SupervisorWorkspaceReset,
 } from "./supervisor-env.js";
 
@@ -98,6 +100,19 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     } finally {
       this.#resetInProgress = false;
     }
+  }
+
+  getWorkspaceBackend(): Promise<BackendSetting> {
+    return this.env.WORKSPACE_HOST.getByName(this.#parts.workspaceName).backend();
+  }
+
+  setWorkspaceBackend(setting: BackendSetting): Promise<SupervisorWorkspaceBackendChange> {
+    if (this.#resetInProgress) return Promise.resolve(WORKSPACE_BUSY);
+
+    if (this.#parts.serving.running())
+      return Promise.resolve({ ok: false, problem: { code: "run-active" } });
+
+    return this.env.WORKSPACE_HOST.getByName(this.#parts.workspaceName).setBackend(setting);
   }
 
   connectProject(repositoryUrl: string, displayName: string | undefined, now: number = Date.now()) {

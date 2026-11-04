@@ -70,6 +70,8 @@ export function ownerApiSupervisor(
     resetWorkspace() {
       return Promise.resolve({ ok: true, reset: "workspace" });
     },
+    getWorkspaceBackend: () => Promise.resolve("provider"),
+    setWorkspaceBackend: (backend) => Promise.resolve({ ok: true, backend }),
     ...chatgptSupervisor,
     ...overrides,
   };

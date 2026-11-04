@@ -1,6 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import { runAtEntryPoint } from "../run-entry-point.js";
+import {
+  chooseProviderPort,
+  readBackendSetting,
+  writeBackendSetting,
+  type BackendSetting,
+  type WorkspaceBackendChange,
+} from "../backend-setting.js";
 import { afterIdleStop, trackedWork, WorkspaceIdleController } from "./idle-controller.js";
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import {
@@ -45,7 +52,9 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
-    this.#platform = new WorkspacePlatform(ctx, env.ORB_PROVIDER_TOKEN);
+    this.#platform = new WorkspacePlatform(ctx, env.ORB_PROVIDER_TOKEN, (connectedEgressPort) =>
+      chooseProviderPort(readBackendSetting(ctx.storage.kv), connectedEgressPort),
+    );
     this.#idle = new WorkspaceIdleController({
       nowMs: () => Date.now(),
       idleLimitMs: WORKSPACE_IDLE_STOP_MS,
@@ -90,16 +99,43 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return this.#unlessResetting(CREDENTIAL_REFUSED, () => this.#surfaces().credential(request));
   }
 
+  backend(): Promise<BackendSetting> {
+    return Promise.resolve(readBackendSetting(this.ctx.storage.kv));
+  }
+
+  setBackend(setting: BackendSetting): Promise<WorkspaceBackendChange> {
+    if (this.#resetting || this.#idle.snapshot().inFlight > 0)
+      return Promise.resolve(WORKSPACE_BUSY);
+
+    if (setting === readBackendSetting(this.ctx.storage.kv))
+      return Promise.resolve({ ok: true, backend: setting });
+
+    return this.#tracked(() =>
+      Effect.promise(async () => {
+        writeBackendSetting(this.ctx.storage.kv, setting);
+
+        if (this.#platform.containerRunning()) {
+          await this.#platform.workspace.close();
+          await this.#platform.stopContainer("idle");
+        }
+
+        return { ok: true, backend: setting } as const;
+      }),
+    );
+  }
+
   reset(): Promise<WorkspaceResetResult> {
     if (this.#resetting || this.#idle.snapshot().inFlight > 0)
       return Promise.resolve(WORKSPACE_BUSY);
 
     this.#resetting = true;
+    const backend = readBackendSetting(this.ctx.storage.kv);
 
     return this.#tracked(() =>
       resetWorkspaceStorage(this.ctx.storage, () => this.#platform.stopContainer("reset")).pipe(
         Effect.ensuring(
           Effect.sync(() => {
+            writeBackendSetting(this.ctx.storage.kv, backend);
             this.#platform.renewWorkspace();
 
             this.#idle.forgetAlarm();

@@ -29,10 +29,9 @@ export function ownerSession() {
 export function stubExternalBoundaries<Workspace extends FakeTenantWorkspace>(
   workspace: Workspace,
 ): Workspace {
-  replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "project" | "reset">>(
-    env.WORKSPACE_HOST,
-    workspace,
-  );
+  replaceWorkspaceHost<
+    Omit<SupervisorWorkspaceHost, "project" | "reset" | "backend" | "setBackend">
+  >(env.WORKSPACE_HOST, workspace);
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     Promise.resolve(new Response("{}", { status: 404 })),
   );

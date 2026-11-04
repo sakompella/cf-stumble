@@ -26,7 +26,10 @@ export async function servingGeneration1(
   name: string,
   workspace: ProjectWorkspace,
 ): Promise<Control> {
-  replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "reset">>(env.WORKSPACE_HOST, workspace);
+  replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "reset" | "backend" | "setBackend">>(
+    env.WORKSPACE_HOST,
+    workspace,
+  );
 
   const control = await connectedSupervisor(name);
 

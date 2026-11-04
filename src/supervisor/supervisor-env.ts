@@ -5,6 +5,7 @@ import type {
   ProjectWorkspaceNamespace,
   ProvisionWorkspaceNamespace,
 } from "./projects/index.js";
+import type { BackendSetting, WorkspaceBackendChange } from "../backend-setting.js";
 import type {
   HarnessProvisionWorkspaceNamespace,
   WorkspaceResetResult,
@@ -19,6 +20,17 @@ export type SupervisorWorkspaceReset =
   | WorkspaceResetResult
   | Readonly<{ ok: false; problem: Readonly<{ code: "run-active" }> }>;
 
+export type { BackendSetting };
+
+export type BackendWorkspaceHost = Readonly<{
+  backend(): Promise<BackendSetting>;
+  setBackend(setting: BackendSetting): Promise<WorkspaceBackendChange>;
+}>;
+
+export type SupervisorWorkspaceBackendChange =
+  | WorkspaceBackendChange
+  | Readonly<{ ok: false; problem: Readonly<{ code: "run-active" }> }>;
+
 type HostOf<Namespace extends Readonly<{ getByName(name: string): object }>> = ReturnType<
   Namespace["getByName"]
 >;
@@ -29,7 +41,8 @@ export type SupervisorWorkspaceHost = HostOf<BuildWorkspaceNamespace> &
   HostOf<ProvisionWorkspaceNamespace> &
   HostOf<ProjectRemovalWorkspaceNamespace> &
   HostOf<HarnessProvisionWorkspaceNamespace> &
-  ResetWorkspaceHost;
+  ResetWorkspaceHost &
+  BackendWorkspaceHost;
 
 export type SupervisorEnv = {
   readonly LOADER: WorkerLoader;

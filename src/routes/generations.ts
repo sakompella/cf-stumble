@@ -1,6 +1,11 @@
 import * as Effect from "effect/Effect";
 import type { HarnessCommit } from "../harness-commit.js";
-import { GenerationControlTarget, GenerationSubmissionRequest } from "../generation-requests.js";
+import {
+  generationStatusView,
+  GenerationControlTarget,
+  GenerationSubmissionRequest,
+  type ActiveGeneration,
+} from "../generation-requests.js";
 import {
   type ActivationCommand,
   type ControlProblemCode,
@@ -9,7 +14,19 @@ import {
   type Submission,
 } from "../supervisor/generations.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
-import { callSupervisor, decodeRequestBody, jsonError } from "./json.js";
+import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
+
+export type GenerationStatusSupervisor = {
+  readonly getActiveGeneration: () => Promise<ActiveGeneration>;
+};
+
+export function statusResponse(
+  supervisor: GenerationStatusSupervisor,
+): Effect.Effect<Response, SupervisorCallFailed> {
+  return callSupervisor(() => supervisor.getActiveGeneration()).pipe(
+    Effect.map((active) => Response.json({ activeGeneration: generationStatusView(active) })),
+  );
+}
 
 export type GenerationControlSupervisor = {
   readonly controlGeneration: (command: ActivationCommand) => Promise<GenerationControlResult>;
