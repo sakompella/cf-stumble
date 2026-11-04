@@ -1,6 +1,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import { GENERATION_REPLACED } from "./generation-replaced.js";
 import { chatgptTurn, type ChatGPTAccess, type ChatGPTCredential } from "./chatgpt/index.js";
 import { parseRequest, type RouteWire, type ValidationFailure } from "./model-route-request.js";
 import { workersAiTurn } from "./model-route-stream.js";
@@ -19,6 +20,7 @@ export type { ModelStreamEvent, ModelUsage, ToolCallDelta } from "./model-route-
 
 type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{
+    admitModelTurn(instance: number): Promise<boolean>;
     chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
     markChatGPTRefused(accessToken: string): Promise<void>;
     markChatGPTUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
@@ -31,14 +33,19 @@ type ModelRouteEnv = Readonly<{
   CHATGPT_MODEL: string;
 }>;
 
-export type ModelRouteProps = Readonly<{ supervisor: string }>;
+export type ModelRouteProps = Readonly<{ supervisor: string; instance: number }>;
 
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps> {
-  runStream(request: RouteWire): ReadableStream<Uint8Array> | ValidationFailure {
+  async runStream(request: RouteWire): Promise<ReadableStream<Uint8Array> | ValidationFailure> {
     const parsed = parseRequest(request);
 
     if (Result.isFailure(parsed)) return parsed.failure;
     const validated = parsed.success;
+    const holder = this.env.SUPERVISOR.getByName(this.ctx.props.supervisor);
+
+    if (!(await holder.admitModelTurn(this.ctx.props.instance))) {
+      return { ok: false, error: { code: "invalid-request", reason: GENERATION_REPLACED } };
+    }
 
     const workersAi = workersAiTurn(
       { run: (model, input, signal) => this.env.AI.run(model, input, { signal }) },
@@ -47,7 +54,7 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
 
     const chatgpt = chatgptTurn(
       {
-        credential: this.#chatgptCredential(),
+        credential: chatgptCredential(holder),
         fetcher: (url, init) => fetch(url, init),
         model: this.env.CHATGPT_MODEL,
       },
@@ -68,15 +75,13 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
 
     return modelEventStream(turn);
   }
+}
 
-  #chatgptCredential(): ChatGPTCredential {
-    const holder = this.env.SUPERVISOR.getByName(this.ctx.props.supervisor);
-
-    return {
-      access: (rejected) => holder.chatgptAccess(rejected),
-      markRefused: (accessToken) => holder.markChatGPTRefused(accessToken),
-      markUsageLimited: (accessToken, limitedUntil) =>
-        holder.markChatGPTUsageLimited(accessToken, limitedUntil),
-    };
-  }
+function chatgptCredential(holder: ReturnType<CredentialHolders["getByName"]>): ChatGPTCredential {
+  return {
+    access: (rejected) => holder.chatgptAccess(rejected),
+    markRefused: (accessToken) => holder.markChatGPTRefused(accessToken),
+    markUsageLimited: (accessToken, limitedUntil) =>
+      holder.markChatGPTUsageLimited(accessToken, limitedUntil),
+  };
 }

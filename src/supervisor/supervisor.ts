@@ -145,6 +145,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.#parts.chatgpt.disconnect();
   }
 
+  admitModelTurn(instance: number): boolean {
+    return this.#parts.serving.admitModelTurn(instance);
+  }
+
   chatgptAccess(rejected?: string) {
     return runAtEntryPoint(this.#parts.chatgpt.access(rejected));
   }

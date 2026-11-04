@@ -12,6 +12,7 @@ import {
   type GenerationOperations,
   type GenerationStatusView,
 } from "../../generation-requests.js";
+import { whileServing } from "../../generation-replaced.js";
 import type { GenerationControlResult, Submission } from "../generations.js";
 import type { StartupCheckResult } from "../startup-check/index.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
@@ -95,29 +96,56 @@ function whenValid<I, A>(input: Option.Option<I>, call: (value: I) => A | Promis
 
 export class GenerationHostTarget extends RpcTarget implements GenerationControl {
   readonly #operations: GenerationOperations;
+  readonly #serves: () => boolean;
 
-  constructor(operations: GenerationOperations) {
+  constructor(operations: GenerationOperations, serves: () => boolean) {
     super();
     this.#operations = operations;
+    this.#serves = serves;
   }
 
-  async generationStatus(): Promise<GenerationStatusView> {
-    return generationStatusView(await this.#operations.getActiveGeneration());
+  generationStatus(): Promise<GenerationStatusView> {
+    return whileServing(this.#serves, async () =>
+      generationStatusView(await this.#operations.getActiveGeneration()),
+    );
   }
 
   submitGeneration(harnessCommit: Schema.Json): Promise<Submission> {
-    return whenValid(readSubmission({ harnessCommit }), (request) =>
-      this.#operations.submitGeneration(request.harnessCommit),
+    return whileServing(this.#serves, () =>
+      whenValid(readSubmission({ harnessCommit }), (request) =>
+        this.#operations.submitGeneration(request.harnessCommit),
+      ),
     );
   }
 
   prepareGeneration(label: Schema.Json): Promise<StartupCheckResult> {
-    return whenValid(readLabel(label), (checked) => this.#operations.prepareGeneration(checked));
+    return whileServing(this.#serves, () =>
+      whenValid(readLabel(label), (checked) => this.#operations.prepareGeneration(checked)),
+    );
   }
 
   controlGeneration(command: Schema.Json): Promise<GenerationControlResult> {
-    return whenValid(readControl(command), (checked) =>
-      this.#operations.controlGeneration(checked),
+    return whileServing(this.#serves, () =>
+      whenValid(readControl(command), (checked) => this.#operations.controlGeneration(checked)),
     );
   }
+}
+
+export type HostTargets = Readonly<{
+  host: ConversationHostTarget;
+  generations: GenerationHostTarget;
+}>;
+
+export function servingHosts(
+  ports: HostPorts,
+  generations: GenerationOperations,
+  serves: () => boolean,
+): HostTargets {
+  return {
+    host: new ConversationHostTarget({
+      ...ports,
+      workspace: (conversationId) => whileServing(serves, () => ports.workspace(conversationId)),
+    }),
+    generations: new GenerationHostTarget(generations, serves),
+  };
 }

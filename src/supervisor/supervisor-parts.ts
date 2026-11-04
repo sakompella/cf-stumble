@@ -10,7 +10,7 @@ import { FACET_COMPATIBILITY } from "../facet-compatibility.js";
 import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, type MainFacetCapabilities } from "./artifacts/index.js";
-import { GenerationHostTarget, ServingConversations } from "./conversations/index.js";
+import { ServingConversations } from "./conversations/index.js";
 import { obtainProjectWorkspace, obtainScratchWorkspace } from "./obtain-workspace.js";
 import { supervisorNames, type SupervisorEnv } from "./supervisor-env.js";
 
@@ -53,8 +53,8 @@ export function supervisorParts(
     env.WORKSPACE_HOST.getByName(workspaceName),
   );
 
-  const modelRoute = (): MainFacetCapabilities["MODEL"] =>
-    ctx.exports.ModelRoute({ props: { supervisor: name } });
+  const modelRoute = (instance: number): MainFacetCapabilities["MODEL"] =>
+    ctx.exports.ModelRoute({ props: { supervisor: name, instance } });
 
   const { github, connections } = projectParts(ctx.storage, env, workspaceName);
 
@@ -76,15 +76,15 @@ export function supervisorParts(
     connections,
     serving: new ServingConversations({
       ctx,
-      mount: () =>
+      mount: (instance) =>
         Effect.fromResult(
-          artifacts.mount(generations.active(), env.LOADER, ctx.facets, modelRoute()),
+          artifacts.mount(generations.active(), env.LOADER, ctx.facets, modelRoute(instance)),
         ),
       catalog: () => connections.catalog(),
       resetting,
       obtainWorkspace: (project, remainingMs, signal) =>
         obtainProjectWorkspace(sources, project, remainingMs, signal),
-      generations: new GenerationHostTarget(generationOperations),
+      generations: generationOperations,
     }),
     chatgpt: new ChatGPTConnection({
       store: new ChatGPTCredentialStore(ctx.storage),

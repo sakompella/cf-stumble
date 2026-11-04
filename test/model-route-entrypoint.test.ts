@@ -1,6 +1,7 @@
 import { exports as workerExports } from "cloudflare:workers";
 import { createExecutionContext } from "cloudflare:test";
 import { expect, test } from "vitest";
+import { GENERATION_REPLACED } from "../src/generation-replaced.js";
 import { ModelRoute } from "../src/model-route.js";
 import {
   collectEvents,
@@ -34,9 +35,9 @@ function bindingStreaming(lines: readonly string[]): FakeBinding {
   return fakeAiBinding(() => Promise.resolve(providerStreamOfLines(lines)));
 }
 
-function supervisedRoute(binding: FakeBinding, access: ChatGPTAccess): ModelRoute {
+function supervisedRoute(binding: FakeBinding, access: ChatGPTAccess, serving = true): ModelRoute {
   const context = createExecutionContext();
-  Object.defineProperty(context, "props", { value: { supervisor: "owner" } });
+  Object.defineProperty(context, "props", { value: { supervisor: "owner", instance: 0 } });
 
   return new ModelRoute(context, {
     AI: binding.ai,
@@ -45,6 +46,7 @@ function supervisedRoute(binding: FakeBinding, access: ChatGPTAccess): ModelRout
         expect(name).toBe("owner");
 
         return {
+          admitModelTurn: (instance) => Promise.resolve(serving && instance === 0),
           chatgptAccess: () => Promise.resolve(access),
           markChatGPTRefused: () => Promise.resolve(),
           markChatGPTUsageLimited: () => Promise.resolve(),
@@ -59,19 +61,33 @@ function routeOver(binding: FakeBinding): ModelRoute {
   return supervisedRoute(binding, { kind: "not-connected" });
 }
 
-function streamOf(
-  outcome: ReadableStream<Uint8Array> | ValidationFailure,
-): ReadableStream<Uint8Array> {
+async function streamOf(
+  pending: Promise<ReadableStream<Uint8Array> | ValidationFailure>,
+): Promise<ReadableStream<Uint8Array>> {
+  const outcome = await pending;
+
   if (outcome instanceof ReadableStream) return outcome;
   throw new Error(`the entrypoint refused the request: ${outcome.error.reason}`);
 }
 
+test("a Supervisor's route refuses a facet whose serving instance was replaced, before any model call", async () => {
+  const binding = bindingStreaming([sseLine({ response: "ok" }), DONE_LINE]);
+  const route = supervisedRoute(binding, { kind: "not-connected" }, false);
+
+  expect(await route.runStream(REQUEST)).toEqual({
+    ok: false,
+    error: { code: "invalid-request", reason: GENERATION_REPLACED },
+  });
+
+  expect(binding.calls).toEqual([]);
+});
+
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
-test("a request that names its own model is refused as a plain value and never reaches the binding", () => {
+test("a request that names its own model is refused as a plain value and never reaches the binding", async () => {
   const binding = bindingStreaming([DONE_LINE]);
 
-  const outcome = routeOver(binding).runStream({
+  const outcome = await routeOver(binding).runStream({
     messages: [{ role: "user", content: "hi" }],
     model: "@cf/some/other-model",
   });
@@ -97,7 +113,7 @@ test("two tool calls the provider reports without an index stay two separate cal
     DONE_LINE,
   ]);
 
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
+  const events = await collectEvents(await streamOf(routeOver(binding).runStream(REQUEST)));
   expect(events.at(-1)).toMatchObject({
     type: "done",
     message: {
@@ -121,7 +137,7 @@ test("the deployed entrypoint refuses a bad runStream request across its own ser
 test("with no ChatGPT credential connected, the Supervisor's route answers from Workers AI", async () => {
   const binding = bindingStreaming([sseLine({ response: "fallback" }), DONE_LINE]);
 
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
+  const events = await collectEvents(await streamOf(routeOver(binding).runStream(REQUEST)));
 
   expect(binding.calls).toHaveLength(1);
   expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "fallback" } });
@@ -131,7 +147,7 @@ test("a Supervisor's route sends the binding the normalized messages", async () 
   const binding = bindingStreaming([sseLine({ response: "ok" }), DONE_LINE]);
 
   await collectEvents(
-    streamOf(
+    await streamOf(
       supervisedRoute(binding, { kind: "not-connected" }).runStream({
         messages: [{ role: "user", content: "hi", name: "owner" }],
       }),
@@ -147,7 +163,7 @@ test("a ChatGPT grant that needs a reconnect fails the call and never falls back
   const binding = bindingStreaming([sseLine({ response: "fallback" }), DONE_LINE]);
 
   const events = await collectEvents(
-    streamOf(supervisedRoute(binding, { kind: "reconnect-required" }).runStream(REQUEST)),
+    await streamOf(supervisedRoute(binding, { kind: "reconnect-required" }).runStream(REQUEST)),
   );
 
   expect(events).toEqual([{ type: "error", error: { code: "chatgpt-reconnect-required" } }]);
@@ -175,7 +191,7 @@ test("a Workers AI answer cut off at max_tokens ends with a truncated done", asy
     DONE_LINE,
   ]);
 
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
+  const events = await collectEvents(await streamOf(routeOver(binding).runStream(REQUEST)));
   expect(events.at(-1)).toMatchObject({ type: "done", truncated: true });
 });
 
@@ -185,7 +201,7 @@ test("a Workers AI answer that stops on its own ends with a done that is not tru
     DONE_LINE,
   ]);
 
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
+  const events = await collectEvents(await streamOf(routeOver(binding).runStream(REQUEST)));
   expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "ok" } });
   expect(events.at(-1)).not.toHaveProperty("truncated");
 });
