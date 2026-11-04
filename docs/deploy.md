@@ -302,18 +302,25 @@ loopback, so the script runs the container on `pasta` with `--map-host-loopback`
    exec pnpm stumble orb provider src/stumble-cli/orb/podman-dispatch.sh
    ```
 
-3. Run it as a user service, and check that it logs `connected to the Workspace Host`:
+3. Run it as a user service. Put this in `~/.config/systemd/user/stumble-orb.service`, run
+   `systemctl --user enable --now stumble-orb`, and check that `journalctl --user -u stumble-orb`
+   logs `connected to the Workspace Host`:
 
-   ```sh
-   systemd-run --user --unit stumble-orb --property=Restart=always --property=RestartSec=5 \
-     --setenv=PATH="$PATH" --setenv=STUMBLE_ORB_URL=https://stumble.akompella.dev \
-     ~/.config/cf-stumble/orb-provider.sh
-   journalctl --user -u stumble-orb
+   ```ini
+   [Service]
+   Environment="PATH=%h/.nix-profile/bin:/etc/profiles/per-user/%u/bin:/run/wrappers/bin:/run/current-system/sw/bin"
+   Environment="STUMBLE_ORB_URL=https://stumble.akompella.dev"
+   ExecStart=%h/.config/cf-stumble/orb-provider.sh
+   Restart=always
+   RestartSec=5s
+
+   [Install]
+   WantedBy=default.target
    ```
 
-The user needs lingering (`loginctl show-user $USER -p Linger`) for the service to outlive a
-logout. A `systemd-run` unit is transient: it does not come back after a reboot. Stop it with
-`systemctl --user stop stumble-orb`; the instance then uses the Cloudflare container.
+The user needs lingering (`loginctl show-user $USER -p Linger`) for the service to start at boot
+and outlive a logout. Stop it with `systemctl --user stop stumble-orb`; the instance then uses the
+Cloudflare container.
 
 Without the secret, `/orb/provider` and `/orb/computerd` answer 401 to every request. No route
 mints or shows the token, and a workspace reset leaves it in place. To revoke a machine, set a new
