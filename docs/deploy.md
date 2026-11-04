@@ -31,7 +31,7 @@ Run Alchemy from the repository root, because the stack names its files relative
 
 - `pnpm run deploy` writes the owner page's script with `pnpm run build:page` and deploys the stage `prod`. Alchemy does not run a build command of its own, so a deploy of another stage needs `pnpm run build:page` first.
 - `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod` lists what a deploy would change, and changes nothing.
-- `pnpm alchemy logs --config infra/alchemy.run.ts --stage prod --tail` streams the Worker's logs. `pnpm exec wrangler tail cf-stumble --format json` also works and gives JSON.
+- `pnpm alchemy logs --config infra/alchemy.run.ts --stage prod --tail` streams the Worker's logs.
 - `pnpm alchemy destroy --config infra/alchemy.run.ts --stage <stage>` deletes a stage's Worker and container application.
 
 Alchemy keeps what it deployed for each stage in the account, in a Worker named `alchemy-state-store` (ADR-0049). The first `plan` or `deploy` on an account creates that Worker and two secrets in the account's default Secrets Store, and saves its address and token under `~/.alchemy/profiles/`. Any machine with credentials for the account reads the same state. Do not delete the state store while a stage exists: Alchemy then forgets what it deployed, and the next deploy must pass `--adopt` to take the existing resources back.

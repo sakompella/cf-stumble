@@ -50,8 +50,7 @@ run `pnpm build:page` before `pnpm typecheck` or `pnpm test` alone. The page is 
 code, not part of a generation's module map.
 
 **Budgets.** `tools/bundle-budgets.test.ts`, in `pnpm test:tools`, measures the Worker bundle that
-`wrangler deploy src/worker.ts --dry-run` writes with the compatibility settings in
-`infra/worker-settings.ts`, and the page script, both gzipped, and fails above its limits. Alchemy
+esbuild bundles from `src/worker.ts` (the `workerd`, `worker` and `browser` conditions, `cloudflare:` and `node:` imports external), and the page script, both gzipped, and fails above its limits. Alchemy
 bundles the deployed Worker with Rolldown, so the measured bundle stands in for the upload. The limits sit about 10 percent above the measured sizes. The real constraint on
 the Worker is startup time, which only a staged deploy measures.
 
