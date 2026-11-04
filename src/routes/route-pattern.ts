@@ -18,6 +18,7 @@ const API_ROUTES: ReadonlyMap<string, RouteClass> = new Map([
   ["/api/generations/activate", "workspace"],
   ["/api/generations/rollback", "workspace"],
   ["/api/workspace/reset", "workspace"],
+  ["/api/workspace/backend", "record-only"],
 ]);
 
 const PROJECT_ROUTE_SUFFIXES = [

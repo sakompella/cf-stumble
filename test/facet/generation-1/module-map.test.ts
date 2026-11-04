@@ -14,7 +14,10 @@ afterEach(async () => {
 });
 
 async function checkedWith(name: string, workspace: ProjectWorkspace) {
-  replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "reset">>(env.WORKSPACE_HOST, workspace);
+  replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "reset" | "backend" | "setBackend">>(
+    env.WORKSPACE_HOST,
+    workspace,
+  );
   const control = env.SUPERVISOR.getByName(name);
   const label = await submitCandidate(control, GENERATION_1_COMMIT);
   const moduleMap = await builtGeneration(GENERATION_1_COMMIT);

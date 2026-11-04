@@ -11,6 +11,7 @@ type ApiErrorCode =
   | "invalid-events-request"
   | "invalid-entries-request"
   | "invalid-chatgpt-request"
+  | "invalid-backend-request"
   | "cross-origin-request"
   | "not-found"
   | "internal-error";

@@ -36,14 +36,20 @@ export class WorkspacePlatform {
   readonly #providerContainer: ProviderContainerAPI;
   readonly #state: DurableObjectState;
   readonly #providerToken: string | undefined;
+  readonly #chooseProviderPort: (connectedEgressPort: number | undefined) => number | undefined;
   readonly #platformContainer: DurableObjectState["container"];
   readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   #providerBackend: ProviderBackend | undefined;
   #workspace: Workspace;
 
-  constructor(state: DurableObjectState, providerToken: string | undefined) {
+  constructor(
+    state: DurableObjectState,
+    providerToken: string | undefined,
+    chooseProviderPort: (connectedEgressPort: number | undefined) => number | undefined,
+  ) {
     this.#state = state;
+    this.#chooseProviderPort = chooseProviderPort;
     this.#providerToken = providerToken;
     this.#platformContainer = state.container;
     this.provider = new ProviderLink(state);
@@ -118,7 +124,7 @@ export class WorkspacePlatform {
       type: this.#containerBackend.type,
       description: this.#containerBackend.description,
       connect: () => {
-        const egressPort = this.provider.egressPort();
+        const egressPort = this.#chooseProviderPort(this.provider.egressPort());
 
         logEvent("info", "workspace.backend.chosen", {
           container: egressPort === undefined ? "cloudflare" : "provider",

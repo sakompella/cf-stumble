@@ -255,6 +255,11 @@ A machine you own, such as a Mac with OrbStack, can run the workspace container 
 (ADR-0050). The machine opens every connection itself, so it needs no inbound port. While no
 provider is connected, the instance uses the Cloudflare container.
 
+The page's "Workspace container" control (`GET`/`POST /api/workspace/backend`) picks the backend.
+`provider` is the default: use a connected provider, else Cloudflare. `cloudflare` always uses the
+Cloudflare container, even while a provider is connected. A change stops a running container, so the
+next command starts on the chosen backend. It is refused while a run is active.
+
 1. Make a random token and keep it in a file outside the repository, for example
    `openssl rand -hex 32 > ~/.config/cf-stumble/orb-token`.
 2. Set it as the `ORB_PROVIDER_TOKEN` secret (see "Instance secrets"):

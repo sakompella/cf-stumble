@@ -1,10 +1,11 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../diagnostics.js";
-import { generationStatusView, type ActiveGeneration } from "../generation-requests.js";
 import {
   handleGenerationControl,
   handleGenerationSubmission,
+  statusResponse,
+  type GenerationStatusSupervisor,
   type GenerationControlSupervisor,
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
@@ -12,6 +13,10 @@ import { routeChatGPTApiRequest, type ChatGPTApiSupervisor } from "./chatgpt.js"
 import { callSupervisor, jsonError, SupervisorCallFailed } from "./json.js";
 import { routePattern } from "./route-pattern.js";
 import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
+import {
+  routeWorkspaceBackendRequest,
+  type WorkspaceBackendApiSupervisor,
+} from "./workspace-backend.js";
 import { routeConversationRequest, type ConversationApiSupervisor } from "./conversations.js";
 
 type WorkspaceResetResult =
@@ -22,11 +27,12 @@ type WorkspaceResetResult =
     }>;
 
 export type OwnerApiSupervisor = ChatGPTApiSupervisor &
+  GenerationStatusSupervisor &
   GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
   ProjectApiSupervisor &
-  ConversationApiSupervisor & {
-    readonly getActiveGeneration: () => Promise<ActiveGeneration>;
+  ConversationApiSupervisor &
+  WorkspaceBackendApiSupervisor & {
     readonly resetWorkspace: () => Promise<WorkspaceResetResult>;
   };
 
@@ -35,14 +41,6 @@ function workspaceResetResponse(
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.resetWorkspace()).pipe(
     Effect.map((reset) => Response.json(reset, { status: reset.ok ? 200 : 409 })),
-  );
-}
-
-function statusResponse(
-  supervisor: OwnerApiSupervisor,
-): Effect.Effect<Response, SupervisorCallFailed> {
-  return callSupervisor(() => supervisor.getActiveGeneration()).pipe(
-    Effect.map((active) => Response.json({ activeGeneration: generationStatusView(active) })),
   );
 }
 
@@ -81,6 +79,12 @@ function ownerApiRoute(
 
   if (conversationRoute !== undefined) {
     return conversationRoute;
+  }
+
+  const backendRoute = routeWorkspaceBackendRequest(request, supervisor);
+
+  if (backendRoute !== undefined) {
+    return backendRoute;
   }
 
   const chatgptRoute = routeChatGPTApiRequest(request, supervisor);

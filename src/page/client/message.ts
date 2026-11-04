@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
+import { BackendSetting } from "../../backend-setting.js";
 import { Conversation } from "./conversation.js";
 import {
   ChatGPTConnection,
@@ -20,6 +21,7 @@ export const Message = defineMessageUnion({
   UpdatedChatGPTCallbackInput: { value: Schema.String },
   ClickedChatGPTFinish: {},
   ClickedChatGPTDisconnect: {},
+  ClickedBackend: { backend: BackendSetting },
 
   UpdatedPrompt: { value: Schema.String },
   ClickedSendTurn: {},
@@ -55,6 +57,10 @@ export const Message = defineMessageUnion({
   SucceededChatGPT: { chatgpt: ChatGPTConnection },
   RejectedChatGPT: { wording: Schema.String, maybeChatGPT: Schema.Option(ChatGPTConnection) },
   FailedChatGPT: { detail: Schema.String },
+
+  SucceededBackend: { backend: BackendSetting },
+  RejectedBackend: { wording: Schema.String },
+  FailedBackend: { detail: Schema.String },
 
   MintedRequestId: { projectId: Schema.String, requestId: Schema.String, content: Schema.String },
   SucceededSend: { requestId: Schema.String, submissionId: Schema.Number },

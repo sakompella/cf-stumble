@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
+import { BackendSetting } from "../../backend-setting.js";
 import { Conversation } from "./conversation.js";
 import { OutboxItem } from "./outbox.js";
 
@@ -108,6 +109,8 @@ export const Model = Schema.Struct({
   chatgpt: ChatGPTConnection,
   chatgptCallbackInput: Schema.String,
   chatgptResult: Schema.String,
+  maybeBackend: Schema.Option(BackendSetting),
+  backendResult: Schema.String,
 
   maybeProjectId: Schema.Option(Schema.String),
   conversationProject: Schema.String,

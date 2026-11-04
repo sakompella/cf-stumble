@@ -4,6 +4,7 @@ import { OWNER_PAGE_CLASSES as CLASS, OWNER_PAGE_IDS as ID } from "../element-id
 import { Message } from "./message.js";
 import type { Model, Project } from "./model.js";
 import { conversationView } from "./view-conversation.js";
+import { backendPanel } from "./view-backend.js";
 import { chatGPTPanel } from "./view-chatgpt.js";
 import { generationBarView } from "./view-generation.js";
 import { controlRow, valueRow } from "./view-parts.js";
@@ -127,6 +128,7 @@ function sidebarView(model: Model, h: HtmlBuilder<Message>): Html {
           ),
           gitHubPanel(model, h),
           chatGPTPanel(model, h),
+          backendPanel(model, h),
           connectPanel(model, h),
         ],
       ),

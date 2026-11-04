@@ -13,6 +13,8 @@ import type { GitHubReport, Model, Project } from "./model.js";
 import { EMPTY_CONVERSATION } from "./conversation.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
+export { backendHandlers, FetchBackend } from "./update-backend.js";
+
 function withGitHub(model: Model, report: GitHubReport): Model {
   const github =
     report._tag === "Known"
