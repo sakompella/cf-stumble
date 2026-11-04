@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { after, describe, it } from "node:test";
+import { resolve } from "node:path";
+import { describe, it } from "node:test";
 import { gzipSync } from "node:zlib";
-import { compatibility } from "../infra/worker-settings.ts";
+import { build } from "esbuild";
 import { OWNER_PAGE_SCRIPT_SOURCE } from "../src/page/owner-script.generated.ts";
 
 const KIB = 1024;
@@ -16,44 +13,26 @@ const OWNER_SCRIPT_GZIP_LIMIT = 240 * KIB;
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
-const outdir = mkdtempSync(join(tmpdir(), "cf-stumble-budget-"));
+async function workerUploadGzipBytes(): Promise<number> {
+  const bundled = await build({
+    entryPoints: [resolve(repoRoot, "src/worker.ts")],
+    bundle: true,
+    write: false,
+    format: "esm",
+    platform: "neutral",
+    target: "es2023",
+    mainFields: ["module", "main"],
+    conditions: ["workerd", "worker", "browser"],
+    external: ["cloudflare:*", "node:*"],
+    legalComments: "none",
+  });
 
-after(() => {
-  rmSync(outdir, { recursive: true, force: true });
-});
-
-function workerUploadGzipBytes(): number {
-  execFileSync(
-    "pnpm",
-    [
-      "exec",
-      "wrangler",
-      "deploy",
-      "src/worker.ts",
-      "--dry-run",
-      "--name",
-      "cf-stumble-budget",
-      "--compatibility-date",
-      compatibility.date,
-      ...compatibility.flags.flatMap((flag) => ["--compatibility-flags", flag]),
-      "--outdir",
-      outdir,
-    ],
-    { cwd: repoRoot, stdio: "pipe", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } },
-  );
-
-  const modules = readdirSync(outdir).filter((name) => name.endsWith(".js"));
-
-  assert.ok(modules.length > 0, "wrangler wrote no Worker module");
-
-  return modules
-    .map((name) => gzipSync(readFileSync(join(outdir, name))).length)
-    .reduce((total, size) => total + size, 0);
+  return bundled.outputFiles.reduce((total, file) => total + gzipSync(file.contents).length, 0);
 }
 
 describe("bundle budgets", () => {
-  it(`the Worker upload stays within ${WORKER_UPLOAD_GZIP_LIMIT / KIB} KiB gzip`, () => {
-    const size = workerUploadGzipBytes();
+  it(`the Worker upload stays within ${WORKER_UPLOAD_GZIP_LIMIT / KIB} KiB gzip`, async () => {
+    const size = await workerUploadGzipBytes();
 
     assert.ok(size <= WORKER_UPLOAD_GZIP_LIMIT, `the Worker upload is ${size} bytes gzip`);
   });

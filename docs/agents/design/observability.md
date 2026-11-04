@@ -50,11 +50,10 @@ appear only in Computer's own log lines and in the container metrics.
 
 ## Querying
 
-Stream live events with Wrangler. The first element of each log's `message` is the event object:
+Stream live events with Alchemy:
 
 ```sh
-pnpm exec wrangler tail cf-stumble --format json \
-  | jq -c '.logs[]?.message[0] | objects | select(.event? // "" | startswith("run."))'
+pnpm alchemy logs --config infra/alchemy.run.ts --stage prod --tail
 ```
 
 For past events, open the Cloudflare dashboard, Workers & Pages, `cf-stumble`, Observability, and
