@@ -101,7 +101,7 @@ export default defineConfig({
               name: workerName("test"),
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
-              bindings: plainTextBindings,
+              bindings: { ...plainTextBindings, OWNER_PASSWORD: "test-owner-password" },
               durableObjects: Object.fromEntries(
                 Object.entries(durableObjectClasses).map(([binding, className]) => [
                   binding,

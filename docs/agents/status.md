@@ -8,11 +8,11 @@ Production is the Worker `cf-stumble`, deployed by Alchemy since 2026-11-03: the
 
 On 2026-11-03 production runs `68f8397` (Pi Durable 1.5.0, no login), with generation 9 (`68f8397`, key `pi-durable@1.5.0/host-5`) active at epoch 31. Checked on production that day: `/` answered 200 with no login and a cross-origin POST answered 403; a harness turn wrote a file with `bash` and a later turn read it back; in the browser, "Load earlier messages" loaded older history, a streamed answer grew in place, and a reload during a running `bash` call showed the run as running and then answered. `pnpm ops:check` was not run: hp has no Cloudflare credential.
 
-Every request reaches one Supervisor named `owner`; a state-changing request from another origin is refused first (ADR-0051). GitHub is connected through the `GH_TOKEN` secret, and only the harness project exists. ChatGPT is not connected, so runs answer from Workers AI. Checked on production that day: a run with a `bash` tool call saved; a retried `requestId` returned the same submission; an abort answered in 0.9 s and killed a running `sleep 120` within about 2 s; the container stopped 600 s after the last run settled.
+Every request except `GET /health` needs HTTP Basic auth with the `OWNER_PASSWORD` secret (ADR-0051), and then reaches one Supervisor named `owner`. GitHub is connected through the `GH_TOKEN` secret, and only the harness project exists. ChatGPT is not connected, so runs answer from Workers AI. Checked on production that day: a run with a `bash` tool call saved; a retried `requestId` returned the same submission; an abort answered in 0.9 s and killed a running `sleep 120` within about 2 s; the container stopped 600 s after the last run settled.
 
 ## Decided outside an ADR
 
-- **No Cloudflare Access** (Aditya, 2026-10-30, so the Worker has no login; ADR-0051 keeps only the same-origin check on state-changing requests). State under the old per-identity Supervisor name was abandoned, and `GH_TOKEN` reinstalls the GitHub credential on the fresh workspace.
+- **No Cloudflare Access** (Aditya, 2026-10-30; Basic auth added 2026-11-03, ADR-0051). State under the old per-identity Supervisor name was abandoned, and `GH_TOKEN` reinstalls the GitHub credential on the fresh workspace.
 - **No Bombadil for now** (Aditya, 2026-09-28). Do not add it to `pnpm verify` or run a pilot.
 - **Skip Cloudflare Artifacts for now** (Aditya, 2026-10-02). See `design/computer-integration.md`, "Artifacts (deferred)".
 - **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance secrets".

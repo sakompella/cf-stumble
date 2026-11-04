@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import { ownerPageResponse, routeOrbRequest, routeOwnerApiRequest } from "./routes/index.js";
 import { runAtEntryPoint } from "./run-entry-point.js";
-import { crossOriginRefusal } from "./origin-guard.js";
+import { ownerGateRefusal } from "./owner-gate.js";
 import { Supervisor } from "./supervisor/supervisor.js";
 import { WorkspaceHost } from "./workspace/index.js";
 import { tenantWorkspaceName } from "./workspace-names.js";
@@ -53,14 +53,16 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
   );
 }
 
-function guardedRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Response> {
-  const refusal = crossOriginRefusal(request);
-
-  return refusal === undefined ? ownerRequest(request, env) : Effect.succeed(noStore(refusal));
+function gatedRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Response> {
+  return Effect.promise(() => ownerGateRefusal(request, env.OWNER_PASSWORD)).pipe(
+    Effect.flatMap((refusal) =>
+      refusal === undefined ? ownerRequest(request, env) : Effect.succeed(noStore(refusal)),
+    ),
+  );
 }
 
 export default {
   fetch(request: Request, env: Cloudflare.Env): Promise<Response> {
-    return runAtEntryPoint(Effect.suspend(() => guardedRequest(request, env)));
+    return runAtEntryPoint(Effect.suspend(() => gatedRequest(request, env)));
   },
 };
