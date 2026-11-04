@@ -33,12 +33,13 @@ function workersAi(text: string) {
 function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess) {
   const limited: (readonly [string, number | null])[] = [];
   const context = createExecutionContext();
-  Object.defineProperty(context, "props", { value: { supervisor: "owner" } });
+  Object.defineProperty(context, "props", { value: { supervisor: "owner", instance: 0 } });
 
   const route = new ModelRoute(context, {
     AI: ai,
     SUPERVISOR: {
       getByName: () => ({
+        admitModelTurn: () => Promise.resolve(true),
         chatgptAccess: () => Promise.resolve(access),
         markChatGPTRefused: () => Promise.resolve(),
         markChatGPTUsageLimited: (accessToken, limitedUntil) => {
@@ -54,7 +55,9 @@ function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess) {
   return { limited, events: () => eventsOf(route.runStream(REQUEST)) };
 }
 
-function eventsOf(outcome: ReturnType<ModelRoute["runStream"]>) {
+async function eventsOf(pending: ReturnType<ModelRoute["runStream"]>) {
+  const outcome = await pending;
+
   if (!(outcome instanceof ReadableStream)) throw new Error(outcome.error.reason);
 
   return collectEvents(outcome);

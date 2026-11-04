@@ -62,7 +62,7 @@ test("a generation holding the model route cannot reach its credential helper or
       entryModule: "main.js",
       modules: [{ name: "main.js", source: PROBING_GENERATION }],
     }),
-    { MODEL: workerExports.ModelRoute({ props: { supervisor } }) },
+    { MODEL: workerExports.ModelRoute({ props: { supervisor, instance: 0 } }) },
   );
 
   const response = await loaded.worker

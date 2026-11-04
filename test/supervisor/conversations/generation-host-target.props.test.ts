@@ -71,7 +71,10 @@ test("the generation host admits exactly the control commands the HTTP routes ad
     );
 
     await settled(() =>
-      new GenerationHostTarget(viaRpc.operations).controlGeneration({ kind: commandKind, ...body }),
+      new GenerationHostTarget(viaRpc.operations, () => true).controlGeneration({
+        kind: commandKind,
+        ...body,
+      }),
     );
 
     expect(viaRpc.reached).toStrictEqual(viaHttp.reached);
@@ -93,7 +96,7 @@ test("the generation host admits exactly the commits the HTTP submission admits,
     );
 
     await settled(() =>
-      new GenerationHostTarget(viaRpc.operations).submitGeneration(harnessCommit),
+      new GenerationHostTarget(viaRpc.operations, () => true).submitGeneration(harnessCommit),
     );
 
     expect(viaRpc.reached).toStrictEqual(viaHttp.reached);
@@ -103,7 +106,7 @@ test("the generation host admits exactly the commits the HTTP submission admits,
 test("the generation host refuses a malformed request without reaching the Supervisor", async () => {
   await hegel.testAsync(async (tc) => {
     const { reached, operations } = recording();
-    const host = new GenerationHostTarget(operations);
+    const host = new GenerationHostTarget(operations, () => true);
     const extra = tc.draw(gs.text({ minSize: 1, maxSize: 8 }));
     const otherKind = tc.draw(gs.text({ maxSize: 9 }));
 

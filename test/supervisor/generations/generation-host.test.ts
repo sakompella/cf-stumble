@@ -18,7 +18,7 @@ test("a repeated submission through the generation host keeps one label, and ove
   const { submissions, preparations, before, after } = await runInDurableObject(
     control,
     async (supervisor) => {
-      const host = new GenerationHostTarget(supervisor);
+      const host = new GenerationHostTarget(supervisor, () => true);
 
       const submitted = [await host.submitGeneration(commit), await host.submitGeneration(commit)];
       const label = submitted[0]?.generation.label ?? -1;

@@ -14,9 +14,9 @@ import {
 } from "../artifacts/index.js";
 import { HeldWorkspaces, type ObtainWorkspace } from "./held-workspaces.js";
 import {
-  ConversationHostTarget,
+  servingHosts,
   type EntriesRequest,
-  type GenerationHostTarget,
+  type HostTargets,
   type RunningConversation,
 } from "./host-target.js";
 import { ProjectConversations } from "./project-conversations.js";
@@ -24,17 +24,19 @@ import { ConversationRuns } from "./runs.js";
 
 type ServingPorts = Readonly<{
   ctx: DurableObjectState;
-  mount: () => Effect.Effect<MountedFacet, MainFacetMountProblem>;
+  mount: (instance: number) => Effect.Effect<MountedFacet, MainFacetMountProblem>;
   catalog: () => SelectableCatalog;
   resetting: () => boolean;
   obtainWorkspace: ObtainWorkspace;
-  generations: GenerationHostTarget;
+  generations: Parameters<typeof servingHosts>[1];
 }>;
+
+const INSTANCE_KEY = "serving-instance";
 
 export class ServingConversations {
   readonly #ports: ServingPorts;
   readonly #projects: ProjectConversations;
-  readonly #host: ConversationHostTarget;
+  readonly #hosts = new Map<number, HostTargets>();
   readonly #workspaces: HeldWorkspaces;
   readonly #runs: ConversationRuns;
   readonly #readers = new Map<string, Set<() => void>>();
@@ -44,14 +46,23 @@ export class ServingConversations {
     this.#projects = new ProjectConversations(ports.ctx.storage);
     this.#workspaces = new HeldWorkspaces(ports.obtainWorkspace);
     this.#runs = new ConversationRuns(ports.ctx.storage);
-    this.#host = new ConversationHostTarget({
-      arm: (wake) => this.#runs.arm(wake, Date.now()),
-      running: (conversations) => this.#running(conversations),
-      workspace: (conversationId) => this.#workspace(conversationId),
-    });
+  }
+
+  serves(instance: number): boolean {
+    return instance === this.#instance();
+  }
+
+  admitModelTurn(instance: number): boolean {
+    const admitted = this.serves(instance);
+
+    if (!admitted) this.#workspaces.flushRetirement();
+
+    return admitted;
   }
 
   replaceFacet(): void {
+    this.#ports.ctx.storage.kv.put(INSTANCE_KEY, this.#instance() + 1);
+    this.#hosts.clear();
     this.#workspaces.retire(() => {
       this.#ports.ctx.facets.abort(SERVING_FACET_NAME, "another generation serves");
     });
@@ -178,6 +189,10 @@ export class ServingConversations {
     this.#workspaces.endAll();
   }
 
+  #instance(): number {
+    return this.#ports.ctx.storage.kv.get<number>(INSTANCE_KEY) ?? 0;
+  }
+
   #project(projectId: string): Effect.Effect<SelectableProject, ConversationProblem> {
     const resolved = resolveSelectableProject(projectId, this.#ports.catalog());
 
@@ -219,13 +234,34 @@ export class ServingConversations {
     return Effect.suspend(() => {
       this.#workspaces.flushRetirement();
 
-      return this.#ports.mount();
+      return this.#ports.mount(this.#instance());
     }).pipe(
       Effect.mapError((problem): ConversationProblem => ({
         code: problem.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
       })),
-      Effect.tap((facet) => this.#call(() => facet.attach(this.#host, this.#ports.generations))),
+      Effect.tap((facet) => this.#call(() => this.#attach(facet))),
     );
+  }
+
+  #attach(facet: MountedFacet): Promise<void> {
+    const instance = this.#instance();
+    const existing = this.#hosts.get(instance);
+
+    if (existing !== undefined) return facet.attach(existing.host, existing.generations);
+
+    const targets = servingHosts(
+      {
+        arm: (wake) => this.#runs.arm(wake, Date.now()),
+        running: (conversations) => this.#running(conversations),
+        workspace: (conversationId) => this.#workspace(conversationId),
+      },
+      this.#ports.generations,
+      () => this.serves(instance),
+    );
+
+    this.#hosts.set(instance, targets);
+
+    return facet.attach(targets.host, targets.generations);
   }
 
   #endedWhenReplaced(
