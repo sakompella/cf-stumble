@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { durableObjectClasses } from "../../infra/worker-settings.ts";
 import { routePattern } from "../../src/routes/route-pattern.ts";
 import { WORKSPACE_CONTAINER_MEMORY_MIB } from "../../src/workspace/container-instance.ts";
@@ -47,22 +49,25 @@ function digArray(value: JsonValue | undefined, ...keys: readonly string[]) {
   return found !== undefined && isJsonArray(found) ? found : null;
 }
 
-export function readToken(tokenFile: string | null, env: NodeJS.ProcessEnv): string {
-  let content: string;
+const CF_LOGIN_FILE = join(homedir(), ".config", "cloudflare", "config", "default.json");
+
+export function readToken(env: NodeJS.ProcessEnv): string {
+  const fromEnv = env["CLOUDFLARE_API_TOKEN"]?.trim() ?? "";
+
+  if (fromEnv !== "") return fromEnv;
+
+  let login: JsonRecord | undefined;
 
   try {
-    content =
-      tokenFile === null ? (env["CLOUDFLARE_API_TOKEN"] ?? "") : readFileSync(tokenFile, "utf8");
+    login = parseJsonRecordText(readFileSync(CF_LOGIN_FILE, "utf8"));
   } catch {
-    throw new ApiFailure("cannot read --token-file");
+    login = undefined;
   }
 
-  const trimmed = content.trim();
-  const login = parseJsonRecordText(trimmed);
-  const token = login === undefined ? trimmed : digString(login, "oauth_token");
+  const token = login === undefined ? null : digString(login, "oauth_token");
 
   if (token === null || token === "") {
-    throw new ApiFailure("no CLOUDFLARE_API_TOKEN and no --token-file");
+    throw new ApiFailure(`no CLOUDFLARE_API_TOKEN and no cf login in ${CF_LOGIN_FILE}`);
   }
 
   return token;
@@ -84,10 +89,9 @@ async function send(token: string, url: string, body?: JsonRecord): Promise<Json
 
 export async function resolveAccount(
   token: string,
-  requested: string | null,
   env: NodeJS.ProcessEnv,
 ): Promise<string> {
-  const named = requested ?? env["CLOUDFLARE_ACCOUNT_ID"]?.trim() ?? "";
+  const named = env["CLOUDFLARE_ACCOUNT_ID"]?.trim() ?? "";
 
   if (named !== "") return named;
 
@@ -95,7 +99,7 @@ export async function resolveAccount(
   const ids = accounts.flatMap((account) => digString(account, "id") ?? []);
 
   if (ids.length !== 1 || ids[0] === undefined) {
-    throw new ApiFailure(`token sees ${ids.length} accounts; pass --account`);
+    throw new ApiFailure(`token sees ${ids.length} accounts; set CLOUDFLARE_ACCOUNT_ID`);
   }
 
   return ids[0];
