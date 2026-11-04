@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { devShellTool } from "../dev-shell-tool.js";
 import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,9 +28,6 @@ export function underScratch(source: string, root: string): string {
 }
 
 export const FLOCK_STAND_IN = `#!/bin/sh
-for real in /usr/bin/flock /bin/flock; do
-  if [ -x "$real" ]; then exec "$real" "$@"; fi
-done
 exec perl -MFcntl=:flock -e 'open(my $held, ">&=", $ARGV[0]) or die "flock stand-in: $!\n"; flock($held, LOCK_EX) or die "flock stand-in: $!\n";' -- "$1"
 `;
 
@@ -50,8 +47,7 @@ export function systemToolsDirectory(parent: string): string {
   mkdirSync(directory);
 
   for (const tool of SYSTEM_TOOLS) {
-    const found = spawnSync("/bin/sh", ["-c", `command -v ${tool}`], { encoding: "utf8" });
-    symlinkSync(found.stdout.trim(), join(directory, tool));
+    symlinkSync(devShellTool(tool), join(directory, tool));
   }
 
   return directory;

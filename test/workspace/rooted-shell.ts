@@ -1,3 +1,4 @@
+import { devShellTool } from "../dev-shell-tool.js";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -42,7 +43,7 @@ export function runRooted(
   source: string,
   environment: Readonly<Record<string, string>> = {},
 ): SpawnSyncReturns<string> {
-  return spawnSync("/bin/sh", ["-c", source], {
+  return spawnSync(devShellTool("sh"), ["-c", source], {
     cwd: layout.workspace,
     encoding: "utf8",
     env: {

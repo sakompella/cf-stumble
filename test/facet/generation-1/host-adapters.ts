@@ -1,3 +1,4 @@
+import { devShellTool } from "../../dev-shell-tool.js";
 import { spawn } from "node:child_process";
 import {
   closeSync,
@@ -39,7 +40,7 @@ export function hostFilesystemProvider(root: string): ProjectFilesystemProvider 
 export function hostExecBackend(root: string): ExecBackend {
   return {
     exec(input) {
-      const child = spawn("/bin/sh", ["-c", input.command], {
+      const child = spawn(devShellTool("dash"), ["-c", input.command], {
         cwd: hostPath(root, input.cwd),
         detached: true,
         stdio: ["ignore", "pipe", "pipe"],

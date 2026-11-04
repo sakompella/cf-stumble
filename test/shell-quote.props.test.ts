@@ -1,3 +1,4 @@
+import { devShellTool } from "./dev-shell-tool.js";
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { execFileSync } from "node:child_process";
@@ -14,7 +15,7 @@ test("/bin/sh evaluates shellQuote to the original text", () => {
     (tc) => {
       const value = `'$${tc.draw(shellText)}`;
 
-      const echoed = execFileSync("/bin/sh", ["-c", `printf %s ${shellQuote(value)}`], {
+      const echoed = execFileSync(devShellTool("sh"), ["-c", `printf %s ${shellQuote(value)}`], {
         encoding: "utf8",
       });
 

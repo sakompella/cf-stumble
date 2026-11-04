@@ -1,3 +1,4 @@
+import { devShellTool } from "../dev-shell-tool.js";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -34,7 +35,7 @@ afterAll(() => {
 function environmentsSeenBy(source: string): readonly string[] {
   rmSync(environmentLog, { force: true });
 
-  const ran = spawnSync("/bin/sh", ["-c", source], {
+  const ran = spawnSync(devShellTool("sh"), ["-c", source], {
     encoding: "utf8",
     input: "token\n",
     env: { PATH: `${stubs}:${process.env["PATH"] ?? ""}` },

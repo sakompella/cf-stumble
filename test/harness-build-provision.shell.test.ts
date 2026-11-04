@@ -1,4 +1,5 @@
-import { execFileSync, spawn } from "node:child_process";
+import { devShellTool } from "./dev-shell-tool.js";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,13 +9,9 @@ import { holdProvisionLock } from "../src/project-provision.js";
 import { shellQuote } from "../src/shell-quote.js";
 import { writeExecutable } from "./workspace/planned-shell-fixture.js";
 
-const dash = execFileSync("/bin/sh", ["-c", "command -v dash || true"], {
-  encoding: "utf8",
-}).trim();
+const shells = [devShellTool("sh"), devShellTool("dash")];
 
-const shells = ["/bin/sh", dash].filter((shell) => shell !== "");
-
-const realSleep = ["/bin/sleep", "/usr/bin/sleep"].find((path) => existsSync(path)) ?? "sleep";
+const realSleep = devShellTool("sleep");
 
 const flockStandIn = `#!/bin/sh
 set -eu
@@ -23,16 +20,11 @@ if [ "$#" -ne 1 ]; then
   exit 2
 fi
 descriptor="$1"
-real="$(PATH="$REAL_PATH" command -v flock || true)"
 take() {
-  if [ -n "$real" ]; then
-    "$real" "$1" "$descriptor"
-  else
-    perl -MFcntl=:flock -e '
-      open(my $held, ">&=", $ARGV[1]) or die "flock stand-in: $!\\n";
-      flock($held, LOCK_EX | ($ARGV[0] eq "-n" ? LOCK_NB : 0)) or exit 1;
-    ' -- "$1" "$descriptor"
-  fi
+  perl -MFcntl=:flock -e '
+    open(my $held, ">&=", $ARGV[1]) or die "flock stand-in: $!\\n";
+    flock($held, LOCK_EX | ($ARGV[0] eq "-n" ? LOCK_NB : 0)) or exit 1;
+  ' -- "$1" "$descriptor"
 }
 if ! take -n; then
   : > "$BLOCKED_MARK"
@@ -118,7 +110,6 @@ function start(shell: string, name: string, options: Options = {}): Contender {
 
   const script = [
     "set -eu",
-    'export REAL_PATH="$PATH"',
     `export PATH=${shellQuote(standIns)}:"$PATH"`,
     ...Object.entries(settings).map(([key, value]) => `export ${key}=${shellQuote(value)}`),
     `lock=${shellQuote(lock)}`,

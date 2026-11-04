@@ -1,3 +1,4 @@
+import { devShellTool } from "../dev-shell-tool.js";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -66,7 +67,7 @@ function prepare(): Run {
 }
 
 function start(run: Run, source: string, holdRemoval = false): ChildProcess {
-  return spawn("/bin/sh", ["-c", underScratch(source, run.root)], {
+  return spawn(devShellTool("sh"), ["-c", underScratch(source, run.root)], {
     env: {
       PATH: `${run.bin}:${systemTools}`,
       STUB_DIR: run.root,
