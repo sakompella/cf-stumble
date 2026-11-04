@@ -1,3 +1,4 @@
+import { devShellTool } from "../../dev-shell-tool.js";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { getOrThrow } from "@earendil-works/pi-durable/env";
 import { describe, expect, it } from "vitest";
@@ -23,7 +24,7 @@ describe("Computer ExecutionEnv exec", () => {
     let stdout = "";
 
     await withHostWorkspace(async (env) => {
-      const argv = ["/bin/sh", "-c", 'printf "%s|%s" "$GREETING" "${HOME-unset}"'];
+      const argv = [devShellTool("sh"), "-c", 'printf "%s|%s" "$GREETING" "${HOME-unset}"'];
 
       const result = await env.exec(
         argv,

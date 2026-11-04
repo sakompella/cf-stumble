@@ -1,3 +1,4 @@
+import { devShellTool } from "../dev-shell-tool.js";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -28,7 +29,7 @@ test("a clone whose existing directory has another origin fails and says why", (
 
   const source = projectCloneSource(sampleProjectOne);
 
-  const ran = spawnSync("/bin/sh", ["-c", underScratch(source, scratch)], {
+  const ran = spawnSync(devShellTool("sh"), ["-c", underScratch(source, scratch)], {
     encoding: "utf8",
     env: {
       PATH: `${bin}:${process.env["PATH"] ?? ""}`,

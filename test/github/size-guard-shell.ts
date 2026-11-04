@@ -1,3 +1,4 @@
+import { devShellTool } from "../dev-shell-tool.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,7 +18,7 @@ import {
 } from "../workspace/planned-shell-fixture.js";
 import { projectOf } from "../project-fixtures.js";
 
-const jq = execFileSync("/bin/sh", ["-c", "command -v jq"], { encoding: "utf8" }).trim();
+const jq = devShellTool("jq");
 
 const project = projectOf("https://github.com/sample/repo-1");
 
@@ -111,7 +112,7 @@ function prepare(scenario: Scenario) {
 }
 
 function run({ directory, bin }: ReturnType<typeof prepare>, source: string) {
-  return spawnSync("/bin/sh", ["-c", source], {
+  return spawnSync(devShellTool("sh"), ["-c", source], {
     encoding: "utf8",
     env: {
       PATH: `${bin}:${systemTools}`,

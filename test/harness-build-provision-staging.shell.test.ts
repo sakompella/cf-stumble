@@ -1,3 +1,4 @@
+import { devShellTool } from "./dev-shell-tool.js";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -77,7 +78,7 @@ async function untilExists(path: string): Promise<void> {
 }
 
 async function killProvisionDuringClone(root: string): Promise<void> {
-  const killed = spawn("/bin/sh", ["-c", provisionSource(root)], {
+  const killed = spawn(devShellTool("sh"), ["-c", provisionSource(root)], {
     env: environment(root, true),
     stdio: "ignore",
   });
@@ -93,7 +94,7 @@ async function killProvisionDuringClone(root: string): Promise<void> {
 }
 
 function provision(root: string): void {
-  const ran = spawnSync("/bin/sh", ["-c", provisionSource(root)], {
+  const ran = spawnSync(devShellTool("sh"), ["-c", provisionSource(root)], {
     encoding: "utf8",
     env: environment(root, false),
   });
