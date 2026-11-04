@@ -3,12 +3,6 @@ import { resolve } from "node:path";
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { build } from "esbuild";
 import { defaultExclude, defineConfig, type Plugin } from "vitest/config";
-import {
-  compatibility,
-  durableObjectClasses,
-  plainTextBindings,
-  workerName,
-} from "./infra/worker-settings.js";
 
 const EFFECT_PATH = /^effect(?:\/[\w-]+)*$/u;
 
@@ -96,20 +90,8 @@ export default defineConfig({
         plugins: [
           await effectPrebundle(),
           cloudflareTest({
-            main: "./src/worker.ts",
-            miniflare: {
-              name: workerName("test"),
-              compatibilityDate: compatibility.date,
-              compatibilityFlags: compatibility.flags,
-              bindings: { ...plainTextBindings, OWNER_PASSWORD: "test-owner-password" },
-              durableObjects: Object.fromEntries(
-                Object.entries(durableObjectClasses).map(([binding, className]) => [
-                  binding,
-                  { className, useSQLite: true },
-                ]),
-              ),
-              workerLoaders: { LOADER: {} },
-            },
+            config: "./cloudflare.config.ts",
+            miniflare: { bindings: { OWNER_PASSWORD: "test-owner-password" } },
           }),
         ],
         test: {

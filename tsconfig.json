@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "lib": ["ES2023"],
     "types": ["@cloudflare/workers-types", "@cloudflare/vitest-plugin/types"]
   },

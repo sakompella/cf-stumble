@@ -17,3 +17,25 @@ export const durableObjectClasses = {
 } as const;
 
 export const plainTextBindings = { CHATGPT_MODEL: "gpt-6.1-sol" } as const;
+
+export const workerEntrypoint = "src/worker.ts";
+
+export const productionRoute = {
+  pattern: "stumble.akompella.dev/*",
+  zone: "akompella.dev",
+} as const;
+
+export const workspaceContainer = {
+  dockerfile: "containers/computerd.Dockerfile",
+  context: ".",
+} as const;
+
+export function observability(isProduction: boolean) {
+  return {
+    enabled: true,
+    headSamplingRate: 1,
+    logs: { enabled: true, headSamplingRate: 1, invocationLogs: true, persist: true },
+    traces: { enabled: isProduction, headSamplingRate: 1, persist: true },
+    issues: { enabled: true },
+  };
+}

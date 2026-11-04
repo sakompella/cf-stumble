@@ -17,13 +17,13 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 
 ## Configuration files
 
-`infra/alchemy.run.ts` is the only Worker configuration. It is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.85, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that the test runner reads too: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, and the one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"). Neither file declares per-instance values or secrets (see "Instance secrets").
+`infra/alchemy.run.ts` deploys the Worker. `cloudflare.config.ts` describes the same Worker for `cf` and the test runner. `infra/alchemy.run.ts` is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.85, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that both files read, so they cannot drift: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, the entry point, the route, the container image, the observability settings, and the one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"). Neither file declares per-instance values or secrets (see "Instance secrets").
 
 The stack is a function of the stage:
 
 - The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, no `workers.dev` subdomain, a `standard-3` container, and traces on.
 - Any other stage `<stage>` is a separate Worker, `cf-stumble-<stage>`, with its own container application attached to its `WorkspaceHost` namespace, a `workers.dev` subdomain without preview URLs, no route, and traces off. Every stage boots the production instance size, which the Durable Object requests at launch.
-- Vitest builds its Worker, `cf-stumble-test`, from `infra/worker-settings.ts` and leaves out the Workers AI binding, because the test runtime has no AI service to reach.
+- Vitest builds its Worker, `cf-stumble-test`, from `cloudflare.config.ts` in mode `test` and leaves out the Workers AI binding and the container, because the test runtime has no AI service to reach.
 
 Alchemy is its own pnpm project in `infra/`, with its own lockfile, because the Worker's dependency tree, which the Container image copies, should not change for Alchemy. `pnpm install:infra` installs it; `pnpm verify` and `pnpm run deploy` run that first.
 
