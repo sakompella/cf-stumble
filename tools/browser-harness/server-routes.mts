@@ -77,6 +77,11 @@ const JSON_ROUTES: readonly Readonly<{
     path: "/api/chatgpt/connection",
     answer: () => ({ status: 200, payload: CHATGPT_PAYLOAD }),
   },
+  {
+    method: "GET",
+    path: "/api/workspace/backend",
+    answer: () => ({ status: 200, payload: { ok: true, backend: "provider" } }),
+  },
   { method: "POST", path: "/api/projects/connect", answer: connect },
   {
     method: "GET",
