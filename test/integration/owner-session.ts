@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 import worker from "../../src/worker.js";
+import { ownerRequest } from "../owner-credentials.js";
 import type { SupervisorWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
 import type { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
@@ -13,11 +14,11 @@ import {
 
 const ORIGIN = "https://cf-stumble.test";
 
-const get = (path: string) => worker.fetch(new Request(`${ORIGIN}${path}`), env);
+const get = (path: string) => worker.fetch(ownerRequest(`${ORIGIN}${path}`), env);
 
 const post = (path: string, body: Readonly<Record<string, string>> = {}) =>
   worker.fetch(
-    new Request(`${ORIGIN}${path}`, { method: "POST", body: JSON.stringify(body) }),
+    ownerRequest(`${ORIGIN}${path}`, { method: "POST", body: JSON.stringify(body) }),
     env,
   );
 
