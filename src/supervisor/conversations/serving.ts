@@ -52,10 +52,9 @@ export class ServingConversations {
   }
 
   replaceFacet(): void {
-    setTimeout(() => {
+    this.#workspaces.retire(() => {
       this.#ports.ctx.facets.abort(SERVING_FACET_NAME, "another generation serves");
-      this.endWorkspaces();
-    }, 0);
+    });
   }
 
   running(): boolean {
@@ -217,7 +216,11 @@ export class ServingConversations {
   }
 
   #facet(): Effect.Effect<MountedFacet, ConversationProblem> {
-    return this.#ports.mount().pipe(
+    return Effect.suspend(() => {
+      this.#workspaces.flushRetirement();
+
+      return this.#ports.mount();
+    }).pipe(
       Effect.mapError((problem): ConversationProblem => ({
         code: problem.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
       })),
