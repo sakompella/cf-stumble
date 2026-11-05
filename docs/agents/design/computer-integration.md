@@ -4,7 +4,9 @@ cf-stumble uses Cloudflare Computer release 0.8.0: `@cloudflare/computer` from n
 
 The Workspace Host runs the container through `ContainerBackend`, with the container scheduled by the Host's Durable Object. The instance size is `WORKSPACE_CONTAINER_INSTANCE` in `src/workspace/container-instance.ts`, and the image is the `app` Container that `infra/alchemy.run.ts` attaches to the `WorkspaceHost` Durable Object class. Upgrade the package, the commit and the image together, and adopt a newer release only if the full application workflow passes against it.
 
-Worker-shell handles text operations and host-forwarded Git. The container handles Node, pnpm, TypeScript compilation, tests, and project commands.
+The workspace image is built once in CI and published to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`. The deploy and every machine that runs the container pull it, and nothing builds it locally.
+
+The Workspace Host has two exec backends. The container handles Node, pnpm, TypeScript compilation, tests, and project commands. The isolate backend runs just-bash in a Dynamic Worker with Git over the SQLite workspace, so it handles text operations and Git without waking the container; it has no Node, pnpm, `gh` or network. The model picks the backend for each `bash` call through its optional `backend` parameter, and a call that names none uses the container. The shell's modules ship as the static asset `ASSETS` and are loaded into the Dynamic Worker.
 
 ## Workspace layout
 

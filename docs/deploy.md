@@ -17,13 +17,13 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 
 ## Configuration files
 
-`infra/alchemy.run.ts` deploys the Worker. `cloudflare.config.ts` describes the same Worker for `cf` and the test runner. `infra/alchemy.run.ts` is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.85, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that both files read, so they cannot drift: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, the entry point, the route, the container image, the observability settings, and the one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"). Neither file declares per-instance values or secrets (see "Instance secrets").
+`infra/alchemy.run.ts` deploys the Worker. `cloudflare.config.ts` describes the same Worker for `cf` and the test runner. `infra/alchemy.run.ts` is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.85, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that both files read, so they cannot drift: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, the entry point, the route, the container image, the static assets settings (`runWorkerFirst`), the cache setting, the observability settings, and the one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"). Neither file declares per-instance values or secrets (see "Instance secrets").
 
 The stack is a function of the stage:
 
 - The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, no `workers.dev` subdomain, a `standard-3` container, and traces on.
 - Any other stage `<stage>` is a separate Worker, `cf-stumble-<stage>`, with its own container application attached to its `WorkspaceHost` namespace, a `workers.dev` subdomain without preview URLs, no route, and traces off. Every stage boots the production instance size, which the Durable Object requests at launch.
-- Vitest builds its Worker, `cf-stumble-test`, from `cloudflare.config.ts` in mode `test` and leaves out the Workers AI binding and the container, because the test runtime has no AI service to reach.
+- Vitest builds its Worker, `cf-stumble-test`, from `cloudflare.config.ts` in mode `test` and leaves out the Workers AI binding and the container, because the test runtime has no AI service to reach. The stack and `cloudflare.config.ts` also differ in what only one tool needs: the stack sets `workersDev` per stage and the container through `Cloudflare.Container`, while `cloudflare.config.ts` sets the container name, `maxInstances` and instance size (which the Durable Object scheduling policy refuses in the stack).
 
 Alchemy is its own pnpm project in `infra/`, with its own lockfile, because the Worker's dependency tree, which the Container image copies, should not change for Alchemy. `pnpm install:infra` installs it; `pnpm verify` and `pnpm run deploy` run that first.
 
@@ -145,13 +145,17 @@ Workers Logs keeps events for 7 days. After a deploy that changes lifecycle beha
 
 ## Container image
 
-CI builds the image once. `.github/workflows/workspace-image.yml` builds `containers/computerd.Dockerfile` for linux/amd64 and pushes it to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`, where `<hash>` is `containers/image-tag.sh`: a hash of `.dockerignore`, the Dockerfile and the patch. It skips the build when that tag exists, and on `main` it moves `latest` to it. The Deploy workflow runs it first, so a deploy always finds its image. Nothing else builds the image: a change to those files is the only reason to rebuild. The package is public (the first publish from this public repository was pullable without a login), so machines pull without credentials.
+CI builds the image once. `.github/workflows/workspace-image.yml` builds `containers/computerd.Dockerfile` for linux/amd64 and pushes it to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`, where `<hash>` is `containers/image-tag.sh`: a hash of `.dockerignore`, the Dockerfile and the patch. It skips the build when that tag exists, and on `main` it moves `latest` to it. The Deploy workflow runs it first, so a deploy always finds its image. Nothing else builds the image, and no machine builds it locally: a change to those files is the only reason to rebuild, and CI does it. The package is public (the first publish from this public repository was pullable without a login), so machines pull without credentials.
 
 `infra/worker-settings.ts` holds that reference as `workspaceImage`, for the stack and for `cloudflare.config.ts`. Cloudflare Containers only pull images from the deploying account's managed registry or from a registry that account has configured, so a direct reference to a ghcr.io image fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Alchemy's `image` option pulls the image and pushes it to the account's registry on deploy, so the deploy needs Docker and a pull of about a gigabyte, not a build.
 
 If you deploy by hand, use Docker. Podman does not work for this deployment because it can rewrite the image manifest when it pushes, leaving the deploy with a local digest that Cloudflare cannot find in the registry. The resulting deployment error is `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
 
 The image also carries the packages your harness build needs, fetched from the lockfile. That makes it about a gigabyte larger and your first build several minutes faster, because the build reads packages from the image instead of the network.
+
+## Isolate backend
+
+The workspace also has an isolate backend, which runs shell commands in a Dynamic Worker with no container. The model picks the backend for each `bash` call through the tool's optional `backend` parameter (`isolate` or `container`); a call that names none runs in the container. The isolate has no Node, pnpm, `gh` or network, so those commands need the container. `pnpm run deploy` ships the isolate's shell modules as a static asset (the `ASSETS` binding).
 
 ## What to expect the first time
 
