@@ -66,7 +66,7 @@ resource for each machine.
 **Backend setting.** The Host stores one setting, `provider` (the default) or `cloudflare`, set
 with `GET`/`POST /api/workspace/backend` and a control in the page sidebar. `provider` uses a
 connected provider and falls back to Cloudflare, as above. `cloudflare` always uses the Cloudflare
-container. The choice is made at connect time (`chooseBackend`), so a change affects the next
+container. The choice is made at connect time (`WorkspacePlatform`), so a change affects the next
 container start. A change while a container runs closes the workspace and stops the container, as
 the idle stop does, so the next command starts on the chosen backend. It is refused while a run is
 active. A workspace reset keeps the setting.

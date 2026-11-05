@@ -271,7 +271,8 @@ export class ServingConversations {
     const source = events.getReader();
     const readers = this.#readers.get(conversationId) ?? new Set();
     let opened: ReadableStreamDefaultController<Uint8Array> | undefined;
-    let replaced = false;
+    let ended = false;
+    let reading = false;
 
     const forget = () => {
       readers.delete(end);
@@ -279,9 +280,15 @@ export class ServingConversations {
       if (readers.size === 0) this.#readers.delete(conversationId);
     };
 
-    const end = () => {
-      replaced = true;
+    const stop = () => {
+      ended = true;
       forget();
+
+      if (!reading) void source.cancel().catch(() => {});
+    };
+
+    const end = () => {
+      stop();
       opened?.close();
     };
 
@@ -290,9 +297,11 @@ export class ServingConversations {
         opened = controller;
       },
       pull: async (controller) => {
+        reading = true;
         const next = await source.read().catch(() => ({ done: true }) as const);
+        reading = false;
 
-        if (replaced) {
+        if (ended) {
           void source.cancel().catch(() => {});
         } else if (next.done) {
           forget();
@@ -301,13 +310,7 @@ export class ServingConversations {
           controller.enqueue(next.value);
         }
       },
-      cancel: (reason) => {
-        forget();
-
-        source.releaseLock();
-
-        return events.cancel(reason);
-      },
+      cancel: stop,
     });
 
     readers.add(end);

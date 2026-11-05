@@ -22,13 +22,6 @@ export function writeBackendSetting(kv: SettingStore, setting: BackendSetting): 
   kv.put(BACKEND_SETTING_KEY, setting);
 }
 
-export function chooseProviderPort(
-  setting: BackendSetting,
-  connectedEgressPort: number | undefined,
-): number | undefined {
-  return setting === "provider" ? connectedEgressPort : undefined;
-}
-
 export type WorkspaceBackendChange =
   | Readonly<{ ok: true; backend: BackendSetting }>
   | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy" }> }>;

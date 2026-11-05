@@ -4,6 +4,7 @@ import {
   type WorkspaceBackend,
 } from "@cloudflare/computer";
 import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
+import { readBackendSetting } from "../backend-setting.js";
 import { logEvent } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore, type HostedBackend } from "./backend-sync-ignore.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
@@ -36,20 +37,14 @@ export class WorkspacePlatform {
   readonly #providerContainer: ProviderContainerAPI;
   readonly #state: DurableObjectState;
   readonly #providerToken: string | undefined;
-  readonly #chooseProviderPort: (connectedEgressPort: number | undefined) => number | undefined;
   readonly #platformContainer: DurableObjectState["container"];
   readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   #providerBackend: ProviderBackend | undefined;
   #workspace: Workspace;
 
-  constructor(
-    state: DurableObjectState,
-    providerToken: string | undefined,
-    chooseProviderPort: (connectedEgressPort: number | undefined) => number | undefined,
-  ) {
+  constructor(state: DurableObjectState, providerToken: string | undefined) {
     this.#state = state;
-    this.#chooseProviderPort = chooseProviderPort;
     this.#providerToken = providerToken;
     this.#platformContainer = state.container;
     this.provider = new ProviderLink(state);
@@ -79,7 +74,7 @@ export class WorkspacePlatform {
     return (this.#platformContainer?.running ?? false) || this.#providerContainer.running();
   }
 
-  async stopContainer(reason: "idle" | "reset"): Promise<void> {
+  async stopContainer(reason: "idle" | "reset" | "backend"): Promise<void> {
     if (this.#platformContainer?.running === true) await this.#platformContainer.destroy(reason);
 
     if (reason === "reset" && this.provider.egressPort() !== undefined)
@@ -124,7 +119,10 @@ export class WorkspacePlatform {
       type: this.#containerBackend.type,
       description: this.#containerBackend.description,
       connect: () => {
-        const egressPort = this.#chooseProviderPort(this.provider.egressPort());
+        const egressPort =
+          readBackendSetting(this.#state.storage.kv) === "provider"
+            ? this.provider.egressPort()
+            : undefined;
 
         logEvent("info", "workspace.backend.chosen", {
           container: egressPort === undefined ? "cloudflare" : "provider",

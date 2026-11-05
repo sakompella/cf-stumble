@@ -128,6 +128,17 @@ test("a past-due alarm closes the Workspace and destroys the container for being
   expect(destroyed).toEqual(["idle"]);
 });
 
+test("a backend change while a project lease is held is refused and leaves the container running", async () => {
+  const result = await withHost("host-seam-backend-lease", async (host, _state, container) => {
+    host.project({ remainingMs: 60_000 });
+
+    return { change: await host.setBackend("cloudflare"), destroyed: container.destroyed };
+  });
+
+  expect(result.change).toEqual({ ok: false, problem: { code: "workspace-busy" } });
+  expect(result.destroyed).toEqual([]);
+});
+
 test.each([
   [true, 1],
   [false, 0],
