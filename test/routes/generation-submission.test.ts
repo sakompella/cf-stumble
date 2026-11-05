@@ -62,7 +62,9 @@ test("returns a failed build step's output tail to the owner", async () => {
   });
 });
 
-test("reports a preparation failure without echoing the internal error", async () => {
+test("reports the recorded label with a preparation failure, without echoing the internal error", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
@@ -77,6 +79,10 @@ test("reports a preparation failure without echoing the internal error", async (
 
   expect(response.status).toBe(500);
   expect(await response.text()).toBe(
-    JSON.stringify({ ok: false, error: { code: "internal-error" } }),
+    JSON.stringify({
+      ok: false,
+      error: { code: "preparation-failed" },
+      recorded: { label: generationLabel(1), harnessCommit },
+    }),
   );
 });

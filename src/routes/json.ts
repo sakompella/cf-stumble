@@ -14,6 +14,7 @@ type ApiErrorCode =
   | "invalid-backend-request"
   | "cross-origin-request"
   | "not-found"
+  | "preparation-failed"
   | "internal-error";
 
 export function jsonError(status: number, code: ApiErrorCode): Response {

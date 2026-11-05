@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { logRedactedCause } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import {
   generationStatusView,
@@ -88,12 +89,33 @@ export const handleGenerationSubmission = Effect.fnUntraced(
 
     const submitted = yield* callSupervisor(() => supervisor.submitGeneration(harnessCommit));
 
+    const preparation = yield* callSupervisor(() =>
+      supervisor.prepareGeneration(submitted.generation.label),
+    ).pipe(Effect.result);
+
+    if (preparation._tag === "Failure") {
+      logRedactedCause(
+        "owner-api POST /api/generations/submit: preparation-failed",
+        preparation.failure.cause,
+      );
+
+      return Response.json(
+        {
+          ok: false,
+          error: { code: "preparation-failed" },
+          recorded: {
+            label: submitted.generation.label,
+            harnessCommit: submitted.generation.harnessCommit,
+          },
+        },
+        { status: 500 },
+      );
+    }
+
     const result: GenerationSubmissionResult = {
       ok: true,
       outcome: submitted,
-      preparation: yield* callSupervisor(() =>
-        supervisor.prepareGeneration(submitted.generation.label),
-      ),
+      preparation: preparation.success,
     };
 
     return Response.json(result);
