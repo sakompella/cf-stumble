@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@cloudflare/computer':
         specifier: 0.8.0
-        version: 0.8.0(@cloudflare/workers-types@5.20261104.1)(just-bash@3.4.2(supports-color@10.2.2))(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(zod@4.6.6)
+        version: 0.8.0(@cloudflare/workers-types@5.20261104.1)(@platformatic/vfs@0.5.0)(just-bash@3.4.2(supports-color@10.2.2))(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(zod@4.6.6)
       '@earendil-works/chord':
         specifier: 1.5.0
         version: 1.5.0(esbuild@0.28.2)(ws@8.21.0)
@@ -29,6 +29,9 @@ importers:
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      just-bash:
+        specifier: 3.4.2
+        version: 3.4.2(supports-color@10.2.2)
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: 2.0.0-beta.v.11
@@ -1361,6 +1364,10 @@ packages:
   '@oxlint/plugins@1.90.0':
     resolution: {integrity: sha512-FT0JJDNbj9oobVWHpAzFckHY/bx1ftPjulBx4UCMXqmDUGqVWOkbKe5bj4zdEL+D5Ud7y/RfioLwSvlHBMjI4w==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
+
+  '@platformatic/vfs@0.5.0':
+    resolution: {integrity: sha512-U/yG5a2IELJxAtwkgGmhZJnLCHRzyxNyWWbaDKMbCyjB0kuPxU9fvIZCxf7Kv7jz7I7IXlyuY7gXkXGMdLHhPw==}
+    engines: {node: '>= 22'}
 
   '@playwright/test@1.64.1':
     resolution: {integrity: sha512-IaYGml/nSOiZWROfPtuIL7neuu9qDOZ3TNvNljUIrhDMxiGTgPjzj/g9p9RxpS2tSepPDRY+UwAaEeiKtUvIAg==}
@@ -2723,8 +2730,7 @@ snapshots:
 
   '@babel/runtime@7.29.10': {}
 
-  '@borewit/text-codec@0.2.2':
-    optional: true
+  '@borewit/text-codec@0.2.2': {}
 
   '@cloudflare/build-output-utils@0.9.7':
     dependencies:
@@ -2734,11 +2740,12 @@ snapshots:
     dependencies:
       '@cloudflare/config': 0.30.1
 
-  '@cloudflare/computer@0.8.0(@cloudflare/workers-types@5.20261104.1)(just-bash@3.4.2(supports-color@10.2.2))(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(zod@4.6.6)':
+  '@cloudflare/computer@0.8.0(@cloudflare/workers-types@5.20261104.1)(@platformatic/vfs@0.5.0)(just-bash@3.4.2(supports-color@10.2.2))(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(zod@4.6.6)':
     dependencies:
       capnweb: 0.10.0
     optionalDependencies:
       '@cloudflare/workers-types': 5.20261104.1
+      '@platformatic/vfs': 0.5.0
       just-bash: 3.4.2(supports-color@10.2.2)
       vite: 8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
       zod: 4.6.6
@@ -3158,28 +3165,23 @@ snapshots:
   '@img/sharp-win32-x64@0.35.5':
     optional: true
 
-  '@jitl/quickjs-ffi-types@0.32.0':
-    optional: true
+  '@jitl/quickjs-ffi-types@0.32.0': {}
 
   '@jitl/quickjs-wasmfile-debug-asyncify@0.32.0':
     dependencies:
       '@jitl/quickjs-ffi-types': 0.32.0
-    optional: true
 
   '@jitl/quickjs-wasmfile-debug-sync@0.32.0':
     dependencies:
       '@jitl/quickjs-ffi-types': 0.32.0
-    optional: true
 
   '@jitl/quickjs-wasmfile-release-asyncify@0.32.0':
     dependencies:
       '@jitl/quickjs-ffi-types': 0.32.0
-    optional: true
 
   '@jitl/quickjs-wasmfile-release-sync@0.32.0':
     dependencies:
       '@jitl/quickjs-ffi-types': 0.32.0
-    optional: true
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
@@ -3240,8 +3242,7 @@ snapshots:
   '@koromix/koffi-win32-x64@3.1.6':
     optional: true
 
-  '@mixmark-io/domino@2.2.0':
-    optional: true
+  '@mixmark-io/domino@2.2.0': {}
 
   '@mongodb-js/zstd@7.0.0':
     dependencies:
@@ -3256,8 +3257,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.4
     optional: true
 
-  '@nodable/entities@3.0.0':
-    optional: true
+  '@nodable/entities@3.0.0': {}
 
   '@oxc-parser/binding-android-arm-eabi@0.155.0':
     optional: true
@@ -3515,6 +3515,9 @@ snapshots:
 
   '@oxlint/plugins@1.90.0': {}
 
+  '@platformatic/vfs@0.5.0':
+    optional: true
+
   '@playwright/test@1.64.1':
     dependencies:
       playwright: 1.64.1
@@ -3651,10 +3654,8 @@ snapshots:
       token-types: 6.1.2
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
-  '@tokenizer/token@0.3.0':
-    optional: true
+  '@tokenizer/token@0.3.0': {}
 
   '@tsrs/darwin-arm64@0.20.1-ts7.1.0-beta':
     optional: true
@@ -3712,13 +3713,11 @@ snapshots:
 
   agent-base@9.0.0: {}
 
-  anynum@1.0.1:
-    optional: true
+  anynum@1.0.1: {}
 
   assertion-error@2.0.1: {}
 
-  balanced-match@4.0.4:
-    optional: true
+  balanced-match@4.0.4: {}
 
   base64-js@1.5.1: {}
 
@@ -3738,7 +3737,6 @@ snapshots:
   brace-expansion@5.0.9:
     dependencies:
       balanced-match: 4.0.4
-    optional: true
 
   buffer-equal-constant-time@1.0.1: {}
 
@@ -3769,8 +3767,7 @@ snapshots:
 
   cjs-module-lexer@1.2.3: {}
 
-  commander@6.2.1:
-    optional: true
+  commander@6.2.1: {}
 
   cookie@1.1.1: {}
 
@@ -3862,7 +3859,6 @@ snapshots:
     dependencies:
       path-expression-matcher: 1.6.2
       xml-naming: 0.3.0
-    optional: true
 
   fast-xml-parser@5.11.1:
     dependencies:
@@ -3872,7 +3868,6 @@ snapshots:
       path-expression-matcher: 1.6.2
       strnum: 2.4.2
       xml-naming: 0.3.0
-    optional: true
 
   fd-package-json@2.0.0:
     dependencies:
@@ -3895,7 +3890,6 @@ snapshots:
       uint8array-extras: 1.5.0
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   foldkit@0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2):
     dependencies:
@@ -3979,8 +3973,7 @@ snapshots:
       - kerberos
       - supports-color
 
-  ieee754@1.2.1:
-    optional: true
+  ieee754@1.2.1: {}
 
   inherits@2.0.4:
     optional: true
@@ -3988,11 +3981,9 @@ snapshots:
   ini@1.3.8:
     optional: true
 
-  ini@6.0.0:
-    optional: true
+  ini@6.0.0: {}
 
-  is-unsafe@2.0.2:
-    optional: true
+  is-unsafe@2.0.2: {}
 
   jiti@2.7.0: {}
 
@@ -4028,7 +4019,6 @@ snapshots:
       node-liblzma: 2.2.0
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   jwa@2.0.1:
     dependencies:
@@ -4163,7 +4153,6 @@ snapshots:
   minimatch@10.2.6:
     dependencies:
       brace-expansion: 5.0.9
-    optional: true
 
   minimist@1.2.8:
     optional: true
@@ -4171,8 +4160,7 @@ snapshots:
   mkdirp-classic@0.5.3:
     optional: true
 
-  modern-tar@0.7.7:
-    optional: true
+  modern-tar@0.7.7: {}
 
   ms@2.1.3: {}
 
@@ -4330,8 +4318,7 @@ snapshots:
 
   package-manager-detector@1.9.0: {}
 
-  papaparse@5.7.0:
-    optional: true
+  papaparse@5.7.0: {}
 
   parse5@8.0.1:
     dependencies:
@@ -4339,8 +4326,7 @@ snapshots:
 
   partial-json@0.1.7: {}
 
-  path-expression-matcher@1.6.2:
-    optional: true
+  path-expression-matcher@1.6.2: {}
 
   path-to-regexp@6.3.0: {}
 
@@ -4403,7 +4389,6 @@ snapshots:
   quickjs-emscripten-core@0.32.0:
     dependencies:
       '@jitl/quickjs-ffi-types': 0.32.0
-    optional: true
 
   quickjs-emscripten@0.32.0:
     dependencies:
@@ -4412,7 +4397,6 @@ snapshots:
       '@jitl/quickjs-wasmfile-release-asyncify': 0.32.0
       '@jitl/quickjs-wasmfile-release-sync': 0.32.0
       quickjs-emscripten-core: 0.32.0
-    optional: true
 
   quickjs-wasi@3.6.2: {}
 
@@ -4424,8 +4408,7 @@ snapshots:
       strip-json-comments: 2.0.1
     optional: true
 
-  re2js@1.3.3:
-    optional: true
+  re2js@1.3.3: {}
 
   readable-stream@3.6.2:
     dependencies:
@@ -4464,7 +4447,6 @@ snapshots:
   seek-bzip@2.0.0:
     dependencies:
       commander: 6.2.1
-    optional: true
 
   semver@7.8.6: {}
 
@@ -4515,11 +4497,9 @@ snapshots:
 
   source-map-js@1.2.2: {}
 
-  sprintf-js@1.1.3:
-    optional: true
+  sprintf-js@1.1.3: {}
 
-  sql.js@1.14.2:
-    optional: true
+  sql.js@1.14.2: {}
 
   standardwebhooks@1.1.1:
     dependencies:
@@ -4541,12 +4521,10 @@ snapshots:
   strnum@2.4.2:
     dependencies:
       anynum: 1.0.1
-    optional: true
 
   strtok3@10.3.5:
     dependencies:
       '@tokenizer/token': 0.3.0
-    optional: true
 
   supports-color@10.2.2: {}
 
@@ -4583,7 +4561,6 @@ snapshots:
       '@borewit/text-codec': 0.2.2
       '@tokenizer/token': 0.3.0
       ieee754: 1.2.1
-    optional: true
 
   ts-algebra@2.0.0: {}
 
@@ -4615,10 +4592,8 @@ snapshots:
   turndown@7.2.4:
     dependencies:
       '@mixmark-io/domino': 2.2.0
-    optional: true
 
-  uint8array-extras@1.5.0:
-    optional: true
+  uint8array-extras@1.5.0: {}
 
   unbash@6.0.1: {}
 
@@ -4717,8 +4692,7 @@ snapshots:
 
   ws@8.22.0: {}
 
-  xml-naming@0.3.0:
-    optional: true
+  xml-naming@0.3.0: {}
 
   yaml@2.9.1: {}
 

@@ -34,7 +34,8 @@
     "@earendil-works/pi-durable": "1.5.0",
     "@earendil-works/pi-schema": "1.5.0",
     "effect": "4.1.2",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "just-bash": "3.4.2"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "2.0.0-beta.v.11",

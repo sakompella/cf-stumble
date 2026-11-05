@@ -53,10 +53,13 @@ export type ExecEvent =
       error: { code: "backend-unavailable" | "container-restarted" };
     };
 
+export type ExecBackendChoice = "isolate" | "container";
+
 export type StartExecWire = Readonly<{
   command: string;
   cwd?: string | undefined;
   timeoutMs?: number | undefined;
+  backend?: ExecBackendChoice | undefined;
 }>;
 
 export type WriteFileWire = Readonly<{ path: string; bytes: Uint8Array; mode: WriteMode }>;

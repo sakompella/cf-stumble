@@ -50,7 +50,7 @@ function withHost<T>(
 
     Object.defineProperty(state, "container", { value: container, configurable: true });
 
-    return run(new WorkspaceHost(state, {}), state, container);
+    return run(new WorkspaceHost(state, { LOADER: env.LOADER }), state, container);
   });
 }
 

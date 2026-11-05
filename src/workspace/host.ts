@@ -10,7 +10,8 @@ import {
 import { afterIdleStop, trackedWork, WorkspaceIdleController } from "./idle-controller.js";
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import {
-  computerExecBackend,
+  chosenExecBackend,
+  isolateBackend,
   computerFilesystemProvider,
   durableObjectTransactions,
   ProjectRpcTarget,
@@ -42,6 +43,7 @@ const CREDENTIAL_REFUSED = {
 interface WorkspaceHostEnv {
   readonly HARNESS_REPOSITORY_URL?: string;
   readonly ORB_PROVIDER_TOKEN?: string;
+  readonly LOADER: WorkerLoader;
 }
 
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
@@ -55,6 +57,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       ctx,
       env.ORB_PROVIDER_TOKEN,
       () => readBackendSetting(ctx.storage.kv) === "provider",
+      isolateBackend(env.LOADER, ctx),
     );
     this.#idle = new WorkspaceIdleController({
       nowMs: () => Date.now(),
@@ -149,9 +152,13 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return new ProjectRpcTarget(
       computerFilesystemProvider(workspace),
       durableObjectTransactions(this.ctx.storage),
-      afterIdleStop(this.#idle, computerExecBackend(workspace, "container-shell", lifecycle)),
+      afterIdleStop(this.#idle, chosenExecBackend(workspace, lifecycle)),
       { remainingMs, containerState: lifecycle, activity: this.#idle, endLease },
     );
+  }
+
+  __getWorkspaceStub() {
+    return this.#platform.workspace.stub();
   }
 
   override fetch(request: Request): Promise<Response> {

@@ -40,6 +40,7 @@ export class WorkspacePlatform {
   readonly #platformContainer: DurableObjectState["container"];
   readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
+  readonly #isolateBackend: WorkspaceBackend;
   #providerBackend: ProviderBackend | undefined;
   #workspace: Workspace;
 
@@ -47,6 +48,7 @@ export class WorkspacePlatform {
     state: DurableObjectState,
     providerToken: string | undefined,
     usesProvider: () => boolean,
+    isolateBackend: WorkspaceBackend,
   ) {
     this.#state = state;
     this.#providerToken = providerToken;
@@ -64,6 +66,7 @@ export class WorkspacePlatform {
       this.lifecycle.connected(runtimeId);
       logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
     });
+    this.#isolateBackend = isolateBackend;
     this.#workspace = this.#newWorkspace();
   }
 
@@ -157,7 +160,7 @@ export class WorkspacePlatform {
     return new Workspace({
       storage: computerStorage(this.#state.storage),
       sessionId: this.#state.id.toString(),
-      backends: [this.#workspaceBackend],
+      backends: [this.#workspaceBackend, this.#isolateBackend],
       output: false,
     });
   }

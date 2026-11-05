@@ -1,4 +1,5 @@
-import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
+import type { Workspace, WorkspaceBackend, WorkspaceRuntimeEvent } from "@cloudflare/computer";
+import { WorkerShellBackend } from "@cloudflare/computer/backends/worker-shell";
 import { shellQuote } from "../../shell-quote.js";
 import { ContainerRestartedError, type ContainerLifecycleState } from "./exec-backend.js";
 import type {
@@ -110,6 +111,8 @@ async function waitForPostCommandSync(reader: RuntimeReader): Promise<void> {
   while (!(await reader.read()).done);
 }
 
+const ISOLATE_BACKEND_ID = "worker-shell";
+
 export function computerExecBackend(
   workspace: ExecWorkspace,
   backendId = "container-shell",
@@ -119,8 +122,11 @@ export function computerExecBackend(
     async exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
       const guard = replacementGuard(containerState);
 
+      const source =
+        backendId === ISOLATE_BACKEND_ID ? input.command : processGroupCommand(input.command);
+
       const handle = await workspace.runtime
-        .exec(processGroupCommand(input.command), {
+        .exec(source, {
           backend: backendId,
           cwd: input.cwd,
           timeoutMs: input.timeoutMs,
@@ -139,6 +145,26 @@ export function computerExecBackend(
 
       return { reader: guardedReader(handle.getReader(), guard), kill: () => handle.kill() };
     },
+  };
+}
+
+export function isolateBackend(loader: WorkerLoader, ctx: DurableObjectState): WorkspaceBackend {
+  return new WorkerShellBackend({
+    loader,
+    workspace: { binding: "WORKSPACE_HOST", id: ctx.id.toString() },
+    ctx,
+  });
+}
+
+export function chosenExecBackend(
+  workspace: ExecWorkspace,
+  containerState: ContainerLifecycleState,
+): ExecBackend {
+  const container = computerExecBackend(workspace, "container-shell", containerState);
+  const isolate = computerExecBackend(workspace, ISOLATE_BACKEND_ID);
+
+  return {
+    exec: (input) => (input.backend === "isolate" ? isolate : container).exec(input),
   };
 }
 

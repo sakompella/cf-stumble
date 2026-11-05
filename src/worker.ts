@@ -8,7 +8,7 @@ import { tenantWorkspaceName } from "./workspace-names.js";
 
 export { Supervisor, WorkspaceHost };
 
-export { WorkspaceProxy } from "@cloudflare/computer";
+export { WorkspaceProxy, WorkspaceServiceProxy } from "@cloudflare/computer";
 
 export { ModelRoute } from "./model-route.js";
 

@@ -1,5 +1,6 @@
 export {
-  computerExecBackend,
+  chosenExecBackend,
+  isolateBackend,
   computerFilesystemProvider,
   durableObjectTransactions,
 } from "./computer-adapter.js";
