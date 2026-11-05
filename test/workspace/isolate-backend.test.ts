@@ -2,6 +2,7 @@ import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
+import { WorkspaceHost } from "../../src/workspace/index.js";
 import { seedWorkspaceRoot } from "./host-fixtures.js";
 
 const decodeEvent = Schema.decodeUnknownSync(
@@ -79,4 +80,13 @@ test("git init, add, commit, status, log and diff run in the isolate", async () 
   expect(output.map((event) => event.data ?? "").join("")).toMatch(
     /M notes\.txt[\s\S]*first[\s\S]*\+three/u,
   );
+});
+
+test("a holder of the WORKSPACE_HOST binding cannot get the workspace without the isolate's token", async () => {
+  const outcome = await runInDurableObject(env.WORKSPACE_HOST.getByName("isolate-gate"), (host) =>
+    host.openIsolateWorkspace("guess").then(() => "opened", String),
+  );
+
+  expect(outcome).toContain("not the isolate shell");
+  expect("__getWorkspaceStub" in WorkspaceHost.prototype).toBe(false);
 });

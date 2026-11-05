@@ -24,7 +24,8 @@ jobs:
     # A pull request from a fork whose branch is named main also completes a
     # Verify run with head_branch main, so deploy only after a push here.
     if: >-
-      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch' &&
+        (github.ref == 'refs/heads/main' || inputs.stage != 'prod') ||
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository

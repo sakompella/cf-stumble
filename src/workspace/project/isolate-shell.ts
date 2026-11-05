@@ -1,10 +1,7 @@
-import type {
-  BackendHandle,
-  WorkspaceBackend,
-  WorkspaceServiceProxyProps,
-} from "@cloudflare/computer";
+import type { BackendHandle, WorkspaceBackend } from "@cloudflare/computer";
 import type { ShellWorker } from "@cloudflare/computer/backends/worker-shell";
 import * as Schema from "effect/Schema";
+import type { IsolateGateProps } from "./isolate-gate.js";
 import { SHELL_MODULES_FILE, type ShellModuleSet } from "./shell-modules.js";
 
 type ShellRpc = BackendHandle["rpc"]["shell"];
@@ -15,8 +12,9 @@ type ShellEvent = ShellEvents extends ReadableStream<infer Event> ? Event : neve
 
 export interface ShellHost {
   readonly id: DurableObjectId;
+  readonly isolateToken: string;
   readonly exports: {
-    WorkspaceServiceProxy(options: { props: WorkspaceServiceProxyProps }): Fetcher;
+    IsolateWorkspaceGate(options: { props: IsolateGateProps }): Fetcher;
   };
 }
 
@@ -86,14 +84,6 @@ function fetchModules(assets: Fetcher): () => Promise<ShellModuleSet> {
   };
 }
 
-function proxyProps(host: ShellHost): WorkspaceServiceProxyProps {
-  const props: WorkspaceServiceProxyProps = { binding: "WORKSPACE_HOST", id: host.id.toString() };
-
-  if (host.id.name !== undefined) props.name = host.id.name;
-
-  return props;
-}
-
 function shellRpc(runtime: () => Fetcher<ShellWorker>): ShellRpc {
   return {
     async exec({ source, ...rest }) {
@@ -116,7 +106,7 @@ export function isolateShellBackend(
 
   const runtime = () =>
     loader
-      .get(`isolate-shell:${host.id.toString()}`, async () => {
+      .get(`isolate-shell:${host.id.toString()}:${host.isolateToken}`, async () => {
         const set = await modules();
 
         return {
@@ -124,7 +114,11 @@ export function isolateShellBackend(
           compatibilityFlags: ["nodejs_compat"],
           mainModule: set.mainModule,
           modules: set.modules,
-          env: { HOST: host.exports.WorkspaceServiceProxy({ props: proxyProps(host) }) },
+          env: {
+            HOST: host.exports.IsolateWorkspaceGate({
+              props: { id: host.id.toString(), token: host.isolateToken },
+            }),
+          },
           globalOutbound: null,
         };
       })

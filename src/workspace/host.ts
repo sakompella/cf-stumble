@@ -50,6 +50,7 @@ interface WorkspaceHostEnv {
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #platform: WorkspacePlatform;
   readonly #idle: WorkspaceIdleController;
+  readonly #isolateToken = crypto.randomUUID();
   #resetting = false;
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
@@ -58,7 +59,11 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       ctx,
       env.ORB_PROVIDER_TOKEN,
       () => readBackendSetting(ctx.storage.kv) === "provider",
-      isolateWorkspace(env, ctx),
+      isolateWorkspace(env, {
+        id: ctx.id,
+        exports: ctx.exports,
+        isolateToken: this.#isolateToken,
+      }),
     );
     this.#idle = new WorkspaceIdleController({
       nowMs: () => Date.now(),
@@ -158,8 +163,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  __getWorkspaceStub() {
-    return this.#platform.workspace.stub();
+  openIsolateWorkspace(token: string) {
+    if (token !== this.#isolateToken) return Promise.reject(new Error("not the isolate shell"));
+
+    return Promise.resolve(this.#platform.workspace.stub());
   }
 
   override fetch(request: Request): Promise<Response> {
