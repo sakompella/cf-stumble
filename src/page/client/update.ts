@@ -38,6 +38,8 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     eventsStreamId: 0,
     conversation: EMPTY_CONVERSATION,
     outbox: [],
+    sending: [],
+    drafts: {},
     prompt: "",
     runNote: "",
     isFreshArmed: false,

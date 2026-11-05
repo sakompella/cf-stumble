@@ -118,6 +118,10 @@ export const Model = Schema.Struct({
   eventsStreamId: Schema.Number,
   conversation: Conversation,
   outbox: Schema.Array(OutboxItem),
+  sending: Schema.Array(
+    Schema.Struct({ requestId: Schema.String, projectId: Schema.String, text: Schema.String }),
+  ),
+  drafts: Schema.Record(Schema.String, Schema.String),
 
   prompt: Schema.String,
   runNote: Schema.String,

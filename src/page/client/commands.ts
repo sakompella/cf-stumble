@@ -18,6 +18,7 @@ import {
   projects,
   requestJson,
   sendRefusalText,
+  submitRejection,
   transportDetail,
   text,
   truthy,
@@ -263,7 +264,7 @@ export const SubmitCandidate = Command.define("SubmitCandidate", {
               preparation: preparationText(preparation),
               maybeDiagnostics: diagnosticsText(preparation),
             })
-          : Message.RejectedSubmit({ wording: problemText(answer) });
+          : Message.RejectedSubmit({ wording: submitRejection(answer) });
       }),
       Effect.catch((detail) => Effect.succeed(Message.FailedSubmit({ detail }))),
     ),

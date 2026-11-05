@@ -1,7 +1,12 @@
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { expect, test } from "vitest";
-import { checkedWording, generationReading, gitHubReport } from "../../../src/page/client/api.js";
+import {
+  checkedWording,
+  generationReading,
+  gitHubReport,
+  submitRejection,
+} from "../../../src/page/client/api.js";
 import { Message } from "../../../src/page/client/message.js";
 import { ControlRequest, type Model } from "../../../src/page/client/model.js";
 import { controlLabel } from "../../../src/page/client/update-generation.js";
@@ -306,5 +311,20 @@ test("the status answer is read into a numeric label and epoch, or refused", () 
   ).toBe(true);
   expect(Option.isNone(generationReading({ activeGeneration: { generation, epoch: "4" } }))).toBe(
     true,
+  );
+});
+
+test("a submit refused after the label was recorded says so", () => {
+  const payload = {
+    ok: false,
+    error: { code: "preparation-failed" },
+    recorded: { label: 7, harnessCommit: "abc" },
+  };
+
+  expect(submitRejection({ status: 500, payload })).toBe(
+    "label 7 recorded (commit abc), preparation failed: error: preparation-failed",
+  );
+  expect(submitRejection({ status: 400, payload: { ok: false, error: { code: "x" } } })).toBe(
+    "error: x",
   );
 });

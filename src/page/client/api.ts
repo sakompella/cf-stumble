@@ -128,6 +128,16 @@ export function problemText(answer: Answer): string {
   return truthy(errorCode) ? `error: ${text(errorCode)}` : `error: HTTP ${answer.status}`;
 }
 
+export function submitRejection(answer: Answer): string {
+  const recorded = numberField(answer.payload, "recorded", "label");
+
+  return Option.match(recorded, {
+    onNone: () => problemText(answer),
+    onSome: (label) =>
+      `label ${label} recorded (commit ${text(field(answer.payload, "recorded", "harnessCommit"))}), preparation failed: ${problemText(answer)}`,
+  });
+}
+
 function connectionDetail(status: Wire, state: string): string {
   switch (state) {
     case "connected":

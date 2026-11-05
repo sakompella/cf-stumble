@@ -28,18 +28,28 @@ function withoutRequest(model: Model, requestId: string): Model {
   return { ...model, outbox: model.outbox.filter((item) => item.requestId !== requestId) };
 }
 
+function textAbove(text: string, rest: string): string {
+  return rest === "" ? text : `${text}\n\n${rest}`;
+}
+
+function withTextRestored(model: Model, projectId: string, text: string): Model {
+  return Option.contains(model.maybeProjectId, projectId)
+    ? { ...model, prompt: textAbove(text, model.prompt) }
+    : {
+        ...model,
+        drafts: { ...model.drafts, [projectId]: textAbove(text, model.drafts[projectId] ?? "") },
+      };
+}
+
 function withUnsentRequestInPrompt(model: Model, requestId: string): Model {
-  const unsent = model.outbox.find((item) => item.requestId === requestId);
-  const kept = withoutRequest(model, requestId);
+  const unsent = model.sending.find((item) => item.requestId === requestId);
 
-  if (unsent === undefined) {
-    return kept;
-  }
-
-  return {
-    ...kept,
-    prompt: model.prompt === "" ? unsent.text : `${unsent.text}\n\n${model.prompt}`,
+  const kept = {
+    ...withoutRequest(model, requestId),
+    sending: model.sending.filter((item) => item.requestId !== requestId),
   };
+
+  return unsent === undefined ? kept : withTextRestored(kept, unsent.projectId, unsent.text);
 }
 
 function runEndNote(previous: Conversation, next: Conversation): Option.Option<string> {
@@ -131,7 +141,7 @@ function mintedRequest(
   }: Readonly<{ projectId: string; requestId: string; content: string }>,
 ): UpdateReturn {
   if (!Option.contains(model.maybeProjectId, projectId)) {
-    return { model };
+    return { model: withTextRestored(model, projectId, content) };
   }
 
   const item = {
@@ -142,7 +152,12 @@ function mintedRequest(
   };
 
   return {
-    model: { ...model, runNote: "", outbox: [...model.outbox, item] },
+    model: {
+      ...model,
+      runNote: "",
+      outbox: [...model.outbox, item],
+      sending: [...model.sending, { requestId, projectId, text: content }],
+    },
     commands: [SendMessage({ projectId, requestId, content })],
   };
 }
@@ -179,7 +194,10 @@ export function composerHandlers(
     PressedSendShortcut: () => send(model),
     MintedRequestId: (minted) => mintedRequest(model, minted),
     SucceededSend: ({ requestId, submissionId }) => ({
-      model: withSubmissionId(model, requestId, submissionId),
+      model: {
+        ...withSubmissionId(model, requestId, submissionId),
+        sending: model.sending.filter((item) => item.requestId !== requestId),
+      },
     }),
     RejectedSend: ({ requestId, wording }) => ({
       model: { ...withUnsentRequestInPrompt(model, requestId), runNote: wording },
