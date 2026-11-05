@@ -10,7 +10,7 @@ export function workerName(stage: string): string {
 
 export const compatibility = {
   date: "2025-01-01",
-  flags: ["enable_ctx_exports", "nodejs_compat"],
+  flags: ["enable_ctx_exports", "legacy_module_registry", "nodejs_compat"],
 };
 
 export const durableObjectClasses = {
@@ -21,6 +21,10 @@ export const durableObjectClasses = {
 export const plainTextBindings = { CHATGPT_MODEL: "gpt-6.1-sol" } as const;
 
 export const shellModulesAssetDirectory = "build/shell-assets";
+
+export const assetsConfig = { runWorkerFirst: true };
+
+export const cache = { enabled: false };
 
 export const workerEntrypoint = "src/worker.ts";
 

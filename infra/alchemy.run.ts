@@ -3,6 +3,8 @@ import * as Alchemy from "alchemy";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import {
+  assetsConfig,
+  cache,
   compatibility,
   durableObjectClasses,
   observability,
@@ -28,14 +30,14 @@ export default Alchemy.Stack(
       main: workerEntrypoint,
       compatibility: {
         date: compatibility.date,
-        flags: [...compatibility.flags, "legacy_module_registry"],
+        flags: [...compatibility.flags],
       },
       workersDev: isProduction ? false : { enabled: true, previewsEnabled: false },
       routes: isProduction
         ? [{ pattern: productionRoute.pattern, zoneName: productionRoute.zone }]
         : [],
-      assets: { directory: shellModulesAssetDirectory, config: { runWorkerFirst: true } },
-      cache: { enabled: false },
+      assets: { directory: shellModulesAssetDirectory, config: assetsConfig },
+      cache,
       observability: observability(isProduction),
       env: {
         ...plainTextBindings,
