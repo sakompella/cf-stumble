@@ -1,6 +1,7 @@
 import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
 import { shellQuote } from "../../shell-quote.js";
 import { ContainerRestartedError, type ContainerLifecycleState } from "./exec-backend.js";
+import { routedBackend } from "./exec-routing.js";
 import type {
   BackendExecEvent,
   ExecBackend,
@@ -155,7 +156,8 @@ export function chosenExecBackend(
   const isolate = computerExecBackend(workspace, ISOLATE_BACKEND_ID);
 
   return {
-    exec: (input) => (input.backend === "isolate" ? isolate : container).exec(input),
+    exec: (input) =>
+      (routedBackend(input.command, input.backend) === "isolate" ? isolate : container).exec(input),
   };
 }
 

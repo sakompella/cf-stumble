@@ -10,12 +10,13 @@ import { num, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
 import type { ComputerEnv } from "./execution-env.js";
 
 const BACKEND_DESCRIPTION = [
-  "Where the command runs; both see the same workspace files. Default: container.",
-  "isolate: a fast shell in a Worker isolate that starts at once and costs little.",
-  "Use it for reading and editing files: ls, cat, head, tail, grep, find, sed, awk, sort, wc and diff.",
-  "It has no git, node, npm, pnpm, python, gh, jq or curl, and no network.",
-  "container: a Linux machine with the project's toolchain and the internet.",
-  "Use it for git, to install dependencies, build, run tests, run node or gh, and for anything the isolate cannot run.",
+  "Optional override; leave it out. The host routes each command by itself.",
+  "A command whose programs are all simple file tools or local git, with no network, runs in a fast Worker isolate that starts at once and costs little:",
+  "ls, cat, head, tail, grep, find, sed, awk, sort, wc, diff, jq, yq, echo, mkdir, cp, mv, rm, and git except clone, fetch, pull, push and remote.",
+  "Anything else runs in the container, a Linux machine with the project's toolchain and the internet: node, npm, pnpm, python, gh, curl, builds, tests, subshells, $(...), env assignments.",
+  "isolate: ask for the isolate; a command it cannot run goes to the container instead.",
+  "container: always the container.",
+  "Both see the same workspace files.",
 ].join(" ");
 
 const bash = createBashTool();
@@ -33,10 +34,10 @@ function isComputerEnv(env: ExecutionEnv | undefined): env is ComputerEnv {
   return env !== undefined && "onBackend" in env;
 }
 
-function inIsolate<Api extends ToolExecutionApi>(api: Api): Api {
+function onBackend<Api extends ToolExecutionApi>(api: Api, backend: "isolate" | "container"): Api {
   const { env } = api;
 
-  return isComputerEnv(env) ? { ...api, env: env.onBackend("isolate") } : api;
+  return isComputerEnv(env) ? { ...api, env: env.onBackend(backend) } : api;
 }
 
 const backendBash = defineTool({
@@ -46,7 +47,7 @@ const backendBash = defineTool({
   outputLimits: bash.outputLimits ?? {},
   parameters,
   execute: (args, api, context) =>
-    bash.execute(args, args.backend === "isolate" ? inIsolate(api) : api, context),
+    bash.execute(args, args.backend === undefined ? api : onBackend(api, args.backend), context),
 });
 
 export const CodingTools = defineExtension({
