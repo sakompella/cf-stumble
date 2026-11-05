@@ -31,7 +31,7 @@ test("the setting is read and changed through the supervisor", async () => {
 test("a busy workspace answers 409 and an unknown value 400", async () => {
   const supervisor = ownerApiSupervisor({
     setWorkspaceBackend: () =>
-      Promise.resolve({ ok: false, problem: { code: "run-active" } } as const),
+      Promise.resolve({ ok: false, problem: { code: "workspace-busy" } } as const),
   });
 
   const busy = await ownerApiResponse(

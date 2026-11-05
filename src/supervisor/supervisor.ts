@@ -15,8 +15,8 @@ import type {
   BackendSetting,
   ResetWorkspaceNamespace,
   SupervisorEnv,
-  SupervisorWorkspaceBackendChange,
   SupervisorWorkspaceReset,
+  WorkspaceBackendChange,
 } from "./supervisor-env.js";
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
@@ -106,11 +106,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.env.WORKSPACE_HOST.getByName(this.#parts.workspaceName).backend();
   }
 
-  setWorkspaceBackend(setting: BackendSetting): Promise<SupervisorWorkspaceBackendChange> {
+  setWorkspaceBackend(setting: BackendSetting): Promise<WorkspaceBackendChange> {
     if (this.#resetInProgress) return Promise.resolve(WORKSPACE_BUSY);
-
-    if (this.#parts.serving.running())
-      return Promise.resolve({ ok: false, problem: { code: "run-active" } });
 
     return this.env.WORKSPACE_HOST.getByName(this.#parts.workspaceName).setBackend(setting);
   }

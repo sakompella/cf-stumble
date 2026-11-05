@@ -14,7 +14,7 @@ type IdleControllerPorts = Readonly<{
   setAlarm(atMs: number): Promise<void>;
   containerRunning(): boolean;
   closeWorkspace(): Promise<void>;
-  stopContainer(): Promise<void>;
+  stopContainer(reason: "idle" | "backend"): Promise<void>;
 }>;
 
 export class WorkspaceIdleController implements ProjectActivity {
@@ -110,12 +110,25 @@ export class WorkspaceIdleController implements ProjectActivity {
 
     if (decision.kind === "check-at") return this.#arm(decision.atMs);
 
+    await this.#whileStopping(() => this.#stop(decision.idleForMs));
+  }
+
+  async stopForBackendChange(): Promise<void> {
+    if (!this.#ports.containerRunning() || this.#stopping !== undefined) return;
+
+    await this.#whileStopping(async () => {
+      await this.#ports.closeWorkspace();
+      await this.#ports.stopContainer("backend");
+    });
+  }
+
+  async #whileStopping(stop: () => Promise<void>): Promise<void> {
     this.#stopping = new Promise((done) => {
       this.#finishStop = done;
     });
 
     try {
-      await this.#stop(decision.idleForMs);
+      await stop();
     } finally {
       this.#stopping = undefined;
       this.#finishStop();
@@ -148,7 +161,7 @@ export class WorkspaceIdleController implements ProjectActivity {
     if (!this.#ports.containerRunning()) return "not-running";
 
     try {
-      await this.#ports.stopContainer();
+      await this.#ports.stopContainer("idle");
 
       return "stopped";
     } catch (cause) {

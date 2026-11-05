@@ -10,15 +10,11 @@ import {
 } from "./check.mts";
 import { fetchInvocations, fetchUsage, readToken, resolveAccount, ApiFailure } from "./fetch.mts";
 
-const USAGE =
-  "usage: ops-check --worker <name> (--since <90m|2h|1d> | --from <ISO> [--to <ISO>]) " +
-  "[--account <id>] [--token-file <path>]";
+const USAGE = "usage: ops-check --worker <name> --since <90m|2h|1d>";
 
 interface Options {
   readonly worker: string;
   readonly window: TimeWindow;
-  readonly account: string | null;
-  readonly tokenFile: string | null;
 }
 
 const UNIT_MS = new Map([
@@ -33,51 +29,29 @@ function parseOptions(argv: readonly string[], nowMs: number): Options {
     options: {
       worker: { type: "string" },
       since: { type: "string" },
-      from: { type: "string" },
-      to: { type: "string" },
-      account: { type: "string" },
-      "token-file": { type: "string" },
     },
   });
 
   if (values.worker === undefined) throw new Error("--worker is required");
 
-  const toMs = values.to === undefined ? nowMs : Date.parse(values.to);
-
-  if (Number.isNaN(toMs)) throw new Error("--to is not a date");
-
-  if (toMs > nowMs) throw new Error("--to is in the future");
-
   const since = /^(\d+)([mhd])$/u.exec(values.since ?? "");
   const unitMs = UNIT_MS.get(since?.[2] ?? "");
 
-  const fromMs =
-    values.from === undefined
-      ? since?.[1] === undefined || unitMs === undefined
-        ? Number.NaN
-        : toMs - Number(since[1]) * unitMs
-      : Date.parse(values.from);
+  if (since?.[1] === undefined || unitMs === undefined)
+    throw new Error("--since must look like 90m, 2h or 1d");
 
-  if (values.from === undefined && values.since === undefined)
-    throw new Error("give --since or --from");
-
-  if (Number.isNaN(fromMs))
-    throw new Error("--since must look like 90m, 2h or 1d, and --from must be a date");
-
-  if (fromMs >= toMs) throw new Error("the window is empty");
+  const fromMs = nowMs - Number(since[1]) * unitMs;
 
   return {
     worker: values.worker,
-    window: { fromMs, toMs },
-    account: values.account ?? null,
-    tokenFile: values["token-file"] ?? null,
+    window: { fromMs, toMs: nowMs },
   };
 }
 
 async function readActivity(options: Options): Promise<Activity> {
   const { worker, window } = options;
-  const token = readToken(options.tokenFile, process.env);
-  const account = await resolveAccount(token, options.account, process.env);
+  const token = readToken(process.env);
+  const account = await resolveAccount(token, process.env);
 
   const requestWindow = { ...window, fromMs: window.fromMs - WORKSPACE_IDLE_STOP_MS };
 

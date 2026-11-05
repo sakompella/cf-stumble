@@ -74,7 +74,7 @@ live account, so it is not part of `pnpm verify`. It checks one thing: a workspa
 kept running past the Host's idle stop. It prints one check mark when all is well and one line per
 finding otherwise, and exits 1 on any finding or `unknown`.
 
-**Sources.** For the window (`--since 90m|2h|1d`, or `--from <ISO> [--to <ISO>]`), it reads:
+**Sources.** For the window (`--since 90m|2h|1d`, ending now), it reads:
 
 - Workers Logs (`workers/observability/telemetry/query`): every fetch invocation of the Worker, with
   its end time, `$workers.wallTimeMs`, and URL, from one idle limit before the window starts. Only
@@ -101,10 +101,10 @@ the last three requests before the run ended, which shows what kept the containe
 **Limits.** Other work that holds the container after its request ended is covered only by the 10-minute slack. A stuck container shows up about 30
 minutes after the last request with the defaults, or about 40 after a message.
 
-**Credentials.** `CLOUDFLARE_API_TOKEN`, or `--token-file` with a bare token or the `cf` login JSON
+**Credentials.** `CLOUDFLARE_API_TOKEN`, else the `cf` login JSON
 (`~/.config/cloudflare/config/default.json`, after `pnpm exec cf auth whoami` refreshed it). GraphQL
 needs Account Analytics Read; an API token with it is better for repeated runs. The account is
-`--account`, then `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. The token goes in
+`CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. The token goes in
 the `Authorization` header only and is never printed. Use `--worker <name>` for another Worker.
 
 **Unknown.** Missing data never reads as fine. A request to an `/api/` route that

@@ -36,7 +36,7 @@ export class WorkspacePlatform {
   readonly #providerContainer: ProviderContainerAPI;
   readonly #state: DurableObjectState;
   readonly #providerToken: string | undefined;
-  readonly #chooseProviderPort: (connectedEgressPort: number | undefined) => number | undefined;
+  readonly #usesProvider: () => boolean;
   readonly #platformContainer: DurableObjectState["container"];
   readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
@@ -46,11 +46,11 @@ export class WorkspacePlatform {
   constructor(
     state: DurableObjectState,
     providerToken: string | undefined,
-    chooseProviderPort: (connectedEgressPort: number | undefined) => number | undefined,
+    usesProvider: () => boolean,
   ) {
     this.#state = state;
-    this.#chooseProviderPort = chooseProviderPort;
     this.#providerToken = providerToken;
+    this.#usesProvider = usesProvider;
     this.#platformContainer = state.container;
     this.provider = new ProviderLink(state);
     this.#providerContainer = new ProviderContainerAPI(this.provider, state.id.toString());
@@ -79,7 +79,7 @@ export class WorkspacePlatform {
     return (this.#platformContainer?.running ?? false) || this.#providerContainer.running();
   }
 
-  async stopContainer(reason: "idle" | "reset"): Promise<void> {
+  async stopContainer(reason: "idle" | "reset" | "backend"): Promise<void> {
     if (this.#platformContainer?.running === true) await this.#platformContainer.destroy(reason);
 
     if (reason === "reset" && this.provider.egressPort() !== undefined)
@@ -124,7 +124,7 @@ export class WorkspacePlatform {
       type: this.#containerBackend.type,
       description: this.#containerBackend.description,
       connect: () => {
-        const egressPort = this.#chooseProviderPort(this.provider.egressPort());
+        const egressPort = this.#usesProvider() ? this.provider.egressPort() : undefined;
 
         logEvent("info", "workspace.backend.chosen", {
           container: egressPort === undefined ? "cloudflare" : "provider",

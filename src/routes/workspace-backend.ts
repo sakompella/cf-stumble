@@ -1,12 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import type { SupervisorWorkspaceBackendChange } from "../supervisor/supervisor-env.js";
-import { BackendSetting } from "../backend-setting.js";
+import { BackendSetting, type WorkspaceBackendChange } from "../backend-setting.js";
 import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
 
 export type WorkspaceBackendApiSupervisor = Readonly<{
   getWorkspaceBackend: () => Promise<BackendSetting>;
-  setWorkspaceBackend: (setting: BackendSetting) => Promise<SupervisorWorkspaceBackendChange>;
+  setWorkspaceBackend: (setting: BackendSetting) => Promise<WorkspaceBackendChange>;
 }>;
 
 const ChangeBody = Schema.Struct({ backend: BackendSetting });

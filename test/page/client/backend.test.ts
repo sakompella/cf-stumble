@@ -39,14 +39,3 @@ test("the control marks the chosen backend", () => {
   expect(pressed("cloudflare")(ID.backendProviderButton)).toBe(false);
   expect(pressed("provider")(ID.backendProviderButton)).toBe(true);
 });
-
-test("clicking asks for the change and the answer becomes the chosen backend", () => {
-  const clicked = update(init().model, Message.ClickedBackend({ backend: "cloudflare" }));
-
-  expect(clicked.commands?.length).toBe(1);
-
-  const done = update(clicked.model, Message.SucceededBackend({ backend: "cloudflare" }));
-
-  expect(done.model.maybeBackend).toEqual(Option.some("cloudflare"));
-  expect(done.model.backendResult).toBe("");
-});

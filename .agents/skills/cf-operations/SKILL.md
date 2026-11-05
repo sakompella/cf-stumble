@@ -7,7 +7,7 @@ description: Operate a cf-stumble instance on Cloudflare with Alchemy and `cf`. 
 
 Placeholders: `<worker>` is `cf-stumble` for the stage `prod` and `cf-stumble-<stage>` for any other stage (`workerName` in `infra/worker-settings.ts`). `<account-id>` comes from `pnpm exec cf accounts list`. `<container-app-id>` is the `id` of the container application whose `durable_objects.namespace_id` is the id of the `<worker>` `WorkspaceHost` namespace in `GET /accounts/<account-id>/workers/durable_objects/namespaces`; Alchemy generates the application's name, so search `GET /accounts/<account-id>/containers/applications` by namespace, not by name. Look each one up; never copy one from another instance.
 
-Run Alchemy from the repository root as `pnpm alchemy <command> --config infra/alchemy.run.ts --stage <stage>`, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set (`docs/deploy.md`, "Configuration files"). Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live `cf` or Alchemy call: it shows the account and refreshes the login that `cf` keeps in its config. `pnpm ops:check` does not use that login by itself; see the Check branch.
+Run Alchemy from the repository root as `pnpm alchemy <command> --config infra/alchemy.run.ts --stage <stage>`, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set (`docs/deploy.md`, "Configuration files"). Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live `cf` or Alchemy call: it shows the account and refreshes the login that `cf` keeps in its config. `pnpm ops:check` reads the same login when `CLOUDFLARE_API_TOKEN` is unset.
 
 Every request except `GET /health` needs HTTP Basic auth with the user name `aditya` and the `OWNER_PASSWORD` secret. Read the password from the environment, never from a tracked file: `curl -u "aditya:$CF_STUMBLE_PASSWORD" https://<hostname>/api/status`. A Worker without `OWNER_PASSWORD` answers 503.
 
@@ -44,7 +44,7 @@ Compare against what you recorded before step 2. The container application keeps
 
 ### 1. Run the command
 
-Give `ops:check` a credential: it reads only `CLOUDFLARE_API_TOKEN` or the file named by `--token-file` (the `cf` login JSON, `~/.config/cloudflare/config/default.json`, works after `pnpm exec cf auth whoami` refreshed it; an API token with Account Analytics Read is better for repeated runs). See `docs/agents/design/observability.md`, "Checking a running deployment", "Credentials". Then run `pnpm ops:check --token-file <file>` (or without the flag when the variable is set). The account is `--account`, then `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. Use `--worker <worker>` for another Worker, `--since 90m|2h|1d` or `--from <ISO> [--to <ISO>]` for the window.
+Give `ops:check` a credential: it reads `CLOUDFLARE_API_TOKEN`, else the `cf` login in `~/.config/cloudflare/config/default.json` (refreshed by `pnpm exec cf auth whoami`; an API token with Account Analytics Read is better for repeated runs). See `docs/agents/design/observability.md`, "Checking a running deployment", "Credentials". Then run `pnpm ops:check`. The account is `CLOUDFLARE_ACCOUNT_ID`, else the only account the token sees. Add `--worker <worker>` or `--since 90m|2h|1d` for another Worker or window.
 
 ### 2. Read the result
 
