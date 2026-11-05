@@ -37,7 +37,7 @@ function hostAnswering<T>(
   return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) => {
     Object.defineProperty(state, "container", { value: {}, configurable: true });
 
-    return run(new WorkspaceHost(state, {}), sources);
+    return run(new WorkspaceHost(state, { LOADER: env.LOADER, ASSETS: env.ASSETS }), sources);
   });
 }
 

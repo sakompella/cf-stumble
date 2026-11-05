@@ -197,6 +197,7 @@ export async function execInWorkspace(
     command: scriptOf(command, options),
     cwd: cwd.value.addressed,
     timeoutMs: Math.min(timeout * 1_000, MAX_EXEC_TIMEOUT_MS),
+    backend: workspace.backend,
   };
 
   const started = await workspace.target.startExec(input).catch(() => {});

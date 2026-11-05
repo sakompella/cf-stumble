@@ -10,6 +10,7 @@ cd /tmp/<stage>
 pnpm install --offline --ignore-scripts
 pnpm install:infra
 pnpm run build:page
+pnpm run build:shell-modules
 mkdir -p .audit/stage        # `.audit/` is ignored by Git
 ```
 

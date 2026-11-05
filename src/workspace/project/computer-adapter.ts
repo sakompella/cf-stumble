@@ -110,6 +110,8 @@ async function waitForPostCommandSync(reader: RuntimeReader): Promise<void> {
   while (!(await reader.read()).done);
 }
 
+const ISOLATE_BACKEND_ID = "worker-shell";
+
 export function computerExecBackend(
   workspace: ExecWorkspace,
   backendId = "container-shell",
@@ -119,8 +121,11 @@ export function computerExecBackend(
     async exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
       const guard = replacementGuard(containerState);
 
+      const source =
+        backendId === ISOLATE_BACKEND_ID ? input.command : processGroupCommand(input.command);
+
       const handle = await workspace.runtime
-        .exec(processGroupCommand(input.command), {
+        .exec(source, {
           backend: backendId,
           cwd: input.cwd,
           timeoutMs: input.timeoutMs,
@@ -139,6 +144,18 @@ export function computerExecBackend(
 
       return { reader: guardedReader(handle.getReader(), guard), kill: () => handle.kill() };
     },
+  };
+}
+
+export function chosenExecBackend(
+  workspace: ExecWorkspace,
+  containerState: ContainerLifecycleState,
+): ExecBackend {
+  const container = computerExecBackend(workspace, "container-shell", containerState);
+  const isolate = computerExecBackend(workspace, ISOLATE_BACKEND_ID);
+
+  return {
+    exec: (input) => (input.backend === "isolate" ? isolate : container).exec(input),
   };
 }
 

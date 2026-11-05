@@ -1,6 +1,9 @@
 import { FileError, type ExecutionEnv, type Result } from "@earendil-works/pi-durable/env";
 import type { GenerationControl } from "../../generation-requests.js";
-import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
+import type {
+  ExecBackendChoice,
+  ProjectRpcTargetContract,
+} from "../../workspace/project/protocol.js";
 import { execInWorkspace, killAll, type RunningCommands } from "./execution-env-exec.js";
 import {
   absolutePath,
@@ -28,12 +31,15 @@ function unsupported(member: string): () => Promise<Result<never, FileError>> {
   return () => Promise.resolve({ ok: false, error: new FileError("not_supported", message) });
 }
 
-export function createComputerEnv(options: ComputerEnvOptions): ExecutionEnv {
-  const workspace: ComputerWorkspace = { cwd: options.cwd, target: options.target };
+export interface ComputerEnv extends ExecutionEnv {
+  onBackend(backend: ExecBackendChoice): ExecutionEnv;
+}
+
+export function createComputerEnv(options: ComputerEnvOptions): ComputerEnv {
   const running: RunningCommands = new Set();
   const { generations } = options;
 
-  return {
+  const envFor = (workspace: ComputerWorkspace): ComputerEnv => ({
     id: COMPUTER_ENV_ID,
     cwd: workspace.cwd,
     absolutePath: (path, context) => absolutePath(workspace, path, context),
@@ -68,5 +74,8 @@ export function createComputerEnv(options: ComputerEnvOptions): ExecutionEnv {
         : runStumbleCommand(stumble, { generations }, execOptions, context);
     },
     cleanup: () => killAll(workspace, running),
-  };
+    onBackend: (backend) => envFor({ ...workspace, backend }),
+  });
+
+  return envFor({ cwd: options.cwd, target: options.target });
 }

@@ -1,6 +1,7 @@
 import { FileError, type FileErrorCode, type Result } from "@earendil-works/pi-durable/env";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import type {
+  ExecBackendChoice,
   ProjectErrorCode,
   ProjectResult,
   ProjectRpcTargetContract,
@@ -14,6 +15,7 @@ export interface WorkspacePath {
 export interface ComputerWorkspace {
   readonly cwd: string;
   readonly target: ProjectRpcTargetContract;
+  readonly backend?: ExecBackendChoice | undefined;
 }
 
 function normalizePosix(path: string): string {

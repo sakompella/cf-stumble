@@ -7,13 +7,13 @@ import {
   type TaskGraph,
 } from "@earendil-works/pi-durable";
 import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
-import { CodingTools } from "@earendil-works/pi-durable/tools";
 import type {
   ConversationHost,
   GenerationControl,
   RunningConversation,
 } from "../conversation-protocol.js";
 import type { ModelCapability } from "./capabilities.js";
+import { CodingTools } from "./coding-tools.js";
 import { computerEnv } from "./computer-env.js";
 import { CfStumblePrompt } from "./prompt.js";
 import { ROUTE_MODEL, routeProvider } from "./route-provider.js";

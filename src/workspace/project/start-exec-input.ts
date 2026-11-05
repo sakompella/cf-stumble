@@ -6,6 +6,7 @@ import {
   MAX_EXEC_COMMAND_BYTES,
   MAX_EXEC_TIMEOUT_MS,
   ok,
+  type ExecBackendChoice,
   type ProjectResult,
   type StartExecWire,
   type WriteFileWire,
@@ -55,6 +56,7 @@ const StartExecInput = Schema.Struct({
   command: CommandText,
   cwd: Schema.optional(Schema.String),
   timeoutMs: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))),
+  backend: Schema.optional(Schema.Literals(["isolate", "container"])),
 });
 
 const decodeStartExecInput = Schema.decodeResult(StartExecInput, { onExcessProperty: "error" });
@@ -63,6 +65,7 @@ export interface ParsedStartExecInput {
   command: string;
   cwdSegments: readonly string[];
   timeoutMs: number;
+  backend: ExecBackendChoice | undefined;
 }
 
 export function parseStartExecInput(input: StartExecWire): ProjectResult<ParsedStartExecInput> {
@@ -78,5 +81,6 @@ export function parseStartExecInput(input: StartExecWire): ProjectResult<ParsedS
     command: decoded.success.command,
     cwdSegments: segmentsOfAddressedPath(cwd.success),
     timeoutMs: Math.min(decoded.success.timeoutMs ?? MAX_EXEC_TIMEOUT_MS, MAX_EXEC_TIMEOUT_MS),
+    backend: decoded.success.backend,
   });
 }

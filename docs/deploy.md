@@ -29,7 +29,7 @@ Alchemy is its own pnpm project in `infra/`, with its own lockfile, because the 
 
 Run Alchemy from the repository root, because the stack names its files relative to it: `pnpm alchemy <command> --config infra/alchemy.run.ts --stage <stage>`. The commands you need:
 
-- `pnpm run deploy` writes the owner page's script with `pnpm run build:page` and deploys the stage `prod`. Alchemy does not run a build command of its own, so a deploy of another stage needs `pnpm run build:page` first.
+- `pnpm run deploy` writes the owner page's script with `pnpm run build:page`, writes the shell module set for the isolate with `pnpm run build:shell-modules`, and deploys the stage `prod`. Alchemy does not run a build command of its own, so a deploy of another stage needs both first.
 - `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod` lists what a deploy would change, and changes nothing.
 - `pnpm alchemy logs --config infra/alchemy.run.ts --stage prod --tail` streams the Worker's logs.
 - `pnpm alchemy destroy --config infra/alchemy.run.ts --stage <stage>` deletes a stage's Worker and container application.
@@ -127,7 +127,7 @@ Before you deploy:
 2. Set the credentials (see "Configuration files") and run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` reads `CLOUDFLARE_API_TOKEN`, else that login (see `docs/agents/design/observability.md`, "Credentials").
 3. Check that the instance secrets you rely on exist: `pnpm exec cf workers secrets list --worker <worker>`. A deploy keeps secrets, so a missing one stays missing.
 4. Check that the last container rollout finished. `pnpm exec cf containers applications get <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Checking a running deployment", shows each instance's state. Find `<container-app-id>` in the applications list: it is the application whose `durable_objects.namespace_id` is the Worker's `WorkspaceHost` namespace id (`GET /accounts/<account-id>/workers/durable_objects/namespaces`). Alchemy generates the application's name.
-5. Run `pnpm run build:page`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change.
+5. Run `pnpm run build:page` and `pnpm run build:shell-modules`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change.
 
 Then run `pnpm run deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
 

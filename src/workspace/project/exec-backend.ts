@@ -1,3 +1,5 @@
+import type { ExecBackendChoice } from "./protocol.js";
+
 export type BackendExecEvent =
   | { name: "stdout"; data: Uint8Array }
   | { name: "stderr"; data: Uint8Array }
@@ -17,6 +19,7 @@ export interface ExecBackendInput {
   command: string;
   cwd: string;
   timeoutMs: number;
+  backend?: ExecBackendChoice | undefined;
 }
 
 export interface ContainerLifecycleState {

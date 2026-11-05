@@ -190,7 +190,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     try {
       return startExecOperation(
         this.#execBackend,
-        { command: input.command, cwd, timeoutMs },
+        { command: input.command, cwd, timeoutMs, backend: input.backend },
         () => {
           this.#operations.delete(operationId);
           endActivity?.();

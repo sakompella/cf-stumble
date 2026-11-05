@@ -11,6 +11,7 @@ import {
   productionRoute,
   workerEntrypoint,
   workerName,
+  shellModulesAssetDirectory,
   workspaceImage,
 } from "./worker-settings.js";
 
@@ -33,6 +34,7 @@ export default Alchemy.Stack(
       routes: isProduction
         ? [{ pattern: productionRoute.pattern, zoneName: productionRoute.zone }]
         : [],
+      assets: { directory: shellModulesAssetDirectory, config: { runWorkerFirst: true } },
       cache: { enabled: false },
       observability: observability(isProduction),
       env: {

@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
       exportName: durableObjectClasses.WORKSPACE_HOST,
     }),
     LOADER: bindings.workerLoader(),
+    ASSETS: bindings.assets(),
   };
 
   return {
