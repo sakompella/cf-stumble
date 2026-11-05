@@ -15,8 +15,10 @@ import {
   type ProjectRemovalRequest,
 } from "./project-removal.js";
 import type { HarnessBuildConfiguration, HarnessBuildRequest } from "../harness-build.js";
+import type { Project } from "../project-catalog.js";
 import {
   answerFailures,
+  attemptWorkspace,
   workspaceEffects,
   WorkspaceSyncIncomplete,
   type CommandOutput,
@@ -119,6 +121,28 @@ export function executeHarnessBuildRequest(
   );
 }
 
+function isolateCloned(
+  operations: WorkspaceEffects,
+  project: Project,
+  clone: (project: Project) => Promise<void>,
+): Effect.Effect<boolean> {
+  return Effect.gen(function* () {
+    if (yield* cloneMarkersAreDurable(operations, project)) return true;
+
+    yield* attemptWorkspace(() => clone(project));
+
+    return yield* cloneMarkersAreDurable(operations, project);
+  }).pipe(
+    Effect.catch((fault) =>
+      Effect.sync(() => {
+        logRedactedCause("workspace.provision-project.isolate-clone: fell-back", fault);
+
+        return false;
+      }),
+    ),
+  );
+}
+
 export function executeProjectProvisionRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
@@ -131,6 +155,20 @@ export function executeProjectProvisionRequest(
 
   return Effect.gen(function* () {
     const operations = workspaceEffects(input.operations);
+
+    const { cloneProject } = input.operations;
+
+    if (
+      cloneProject !== undefined &&
+      (yield* isolateCloned(operations, parsed, (project) =>
+        cloneProject.call(input.operations, project),
+      ))
+    ) {
+      return {
+        ok: true,
+        result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
+      } as const;
+    }
 
     const output = yield* runPlannedCommand(operations, planProjectProvisionRequest(parsed));
 

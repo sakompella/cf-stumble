@@ -11,6 +11,8 @@ import {
   type WorkspacePathKind,
 } from "./executor.js";
 import { hasErrnoCode } from "./errno-code.js";
+import { cloneProjectInIsolate } from "./isolate-clone.js";
+import type { Project } from "../project-catalog.js";
 
 function isNotFound(cause: unknown): boolean {
   return hasErrnoCode(cause) && cause.code === "ENOENT";
@@ -42,6 +44,10 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
   constructor(workspace: Workspace, sync: CommandSync) {
     this.workspace = workspace;
     this.sync = sync;
+  }
+
+  cloneProject(project: Project): Promise<void> {
+    return cloneProjectInIsolate(this.workspace, project);
   }
 
   async lstat(path: string): Promise<WorkspacePathKind | undefined> {
