@@ -29,10 +29,27 @@ function withGitHub(model: Model, report: GitHubReport): Model {
   return { ...model, github };
 }
 
+function withPromptSwitched(model: Model, projectId: string): Model {
+  const { [projectId]: incoming = "", ...others } = model.drafts;
+
+  return Option.match(model.maybeProjectId, {
+    onNone: () => ({
+      ...model,
+      drafts: others,
+      prompt: model.prompt === "" ? incoming : model.prompt,
+    }),
+    onSome: (leaving) => ({
+      ...model,
+      drafts: { ...others, [leaving]: model.prompt },
+      prompt: incoming,
+    }),
+  });
+}
+
 function selectProject(model: Model, project: Project): UpdateReturn {
   return {
     model: {
-      ...model,
+      ...withPromptSwitched(model, project.id),
       eventsStreamId: model.eventsStreamId + 1,
       maybeProjectId: Option.some(project.id),
       conversationProject: project.displayName,
