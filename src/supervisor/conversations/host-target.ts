@@ -21,6 +21,7 @@ export type { EntriesRequest, RunningConversation };
 
 type HostPorts = Readonly<{
   arm: (wake: Wake) => Promise<void>;
+  fault: (event: string, detail: string) => void;
   running: (conversations: readonly RunningConversation[]) => Promise<void>;
   workspace: (conversationId: string) => Promise<ProjectRpcTargetContract & Disposable>;
 }>;
@@ -52,6 +53,16 @@ export class ConversationHostTarget extends RpcTarget implements ConversationHos
 
   arm(wake: Wake): Promise<void> {
     return this.#ports.arm(parseWake(wake));
+  }
+
+  fault(event: string, detail: string): Promise<void> {
+    if (!isString(event) || !isString(detail)) {
+      return Promise.reject(new Error("a fault must be an event name and a detail"));
+    }
+
+    this.#ports.fault(event, detail);
+
+    return Promise.resolve();
   }
 
   running(conversations: readonly RunningConversation[]): Promise<void> {

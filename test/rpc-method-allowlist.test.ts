@@ -51,6 +51,7 @@ test("the generation host a serving facet holds exposes exactly the allowlisted 
 test("the host a serving facet holds exposes exactly the allowlisted RPC members", () => {
   expect(rpcMemberNames(ConversationHostTarget.prototype)).toStrictEqual([
     "arm",
+    "fault",
     "running",
     "workspace",
   ]);

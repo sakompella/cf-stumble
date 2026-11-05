@@ -6,7 +6,7 @@ import {
   type SelectableProject,
 } from "../../selectable-projects.js";
 import { selectedWorkingDirectory } from "../../workspace-layout.js";
-import { logEvent, logRedactedCause } from "../../diagnostics.js";
+import { logEvent, logRedactedCause, redactedExcerpt } from "../../diagnostics.js";
 import {
   SERVING_FACET_NAME,
   type MainFacetMountProblem,
@@ -252,6 +252,9 @@ export class ServingConversations {
     const targets = servingHosts(
       {
         arm: (wake) => this.#runs.arm(wake, Date.now()),
+        fault: (event, detail) => {
+          logEvent("error", `facet.${event.slice(0, 60)}`, { detail: redactedExcerpt(detail) });
+        },
         running: (conversations) => this.#running(conversations),
         workspace: (conversationId) => this.#workspace(conversationId),
       },

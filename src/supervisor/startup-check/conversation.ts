@@ -33,6 +33,7 @@ export function checkConversation(
 
   const host = new ConversationHostTarget({
     arm: () => Promise.resolve(),
+    fault: () => {},
     running: () => Promise.resolve(),
     workspace: async () => {
       held ??= Effect.runPromise(obtainWorkspace(released.signal));

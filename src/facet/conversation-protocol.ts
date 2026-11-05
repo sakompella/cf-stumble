@@ -9,6 +9,7 @@ export type RunningConversation = Readonly<{ conversationId: string; run?: numbe
 
 export interface ConversationHost {
   arm(wake: Wake): Promise<void>;
+  fault(event: string, detail: string): Promise<void>;
   running(conversations: readonly RunningConversation[]): Promise<void>;
   workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable>;
 }

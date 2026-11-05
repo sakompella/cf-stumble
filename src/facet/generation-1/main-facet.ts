@@ -53,13 +53,18 @@ export class MainFacet
       });
 
       this.#session = opening;
-      void opening.catch(() => {
-        this.#session = undefined;
-      });
+      void opening.then(
+        ({ harness }) =>
+          harness.closed.then(() => {
+            if (this.#session === opening) this.#session = undefined;
+          }),
+        () => {
+          this.#session = undefined;
+        },
+      );
     }
 
     const session = await this.#session;
-
     await session.host.arm(session.harness.wake());
     session.harness.resume();
   }
