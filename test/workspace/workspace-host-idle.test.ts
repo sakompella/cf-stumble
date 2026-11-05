@@ -195,7 +195,7 @@ test("an exec started while the idle stop destroys the container waits for it", 
     const alarm = host.alarm();
     await tick();
     const project = host.project({ remainingMs: 60_000 });
-    const started = await project.startExec({ command: "true", timeoutMs: 1_000 });
+    const started = await project.startExec({ command: "node -v", timeoutMs: 1_000 });
     await tick();
     const whileDestroying = container.starts;
     open.release();

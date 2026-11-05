@@ -47,14 +47,21 @@ test("a command asked to run in the isolate runs there against the workspace fil
   ]);
 });
 
-test.each([undefined, "container" as const])(
-  "a command with backend %s goes to the container",
-  async (backend) => {
-    const lines = await runIn(`isolate-routing-${String(backend)}`, backend);
+test("a command with no backend and only isolate programs runs in the isolate", async () => {
+  const lines = await runIn("isolate-routing-auto");
 
-    expect(lines.at(-1)).toContain('"outcome":"failed"');
-  },
-);
+  expect(lines.at(-1)).toContain('"outcome":"exited"');
+});
+
+test.each([
+  ["isolate-routing-container", "container" as const, "grep two notes.txt"],
+  ["isolate-routing-fallback", "isolate" as const, "node -v"],
+  ["isolate-routing-auto-node", undefined, "node -v"],
+])("%s goes to the container", async (name, backend, command) => {
+  const lines = await runIn(name, backend, command);
+
+  expect(lines.at(-1)).toContain('"outcome":"failed"');
+});
 
 const IDENTITY =
   "GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=a@example.com GIT_COMMITTER_NAME=a GIT_COMMITTER_EMAIL=a@example.com";
