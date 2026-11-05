@@ -67,6 +67,17 @@ export async function openSession(input: SessionInput): Promise<Session> {
     BACKGROUND_CONTEXT,
   );
 
+  void harness.closed.then((end) => {
+    if (end.kind !== "failed") return;
+
+    const { error } = end;
+
+    const detail =
+      error instanceof Error ? `${error.message}; cause: ${String(error.cause)}` : String(error);
+
+    void host.fault("session-failed", detail).catch(() => {});
+  });
+
   await relayRunningConversations(harness, host, input.abort);
 
   return { harness, host };
