@@ -87,10 +87,7 @@ async function send(token: string, url: string, body?: JsonRecord): Promise<Json
   return parseJsonText(await response.text().catch(() => "")) ?? null;
 }
 
-export async function resolveAccount(
-  token: string,
-  env: NodeJS.ProcessEnv,
-): Promise<string> {
+export async function resolveAccount(token: string, env: NodeJS.ProcessEnv): Promise<string> {
   const named = env["CLOUDFLARE_ACCOUNT_ID"]?.trim() ?? "";
 
   if (named !== "") return named;

@@ -51,7 +51,11 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
-    this.#platform = new WorkspacePlatform(ctx, env.ORB_PROVIDER_TOKEN);
+    this.#platform = new WorkspacePlatform(
+      ctx,
+      env.ORB_PROVIDER_TOKEN,
+      () => readBackendSetting(ctx.storage.kv) === "provider",
+    );
     this.#idle = new WorkspaceIdleController({
       nowMs: () => Date.now(),
       idleLimitMs: WORKSPACE_IDLE_STOP_MS,

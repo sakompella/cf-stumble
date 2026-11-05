@@ -20,6 +20,8 @@ export type SupervisorWorkspaceReset =
   | WorkspaceResetResult
   | Readonly<{ ok: false; problem: Readonly<{ code: "run-active" }> }>;
 
+export type { BackendSetting, WorkspaceBackendChange };
+
 export type BackendWorkspaceHost = Readonly<{
   backend(): Promise<BackendSetting>;
   setBackend(setting: BackendSetting): Promise<WorkspaceBackendChange>;

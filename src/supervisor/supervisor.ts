@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { ActivationCommand, GenerationLabel } from "./generations.js";
 import { WORKSPACE_BUSY } from "../workspace/index.js";
-import type { BackendSetting, WorkspaceBackendChange } from "../backend-setting.js";
 import type { EntriesRequest } from "../entries-request.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import {
@@ -13,9 +12,11 @@ import {
 } from "./startup-check/index.js";
 import { supervisorParts, type SupervisorParts } from "./supervisor-parts.js";
 import type {
+  BackendSetting,
   ResetWorkspaceNamespace,
   SupervisorEnv,
   SupervisorWorkspaceReset,
+  WorkspaceBackendChange,
 } from "./supervisor-env.js";
 
 export class Supervisor extends DurableObject<SupervisorEnv> {

@@ -4,7 +4,6 @@ import {
   type WorkspaceBackend,
 } from "@cloudflare/computer";
 import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
-import { readBackendSetting } from "../backend-setting.js";
 import { logEvent } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore, type HostedBackend } from "./backend-sync-ignore.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
@@ -37,15 +36,21 @@ export class WorkspacePlatform {
   readonly #providerContainer: ProviderContainerAPI;
   readonly #state: DurableObjectState;
   readonly #providerToken: string | undefined;
+  readonly #usesProvider: () => boolean;
   readonly #platformContainer: DurableObjectState["container"];
   readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   #providerBackend: ProviderBackend | undefined;
   #workspace: Workspace;
 
-  constructor(state: DurableObjectState, providerToken: string | undefined) {
+  constructor(
+    state: DurableObjectState,
+    providerToken: string | undefined,
+    usesProvider: () => boolean,
+  ) {
     this.#state = state;
     this.#providerToken = providerToken;
+    this.#usesProvider = usesProvider;
     this.#platformContainer = state.container;
     this.provider = new ProviderLink(state);
     this.#providerContainer = new ProviderContainerAPI(this.provider, state.id.toString());
@@ -119,10 +124,7 @@ export class WorkspacePlatform {
       type: this.#containerBackend.type,
       description: this.#containerBackend.description,
       connect: () => {
-        const egressPort =
-          readBackendSetting(this.#state.storage.kv) === "provider"
-            ? this.provider.egressPort()
-            : undefined;
+        const egressPort = this.#usesProvider() ? this.provider.egressPort() : undefined;
 
         logEvent("info", "workspace.backend.chosen", {
           container: egressPort === undefined ? "cloudflare" : "provider",
