@@ -1,5 +1,7 @@
 import { bindings, defineConfig, defineContainer, exports, triggers } from "cf/config";
 import {
+  assetsConfig,
+  cache,
   compatibility,
   durableObjectClasses,
   observability,
@@ -10,12 +12,13 @@ import {
   workerName,
   workspaceImage,
 } from "./infra/worker-settings.ts";
+import { WORKSPACE_CONTAINER_INSTANCE } from "./src/workspace/container-instance.ts";
 
 const workspaceHostContainer = defineContainer({
   name: "cf-stumble-workspacehost",
   image: { reference: workspaceImage },
   maxInstances: 1,
-  instanceType: "standard-3",
+  instanceType: WORKSPACE_CONTAINER_INSTANCE,
 });
 
 export default defineConfig(({ mode }) => {
@@ -45,7 +48,8 @@ export default defineConfig(({ mode }) => {
       compatibilityDate: compatibility.date,
       compatibilityFlags: [...compatibility.flags],
       workersDev: false,
-      cache: { enabled: false },
+      assets: assetsConfig,
+      cache,
       observability: observability(true),
       triggers: [triggers.fetch(productionRoute)],
       exports: {
