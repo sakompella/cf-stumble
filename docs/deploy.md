@@ -271,7 +271,7 @@ next command starts on the chosen backend. It is refused while a run is active.
    `cf` reads the value from stdin, so the token stays out of the command line.
 
 3. The provider and its dispatch scripts support x86_64 Linux only for now, because the workspace
-   image is linux/amd64. `stumble orb provider` refuses to start on any other platform. On the
+   image is linux/amd64. `stumble orb provider` logs a warning on any other platform and carries on. On the
    machine, build the workspace image from `containers/computerd.Dockerfile` for
    linux/amd64 as `cf-stumble-workspace:orbs`, or set `STUMBLE_IMAGE` to another tag.
 4. Run the provider from a checkout:

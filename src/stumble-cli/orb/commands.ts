@@ -27,8 +27,8 @@ function workerUrl(text: string | undefined): URL | undefined {
 
 async function provide(script: string, ports: OrbPorts): Promise<CommandOutput> {
   if (ports.platform !== "linux" || ports.arch !== "x64")
-    return refused(
-      `the orb provider supports x86_64 Linux only, not ${ports.platform} ${ports.arch}`,
+    ports.log(
+      `warning: the orb provider is tested on x86_64 Linux only, not ${ports.platform} ${ports.arch}`,
     );
 
   const url = workerUrl(ports.env["STUMBLE_ORB_URL"]);

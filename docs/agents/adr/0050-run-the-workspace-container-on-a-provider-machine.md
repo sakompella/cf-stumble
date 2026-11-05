@@ -8,7 +8,7 @@ itself, so it needs no inbound port, as with Amp's self-hosted orbs. When no pro
 
 **Host requirement.** The provider and its dispatch scripts support x86_64 Linux only for now,
 because the workspace image is linux/amd64. `stumble orb provider` checks `process.platform` and
-`process.arch` and refuses to start elsewhere, with a one-line message. There is no arm64 build.
+`process.arch` and logs a one-line warning elsewhere, then carries on. There is no arm64 build.
 
 **Seam.** Computer 0.8.0's `ContainerBackend` drives a container only through
 `IWorkspaceContainerAPI`. `ProviderContainerAPI` (`src/workspace/provider-container.ts`) implements
