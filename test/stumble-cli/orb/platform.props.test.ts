@@ -6,7 +6,9 @@ function ports(platform: string, arch: string, lines: string[]): OrbPorts {
   return {
     env: {},
     signal: new AbortController().signal,
-    log: (line) => lines.push(line),
+    log: (line) => {
+      lines.push(line);
+    },
     platform,
     arch,
   };
