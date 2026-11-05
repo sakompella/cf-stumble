@@ -1,9 +1,11 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type { Project } from "../project-catalog.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
 
 export type WorkspaceOperations = Readonly<{
+  cloneProject?(project: Project): Promise<void>;
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
