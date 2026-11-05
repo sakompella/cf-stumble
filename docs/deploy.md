@@ -251,7 +251,7 @@ A wrong URL fails safely. The first build step tries to clone it, fails, and rep
 
 ## Run the workspace container on your own machine
 
-A machine you own, such as a Mac with OrbStack, can run the workspace container instead of Cloudflare
+An x86_64 Linux machine you own can run the workspace container instead of Cloudflare
 (ADR-0050). The machine opens every connection itself, so it needs no inbound port. While no
 provider is connected, the instance uses the Cloudflare container.
 
@@ -270,7 +270,9 @@ next command starts on the chosen backend. It is refused while a run is active.
 
    `cf` reads the value from stdin, so the token stays out of the command line.
 
-3. On the machine, build the workspace image from `containers/computerd.Dockerfile` for
+3. The provider and its dispatch scripts support x86_64 Linux only for now, because the workspace
+   image is linux/amd64. `stumble orb provider` refuses to start on any other platform. On the
+   machine, build the workspace image from `containers/computerd.Dockerfile` for
    linux/amd64 as `cf-stumble-workspace:orbs`, or set `STUMBLE_IMAGE` to another tag.
 4. Run the provider from a checkout:
 

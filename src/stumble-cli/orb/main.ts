@@ -20,6 +20,8 @@ process.once("SIGTERM", stop);
 const output = await runCommandTree(stumble, process.argv.slice(2), {
   env: process.env,
   signal: stopping.signal,
+  platform: process.platform,
+  arch: process.arch,
   log: (line) => {
     console.error(`${new Date().toISOString()} ${line}`);
   },
