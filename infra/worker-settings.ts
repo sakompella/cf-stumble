@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+
 export const PRODUCTION_STAGE = "prod";
 
 const PRODUCTION_WORKER = "cf-stumble";
@@ -25,10 +27,9 @@ export const productionRoute = {
   zone: "akompella.dev",
 } as const;
 
-export const workspaceContainer = {
-  dockerfile: "containers/computerd.Dockerfile",
-  context: ".",
-} as const;
+const imageTagScript = new URL("../containers/image-tag.sh", import.meta.url);
+
+export const workspaceImage = `ghcr.io/sakompella/cf-stumble-workspace:${execFileSync(imageTagScript.pathname, { encoding: "utf8" }).trim()}`;
 
 export function observability(isProduction: boolean) {
   return {

@@ -1,0 +1,61 @@
+name: Workspace image
+
+on:
+  push:
+    paths:
+      - .dockerignore
+      - containers/**
+      - .github/workflows/workspace-image.yml
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: workspace-image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REPOSITORY: ghcr.io/sakompella/cf-stumble-workspace
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v4
+      - id: tag
+        run: echo "ref=$REPOSITORY:$(containers/image-tag.sh)" >> "$GITHUB_OUTPUT"
+      - id: exists
+        run: |
+          if docker buildx imagetools inspect "${{ steps.tag.outputs.ref }}" > /dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.exists.outputs.found == 'false'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: containers/computerd.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tag.outputs.ref }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - if: github.ref == 'refs/heads/main'
+        run: docker buildx imagetools create -t "$REPOSITORY:latest" "${{ steps.tag.outputs.ref }}"
