@@ -8,15 +8,12 @@ import {
   productionRoute,
   workerEntrypoint,
   workerName,
-  workspaceContainer,
+  workspaceImage,
 } from "./infra/worker-settings.ts";
 
 const workspaceHostContainer = defineContainer({
   name: "cf-stumble-workspacehost",
-  image: {
-    dockerfile: `./${workspaceContainer.dockerfile}`,
-    buildContext: workspaceContainer.context,
-  },
+  image: { reference: workspaceImage },
   maxInstances: 1,
   instanceType: "standard-3",
 });

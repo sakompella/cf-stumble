@@ -11,7 +11,7 @@ You need:
 - A Cloudflare account on the Workers Paid plan. This project uses Durable Objects with SQLite storage, Containers, and Worker Loaders. They are not available on the free plan.
 - A GitHub account.
 - A domain in the same Cloudflare account for the Worker's route.
-- Docker, to build the Container image.
+- Docker, to pull the Container image and push it to Cloudflare's registry.
 
 The workspace runs project commands and can make Workers AI requests. Use an account where you can control the resulting charges.
 
@@ -84,7 +84,7 @@ GitHub Actions deploys production. Two workflows in `.github/workflows/` do the 
 - `verify.yml` runs `pnpm verify` on Ubuntu for every push and every pull request.
 - `deploy.yml` runs the same steps as `pnpm run deploy --yes` for the stage `prod` when Verify passes on a push to `main`. It checks out the commit that Verify tested. A concurrency group per stage lets only one deploy of a stage run at a time; a second deploy waits for the first to finish.
 
-The normal deploy path is therefore a push or merge to `main`. The runner has Docker, so it builds the Container image and pushes it to the account's registry. Pushing that image from the Mac through OrbStack failed with "use of closed network connection" during the staging rehearsal, which is why deploys moved to CI.
+The normal deploy path is therefore a push or merge to `main`. The runner has Docker, so it pulls the Container image that CI published and pushes it to the account's registry. Pushing that image from the Mac through OrbStack failed with "use of closed network connection" during the staging rehearsal, which is why deploys moved to CI.
 
 You can also start a deploy by hand from `main`: open **Actions** > **Deploy** > **Run workflow**, or run `gh workflow run deploy.yml --ref main`. Set `stage` (`-f stage=<stage>`) to deploy a staging copy, the Worker `cf-stumble-<stage>`, from CI; destroy it from a machine afterwards, which needs no Docker. The workflow skips the job when you start it from any other branch.
 
@@ -117,7 +117,7 @@ In CI, Alchemy refuses to create a missing state store or upgrade an outdated on
 
 ## Deploy an update
 
-A push to `main` deploys through CI (see "Deploying from CI"). To deploy from a machine instead, run `pnpm run deploy`. It builds the Container image, which needs Docker, and pushes it to the account's registry. On the Mac, Alchemy's push of the image's 1 GB layer through OrbStack failed with "use of closed network connection" during the staging rehearsal, so deploy from a machine only when CI cannot. Agents follow the same steps with their completion checks in `.agents/skills/cf-operations/SKILL.md`.
+A push to `main` deploys through CI (see "Deploying from CI"). To deploy from a machine instead, run `pnpm run deploy`. It pulls the published Container image, which needs Docker, and pushes it to the account's registry. On the Mac, Alchemy's push of the image's 1 GB layer through OrbStack failed with "use of closed network connection" during the staging rehearsal, so deploy from a machine only when CI cannot. Agents follow the same steps with their completion checks in `.agents/skills/cf-operations/SKILL.md`.
 
 The checks below apply to both paths. For a deploy from CI, do steps 1 to 5 before you merge to `main`; the Deploy workflow then takes the place of `pnpm run deploy`, and the checks after the deploy stay the same.
 
@@ -145,9 +145,9 @@ Workers Logs keeps events for 7 days. After a deploy that changes lifecycle beha
 
 ## Container image
 
-The stack points the Container at `containers/computerd.Dockerfile`, not at a registry image. The Dockerfile builds `computerd`, Cloudflare Computer's container daemon, from a pinned public source commit with one small patch, then copies it into a Debian and Node image. The first image build fetches that source and its npm packages, so it takes a few minutes longer than copying a prebuilt binary.
+CI builds the image once. `.github/workflows/workspace-image.yml` builds `containers/computerd.Dockerfile` for linux/amd64 and pushes it to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`, where `<hash>` is `containers/image-tag.sh`: a hash of `.dockerignore`, the Dockerfile and the patch. It skips the build when that tag exists, and on `main` it moves `latest` to it. The Deploy workflow runs it first, so a deploy always finds its image. Nothing else builds the image: a change to those files is the only reason to rebuild. The first publish makes the package private; open the package's settings on GitHub once and set its visibility to public (the API has no call for it), so machines can pull without a login.
 
-This indirection is required. Cloudflare Containers only pull images from the deploying account's managed registry or from a registry that account has configured. A direct reference to the public image fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Workers Builds has Docker, so it builds this Dockerfile and pushes the result to the deploying account's managed registry.
+`infra/worker-settings.ts` holds that reference as `workspaceImage`, for the stack and for `cloudflare.config.ts`. Cloudflare Containers only pull images from the deploying account's managed registry or from a registry that account has configured, so a direct reference to a ghcr.io image fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Alchemy's `image` option pulls the image and pushes it to the account's registry on deploy, so the deploy needs Docker and a pull of about a gigabyte, not a build.
 
 If you deploy by hand, use Docker. Podman does not work for this deployment because it can rewrite the image manifest when it pushes, leaving the deploy with a local digest that Cloudflare cannot find in the registry. The resulting deployment error is `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
 
@@ -272,8 +272,9 @@ next command starts on the chosen backend. It is refused while a run is active.
 
 3. The provider and its dispatch scripts support x86_64 Linux only for now, because the workspace
    image is linux/amd64. `stumble orb provider` logs a warning on any other platform and carries on. On the
-   machine, build the workspace image from `containers/computerd.Dockerfile` for
-   linux/amd64 as `cf-stumble-workspace:orbs`, or set `STUMBLE_IMAGE` to another tag.
+   machine, do nothing to build the image: CI publishes it as `ghcr.io/sakompella/cf-stumble-workspace`
+   (see "Container image"). The dispatch scripts default `STUMBLE_IMAGE` to the tag for the checkout's
+   `containers/image-tag.sh` and pull it when it is missing; set `STUMBLE_IMAGE` to use another image.
 4. Run the provider from a checkout:
 
    ```sh
@@ -290,7 +291,7 @@ hp runs the provider with `podman-dispatch.sh`. Rootless podman's host gateway i
 loopback, so the script runs the container on `pasta` with `--map-host-loopback`, and
 `computer.internal` reaches the provider's `127.0.0.1` listener.
 
-1. Build the image: `podman build --platform linux/amd64 -f containers/computerd.Dockerfile -t cf-stumble-workspace:orbs .`
+1. Pull the image once so the first start does not wait: `podman pull --platform linux/amd64 ghcr.io/sakompella/cf-stumble-workspace:$(containers/image-tag.sh)`. Never build it on hp.
 2. Keep the token in `~/.config/cf-stumble/orb-provider-token` (mode 0600), and a wrapper
    `~/.config/cf-stumble/orb-provider.sh` that reads it, so the token never appears in the unit or
    the journal:

@@ -3,12 +3,14 @@
 set -euo pipefail
 
 engine="${STUMBLE_ENGINE:?}"
-image="${STUMBLE_IMAGE:-cf-stumble-workspace:orbs}"
+image="${STUMBLE_IMAGE:-ghcr.io/sakompella/cf-stumble-workspace:$("$(dirname "$0")/../../../containers/image-tag.sh")}"
 network=(${STUMBLE_NETWORK:+--network "$STUMBLE_NETWORK"})
 name="stumble-${STUMBLE_CONTAINER}"
 
 case "$STUMBLE_JOB" in
   start)
+    "$engine" image inspect "$image" >/dev/null 2>&1 ||
+      "$engine" pull --platform linux/amd64 "$image" >&2
     "$engine" rm -f "$name" >/dev/null 2>&1 || true
     "$engine" run -d --rm --name "$name" \
       ${network[@]+"${network[@]}"} \
