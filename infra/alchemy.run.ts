@@ -11,8 +11,8 @@ import {
   productionRoute,
   workerEntrypoint,
   workerName,
-  workspaceContainer,
   shellModulesAssetDirectory,
+  workspaceImage,
 } from "./worker-settings.js";
 
 export default Alchemy.Stack(
@@ -44,8 +44,7 @@ export default Alchemy.Stack(
           containers: [
             Cloudflare.Container("app", {
               schedulingPolicy: "durable_object",
-              dockerfile: workspaceContainer.dockerfile,
-              context: workspaceContainer.context,
+              image: workspaceImage,
             }),
           ],
         }),
