@@ -2,6 +2,7 @@ import { globSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { build } from "esbuild";
+import { shellModulesAssetDirectory } from "./infra/worker-settings.ts";
 import { defaultExclude, defineConfig, type Plugin } from "vitest/config";
 
 const EFFECT_PATH = /^effect(?:\/[\w-]+)*$/u;
@@ -91,7 +92,13 @@ export default defineConfig({
           await effectPrebundle(),
           cloudflareTest({
             config: "./cloudflare.config.ts",
-            miniflare: { bindings: { OWNER_PASSWORD: "test-owner-password" } },
+            miniflare: {
+              bindings: { OWNER_PASSWORD: "test-owner-password" },
+              assets: {
+                directory: resolve(import.meta.dirname, shellModulesAssetDirectory),
+                binding: "ASSETS",
+              },
+            },
           }),
         ],
         test: {

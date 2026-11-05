@@ -11,7 +11,7 @@ import { afterIdleStop, trackedWork, WorkspaceIdleController } from "./idle-cont
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import {
   chosenExecBackend,
-  isolateBackend,
+  isolateWorkspace,
   computerFilesystemProvider,
   durableObjectTransactions,
   ProjectRpcTarget,
@@ -44,6 +44,7 @@ interface WorkspaceHostEnv {
   readonly HARNESS_REPOSITORY_URL?: string;
   readonly ORB_PROVIDER_TOKEN?: string;
   readonly LOADER: WorkerLoader;
+  readonly ASSETS: Fetcher;
 }
 
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
@@ -57,7 +58,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       ctx,
       env.ORB_PROVIDER_TOKEN,
       () => readBackendSetting(ctx.storage.kv) === "provider",
-      isolateBackend(env.LOADER, ctx),
+      isolateWorkspace(env, ctx),
     );
     this.#idle = new WorkspaceIdleController({
       nowMs: () => Date.now(),

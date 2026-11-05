@@ -18,6 +18,8 @@ export const durableObjectClasses = {
 
 export const plainTextBindings = { CHATGPT_MODEL: "gpt-6.1-sol" } as const;
 
+export const shellModulesAssetDirectory = "build/shell-assets";
+
 export const workerEntrypoint = "src/worker.ts";
 
 export const productionRoute = {

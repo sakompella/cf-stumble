@@ -15,16 +15,17 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "build:module-map": "node tools/build-generation-1.mts",
+    "build:shell-modules": "pnpm exec tsx tools/build-shell-modules.mts",
     "build:page": "pnpm exec tsx tools/build-owner-page.mts",
     "install:infra": "pnpm -C infra install --frozen-lockfile --reporter=silent",
     "alchemy": "infra/node_modules/.bin/alchemy",
-    "deploy": "pnpm run install:infra && pnpm run build:page && pnpm alchemy deploy --config infra/alchemy.run.ts --stage prod",
+    "deploy": "pnpm run install:infra && pnpm run build:page && pnpm run build:shell-modules && pnpm alchemy deploy --config infra/alchemy.run.ts --stage prod",
     "build:loaded-execution-env-fixture": "pnpm exec tsx tools/build-loaded-execution-env-fixture.mts",
     "verify:project-protocol": "pnpm exec tsx tools/verify-project-protocol.mts",
     "stumble": "tsx src/stumble-cli/orb/main.ts",
     "ops:check": "pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --since 2h",
     "test:browser": "pnpm build:page && playwright test -c tools/playwright/playwright.config.mts",
-    "verify": "pnpm install:infra && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm knip && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
+    "verify": "pnpm install:infra && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm knip && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:shell-modules && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
@@ -34,8 +35,7 @@
     "@earendil-works/pi-durable": "1.5.0",
     "@earendil-works/pi-schema": "1.5.0",
     "effect": "4.1.2",
-    "esbuild": "0.28.2",
-    "just-bash": "3.4.2"
+    "esbuild": "0.28.2"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "2.0.0-beta.v.11",

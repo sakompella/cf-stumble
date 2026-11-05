@@ -1,7 +1,17 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
+import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
 import { seedWorkspaceRoot } from "./host-fixtures.js";
+
+const decodeEvent = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      data: Schema.optionalKey(Schema.String),
+      exitCode: Schema.optionalKey(Schema.Number),
+    }),
+  ),
+);
 
 async function linesOf(stream: ReadableStream<Uint8Array>): Promise<string[]> {
   const text = await new Response(stream).text();
@@ -9,14 +19,14 @@ async function linesOf(stream: ReadableStream<Uint8Array>): Promise<string[]> {
   return text.split("\n").filter((line) => line !== "");
 }
 
-function runIn(name: string, backend?: "isolate" | "container") {
+function runIn(name: string, backend?: "isolate" | "container", command = "grep two notes.txt") {
   return runInDurableObject(env.WORKSPACE_HOST.getByName(name), async (host, state) => {
     await seedWorkspaceRoot(state);
     const project = host.project({ remainingMs: 60_000 });
     await project.writeFile("/notes.txt", new TextEncoder().encode("one\ntwo\n"), "overwrite");
 
     const started = await project.startExec({
-      command: "grep two notes.txt",
+      command,
       timeoutMs: 10_000,
       backend,
     });
@@ -44,3 +54,29 @@ test.each([undefined, "container" as const])(
     expect(lines.at(-1)).toContain('"outcome":"failed"');
   },
 );
+
+const IDENTITY =
+  "GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=a@example.com GIT_COMMITTER_NAME=a GIT_COMMITTER_EMAIL=a@example.com";
+
+test("git init, add, commit, status, log and diff run in the isolate", async () => {
+  const lines = await runIn(
+    "isolate-git",
+    "isolate",
+    [
+      "git init",
+      "git add notes.txt",
+      `${IDENTITY} git commit -m first`,
+      "echo three >> notes.txt",
+      "git status --short",
+      "git log --oneline",
+      "git diff",
+    ].join(" && "),
+  );
+
+  const output = lines.map((line) => decodeEvent(line));
+
+  expect(output.at(-1)?.exitCode).toBe(0);
+  expect(output.map((event) => event.data ?? "").join("")).toMatch(
+    /M notes\.txt[\s\S]*first[\s\S]*\+three/u,
+  );
+});

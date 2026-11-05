@@ -1,5 +1,4 @@
-import type { Workspace, WorkspaceBackend, WorkspaceRuntimeEvent } from "@cloudflare/computer";
-import { WorkerShellBackend } from "@cloudflare/computer/backends/worker-shell";
+import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
 import { shellQuote } from "../../shell-quote.js";
 import { ContainerRestartedError, type ContainerLifecycleState } from "./exec-backend.js";
 import type {
@@ -146,14 +145,6 @@ export function computerExecBackend(
       return { reader: guardedReader(handle.getReader(), guard), kill: () => handle.kill() };
     },
   };
-}
-
-export function isolateBackend(loader: WorkerLoader, ctx: DurableObjectState): WorkspaceBackend {
-  return new WorkerShellBackend({
-    loader,
-    workspace: { binding: "WORKSPACE_HOST", id: ctx.id.toString() },
-    ctx,
-  });
 }
 
 export function chosenExecBackend(

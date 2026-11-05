@@ -2,6 +2,7 @@ import {
   Workspace,
   type DurableObjectStorageLike,
   type WorkspaceBackend,
+  type WorkspaceOptions,
 } from "@cloudflare/computer";
 import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
 import { logEvent } from "../diagnostics.js";
@@ -29,6 +30,11 @@ export function computerStorage(storage: DurableObjectStorage): DurableObjectSto
 
 type ProviderBackend = Readonly<{ egressPort: number; backend: ContainerBackend }>;
 
+type IsolateWorkspace = Readonly<{
+  backend: WorkspaceBackend;
+  git: NonNullable<WorkspaceOptions["git"]>;
+}>;
+
 export class WorkspacePlatform {
   #container: WorkspaceContainerAPI | undefined;
   readonly lifecycle = new ContainerLifecycle();
@@ -40,7 +46,7 @@ export class WorkspacePlatform {
   readonly #platformContainer: DurableObjectState["container"];
   readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
-  readonly #isolateBackend: WorkspaceBackend;
+  readonly #isolate: IsolateWorkspace;
   #providerBackend: ProviderBackend | undefined;
   #workspace: Workspace;
 
@@ -48,7 +54,7 @@ export class WorkspacePlatform {
     state: DurableObjectState,
     providerToken: string | undefined,
     usesProvider: () => boolean,
-    isolateBackend: WorkspaceBackend,
+    isolate: IsolateWorkspace,
   ) {
     this.#state = state;
     this.#providerToken = providerToken;
@@ -66,7 +72,7 @@ export class WorkspacePlatform {
       this.lifecycle.connected(runtimeId);
       logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
     });
-    this.#isolateBackend = isolateBackend;
+    this.#isolate = isolate;
     this.#workspace = this.#newWorkspace();
   }
 
@@ -160,7 +166,8 @@ export class WorkspacePlatform {
     return new Workspace({
       storage: computerStorage(this.#state.storage),
       sessionId: this.#state.id.toString(),
-      backends: [this.#workspaceBackend, this.#isolateBackend],
+      backends: [this.#workspaceBackend, this.#isolate.backend],
+      git: this.#isolate.git,
       output: false,
     });
   }

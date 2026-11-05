@@ -10,6 +10,7 @@ declare global {
 
     interface Env {
       readonly LOADER: WorkerLoader;
+      readonly ASSETS: Fetcher;
       readonly AI: Ai;
       readonly SUPERVISOR: DurableObjectNamespace<Supervisor>;
       readonly WORKSPACE_HOST: DurableObjectNamespace<WorkspaceHost>;
