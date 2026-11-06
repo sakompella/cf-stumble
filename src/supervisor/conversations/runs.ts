@@ -1,5 +1,6 @@
 import type { Wake } from "@earendil-works/pi-durable";
 import type { RunningConversation } from "../../facet/index.js";
+import type { RunReport } from "./host-target.js";
 import { logEvent } from "../../diagnostics.js";
 import { PROJECT_RUN_DEADLINE_MS } from "../../turn-budget.js";
 
@@ -71,7 +72,7 @@ export class ConversationRuns {
   }
 
   reconcile(
-    running: readonly RunningConversation[],
+    { running, failed }: RunReport,
     now: number,
     generation: number | null,
   ): readonly string[] {
@@ -84,10 +85,14 @@ export class ConversationRuns {
         "DELETE FROM conversation_runs WHERE conversation_id = ?",
         run.conversation_id,
       );
+      const errorCode = failed[run.conversation_id] ?? null;
+
       logEvent("info", "run.settled", {
         totalMs: now - (run.deadline - PROJECT_RUN_DEADLINE_MS),
         generation,
-        outcome: this.#endings.get(run.conversation_id) ?? "completed",
+        outcome:
+          this.#endings.get(run.conversation_id) ?? (errorCode === null ? "completed" : "failed"),
+        errorCode,
       });
       this.#endings.delete(run.conversation_id);
     }

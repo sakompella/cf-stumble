@@ -43,6 +43,7 @@ export class MainFacet extends DurableObject {
   async submit(conversationId, content) {
     if (content === "refuse the next attach") this.ctx.storage.kv.put("refuse-attach", 1);
     await this.host.running([{ conversationId }]);
+    if (content === "fail the run") await this.host.running([], { [conversationId]: "model_error" });
     await this.host.arm({ active: true });
     const submitted = (this.ctx.storage.kv.get("submitted") ?? 0) + 1;
     this.ctx.storage.kv.put("submitted", submitted);
@@ -185,6 +186,17 @@ test("an active run keeps the recovery alarm armed and refuses a workspace reset
   expect(await alarm(control)).toBeNull();
   expect(log).toHaveBeenCalledWith(
     expect.objectContaining({ event: "run.settled", outcome: "cancelled" }),
+  );
+});
+
+test("a run the facet reports as failed settles as failed with the error code", async () => {
+  const control = await servingScripted("conversations-failed-run");
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  await control.submitProjectMessage("sample-project-one", "fail the run", "r1");
+
+  expect(log).toHaveBeenCalledWith(
+    expect.objectContaining({ event: "run.settled", outcome: "failed", errorCode: "model_error" }),
   );
 });
 

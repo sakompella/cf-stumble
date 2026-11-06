@@ -74,6 +74,26 @@ test("a generation that loads but fails every message fails its startup check an
   await expectFailedCandidate(control, label);
 });
 
+test("a generation that answers a fresh conversation but cannot resume it fails its startup check", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-failing-resume",
+    commits.failingResume,
+    servingFacetSource("failing resume", FACET_COMPATIBILITY_METHOD, "async attach() {}").replace(
+      "async submit() { return 1; }",
+      `async submit(id, content, requestId) {
+    if (requestId === "startup-check-resumed") throw new Error("storage error on resume");
+    return 1;
+  }`,
+    ),
+  );
+
+  expect(result).toMatchObject({
+    ok: true,
+    report: { stage: "conversation-failed", reason: "storage error on resume" },
+  });
+  await expectFailedCandidate(control, label);
+});
+
 test("a generation whose attach fails fails its startup check and leaves the active generation serving", async () => {
   const { control, label, result } = await checked(
     "startup-check-failing-attach",

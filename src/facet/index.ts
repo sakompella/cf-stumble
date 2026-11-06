@@ -41,5 +41,6 @@ export type {
   ConversationHost,
   FacetLogFields,
   FacetLogLevel,
+  RunFailures,
   RunningConversation,
 } from "./conversation-protocol.js";

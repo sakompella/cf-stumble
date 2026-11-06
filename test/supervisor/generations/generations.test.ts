@@ -29,7 +29,7 @@ function stagedPreparationArtifact(harnessCommit: string) {
     globalThis.checks = (globalThis.checks ?? 0) + 1;
   }
   compatibility() {
-    return globalThis.checks < 3 ? ${JSON.stringify(FACET_COMPATIBILITY)} : "0.0.1";
+    return globalThis.checks < 7 ? ${JSON.stringify(FACET_COMPATIBILITY)} : "0.0.1";
   }`,
     ),
   );

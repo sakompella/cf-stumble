@@ -24,8 +24,11 @@ const failed = (reason: string): StartupCheckOutcome => ({ stage: "conversation-
 
 type ObtainWorkspace = (signal: AbortSignal) => Effect.Effect<ProjectCapabilityStub | null>;
 
+export type ResumeCandidate = () => Effect.Effect<Fetcher<MainFacetTarget>, string>;
+
 export function checkConversation(
-  candidate: Fetcher<MainFacetTarget>,
+  writer: Fetcher<MainFacetTarget>,
+  resumeCandidate: ResumeCandidate,
   obtainWorkspace: ObtainWorkspace,
 ): Effect.Effect<StartupCheckOutcome> {
   const released = new AbortController();
@@ -53,19 +56,37 @@ export function checkConversation(
   });
 
   return Effect.gen(function* () {
-    yield* candidateCall(() => candidate.attach(host));
-    const conversationId = yield* candidateCall(() => candidate.createConversation(WORKSPACE_ROOT));
-    yield* candidateCall(() => candidate.submit(conversationId, PROBE_MESSAGE, "startup-check"));
-    const answer = yield* settledAnswer(candidate, conversationId);
-    const text = answerText(answer);
+    yield* candidateCall(() => writer.attach(host));
+    const conversationId = yield* candidateCall(() => writer.createConversation(WORKSPACE_ROOT));
+    yield* candidateCall(() => writer.submit(conversationId, PROBE_MESSAGE, "startup-check"));
+    const first = yield* settledAnswer(writer, conversationId, 1);
 
-    return answer.stopReason === "stop" && text === STARTUP_CHECK_REPLY
+    if (!isReply(first))
+      return failed(`the startup-check conversation ended with ${describe(first)}`);
+
+    const candidate = yield* resumeCandidate();
+
+    yield* candidateCall(() => candidate.attach(host));
+    yield* candidateCall(() =>
+      candidate.submit(conversationId, PROBE_MESSAGE, "startup-check-resumed"),
+    );
+    const second = yield* settledAnswer(candidate, conversationId, 2);
+
+    return isReply(second)
       ? PASSED
-      : failed(`the startup-check conversation ended with ${answer.stopReason}: ${text}`);
+      : failed(`the resumed startup-check conversation ended with ${describe(second)}`);
   }).pipe(
     Effect.catch((reason) => Effect.succeed(failed(reason))),
     Effect.ensuring(release),
   );
+}
+
+function isReply(answer: AssistantMessage): boolean {
+  return answer.stopReason === "stop" && answerText(answer) === STARTUP_CHECK_REPLY;
+}
+
+function describe(answer: AssistantMessage): string {
+  return `${answer.stopReason}: ${answerText(answer)}`;
 }
 
 function candidateCall<T>(call: () => Promise<T>): Effect.Effect<T, string> {
@@ -78,6 +99,7 @@ function candidateCall<T>(call: () => Promise<T>): Effect.Effect<T, string> {
 function settledAnswer(
   candidate: Fetcher<MainFacetTarget>,
   conversationId: string,
+  answers: number,
 ): Effect.Effect<AssistantMessage, string> {
   return candidateCall(() => snapshotLine(candidate, conversationId)).pipe(
     Effect.flatMap((line) => {
@@ -87,10 +109,12 @@ function settledAnswer(
         return Effect.fail("the startup-check conversation did not open with a readable view");
       }
 
-      const answer = finalAnswer(conversation.value);
+      const answer = finalAnswer(conversation.value, answers);
 
       return answer === undefined
-        ? Effect.sleep(POLL_MS).pipe(Effect.andThen(settledAnswer(candidate, conversationId)))
+        ? Effect.sleep(POLL_MS).pipe(
+            Effect.andThen(settledAnswer(candidate, conversationId, answers)),
+          )
         : Effect.succeed(answer);
     }),
   );
@@ -118,14 +142,22 @@ async function snapshotLine(
   return read.slice(0, read.indexOf("\n"));
 }
 
-function finalAnswer(conversation: Conversation): AssistantMessage | undefined {
+function finalAnswer(conversation: Conversation, answers: number): AssistantMessage | undefined {
   if (conversation.isRunning) return undefined;
 
-  const last = conversation.items
-    .flatMap((item) => (item.kind === "entry" ? (item.entry.model ?? []) : []))
-    .at(-1);
+  const messages = conversation.items.flatMap((item) =>
+    item.kind === "entry" ? (item.entry.model ?? []) : [],
+  );
 
-  return isAssistantMessage(last) && last.stopReason !== "toolUse" ? last : undefined;
+  const final = messages.filter(
+    (message) => isAssistantMessage(message) && message.stopReason !== "toolUse",
+  );
+
+  const last = messages.at(-1);
+
+  return final.length >= answers && isAssistantMessage(last) && last.stopReason !== "toolUse"
+    ? last
+    : undefined;
 }
 
 function answerText(answer: AssistantMessage): string {
