@@ -93,6 +93,18 @@ function obtainHarnessCommit(): readonly string[] {
   ];
 }
 
+function advanceCheckout(): readonly string[] {
+  return [
+    'if test -n "$(git -C "$repository" status --porcelain --untracked-files=no)"; then',
+    '  printf "harness checkout has local changes; left at %s\\n" "$(git -C "$repository" rev-parse --short HEAD)" >&2',
+    'elif ! git -C "$repository" fetch --no-tags --quiet origin; then',
+    '  printf "harness checkout not updated: fetch failed\\n" >&2',
+    'elif ! git -C "$repository" merge --ff-only --quiet "@{upstream}"; then',
+    '  printf "harness checkout not updated: cannot fast-forward from %s\\n" "$(git -C "$repository" rev-parse --short HEAD)" >&2',
+    "fi",
+  ];
+}
+
 export function provisionHarnessRepository(
   configuration: HarnessBuildConfiguration,
   harnessCommit: HarnessCommit,
@@ -109,6 +121,7 @@ export function provisionHarnessRepository(
     `commit=${shellQuote(harnessCommit)}`,
     ...reconcileClone(),
     ...obtainHarnessCommit(),
+    ...advanceCheckout(),
   ].join("\n");
 }
 
