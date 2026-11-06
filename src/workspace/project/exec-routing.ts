@@ -1,13 +1,5 @@
+import { ISOLATE_PROGRAMS } from "./isolate-programs.js";
 import type { ExecBackendChoice } from "./protocol.js";
-
-const ISOLATE_PROGRAMS: ReadonlySet<string> = new Set(
-  (
-    "echo printf cat ls pwd head tail wc stat grep fgrep egrep rg sed awk sort uniq comm cut paste tr rev nl " +
-    "fold expand unexpand strings column join find basename dirname tree du printenv diff date sleep seq expr " +
-    "md5sum sha1sum sha256sum file which tac hostname od base64 true false jq yq " +
-    "mkdir rmdir touch rm cp mv tee cd test git"
-  ).split(" "),
-);
 
 const SEGMENT_BREAKS = new Set(["|", ";", "&", "\n"]);
 
