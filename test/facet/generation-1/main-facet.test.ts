@@ -18,7 +18,7 @@ test("an attach after a failed open opens the session and arms the host", async 
   let armed = 0;
 
   const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
-    fault: () => Promise.resolve(),
+    log: () => Promise.resolve(),
     arm: () => {
       armed += 1;
 
@@ -60,7 +60,7 @@ test("an attach after a failed open opens the session and arms the host", async 
 test("a reader that stops consuming holds the watch back, and cancelling stops the keepalive", async () => {
   const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
     arm: () => Promise.resolve(),
-    fault: () => Promise.resolve(),
+    log: () => Promise.resolve(),
     running: () => Promise.resolve(),
     workspace: () => Promise.reject(new Error("no workspace")),
     dup: () => host,
@@ -98,8 +98,9 @@ test("a session that failed on a storage error is reopened by the next attach an
 
   const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
     arm: () => Promise.resolve(),
-    fault: (event, detail) => {
-      faults.push(`${event}: ${detail}`);
+    log: (level, event, fields) => {
+      if (level === "error" && event === "session-failed")
+        faults.push(`${event}: ${String(fields["cause"])}`);
 
       return Promise.resolve();
     },

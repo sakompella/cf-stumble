@@ -8,7 +8,14 @@ import {
   type CheckInput,
   type TimeWindow,
 } from "./check.mts";
-import { fetchInvocations, fetchUsage, readToken, resolveAccount, ApiFailure } from "./fetch.mts";
+import {
+  fetchInvocations,
+  fetchSessionFailures,
+  fetchUsage,
+  readToken,
+  resolveAccount,
+  ApiFailure,
+} from "./fetch.mts";
 
 const USAGE = "usage: ops-check --worker <name> --since <90m|2h|1d>";
 
@@ -55,12 +62,13 @@ async function readActivity(options: Options): Promise<Activity> {
 
   const requestWindow = { ...window, fromMs: window.fromMs - WORKSPACE_IDLE_STOP_MS };
 
-  const [invocations, usage] = await Promise.all([
+  const [invocations, usage, sessionFailures] = await Promise.all([
     fetchInvocations(token, account, worker, requestWindow),
     fetchUsage(token, account, worker, window),
+    fetchSessionFailures(token, account, worker, window),
   ]);
 
-  return { invocations, usage };
+  return { invocations, usage, sessionFailures };
 }
 
 async function gather(options: Options, nowMs: number): Promise<CheckInput> {

@@ -53,10 +53,12 @@ export class WorkspacePlatform {
   constructor(
     state: DurableObjectState,
     providerToken: string | undefined,
+    version: string | null,
     usesProvider: () => boolean,
     isolate: IsolateWorkspace,
   ) {
     this.#state = state;
+    logEvent("info", "do.started", { class: "WorkspaceHost", version });
     this.#providerToken = providerToken;
     this.#usesProvider = usesProvider;
     this.#platformContainer = state.container;

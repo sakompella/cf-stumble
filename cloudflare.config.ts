@@ -39,6 +39,7 @@ export default defineConfig(({ mode }) => {
     }),
     LOADER: bindings.workerLoader(),
     ASSETS: bindings.assets(),
+    CF_VERSION_METADATA: bindings.versionMetadata(),
   };
 
   return {

@@ -6,7 +6,7 @@ import {
   type SelectableProject,
 } from "../../selectable-projects.js";
 import { selectedWorkingDirectory } from "../../workspace-layout.js";
-import { logEvent, logRedactedCause, redactedExcerpt } from "../../diagnostics.js";
+import { logEvent, logRedactedCause } from "../../diagnostics.js";
 import {
   SERVING_FACET_NAME,
   type MainFacetMountProblem,
@@ -29,6 +29,7 @@ type ServingPorts = Readonly<{
   resetting: () => boolean;
   obtainWorkspace: ObtainWorkspace;
   generations: Parameters<typeof servingHosts>[1];
+  generationLabel: () => number | null;
 }>;
 
 const INSTANCE_KEY = "serving-instance";
@@ -60,7 +61,22 @@ export class ServingConversations {
     return admitted;
   }
 
-  replaceFacet(): void {
+  started(version: string | null): void {
+    logEvent("info", "do.started", { class: "Supervisor", version });
+  }
+
+  replaceFacet(
+    command: Readonly<{ kind: "activate" | "rollback"; label: number }>,
+    epoch: number,
+  ): void {
+    logEvent(
+      "info",
+      command.kind === "activate" ? "generation.activated" : "generation.rolled-back",
+      {
+        label: command.label,
+        epoch,
+      },
+    );
     this.#ports.ctx.storage.kv.put(INSTANCE_KEY, this.#instance() + 1);
     this.#hosts.clear();
     this.#workspaces.retire(() => {
@@ -172,7 +188,7 @@ export class ServingConversations {
       const facet = yield* this.#facet();
 
       for (const conversationId of this.#runs.expired(now)) {
-        logEvent("warn", "run.deadline-aborted");
+        logEvent("warn", "run.deadline-aborted", { generation: this.#ports.generationLabel() });
         yield* this.#call(() => facet.abort(conversationId));
       }
     }).pipe(
@@ -252,8 +268,11 @@ export class ServingConversations {
     const targets = servingHosts(
       {
         arm: (wake) => this.#runs.arm(wake, Date.now()),
-        fault: (event, detail) => {
-          logEvent("error", `facet.${event.slice(0, 60)}`, { detail: redactedExcerpt(detail) });
+        log: (level, event, fields) => {
+          logEvent(level, `facet.${event.slice(0, 60)}`, {
+            ...fields,
+            generation: this.#ports.generationLabel(),
+          });
         },
         running: (conversations) => this.#running(conversations),
         workspace: (conversationId) => this.#workspace(conversationId),
@@ -325,7 +344,11 @@ export class ServingConversations {
   async #running(conversations: readonly RunningConversation[]): Promise<void> {
     const now = Date.now();
 
-    for (const conversationId of this.#runs.reconcile(conversations, now)) {
+    for (const conversationId of this.#runs.reconcile(
+      conversations,
+      now,
+      this.#ports.generationLabel(),
+    )) {
       this.#workspaces.end(conversationId);
     }
 

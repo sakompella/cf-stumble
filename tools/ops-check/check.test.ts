@@ -9,6 +9,7 @@ import {
   runChecks,
   type CheckInput,
   type Invocation,
+  type SessionFailure,
   type UsageBucket,
 } from "./check.mts";
 
@@ -39,6 +40,7 @@ function check(
   invocations: readonly Invocation[],
   usage: readonly UsageBucket[],
   windowMinutes = 120,
+  sessionFailures: readonly SessionFailure[] = [],
 ): CheckInput {
   const toMs = START + windowMinutes * MINUTE_MS;
 
@@ -47,7 +49,7 @@ function check(
     nowMs: toMs + 60 * MINUTE_MS,
     window: { fromMs: START, toMs },
     idleLimitMs: IDLE_LIMIT_MS,
-    activity: { status: "ok", data: { invocations, usage } },
+    activity: { status: "ok", data: { invocations, usage, sessionFailures } },
   };
 }
 
@@ -192,5 +194,21 @@ describe("unknown", () => {
     };
 
     assert.deepEqual(runChecks(input), [{ rule: "unknown", detail: "no token", evidence: [] }]);
+  });
+});
+
+describe("facet.session-failed", () => {
+  it("reports a failure in the window with its cause and time", () => {
+    const failure = { atMs: START + 5 * MINUTE_MS, cause: "storage reset" };
+
+    const findings = runChecks(check([], [], 120, [failure]));
+
+    assert.deepEqual(findings, [
+      {
+        rule: "facet.session-failed",
+        detail: "1 facet session failure(s); first: storage reset",
+        evidence: [isoMinute(failure.atMs)],
+      },
+    ]);
   });
 });

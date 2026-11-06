@@ -46,6 +46,7 @@ export type SupervisorEnv = {
   readonly GITHUB_OAUTH_CLIENT_ID?: string;
   readonly GH_TOKEN?: string;
   readonly CHATGPT_MODEL: string;
+  readonly CF_VERSION_METADATA?: Readonly<{ id: string }>;
 };
 
 export type SupervisorNames = Readonly<{ name: string; workspaceName: string }>;

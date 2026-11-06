@@ -51,6 +51,7 @@ export default Alchemy.Stack(
           ],
         }),
         LOADER: Cloudflare.WorkerLoader(),
+        CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
         AI: Cloudflare.Workers.AI(),
       },
     });

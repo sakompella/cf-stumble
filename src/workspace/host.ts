@@ -45,6 +45,7 @@ interface WorkspaceHostEnv {
   readonly ORB_PROVIDER_TOKEN?: string;
   readonly LOADER: WorkerLoader;
   readonly ASSETS: Fetcher;
+  readonly CF_VERSION_METADATA?: Readonly<{ id: string }>;
 }
 
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
@@ -58,6 +59,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     this.#platform = new WorkspacePlatform(
       ctx,
       env.ORB_PROVIDER_TOKEN,
+      env.CF_VERSION_METADATA?.id ?? null,
       () => readBackendSetting(ctx.storage.kv) === "provider",
       isolateWorkspace(env, {
         id: ctx.id,

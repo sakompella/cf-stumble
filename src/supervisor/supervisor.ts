@@ -27,6 +27,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.#parts = supervisorParts(ctx, env, () => this.#resetInProgress, this);
+    this.#parts.serving.started(env.CF_VERSION_METADATA?.id ?? null);
   }
 
   prepareGeneration(label: GenerationLabel, options?: StartupCheckOptions) {
@@ -57,7 +58,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     const result = this.#parts.generations.activate(command);
 
     if (result.ok && result.outcome.effect === "activated") {
-      this.#parts.serving.replaceFacet();
+      this.#parts.serving.replaceFacet(command, result.outcome.epoch);
     }
 
     return result;
