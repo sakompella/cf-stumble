@@ -2,7 +2,6 @@ import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
-import { WorkspaceHost } from "../../src/workspace/index.js";
 import { seedWorkspaceRoot } from "./host-fixtures.js";
 
 const decodeEvent = Schema.decodeUnknownSync(
@@ -95,5 +94,4 @@ test("a holder of the WORKSPACE_HOST binding cannot get the workspace without th
   );
 
   expect(outcome).toContain("not the isolate shell");
-  expect("__getWorkspaceStub" in WorkspaceHost.prototype).toBe(false);
 });

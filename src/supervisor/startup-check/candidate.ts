@@ -31,7 +31,7 @@ export function runStartupCheck(
   });
 
   return discard.pipe(
-    Effect.andThen(checkCandidate(host, artifact, deadlines)),
+    Effect.andThen(checkCandidate(host, artifact, name, deadlines)),
     Effect.ensuring(discard),
   );
 }
@@ -49,10 +49,11 @@ function withinDeadline(
 function checkCandidate(
   host: StartupCheckHost,
   artifact: MainHarnessArtifact,
+  name: string,
   deadlines: StartupCheckDeadlines,
 ): Effect.Effect<StartupCheckOutcome> {
   return Effect.gen(function* () {
-    const candidate = mountCandidateFacet(host, artifact);
+    const candidate = mountCandidateFacet(host, artifact, name);
 
     if (Result.isFailure(candidate)) return { stage: "mount-failed", reason: candidate.failure };
 
@@ -66,7 +67,6 @@ function checkCandidate(
     if (incompatible !== undefined) return incompatible;
 
     const previous = yield* previousArtifact(host, artifact);
-    const name = candidateFacetName(artifact.harnessCommit);
     const writer = remount(host, previous, name);
 
     if (Result.isFailure(writer)) return { stage: "mount-failed", reason: writer.failure };
@@ -127,7 +127,7 @@ function compatibilityProblem(
 function mountCandidateFacet(
   host: StartupCheckHost,
   artifact: MainHarnessArtifact,
-  facetName: string = candidateFacetName(artifact.harnessCommit),
+  facetName: string,
 ): Result.Result<Fetcher<MainFacetTarget>, string> {
   try {
     const capabilities = { MODEL: host.model() };

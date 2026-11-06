@@ -246,17 +246,7 @@ export async function fetchSessionFailures(
   const response = await send(
     token,
     `${API}/accounts/${account}/workers/observability/telemetry/query`,
-    {
-      queryId: "adhoc",
-      view: "events",
-      dry: true,
-      limit: TELEMETRY_ROW_LIMIT,
-      timeframe: { from: window.fromMs, to: window.toMs },
-      parameters: {
-        filters: [{ key: "$metadata.service", operation: "eq", type: "string", value: worker }],
-        needle: { value: SESSION_FAILED_EVENT, matchCase: true, isRegex: false },
-      },
-    },
+    eventQuery(worker, window, SESSION_FAILED_EVENT),
   );
 
   return parseSessionFailures(response);
