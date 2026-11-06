@@ -67,7 +67,10 @@ function checkCandidate(
     if (incompatible !== undefined) return incompatible;
 
     const previous = yield* previousArtifact(host, artifact);
-    const writer = remount(host, previous, name);
+
+    if (Result.isFailure(previous)) return previous.failure;
+
+    const writer = remount(host, previous.success, name);
 
     if (Result.isFailure(writer)) return { stage: "mount-failed", reason: writer.failure };
 
@@ -87,12 +90,21 @@ function checkCandidate(
 function previousArtifact(
   host: StartupCheckHost,
   candidate: MainHarnessArtifact,
-): Effect.Effect<MainHarnessArtifact> {
+): Effect.Effect<Result.Result<MainHarnessArtifact, StartupCheckOutcome>> {
   const serving = host.generations.active().generation;
 
-  return serving === undefined
-    ? Effect.succeed(candidate)
-    : host.artifacts.prepare(serving.harnessCommit).pipe(Effect.orElseSucceed(() => candidate));
+  if (serving === undefined) return Effect.succeed(Result.succeed(candidate));
+
+  return host.artifacts.prepare(serving.harnessCommit).pipe(
+    Effect.match({
+      onFailure: () =>
+        Result.fail<StartupCheckOutcome>({
+          stage: "mount-failed",
+          reason: `the serving generation's artifact could not be prepared, so the resume check has no writer`,
+        }),
+      onSuccess: (previous) => Result.succeed(previous),
+    }),
+  );
 }
 
 function remount(host: StartupCheckHost, artifact: MainHarnessArtifact, name: string) {

@@ -23,6 +23,10 @@ export interface ExecBackendInput {
   backend?: ExecBackendChoice | undefined;
 }
 
+export const ISOLATE_BACKEND_ID = "worker-shell";
+
+export const CONTAINER_BACKEND_ID = "container-shell";
+
 export interface ContainerLifecycleState {
   readonly generation: number;
 }

@@ -1,6 +1,7 @@
 import type { BackendHandle, WorkspaceBackend } from "@cloudflare/computer";
 import type { ShellWorker } from "@cloudflare/computer/backends/worker-shell";
 import * as Schema from "effect/Schema";
+import { ISOLATE_BACKEND_ID } from "./exec-backend.js";
 import type { IsolateGateProps } from "./isolate-gate.js";
 import { SHELL_MODULES_FILE, type ShellModuleSet } from "./shell-modules.js";
 
@@ -112,7 +113,7 @@ export function isolateShellBackend(
       .getEntrypoint<ShellWorker>("ShellWorker");
 
   return {
-    id: "worker-shell",
+    id: ISOLATE_BACKEND_ID,
     type: "worker-shell",
     description: "A just-bash shell in a Dynamic Worker with no container and no network.",
     connect: () =>

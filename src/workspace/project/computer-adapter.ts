@@ -1,6 +1,11 @@
 import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
 import { shellQuote } from "../../shell-quote.js";
-import { ContainerRestartedError, type ContainerLifecycleState } from "./exec-backend.js";
+import {
+  CONTAINER_BACKEND_ID,
+  ContainerRestartedError,
+  ISOLATE_BACKEND_ID,
+  type ContainerLifecycleState,
+} from "./exec-backend.js";
 import { isolateWithContainerFallback } from "./exec-fallback.js";
 import { routedBackend } from "./exec-routing.js";
 import type {
@@ -68,7 +73,7 @@ export function processGroupCommand(command: string): string {
   return `exec setsid /bin/sh -c ${shellQuote(body)}`;
 }
 
-function replacementGuard(containerState: ContainerLifecycleState | undefined) {
+function replacementGuard(containerState: ContainerLifecycleState | null) {
   const generation = containerState?.generation;
 
   return {
@@ -112,12 +117,10 @@ async function waitForPostCommandSync(reader: RuntimeReader): Promise<void> {
   while (!(await reader.read()).done);
 }
 
-const ISOLATE_BACKEND_ID = "worker-shell";
-
 export function computerExecBackend(
   workspace: ExecWorkspace,
-  backendId = "container-shell",
-  containerState?: ContainerLifecycleState,
+  backendId: string,
+  containerState: ContainerLifecycleState | null,
 ): ExecBackend {
   return {
     async exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
@@ -153,8 +156,8 @@ export function chosenExecBackend(
   workspace: ExecWorkspace,
   containerState: ContainerLifecycleState,
 ): ExecBackend {
-  const container = computerExecBackend(workspace, "container-shell", containerState);
-  const isolate = computerExecBackend(workspace, ISOLATE_BACKEND_ID);
+  const container = computerExecBackend(workspace, CONTAINER_BACKEND_ID, containerState);
+  const isolate = computerExecBackend(workspace, ISOLATE_BACKEND_ID, null);
 
   const isolateFirst = isolateWithContainerFallback(isolate, container);
 

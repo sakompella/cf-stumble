@@ -69,12 +69,17 @@ test("a project that is already cloned is neither cloned nor run again", async (
 });
 
 test.each([
-  ["fails", () => Promise.reject(new Error("401 Unauthorized"))],
-  ["leaves no clone behind", () => Promise.resolve()],
-])("the container clone runs when the isolate clone %s", async (_case, clone) => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  ["fails", () => Promise.reject(new Error("401 Unauthorized")), "401 Unauthorized"],
+  ["leaves no clone behind", () => Promise.resolve(), "the clone ran but its markers are missing"],
+])("the container clone runs when the isolate clone %s", async (_case, clone, reason) => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const { run, commands } = workspaceWith(false, clone);
 
   await expect(run()).resolves.toMatchObject({ ok: true });
   expect(commands).toHaveLength(1);
+  expect(error).not.toHaveBeenCalled();
+  expect(warn).toHaveBeenCalledWith(
+    expect.objectContaining({ event: "workspace.isolate-clone.fell-back", level: "warn", reason }),
+  );
 });

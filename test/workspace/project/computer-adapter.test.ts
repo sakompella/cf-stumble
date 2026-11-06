@@ -4,6 +4,7 @@ import {
   computerExecBackend,
   processGroupCommand,
 } from "../../../src/workspace/project/computer-adapter.js";
+import { CONTAINER_BACKEND_ID } from "../../../src/workspace/project/exec-backend.js";
 
 test("wraps a command in a session leader that kills the whole process group", () => {
   const wrapped = processGroupCommand("sleep 1 && printf '%s' \"done\"");
@@ -32,7 +33,7 @@ test("marks an in-flight read as container-restarted after the runtime generatio
       }),
   };
 
-  const backend = computerExecBackend({ runtime }, "container-shell", state);
+  const backend = computerExecBackend({ runtime }, CONTAINER_BACKEND_ID, state);
 
   const handle = await backend.exec({ command: "sleep 1", cwd: "/workspace", timeoutMs: 100 });
   const read = handle.reader.read();
@@ -71,7 +72,7 @@ test("reports a container restart that happens while the exit waits for the post
       }),
   };
 
-  const backend = computerExecBackend({ runtime }, "container-shell", state);
+  const backend = computerExecBackend({ runtime }, CONTAINER_BACKEND_ID, state);
 
   const handle = await backend.exec({ command: "true", cwd: "/workspace", timeoutMs: 100 });
 

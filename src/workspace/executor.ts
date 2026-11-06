@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
+import { isTimeoutFailure, logEvent, logRedactedCause } from "../diagnostics.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceCommandResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import {
@@ -131,16 +131,30 @@ function isolateCloned(
 
     yield* attemptWorkspace(() => clone(project));
 
-    return yield* cloneMarkersAreDurable(operations, project);
+    const durable = yield* cloneMarkersAreDurable(operations, project);
+
+    if (!durable) logCloneFallback("the clone ran but its markers are missing");
+
+    return durable;
   }).pipe(
     Effect.catch((fault) =>
       Effect.sync(() => {
-        logRedactedCause("workspace.provision-project.isolate-clone: fell-back", fault);
+        logCloneFallback(faultReason(fault));
 
         return false;
       }),
     ),
   );
+}
+
+function logCloneFallback(reason: string): void {
+  logEvent("warn", "workspace.isolate-clone.fell-back", { reason });
+}
+
+function faultReason(fault: WorkspaceFault): string {
+  const cause = fault._tag === "WorkspaceUnavailable" ? fault.cause : fault;
+
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 export function executeProjectProvisionRequest(

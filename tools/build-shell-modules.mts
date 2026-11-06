@@ -34,20 +34,22 @@ const bashStub = join(scratch, "bash-stub.mjs");
 
 const bundle = join(scratch, "writer.mjs");
 
-await writeFile(stub, WORKERS_STUB);
+try {
+  await writeFile(stub, WORKERS_STUB);
 
-await writeFile(bashStub, BASH_STUB);
+  await writeFile(bashStub, BASH_STUB);
 
-await build({
-  stdin: { contents: ENTRY, resolveDir: repoRoot },
-  outfile: bundle,
-  bundle: true,
-  format: "esm",
-  platform: "node",
-  alias: { "cloudflare:workers": stub, "just-bash": bashStub },
-  logLevel: "error",
-});
+  await build({
+    stdin: { contents: ENTRY, resolveDir: repoRoot },
+    outfile: bundle,
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    alias: { "cloudflare:workers": stub, "just-bash": bashStub },
+    logLevel: "error",
+  });
 
-await import(pathToFileURL(bundle).href);
-
-await rm(scratch, { recursive: true });
+  await import(pathToFileURL(bundle).href);
+} finally {
+  await rm(scratch, { recursive: true, force: true });
+}
