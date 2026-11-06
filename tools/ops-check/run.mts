@@ -6,6 +6,7 @@ import {
   runChecks,
   type Activity,
   type CheckInput,
+  type ModelCalls,
   type TimeWindow,
 } from "./check.mts";
 import {
@@ -63,14 +64,24 @@ async function readActivity(options: Options): Promise<Activity> {
 
   const requestWindow = { ...window, fromMs: window.fromMs - WORKSPACE_IDLE_STOP_MS };
 
-  const [invocations, usage, sessionFailures, modelCalls] = await Promise.all([
+  const [invocations, usage, sessionFailures] = await Promise.all([
     fetchInvocations(token, account, worker, requestWindow),
     fetchUsage(token, account, worker, window),
     fetchSessionFailures(token, account, worker, window),
-    fetchModelCalls(token, account, worker, window),
   ]);
 
-  return { invocations, usage, sessionFailures, modelCalls };
+  return { invocations, usage, sessionFailures };
+}
+
+async function readModelCalls(options: Options): Promise<ModelCalls | null> {
+  try {
+    const token = readToken(process.env);
+    const account = await resolveAccount(token, process.env);
+
+    return await fetchModelCalls(token, account, options.worker, options.window);
+  } catch {
+    return null;
+  }
 }
 
 async function gather(options: Options, nowMs: number): Promise<CheckInput> {
@@ -108,6 +119,8 @@ const input = await gather(options, nowMs);
 
 const findings = runChecks(input);
 
-console.log(formatReport(input, findings).join("\n"));
+const modelCalls = input.activity.status === "ok" ? await readModelCalls(options) : null;
+
+console.log(formatReport(input, findings, modelCalls).join("\n"));
 
 process.exitCode = findings.length === 0 ? 0 : 1;

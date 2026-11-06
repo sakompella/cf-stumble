@@ -84,7 +84,9 @@ kept running past the Host's idle stop (rule `ran-past-idle`), and `facet.sessio
 the window (rule `facet.session-failed`). It prints one check mark when all is well and one line per
 finding otherwise, and exits 1 on any finding or `unknown`. After that it prints an informational
 line, `i model cache hit rate`, with the sum of `cachedTokens` over the sum of `promptTokens` of the
-`model.call` events in the window. The line never changes the exit code.
+`model.call` events in the window. The line never changes the exit code. It is fetched apart from the
+checks, so a failed fetch drops the line only. When telemetry returns a full page (2000 rows), the line
+says the rate is a sample.
 
 **Sources.** For the window (`--since 90m|2h|1d`, ending now), it reads:
 

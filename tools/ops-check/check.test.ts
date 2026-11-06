@@ -50,7 +50,7 @@ function check(
     nowMs: toMs + 60 * MINUTE_MS,
     window: { fromMs: START, toMs },
     idleLimitMs: IDLE_LIMIT_MS,
-    activity: { status: "ok", data: { invocations, usage, sessionFailures, modelCalls: [] } },
+    activity: { status: "ok", data: { invocations, usage, sessionFailures } },
   };
 }
 
@@ -178,10 +178,10 @@ describe("the window the check can see", () => {
     const stillFilling = { ...check([], [], 120), nowMs: START + 125 * MINUTE_MS };
     const settled = check([], [], 120);
 
-    assert.deepEqual(formatReport(stillFilling, runChecks(stillFilling)), [
+    assert.deepEqual(formatReport(stillFilling, runChecks(stillFilling), null), [
       `✓ ops-check cf-stumble ${isoMinute(START)}..${isoMinute(stillFilling.nowMs - METRICS_LAG_MS).slice(11)}`,
     ]);
-    assert.deepEqual(formatReport(settled, runChecks(settled)), [
+    assert.deepEqual(formatReport(settled, runChecks(settled), null), [
       `✓ ops-check cf-stumble ${isoMinute(START)}..${isoMinute(settled.window.toMs).slice(11)}`,
     ]);
   });
@@ -221,9 +221,15 @@ describe("cacheHitLine", () => {
       { promptTokens: 1000, cachedTokens: 500 },
     ];
 
-    assert.deepEqual(cacheHitLine(calls), [
+    assert.deepEqual(cacheHitLine({ calls, sample: false }), [
       "i model cache hit rate 70.0% (1400/2000 prompt tokens, 2 calls)",
     ]);
-    assert.deepEqual(cacheHitLine([]), []);
+    assert.deepEqual(cacheHitLine({ calls: [], sample: false }), []);
+  });
+
+  it("says when a full page makes the rate a sample", () => {
+    const [line] = cacheHitLine({ calls: [{ promptTokens: 10, cachedTokens: 5 }], sample: true });
+
+    assert.match(line ?? "", /a sample/u);
   });
 });

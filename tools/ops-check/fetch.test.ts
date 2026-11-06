@@ -99,8 +99,20 @@ describe("parseModelCalls", () => {
 
     const other: JsonRecord = { timestamp: 4, source: { event: "run.settled" } };
 
-    assert.deepEqual(parseModelCalls({ result: { events: { events: [other, call] } } }), [
-      { promptTokens: 100, cachedTokens: 80 },
-    ]);
+    assert.deepEqual(parseModelCalls({ result: { events: { events: [other, call] } } }), {
+      calls: [{ promptTokens: 100, cachedTokens: 80 }],
+      sample: false,
+    });
+  });
+
+  it("marks a full page as a sample instead of failing", () => {
+    const call: JsonRecord = {
+      timestamp: 3,
+      source: { event: "model.call", promptTokens: 100, cachedTokens: 80 },
+    };
+
+    const page = Array.from({ length: 2000 }, () => call);
+
+    assert.equal(parseModelCalls({ result: { events: { events: page } } }).sample, true);
   });
 });

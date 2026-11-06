@@ -17,7 +17,7 @@ import {
 import {
   BUCKET_MS,
   type Invocation,
-  type ModelCall,
+  type ModelCalls,
   type SessionFailure,
   type TimeWindow,
   type UsageBucket,
@@ -187,18 +187,12 @@ export function parseSessionFailures(response: JsonValue): readonly SessionFailu
 
 const MODEL_CALL_EVENT = "model.call";
 
-export function parseModelCalls(response: JsonValue): readonly ModelCall[] {
+export function parseModelCalls(response: JsonValue): ModelCalls {
   const rows = digArray(response, "result", "events", "events");
 
   if (rows === null) throw new ApiFailure("telemetry response had an unexpected shape");
 
-  if (rows.length >= TELEMETRY_ROW_LIMIT) {
-    throw new ApiFailure(
-      `telemetry returned ${TELEMETRY_ROW_LIMIT} rows, the most it gives; use a shorter --since`,
-    );
-  }
-
-  return rows.flatMap((row) => {
+  const calls = rows.flatMap((row) => {
     const promptTokens = digNumber(row, "source", "promptTokens");
     const cachedTokens = digNumber(row, "source", "cachedTokens");
 
@@ -206,6 +200,8 @@ export function parseModelCalls(response: JsonValue): readonly ModelCall[] {
 
     return promptTokens === null ? [] : [{ promptTokens, cachedTokens: cachedTokens ?? 0 }];
   });
+
+  return { calls, sample: rows.length >= TELEMETRY_ROW_LIMIT };
 }
 
 function eventQuery(worker: string, window: TimeWindow, event: string): JsonRecord {
@@ -227,7 +223,7 @@ export async function fetchModelCalls(
   account: string,
   worker: string,
   window: TimeWindow,
-): Promise<readonly ModelCall[]> {
+): Promise<ModelCalls> {
   const response = await send(
     token,
     `${API}/accounts/${account}/workers/observability/telemetry/query`,
