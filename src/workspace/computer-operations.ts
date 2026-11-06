@@ -12,6 +12,7 @@ import {
 } from "./executor.js";
 import { hasErrnoCode } from "./errno-code.js";
 import { cloneProjectInIsolate } from "./isolate-clone.js";
+import { CONTAINER_BACKEND_ID } from "./project/index.js";
 import type { Project } from "../project-catalog.js";
 
 function isNotFound(cause: unknown): boolean {
@@ -78,7 +79,7 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
     stdin?: string,
   ): Promise<CommandOutput> {
     const options: WorkspaceRuntimeExecOptions<"utf8"> = {
-      backend: "container-shell",
+      backend: CONTAINER_BACKEND_ID,
       cwd,
       encoding: "utf8",
       timeoutMs,

@@ -7,6 +7,7 @@ import {
   computerFilesystemProvider,
   durableObjectTransactions,
 } from "../../../src/workspace/project/computer-adapter.js";
+import { CONTAINER_BACKEND_ID } from "../../../src/workspace/project/exec-backend.js";
 import { ProjectRpcTarget } from "../../../src/workspace/project/target.js";
 import { computerStorage } from "../../../src/workspace/workspace-platform.js";
 
@@ -31,7 +32,7 @@ class ContainerThatCreatesAFile {
   #pushRev = 0;
 
   readonly backend: WorkspaceBackend = {
-    id: "container-shell",
+    id: CONTAINER_BACKEND_ID,
     type: "fake-container",
     connect: () => Promise.resolve(this.#connection()),
   };
@@ -121,7 +122,7 @@ test("a file a command creates is readable once the command has exited", async (
     const target = new ProjectRpcTarget(
       computerFilesystemProvider(workspace),
       durableObjectTransactions(state.storage),
-      computerExecBackend(workspace),
+      computerExecBackend(workspace, CONTAINER_BACKEND_ID, { generation: 0 }),
     );
 
     const started = await target.startExec({ command: "touch /workspace/generated.txt" });
