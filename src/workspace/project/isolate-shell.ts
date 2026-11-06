@@ -72,18 +72,6 @@ const NO_SYNC: BackendHandle["rpc"]["sync"] = {
   watermarks: refuseSync,
 };
 
-function fetchModules(assets: Fetcher): () => Promise<ShellModuleSet> {
-  let loaded: Promise<ShellModuleSet> | undefined;
-
-  return () => {
-    loaded ??= assets
-      .fetch(`https://assets.invalid/${SHELL_MODULES_FILE}`)
-      .then((response) => response.json<ShellModuleSet>());
-
-    return loaded;
-  };
-}
-
 function shellRpc(runtime: () => Fetcher<ShellWorker>): ShellRpc {
   return {
     async exec({ source, ...rest }) {
@@ -102,12 +90,11 @@ export function isolateShellBackend(
   assets: Fetcher,
   host: ShellHost,
 ): WorkspaceBackend {
-  const modules = fetchModules(assets);
-
   const runtime = () =>
     loader
       .get(`isolate-shell:${host.id.toString()}:${host.isolateToken}`, async () => {
-        const set = await modules();
+        const response = await assets.fetch(`https://assets.invalid/${SHELL_MODULES_FILE}`);
+        const set = await response.json<ShellModuleSet>();
 
         return {
           compatibilityDate: COMPATIBILITY_DATE,
