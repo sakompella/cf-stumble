@@ -1,6 +1,7 @@
 import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
 import { shellQuote } from "../../shell-quote.js";
 import { ContainerRestartedError, type ContainerLifecycleState } from "./exec-backend.js";
+import { isolateWithContainerFallback } from "./exec-fallback.js";
 import { routedBackend } from "./exec-routing.js";
 import type {
   BackendExecEvent,
@@ -155,9 +156,14 @@ export function chosenExecBackend(
   const container = computerExecBackend(workspace, "container-shell", containerState);
   const isolate = computerExecBackend(workspace, ISOLATE_BACKEND_ID);
 
+  const isolateFirst = isolateWithContainerFallback(isolate, container);
+
   return {
-    exec: (input) =>
-      (routedBackend(input.command, input.backend) === "isolate" ? isolate : container).exec(input),
+    exec: (input) => {
+      if (routedBackend(input.command, input.backend) !== "isolate") return container.exec(input);
+
+      return (input.backend === undefined ? isolateFirst : isolate).exec(input);
+    },
   };
 }
 

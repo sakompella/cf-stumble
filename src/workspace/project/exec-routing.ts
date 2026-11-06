@@ -5,16 +5,6 @@ const SEGMENT_BREAKS = new Set(["|", ";", "&", "\n"]);
 
 const REFUSED_OUTSIDE_QUOTES = new Set(["(", ")", "{", "}", "`", "\\"]);
 
-const NETWORK_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
-  "clone",
-  "fetch",
-  "pull",
-  "push",
-  "remote",
-  "ls-remote",
-  "submodule",
-]);
-
 const EXECUTING_FIND_FLAGS = new Set(["-exec", "-execdir", "-ok", "-okdir", "-delete"]);
 
 function firstWords(command: string): string[][] | undefined {
@@ -88,12 +78,6 @@ function segmentRunsInIsolate(words: readonly string[]): boolean {
   const [program = "", ...rest] = withoutAssignments(words) ?? [];
 
   if (!ISOLATE_PROGRAMS.has(program)) return false;
-
-  if (program === "git") {
-    const [subcommand = "-"] = rest;
-
-    return !subcommand.startsWith("-") && !NETWORK_GIT_SUBCOMMANDS.has(subcommand);
-  }
 
   return !rest.some((word) => EXECUTING_FIND_FLAGS.has(word));
 }

@@ -1,18 +1,8 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
 import { WorkspaceHost } from "../../src/workspace/index.js";
 import { seedWorkspaceRoot } from "./host-fixtures.js";
-
-const decodeEvent = Schema.decodeUnknownSync(
-  Schema.fromJsonString(
-    Schema.Struct({
-      data: Schema.optionalKey(Schema.String),
-      exitCode: Schema.optionalKey(Schema.Number),
-    }),
-  ),
-);
 
 async function linesOf(stream: ReadableStream<Uint8Array>): Promise<string[]> {
   const text = await new Response(stream).text();
@@ -57,36 +47,11 @@ test.each([
   ["isolate-routing-container", "container" as const, "grep two notes.txt"],
   ["isolate-routing-fallback", "isolate" as const, "node -v"],
   ["isolate-routing-auto-node", undefined, "node -v"],
+  ["isolate-routing-git", "isolate" as const, "git status"],
 ])("%s goes to the container", async (name, backend, command) => {
   const lines = await runIn(name, backend, command);
 
   expect(lines.at(-1)).toContain('"outcome":"failed"');
-});
-
-const IDENTITY =
-  "GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=a@example.com GIT_COMMITTER_NAME=a GIT_COMMITTER_EMAIL=a@example.com";
-
-test("git init, add, commit, status, log and diff run in the isolate", async () => {
-  const lines = await runIn(
-    "isolate-git",
-    "isolate",
-    [
-      "git init",
-      "git add notes.txt",
-      `${IDENTITY} git commit -m first`,
-      "echo three >> notes.txt",
-      "git status --short",
-      "git log --oneline",
-      "git diff",
-    ].join(" && "),
-  );
-
-  const output = lines.map((line) => decodeEvent(line));
-
-  expect(output.at(-1)?.exitCode).toBe(0);
-  expect(output.map((event) => event.data ?? "").join("")).toMatch(
-    /M notes\.txt[\s\S]*first[\s\S]*\+three/u,
-  );
 });
 
 test("a holder of the WORKSPACE_HOST binding cannot get the workspace without the isolate's token", async () => {
