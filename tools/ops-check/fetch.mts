@@ -17,6 +17,7 @@ import {
 import {
   BUCKET_MS,
   type Invocation,
+  type ModelCall,
   type SessionFailure,
   type TimeWindow,
   type UsageBucket,
@@ -182,6 +183,58 @@ export function parseSessionFailures(response: JsonValue): readonly SessionFailu
 
     return [{ atMs, cause: digString(row, "source", "cause") ?? "no cause" }];
   });
+}
+
+const MODEL_CALL_EVENT = "model.call";
+
+export function parseModelCalls(response: JsonValue): readonly ModelCall[] {
+  const rows = digArray(response, "result", "events", "events");
+
+  if (rows === null) throw new ApiFailure("telemetry response had an unexpected shape");
+
+  if (rows.length >= TELEMETRY_ROW_LIMIT) {
+    throw new ApiFailure(
+      `telemetry returned ${TELEMETRY_ROW_LIMIT} rows, the most it gives; use a shorter --since`,
+    );
+  }
+
+  return rows.flatMap((row) => {
+    const promptTokens = digNumber(row, "source", "promptTokens");
+    const cachedTokens = digNumber(row, "source", "cachedTokens");
+
+    if (digString(row, "source", "event") !== MODEL_CALL_EVENT) return [];
+
+    return promptTokens === null ? [] : [{ promptTokens, cachedTokens: cachedTokens ?? 0 }];
+  });
+}
+
+function eventQuery(worker: string, window: TimeWindow, event: string): JsonRecord {
+  return {
+    queryId: "adhoc",
+    view: "events",
+    dry: true,
+    limit: TELEMETRY_ROW_LIMIT,
+    timeframe: { from: window.fromMs, to: window.toMs },
+    parameters: {
+      filters: [{ key: "$metadata.service", operation: "eq", type: "string", value: worker }],
+      needle: { value: event, matchCase: true, isRegex: false },
+    },
+  };
+}
+
+export async function fetchModelCalls(
+  token: string,
+  account: string,
+  worker: string,
+  window: TimeWindow,
+): Promise<readonly ModelCall[]> {
+  const response = await send(
+    token,
+    `${API}/accounts/${account}/workers/observability/telemetry/query`,
+    eventQuery(worker, window, MODEL_CALL_EVENT),
+  );
+
+  return parseModelCalls(response);
 }
 
 export async function fetchSessionFailures(

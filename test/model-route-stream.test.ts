@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { capturedEvents, named } from "./log-capture.js";
 import type { ModelRouteRequest } from "../src/model-route.js";
 import type { ModelStreamInference, StreamingProviderPayload } from "../src/model-route-events.js";
 import {
@@ -239,5 +240,34 @@ test("a binding call that throws before it returns a Promise becomes one termina
 
   await expect(collectEvents(streamModelEvents(throwing, REQUEST))).resolves.toEqual([
     { type: "error", error: { code: "model-unavailable", detail: "binding unavailable" } },
+  ]);
+});
+
+test("logs one model.call event with prompt, cached and completion tokens", async () => {
+  const events = capturedEvents();
+
+  const lines = [
+    sseLine({ response: "ok" }),
+    sseLine({
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 7,
+        prompt_tokens_details: { cached_tokens: 64 },
+      },
+    }),
+    DONE_LINE,
+  ];
+
+  await collectEvents(
+    streamModelEvents(fakeStreamInference(providerStreamOfLines(lines)), REQUEST),
+  );
+
+  expect(named(events(), "model.call")).toMatchObject([
+    {
+      model: "@cf/zai-org/glm-5.3-flash",
+      promptTokens: 100,
+      cachedTokens: 64,
+      completionTokens: 7,
+    },
   ]);
 });

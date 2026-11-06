@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   BUCKET_MS,
+  cacheHitLine,
   formatReport,
   isoMinute,
   METRICS_LAG_MS,
@@ -49,7 +50,7 @@ function check(
     nowMs: toMs + 60 * MINUTE_MS,
     window: { fromMs: START, toMs },
     idleLimitMs: IDLE_LIMIT_MS,
-    activity: { status: "ok", data: { invocations, usage, sessionFailures } },
+    activity: { status: "ok", data: { invocations, usage, sessionFailures, modelCalls: [] } },
   };
 }
 
@@ -210,5 +211,19 @@ describe("facet.session-failed", () => {
         evidence: [isoMinute(failure.atMs)],
       },
     ]);
+  });
+});
+
+describe("cacheHitLine", () => {
+  it("sums cached over prompt tokens and says nothing without calls", () => {
+    const calls = [
+      { promptTokens: 1000, cachedTokens: 900 },
+      { promptTokens: 1000, cachedTokens: 500 },
+    ];
+
+    assert.deepEqual(cacheHitLine(calls), [
+      "i model cache hit rate 70.0% (1400/2000 prompt tokens, 2 calls)",
+    ]);
+    assert.deepEqual(cacheHitLine([]), []);
   });
 });
