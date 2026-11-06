@@ -7,6 +7,8 @@ export type { GenerationControl };
 
 export type RunningConversation = Readonly<{ conversationId: string; run?: number | undefined }>;
 
+export type RunFailures = Readonly<Record<string, string>>;
+
 export type FacetLogLevel = "info" | "error";
 
 export type FacetLogFields = Readonly<Record<string, string | number | boolean | null>>;
@@ -16,7 +18,7 @@ export type FacetLog = (level: FacetLogLevel, event: string, fields: FacetLogFie
 export interface ConversationHost {
   arm(wake: Wake): Promise<void>;
   log(level: FacetLogLevel, event: string, fields: FacetLogFields): Promise<void>;
-  running(conversations: readonly RunningConversation[]): Promise<void>;
+  running(conversations: readonly RunningConversation[], failed?: RunFailures): Promise<void>;
   workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable>;
 }
 

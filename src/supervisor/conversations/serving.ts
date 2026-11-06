@@ -17,7 +17,7 @@ import {
   servingHosts,
   type EntriesRequest,
   type HostTargets,
-  type RunningConversation,
+  type RunReport,
 } from "./host-target.js";
 import { ProjectConversations } from "./project-conversations.js";
 import { ConversationRuns } from "./runs.js";
@@ -275,7 +275,7 @@ export class ServingConversations {
             generation: this.#ports.generationLabel(),
           });
         },
-        running: (conversations) => this.#running(conversations),
+        running: (report) => this.#running(report),
         workspace: (conversationId) => this.#workspace(conversationId),
       },
       this.#ports.generations,
@@ -342,14 +342,10 @@ export class ServingConversations {
     return readable;
   }
 
-  async #running(conversations: readonly RunningConversation[]): Promise<void> {
+  async #running(report: RunReport): Promise<void> {
     const now = Date.now();
 
-    for (const conversationId of this.#runs.reconcile(
-      conversations,
-      now,
-      this.#ports.generationLabel(),
-    )) {
+    for (const conversationId of this.#runs.reconcile(report, now, this.#ports.generationLabel())) {
       this.#workspaces.end(conversationId);
     }
 

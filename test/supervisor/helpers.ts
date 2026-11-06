@@ -27,6 +27,7 @@ export const commits = {
   noGenerationControl: "d123456789abcdef0123456789abcdef01234567",
   unsettled: "e123456789abcdef0123456789abcdef01234567",
   failingAttach: "f123456789abcdef0123456789abcdef01234567",
+  failingResume: "8123456789abcdef0123456789abcdef01234567",
 } as const;
 
 export { generationLabel, testHarnessCommit };

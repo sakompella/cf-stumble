@@ -7,6 +7,7 @@ import type {
   EntriesRequest,
   FacetLogFields,
   FacetLogLevel,
+  RunFailures,
   RunningConversation,
 } from "../../facet/index.js";
 import {
@@ -25,10 +26,15 @@ import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.
 
 export type { EntriesRequest, RunningConversation };
 
+export type RunReport = Readonly<{
+  running: readonly RunningConversation[];
+  failed: RunFailures;
+}>;
+
 type HostPorts = Readonly<{
   arm: (wake: Wake) => Promise<void>;
   log: (level: FacetLogLevel, event: string, fields: FacetLogFields) => void;
-  running: (conversations: readonly RunningConversation[]) => Promise<void>;
+  running: (report: RunReport) => Promise<void>;
   workspace: (conversationId: string) => Promise<ProjectRpcTargetContract & Disposable>;
 }>;
 
@@ -58,6 +64,8 @@ const isRunningConversations = Schema.is(
   ),
 );
 
+const isRunFailures = Schema.is(Schema.Record(Schema.String, Schema.String));
+
 export class ConversationHostTarget extends RpcTarget implements ConversationHost {
   readonly #ports: HostPorts;
 
@@ -80,12 +88,15 @@ export class ConversationHostTarget extends RpcTarget implements ConversationHos
     return Promise.resolve();
   }
 
-  running(conversations: readonly RunningConversation[]): Promise<void> {
-    if (!isRunningConversations(conversations)) {
+  running(conversations: readonly RunningConversation[], failed?: RunFailures): Promise<void> {
+    if (
+      !isRunningConversations(conversations) ||
+      (failed !== undefined && !isRunFailures(failed))
+    ) {
       return Promise.reject(new Error("running conversations must be conversation ids and runs"));
     }
 
-    return this.#ports.running(conversations);
+    return this.#ports.running({ running: conversations, failed: failed ?? {} });
   }
 
   workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable> {

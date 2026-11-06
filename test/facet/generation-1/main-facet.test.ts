@@ -143,3 +143,35 @@ test("a session that failed on a storage error is reopened by the next attach an
     },
   );
 });
+
+test("a turn whose model fails is reported to the host as failed with the reason", async () => {
+  const reports: Array<Readonly<Record<string, string>> | undefined> = [];
+
+  const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
+    arm: () => Promise.resolve(),
+    log: () => Promise.resolve(),
+    running: (_conversations, failed) => {
+      reports.push(failed);
+
+      return Promise.resolve();
+    },
+    workspace: () => Promise.reject(new Error("no workspace")),
+    dup: () => host,
+  };
+
+  await runInDurableObject(
+    env.SUPERVISOR.getByName("main-facet-turn-failed"),
+    async (_instance, state) => {
+      const facet = new MainFacet(state, { MODEL: noModelRun });
+
+      await facet.attach(host);
+
+      const id = await facet.createConversation("/workspace");
+
+      await facet.submit(id, "hello", "r1");
+      await vi.waitFor(() => {
+        expect(reports).toContainEqual({ [id]: "model_error" });
+      });
+    },
+  );
+});

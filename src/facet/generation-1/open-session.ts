@@ -4,6 +4,7 @@ import {
   createRegistry,
   Harness,
   type HarnessSettings,
+  type SubmissionId,
   type TaskGraph,
 } from "@earendil-works/pi-durable";
 import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
@@ -12,7 +13,7 @@ import {
   hostLog,
   type ConversationHost,
   type GenerationControl,
-  type RunningConversation,
+  type RunFailures,
 } from "../conversation-protocol.js";
 import type { ModelCapability } from "./capabilities.js";
 import { CodingTools } from "./coding-tools.js";
@@ -31,6 +32,8 @@ const SETTINGS: HarnessSettings = {
     backgroundTokens: 0,
   },
 };
+
+type Reported = Readonly<{ conversationId: string; run?: SubmissionId | undefined }>;
 
 export type Session = Readonly<{ harness: Harness; host: ConversationHost }>;
 
@@ -105,6 +108,16 @@ async function relayRunningConversations(
   let reported = await runningConversations(harness, graph.value);
 
   await host.running(reported);
+  void harness.closed.then((end) => {
+    if (end.kind !== "failed" || reported.length === 0) return;
+
+    const failed = Object.fromEntries(
+      reported.map((run) => [run.conversationId, "session-failed"]),
+    );
+
+    reported = [];
+    void host.running([], failed).catch(() => {});
+  });
   graph.start(async (call) => {
     if (call.kind !== "value") return;
 
@@ -112,17 +125,44 @@ async function relayRunningConversations(
 
     if (JSON.stringify(running) === JSON.stringify(reported)) return;
 
+    const failed = await failedRuns(harness, reported, running);
+
     reported = running;
-    await host.running(running).catch(() => {
+    await host.running(running, failed).catch(() => {
       abort("the Supervisor did not take the running conversations");
     });
   });
 }
 
+async function failedRuns(
+  harness: Harness,
+  before: readonly Reported[],
+  after: readonly Reported[],
+): Promise<RunFailures> {
+  const ended = before.filter(
+    (run) => !after.some((now) => now.conversationId === run.conversationId && now.run === run.run),
+  );
+
+  const records = await Promise.all(
+    ended.map(async ({ conversationId, run }) => {
+      const submission =
+        run === undefined ? undefined : await harness.submission(run, BACKGROUND_CONTEXT);
+
+      return [conversationId, await submission?.status(BACKGROUND_CONTEXT)] as const;
+    }),
+  );
+
+  return Object.fromEntries(
+    records.flatMap(([conversationId, record]) =>
+      record?.status === "unanswered" ? [[conversationId, record.reason]] : [],
+    ),
+  );
+}
+
 async function runningConversations(
   harness: Harness,
   graph: TaskGraph,
-): Promise<readonly RunningConversation[]> {
+): Promise<readonly Reported[]> {
   const { submissions } = await harness.inspect(BACKGROUND_CONTEXT);
 
   const conversations = Object.values(graph.tasks)
