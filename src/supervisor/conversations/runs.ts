@@ -16,8 +16,12 @@ function continues(run: Run, reported: RunningConversation): boolean {
   );
 }
 
+export type RunEnding = "cancelled" | "interrupted";
+
 export class ConversationRuns {
   readonly #storage: DurableObjectStorage;
+
+  readonly #endings = new Map<string, RunEnding>();
 
   constructor(storage: DurableObjectStorage) {
     this.#storage = storage;
@@ -36,6 +40,18 @@ export class ConversationRuns {
     ) {
       storage.sql.exec("ALTER TABLE conversation_runs ADD COLUMN run INTEGER");
     }
+  }
+
+  cancelled(conversationId: string): string {
+    this.#endings.set(conversationId, "cancelled");
+
+    return conversationId;
+  }
+
+  interrupted(conversationId: string): string {
+    this.#endings.set(conversationId, "interrupted");
+
+    return conversationId;
   }
 
   running(now: number): boolean {
@@ -71,8 +87,9 @@ export class ConversationRuns {
       logEvent("info", "run.settled", {
         totalMs: now - (run.deadline - PROJECT_RUN_DEADLINE_MS),
         generation,
-        outcome: "settled",
+        outcome: this.#endings.get(run.conversation_id) ?? "completed",
       });
+      this.#endings.delete(run.conversation_id);
     }
 
     for (const { conversationId, run } of started) {

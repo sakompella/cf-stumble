@@ -18,6 +18,7 @@ export interface ExecOperation {
 }
 
 interface SettleState {
+  readonly requested: ExecBackendChoice | "automatic";
   readonly backend: ExecBackendChoice;
   readonly startedAt: number;
   settled: boolean;
@@ -46,6 +47,7 @@ function settle(
     outcome.outcome === "exited" || outcome.outcome === "killed" ? "info" : "warn",
     "exec.finished",
     {
+      requested: state.requested,
       backend: state.backend,
       durationMs: Date.now() - state.startedAt,
       outcome: outcome.outcome,
@@ -265,6 +267,7 @@ export function startExecOperation(
   timeoutEndsTurn = false,
 ): ExecOperation {
   const state: SettleState = {
+    requested: input.backend ?? "automatic",
     backend: routedBackend(input.command, input.backend),
     startedAt: Date.now(),
     settled: false,

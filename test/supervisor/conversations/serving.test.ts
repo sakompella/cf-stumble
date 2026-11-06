@@ -171,6 +171,7 @@ test("a Supervisor with nothing serving refuses a message", async () => {
 test("an active run keeps the recovery alarm armed and refuses a workspace reset until it settles", async () => {
   const control = await servingScripted("conversations-alarm");
   const before = Date.now();
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
   await control.submitProjectMessage("sample-project-one", "hello", "r1");
 
@@ -182,6 +183,9 @@ test("an active run keeps the recovery alarm armed and refuses a workspace reset
   await control.abortProjectRun("sample-project-one");
 
   expect(await alarm(control)).toBeNull();
+  expect(log).toHaveBeenCalledWith(
+    expect.objectContaining({ event: "run.settled", outcome: "cancelled" }),
+  );
 });
 
 test("activation and rollback replace the serving facet, and its storage carries over", async () => {
