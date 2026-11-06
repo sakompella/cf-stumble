@@ -6,7 +6,7 @@ The Workspace Host runs the container through `ContainerBackend`, with the conta
 
 The workspace image is built once in CI and published to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`. The deploy and every machine that runs the container pull it, and nothing builds it locally.
 
-The Workspace Host has two exec backends. The container handles Node, pnpm, TypeScript compilation, tests, and project commands. The isolate backend runs just-bash in a Dynamic Worker with Git over the SQLite workspace, so it handles text operations and Git without waking the container; it has no Node, pnpm, `gh` or network. The model picks the backend for each `bash` call through its optional `backend` parameter, and a call that names none uses the container. The shell's modules ship as the static asset `ASSETS` and are loaded into the Dynamic Worker.
+The Workspace Host has two exec backends. The container handles Node, pnpm, TypeScript compilation, tests, and project commands. The isolate backend runs just-bash in a Dynamic Worker with Git over the SQLite workspace, so it handles text operations and Git without waking the container; it has no Node, pnpm, `gh` or network. A `bash` call that names no backend runs in the isolate when every program in it is one the isolate has, and in the container otherwise; its optional `backend` parameter forces the container (`src/workspace/project/exec-routing.ts`). The shell's modules ship as the static asset `ASSETS` and are loaded into the Dynamic Worker.
 
 ## Workspace layout
 
