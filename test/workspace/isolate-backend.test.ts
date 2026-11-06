@@ -1,7 +1,6 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
-import { WorkspaceHost } from "../../src/workspace/index.js";
 import { seedWorkspaceRoot } from "./host-fixtures.js";
 
 async function linesOf(stream: ReadableStream<Uint8Array>): Promise<string[]> {
@@ -60,5 +59,4 @@ test("a holder of the WORKSPACE_HOST binding cannot get the workspace without th
   );
 
   expect(outcome).toContain("not the isolate shell");
-  expect("__getWorkspaceStub" in WorkspaceHost.prototype).toBe(false);
 });

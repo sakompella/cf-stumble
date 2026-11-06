@@ -200,6 +200,20 @@ test("a run the facet reports as failed settles as failed with the error code", 
   );
 });
 
+test("an abort while nothing runs does not mark the next run cancelled", async () => {
+  const control = await servingScripted("conversations-idle-abort");
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  await control.submitProjectMessage("sample-project-one", "fail the run", "r1");
+  await control.abortProjectRun("sample-project-one");
+  log.mockClear();
+  await control.submitProjectMessage("sample-project-one", "fail the run", "r2");
+
+  expect(log).toHaveBeenCalledWith(
+    expect.objectContaining({ event: "run.settled", outcome: "failed", errorCode: "model_error" }),
+  );
+});
+
 test("activation and rollback replace the serving facet, and its storage carries over", async () => {
   const control = await servingScripted("conversations-generation-change");
   const [first, second] = SCRIPTED_COMMITS;

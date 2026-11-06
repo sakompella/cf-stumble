@@ -7,7 +7,6 @@ import {
   type ProjectCatalog,
   type ProjectId,
 } from "../src/project-catalog.js";
-import { selectableCatalog, type SelectableCatalog } from "../src/selectable-projects.js";
 
 export function projectOf(repositoryUrl: string): Project {
   const id = projectIdForRepository(repositoryUrl);
@@ -23,8 +22,6 @@ export const sampleProjectOne: Project = projectOf("https://github.com/sample/pr
 export const sampleProjectTwo: Project = projectOf("https://github.com/sample/project-two");
 
 export const sampleCatalog: ProjectCatalog = [sampleProjectOne, sampleProjectTwo];
-
-export const sampleSelectableCatalog: SelectableCatalog = selectableCatalog(sampleCatalog);
 
 export function projectIdOf(value: string): ProjectId {
   const projectId = parseProjectId(value);
