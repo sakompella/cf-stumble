@@ -17,7 +17,7 @@ function continues(run: Run, reported: RunningConversation): boolean {
   );
 }
 
-export type RunEnding = "cancelled" | "interrupted";
+type RunEnding = "cancelled" | "interrupted";
 
 export class ConversationRuns {
   readonly #storage: DurableObjectStorage;
@@ -44,13 +44,16 @@ export class ConversationRuns {
   }
 
   cancelled(conversationId: string): string {
-    this.#endings.set(conversationId, "cancelled");
-
-    return conversationId;
+    return this.#ends(conversationId, "cancelled");
   }
 
   interrupted(conversationId: string): string {
-    this.#endings.set(conversationId, "interrupted");
+    return this.#ends(conversationId, "interrupted");
+  }
+
+  #ends(conversationId: string, ending: RunEnding): string {
+    if (this.#runs().some((run) => run.conversation_id === conversationId))
+      this.#endings.set(conversationId, ending);
 
     return conversationId;
   }
