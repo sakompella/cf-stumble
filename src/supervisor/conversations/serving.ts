@@ -144,7 +144,7 @@ export class ServingConversations {
 
         if (conversationId === undefined) return {};
         const facet = yield* this.#facet();
-        yield* this.#call(() => facet.abort(conversationId));
+        yield* this.#call(() => facet.abort(this.#runs.cancelled(conversationId)));
 
         return {};
       }),
@@ -158,7 +158,8 @@ export class ServingConversations {
         const facet = yield* this.#facet();
         const previous = this.#projects.conversationOf(project.id);
 
-        if (previous !== undefined) yield* this.#call(() => facet.abort(previous));
+        if (previous !== undefined)
+          yield* this.#call(() => facet.abort(this.#runs.cancelled(previous)));
 
         const conversationId = yield* this.#call(() =>
           facet.createConversation(selectedWorkingDirectory(project)),
@@ -189,7 +190,7 @@ export class ServingConversations {
 
       for (const conversationId of this.#runs.expired(now)) {
         logEvent("warn", "run.deadline-aborted", { generation: this.#ports.generationLabel() });
-        yield* this.#call(() => facet.abort(conversationId));
+        yield* this.#call(() => facet.abort(this.#runs.interrupted(conversationId)));
       }
     }).pipe(
       Effect.tapError((problem) =>
