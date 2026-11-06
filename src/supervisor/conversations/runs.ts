@@ -33,14 +33,6 @@ export class ConversationRuns {
         deadline INTEGER NOT NULL
       );
     `);
-
-    if (
-      storage.sql
-        .exec("SELECT 1 FROM pragma_table_info('conversation_runs') WHERE name = 'run'")
-        .toArray().length === 0
-    ) {
-      storage.sql.exec("ALTER TABLE conversation_runs ADD COLUMN run INTEGER");
-    }
   }
 
   cancelled(conversationId: string): string {
