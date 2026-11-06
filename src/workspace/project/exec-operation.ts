@@ -52,6 +52,7 @@ function settle(
       durationMs: Date.now() - state.startedAt,
       outcome: outcome.outcome,
       exitCode: outcome.outcome === "exited" ? outcome.exitCode : null,
+      fellBackFrom: state.handle?.fellBackFrom ?? null,
       errorCode: outcome.outcome === "failed" ? outcome.error.code : null,
     },
   );
