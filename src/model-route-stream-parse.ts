@@ -16,7 +16,11 @@ export const ProviderErrorField = lenient(
 
 const isString = Schema.is(Schema.String);
 
-export type TokenUsage = Readonly<{ inputTokens: number; outputTokens: number }>;
+export type TokenUsage = Readonly<{
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens?: number | undefined;
+}>;
 
 export type ParsedProviderChunk = Readonly<{
   textDelta?: string | undefined;
@@ -51,6 +55,7 @@ const Usage = Schema.Struct({
   input_tokens: lenient(TokenCount),
   completion_tokens: lenient(TokenCount),
   output_tokens: lenient(TokenCount),
+  prompt_tokens_details: lenient(Schema.Struct({ cached_tokens: lenient(TokenCount) })),
 });
 
 const ProviderEventSchema = Schema.Struct({
@@ -101,7 +106,11 @@ function usageOf(event: ProviderEvent): TokenUsage | undefined {
 
   return inputTokens === undefined || outputTokens === undefined
     ? undefined
-    : { inputTokens, outputTokens };
+    : {
+        inputTokens,
+        outputTokens,
+        cachedTokens: event.usage?.prompt_tokens_details?.cached_tokens,
+      };
 }
 
 function chunkOf(event: ProviderEvent): ParsedProviderChunk {

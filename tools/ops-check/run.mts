@@ -10,6 +10,7 @@ import {
 } from "./check.mts";
 import {
   fetchInvocations,
+  fetchModelCalls,
   fetchSessionFailures,
   fetchUsage,
   readToken,
@@ -62,13 +63,14 @@ async function readActivity(options: Options): Promise<Activity> {
 
   const requestWindow = { ...window, fromMs: window.fromMs - WORKSPACE_IDLE_STOP_MS };
 
-  const [invocations, usage, sessionFailures] = await Promise.all([
+  const [invocations, usage, sessionFailures, modelCalls] = await Promise.all([
     fetchInvocations(token, account, worker, requestWindow),
     fetchUsage(token, account, worker, window),
     fetchSessionFailures(token, account, worker, window),
+    fetchModelCalls(token, account, worker, window),
   ]);
 
-  return { invocations, usage, sessionFailures };
+  return { invocations, usage, sessionFailures, modelCalls };
 }
 
 async function gather(options: Options, nowMs: number): Promise<CheckInput> {

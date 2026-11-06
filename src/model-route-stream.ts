@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { logEvent } from "./diagnostics.js";
 import {
   parseProviderPayload,
   type ParsedProviderChunk,
@@ -131,6 +132,17 @@ function providerFailure(detail: string | undefined): ModelTurnFailed {
   return detail === undefined ? modelUnavailable() : modelUnavailableBecause(detail);
 }
 
+function logModelCall(usage: TokenUsage | undefined): void {
+  if (usage === undefined) return;
+
+  logEvent("info", "model.call", {
+    model: MODEL,
+    promptTokens: usage.inputTokens,
+    cachedTokens: usage.cachedTokens ?? 0,
+    completionTokens: usage.outputTokens,
+  });
+}
+
 export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteRequest): ModelTurn {
   return (emit) => {
     const accumulator = new ProviderStreamAccumulator(emit);
@@ -142,11 +154,15 @@ export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteReque
       Effect.flatMap((providerStream) =>
         pumpSseStream(providerStream, (line) => accumulator.handleLine(line)),
       ),
-      Effect.flatMap(() =>
-        accumulator.providerFailure === undefined
-          ? Effect.succeed(finishedTurn(accumulator, request))
-          : Effect.fail(providerFailure(accumulator.providerFailure.detail)),
-      ),
+      Effect.flatMap(() => {
+        if (accumulator.providerFailure !== undefined) {
+          return Effect.fail(providerFailure(accumulator.providerFailure.detail));
+        }
+
+        logModelCall(accumulator.usage());
+
+        return Effect.succeed(finishedTurn(accumulator, request));
+      }),
     );
   };
 }

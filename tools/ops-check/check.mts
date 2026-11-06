@@ -34,10 +34,16 @@ export interface SessionFailure {
   readonly cause: string;
 }
 
+export interface ModelCall {
+  readonly promptTokens: number;
+  readonly cachedTokens: number;
+}
+
 export interface Activity {
   readonly invocations: readonly Invocation[];
   readonly usage: readonly UsageBucket[];
   readonly sessionFailures: readonly SessionFailure[];
+  readonly modelCalls: readonly ModelCall[];
 }
 
 export type Source<T> =
@@ -201,7 +207,26 @@ export function runChecks(input: CheckInput): readonly Finding[] {
   return [...failures, ...ranPastIdle(input.activity.data, input)];
 }
 
+export function cacheHitLine(calls: readonly ModelCall[]): readonly string[] {
+  const prompt = calls.reduce((sum, call) => sum + call.promptTokens, 0);
+
+  if (prompt === 0) return [];
+
+  const cached = calls.reduce((sum, call) => sum + call.cachedTokens, 0);
+
+  return [
+    `i model cache hit rate ${((100 * cached) / prompt).toFixed(1)}% (${cached}/${prompt} prompt tokens, ${calls.length} calls)`,
+  ];
+}
+
 export function formatReport(input: CheckInput, findings: readonly Finding[]): readonly string[] {
+  return [
+    ...reportFindings(input, findings),
+    ...(input.activity.status === "ok" ? cacheHitLine(input.activity.data.modelCalls) : []),
+  ];
+}
+
+function reportFindings(input: CheckInput, findings: readonly Finding[]): readonly string[] {
   const label = `${isoMinute(input.window.fromMs)}..${isoMinute(completeUntilMs(input)).slice(11)}`;
 
   return findings.length === 0

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { JsonRecord, JsonValue } from "../json.mts";
-import { parseInvocations, parseSessionFailures, parseUsage } from "./fetch.mts";
+import { parseInvocations, parseModelCalls, parseSessionFailures, parseUsage } from "./fetch.mts";
 
 const MEMORY_BYTES = 8 * 1024 ** 3;
 
@@ -87,5 +87,20 @@ describe("parseSessionFailures", () => {
     const parsed = parseSessionFailures({ result: { events: { events: [other, failed] } } });
 
     assert.deepEqual(parsed, [{ atMs: 3, cause: "storage reset" }]);
+  });
+});
+
+describe("parseModelCalls", () => {
+  it("keeps model.call events with their prompt and cached tokens", () => {
+    const call: JsonRecord = {
+      timestamp: 3,
+      source: { event: "model.call", promptTokens: 100, cachedTokens: 80 },
+    };
+
+    const other: JsonRecord = { timestamp: 4, source: { event: "run.settled" } };
+
+    assert.deepEqual(parseModelCalls({ result: { events: { events: [other, call] } } }), [
+      { promptTokens: 100, cachedTokens: 80 },
+    ]);
   });
 });
