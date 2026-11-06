@@ -1,4 +1,4 @@
-import { reset } from "cloudflare:test";
+import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import {
   activeSupervisor,
@@ -247,6 +247,26 @@ test("records a candidate whose startup-check conversation never settles as fail
   );
 
   expect(result).toMatchObject({ ok: true, report: { stage: "deadline-expired" } });
+  await expectFailedCandidate(control, label);
+});
+
+test("refuses a candidate when the serving generation's artifact cannot be prepared", async () => {
+  const control = await activeSupervisor("startup-check-serving-artifact-lost");
+  const label = await labelCandidate(control, commits.ordinary);
+
+  await runInDurableObject(control, (_instance, state) => {
+    state.storage.sql.exec("DELETE FROM module_map_manifests");
+    state.storage.sql.exec("DELETE FROM module_map_chunks");
+  });
+
+  const result = await prepareWithModuleMap(
+    control,
+    label,
+    artifact(commits.ordinary, servingFacetSource("ordinary")),
+  );
+
+  expect(result).toMatchObject({ ok: true, report: { stage: "mount-failed" } });
+  expect(result.ok && result.report.reason).toContain("serving generation");
   await expectFailedCandidate(control, label);
 });
 
