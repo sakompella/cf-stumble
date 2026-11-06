@@ -14,7 +14,13 @@ import {
   type JsonRecord,
   type JsonValue,
 } from "../json.mts";
-import { BUCKET_MS, type Invocation, type TimeWindow, type UsageBucket } from "./check.mts";
+import {
+  BUCKET_MS,
+  type Invocation,
+  type SessionFailure,
+  type TimeWindow,
+  type UsageBucket,
+} from "./check.mts";
 
 const API = "https://api.cloudflare.com/client/v4";
 
@@ -154,6 +160,53 @@ export async function fetchInvocations(
   );
 
   return parseInvocations(response);
+}
+
+const SESSION_FAILED_EVENT = "facet.session-failed";
+
+export function parseSessionFailures(response: JsonValue): readonly SessionFailure[] {
+  const rows = digArray(response, "result", "events", "events");
+
+  if (rows === null) throw new ApiFailure("telemetry response had an unexpected shape");
+
+  if (rows.length >= TELEMETRY_ROW_LIMIT) {
+    throw new ApiFailure(
+      `telemetry returned ${TELEMETRY_ROW_LIMIT} rows, the most it gives; use a shorter --since`,
+    );
+  }
+
+  return rows.flatMap((row) => {
+    const atMs = digNumber(row, "timestamp");
+
+    if (digString(row, "source", "event") !== SESSION_FAILED_EVENT || atMs === null) return [];
+
+    return [{ atMs, cause: digString(row, "source", "cause") ?? "no cause" }];
+  });
+}
+
+export async function fetchSessionFailures(
+  token: string,
+  account: string,
+  worker: string,
+  window: TimeWindow,
+): Promise<readonly SessionFailure[]> {
+  const response = await send(
+    token,
+    `${API}/accounts/${account}/workers/observability/telemetry/query`,
+    {
+      queryId: "adhoc",
+      view: "events",
+      dry: true,
+      limit: TELEMETRY_ROW_LIMIT,
+      timeframe: { from: window.fromMs, to: window.toMs },
+      parameters: {
+        filters: [{ key: "$metadata.service", operation: "eq", type: "string", value: worker }],
+        needle: { value: SESSION_FAILED_EVENT, matchCase: true, isRegex: false },
+      },
+    },
+  );
+
+  return parseSessionFailures(response);
 }
 
 export function parseUsage(response: JsonValue, memoryBytes: number): readonly UsageBucket[] {

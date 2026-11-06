@@ -1,4 +1,9 @@
-import { defineExtension, defineTool, type ToolExecutionApi } from "@earendil-works/pi-durable";
+import {
+  defineExtension,
+  defineTool,
+  type ToolExecutionApi,
+  type ToolRegistration,
+} from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import {
   createBashTool,
@@ -50,7 +55,33 @@ const backendBash = defineTool({
     bash.execute(args, args.backend === undefined ? api : onBackend(api, args.backend), context),
 });
 
+function logged(tool: ToolRegistration): ToolRegistration {
+  return {
+    ...tool,
+    execute: async (args, api, context) => {
+      const started = Date.now();
+      let isError = true;
+
+      try {
+        const result = await tool.execute(args, api, context);
+
+        isError = result.isError === true;
+
+        return result;
+      } finally {
+        const log = isComputerEnv(api.env) ? api.env.log : undefined;
+
+        log?.(isError ? "error" : "info", "tool-call", {
+          tool: tool.name,
+          durationMs: Date.now() - started,
+          isError,
+        });
+      }
+    },
+  };
+}
+
 export const CodingTools = defineExtension({
   name: "coding-tools",
-  tools: [createReadTool(), createWriteTool(), createEditTool(), backendBash],
+  tools: [createReadTool(), createWriteTool(), createEditTool(), backendBash].map(logged),
 });

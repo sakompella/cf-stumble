@@ -2,7 +2,13 @@ import { RpcTarget } from "cloudflare:workers";
 import type { Wake } from "@earendil-works/pi-durable";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { ConversationHost, EntriesRequest, RunningConversation } from "../../facet/index.js";
+import type {
+  ConversationHost,
+  EntriesRequest,
+  FacetLogFields,
+  FacetLogLevel,
+  RunningConversation,
+} from "../../facet/index.js";
 import {
   GenerationControlRequest,
   GenerationControlTarget,
@@ -21,7 +27,7 @@ export type { EntriesRequest, RunningConversation };
 
 type HostPorts = Readonly<{
   arm: (wake: Wake) => Promise<void>;
-  fault: (event: string, detail: string) => void;
+  log: (level: FacetLogLevel, event: string, fields: FacetLogFields) => void;
   running: (conversations: readonly RunningConversation[]) => Promise<void>;
   workspace: (conversationId: string) => Promise<ProjectRpcTargetContract & Disposable>;
 }>;
@@ -36,6 +42,15 @@ const readWakeFields = Schema.decodeUnknownOption(WakeFields);
 const isFiniteNumber = Schema.is(Schema.Finite);
 
 const isString = Schema.is(Schema.String);
+
+const isLogLevel = Schema.is(Schema.Literals(["info", "error"]));
+
+const isLogFields = Schema.is(
+  Schema.Record(
+    Schema.String,
+    Schema.Union([Schema.String, Schema.Finite, Schema.Boolean, Schema.Null]),
+  ),
+);
 
 const isRunningConversations = Schema.is(
   Schema.Array(
@@ -55,12 +70,12 @@ export class ConversationHostTarget extends RpcTarget implements ConversationHos
     return this.#ports.arm(parseWake(wake));
   }
 
-  fault(event: string, detail: string): Promise<void> {
-    if (!isString(event) || !isString(detail)) {
-      return Promise.reject(new Error("a fault must be an event name and a detail"));
+  log(level: FacetLogLevel, event: string, fields: FacetLogFields): Promise<void> {
+    if (!isLogLevel(level) || !isString(event) || !isLogFields(fields)) {
+      return Promise.reject(new Error("a log must be a level, an event name and plain fields"));
     }
 
-    this.#ports.fault(event, detail);
+    this.#ports.log(level, event, fields);
 
     return Promise.resolve();
   }

@@ -29,9 +29,15 @@ export interface UsageBucket {
   readonly runningMinutes: number;
 }
 
+export interface SessionFailure {
+  readonly atMs: number;
+  readonly cause: string;
+}
+
 export interface Activity {
   readonly invocations: readonly Invocation[];
   readonly usage: readonly UsageBucket[];
+  readonly sessionFailures: readonly SessionFailure[];
 }
 
 export type Source<T> =
@@ -39,7 +45,7 @@ export type Source<T> =
   | { readonly status: "unavailable"; readonly reason: string };
 
 export interface Finding {
-  readonly rule: "ran-past-idle" | "unknown";
+  readonly rule: "ran-past-idle" | "facet.session-failed" | "unknown";
   readonly detail: string;
   readonly evidence: readonly string[];
 }
@@ -160,10 +166,26 @@ function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] 
   });
 }
 
+function sessionFailed(activity: Activity): readonly Finding[] {
+  const [first] = activity.sessionFailures;
+
+  if (first === undefined) return [];
+
+  return [
+    {
+      rule: "facet.session-failed",
+      detail: `${activity.sessionFailures.length} facet session failure(s); first: ${first.cause}`,
+      evidence: activity.sessionFailures.slice(0, 3).map((failure) => isoMinute(failure.atMs)),
+    },
+  ];
+}
+
 export function runChecks(input: CheckInput): readonly Finding[] {
   if (input.activity.status !== "ok") {
     return [{ rule: "unknown", detail: input.activity.reason, evidence: [] }];
   }
+
+  const failures = sessionFailed(input.activity.data);
 
   if (completeUntilMs(input) <= input.window.fromMs) {
     return [
@@ -172,10 +194,11 @@ export function runChecks(input: CheckInput): readonly Finding[] {
         detail: `usage lags ${METRICS_LAG_MS / MINUTE_MS} min, so none of this window is complete yet; widen --since or wait`,
         evidence: [],
       },
+      ...failures,
     ];
   }
 
-  return ranPastIdle(input.activity.data, input);
+  return [...failures, ...ranPastIdle(input.activity.data, input)];
 }
 
 export function formatReport(input: CheckInput, findings: readonly Finding[]): readonly string[] {

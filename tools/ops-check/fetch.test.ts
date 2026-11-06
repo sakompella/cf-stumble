@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { JsonRecord, JsonValue } from "../json.mts";
-import { parseInvocations, parseUsage } from "./fetch.mts";
+import { parseInvocations, parseSessionFailures, parseUsage } from "./fetch.mts";
 
 const MEMORY_BYTES = 8 * 1024 ** 3;
 
@@ -72,5 +72,20 @@ describe("parseInvocations", () => {
     const events = Array.from({ length: 2000 }, () => row);
 
     assert.throws(() => parseInvocations({ result: { events: { events } } }), /most it gives/u);
+  });
+});
+
+describe("parseSessionFailures", () => {
+  it("keeps only session-failed events, with their cause", () => {
+    const failed: JsonRecord = {
+      timestamp: 3,
+      source: { event: "facet.session-failed", cause: "storage reset" },
+    };
+
+    const other: JsonRecord = { timestamp: 4, source: { event: "run.settled" } };
+
+    const parsed = parseSessionFailures({ result: { events: { events: [other, failed] } } });
+
+    assert.deepEqual(parsed, [{ atMs: 3, cause: "storage reset" }]);
   });
 });

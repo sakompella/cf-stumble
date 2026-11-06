@@ -1,3 +1,5 @@
+import { logEvent } from "../../diagnostics.js";
+import { routedBackend } from "./exec-routing.js";
 import {
   isContainerRestartedError,
   type BackendExecEvent,
@@ -6,7 +8,7 @@ import {
   type ExecBackendInput,
 } from "./exec-backend.js";
 import { enqueueEvent, enqueueOutput } from "./exec-framing.js";
-import type { ExecEvent } from "./protocol.js";
+import type { ExecBackendChoice, ExecEvent } from "./protocol.js";
 
 type TerminalEvent = Extract<ExecEvent, { kind: "terminal" }>;
 
@@ -16,6 +18,8 @@ export interface ExecOperation {
 }
 
 interface SettleState {
+  readonly backend: ExecBackendChoice;
+  readonly startedAt: number;
   settled: boolean;
   seq: number;
   timer: ReturnType<typeof setTimeout> | undefined;
@@ -38,6 +42,17 @@ function settle(
 ): void {
   if (state.settled) return;
   state.settled = true;
+  logEvent(
+    outcome.outcome === "exited" || outcome.outcome === "killed" ? "info" : "warn",
+    "exec.finished",
+    {
+      backend: state.backend,
+      durationMs: Date.now() - state.startedAt,
+      outcome: outcome.outcome,
+      exitCode: outcome.outcome === "exited" ? outcome.exitCode : null,
+      errorCode: outcome.outcome === "failed" ? outcome.error.code : null,
+    },
+  );
 
   if (state.timer !== undefined) clearTimeout(state.timer);
   resumePump(state);
@@ -250,6 +265,8 @@ export function startExecOperation(
   timeoutEndsTurn = false,
 ): ExecOperation {
   const state: SettleState = {
+    backend: routedBackend(input.command, input.backend),
+    startedAt: Date.now(),
     settled: false,
     seq: 0,
     timer: undefined,

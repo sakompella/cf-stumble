@@ -7,10 +7,12 @@ import {
   type TaskGraph,
 } from "@earendil-works/pi-durable";
 import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
-import type {
-  ConversationHost,
-  GenerationControl,
-  RunningConversation,
+import {
+  errorFields,
+  hostLog,
+  type ConversationHost,
+  type GenerationControl,
+  type RunningConversation,
 } from "../conversation-protocol.js";
 import type { ModelCapability } from "./capabilities.js";
 import { CodingTools } from "./coding-tools.js";
@@ -42,6 +44,7 @@ export type SessionInput = Readonly<{
 
 export async function openSession(input: SessionInput): Promise<Session> {
   const { host, generations } = input;
+  const log = hostLog(host);
   const models = createModels();
   models.setProvider(routeProvider(input.model));
   const registry = createRegistry();
@@ -58,6 +61,16 @@ export async function openSession(input: SessionInput): Promise<Session> {
         cwd === undefined
           ? undefined
           : computerEnv(host, generations, String(conversationId), cwd, invocation.abortSignal),
+      onReport: (report) => {
+        log("error", "report", {
+          kind: report.kind,
+          reason: "reason" in report ? report.reason : null,
+          task: "task" in report && report.task !== undefined ? report.task.kind : null,
+          ...(report.error instanceof Error
+            ? errorFields(report.error)
+            : { cause: String(report.error) }),
+        });
+      },
       onWake: (wake) => {
         void host.arm(wake).catch(() => {
           input.abort("the Supervisor did not arm a wake");
@@ -67,15 +80,15 @@ export async function openSession(input: SessionInput): Promise<Session> {
     BACKGROUND_CONTEXT,
   );
 
+  log("info", "session-opened", {});
   void harness.closed.then((end) => {
-    if (end.kind !== "failed") return;
-
-    const { error } = end;
-
-    const detail =
-      error instanceof Error ? `${error.message}; cause: ${String(error.cause)}` : String(error);
-
-    void host.fault("session-failed", detail).catch(() => {});
+    if (end.kind === "failed")
+      log(
+        "error",
+        "session-failed",
+        end.error instanceof Error ? errorFields(end.error) : { cause: String(end.error) },
+      );
+    else log("info", "session-closed", {});
   });
 
   await relayRunningConversations(harness, host, input.abort);

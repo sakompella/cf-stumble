@@ -54,7 +54,11 @@ export class ConversationRuns {
       .map((run) => run.conversation_id);
   }
 
-  reconcile(running: readonly RunningConversation[], now: number): readonly string[] {
+  reconcile(
+    running: readonly RunningConversation[],
+    now: number,
+    generation: number | null,
+  ): readonly string[] {
     const runs = this.#runs();
     const settled = runs.filter((run) => !running.some((reported) => continues(run, reported)));
     const started = running.filter((reported) => !runs.some((run) => continues(run, reported)));
@@ -64,7 +68,11 @@ export class ConversationRuns {
         "DELETE FROM conversation_runs WHERE conversation_id = ?",
         run.conversation_id,
       );
-      logEvent("info", "run.settled", { totalMs: now - (run.deadline - PROJECT_RUN_DEADLINE_MS) });
+      logEvent("info", "run.settled", {
+        totalMs: now - (run.deadline - PROJECT_RUN_DEADLINE_MS),
+        generation,
+        outcome: "settled",
+      });
     }
 
     for (const { conversationId, run } of started) {
@@ -74,7 +82,7 @@ export class ConversationRuns {
         run ?? null,
         now + PROJECT_RUN_DEADLINE_MS,
       );
-      logEvent("info", "run.started");
+      logEvent("info", "run.started", { generation });
     }
 
     return settled.map((run) => run.conversation_id);

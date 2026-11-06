@@ -1,6 +1,10 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
-import type { ConversationHost, GenerationControl } from "../conversation-protocol.js";
+import {
+  hostLog,
+  type ConversationHost,
+  type GenerationControl,
+} from "../conversation-protocol.js";
 import { createComputerEnv } from "./execution-env.js";
 
 export async function computerEnv(
@@ -11,7 +15,7 @@ export async function computerEnv(
   signal: AbortSignal | undefined,
 ): Promise<ExecutionEnv> {
   const target = await host.workspace(conversationId);
-  const env = createComputerEnv({ cwd, target, generations });
+  const env = createComputerEnv({ cwd, target, generations, log: hostLog(host) });
 
   const end = () => {
     void env.cleanup(BACKGROUND_CONTEXT).finally(() => {

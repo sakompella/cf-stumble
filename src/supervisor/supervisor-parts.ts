@@ -85,6 +85,7 @@ export function supervisorParts(
       obtainWorkspace: (project, remainingMs, signal) =>
         obtainProjectWorkspace(sources, project, remainingMs, signal),
       generations: generationOperations,
+      generationLabel: () => generations.active().generation?.label ?? null,
     }),
     chatgpt: new ChatGPTConnection({
       store: new ChatGPTCredentialStore(ctx.storage),
