@@ -15,3 +15,4 @@ build/
 /test-results/
 /playwright-report/
 /src/page/owner-script.generated.ts
+/src/workspace/project/isolate-commands.generated.ts

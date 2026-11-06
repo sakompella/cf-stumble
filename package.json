@@ -16,7 +16,7 @@
     "format:check": "oxfmt --check",
     "build:module-map": "node tools/build-generation-1.mts",
     "build:shell-modules": "pnpm exec tsx tools/build-shell-modules.mts",
-    "build:page": "pnpm exec tsx tools/build-owner-page.mts",
+    "build:page": "pnpm exec tsx tools/build-owner-page.mts && pnpm exec tsx tools/build-isolate-commands.mts",
     "install:infra": "pnpm -C infra install --frozen-lockfile --reporter=silent",
     "alchemy": "infra/node_modules/.bin/alchemy",
     "deploy": "pnpm run install:infra && pnpm run build:page && pnpm run build:shell-modules && pnpm alchemy deploy --config infra/alchemy.run.ts --stage prod",
