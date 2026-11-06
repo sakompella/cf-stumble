@@ -114,3 +114,33 @@ test("reuses the cached Worker Loader entry when the same harness commit is load
     "a labeled commit is immutable, so its Loader entry must not change under it",
   ).toBe("code the commit was labeled with");
 });
+
+test("a loaded facet can yield to the event loop through a global MessageChannel, as the pi-durable writer does", async () => {
+  const loadedHarness = loadMainFacet(
+    env.LOADER,
+    artifact("6123456789abcdef0123456789abcdef01234567", "main.js", [
+      {
+        name: "main.js",
+        source: `
+import { DurableObject } from "cloudflare:workers";
+const hop = () =>
+  new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve("hopped");
+    };
+    channel.port2.postMessage(undefined);
+  });
+export class MainFacet extends DurableObject {}
+export default {
+  fetch: async () => new Response(await hop()),
+};
+`,
+      },
+    ]),
+    { MODEL: modelRoute },
+  );
+
+  expect(await responseText(loadedHarness.worker)).toBe("hopped");
+});

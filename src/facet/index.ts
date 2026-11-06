@@ -27,7 +27,7 @@ export function loadMainFacet(
 ) {
   const worker = loader.get(workerName, () => ({
     compatibilityDate: "2025-01-01",
-    compatibilityFlags: ["enable_weak_ref"],
+    compatibilityFlags: ["enable_weak_ref", "expose_global_message_channel"],
     mainModule: artifact.modules[0].name,
     modules: Object.fromEntries(artifact.modules.map(workerModuleEntry)),
     env: capabilities,
