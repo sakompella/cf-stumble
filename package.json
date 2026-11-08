@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm build:page && pnpm build:shell-modules && pnpm alchemy dev --config infra/alchemy.run.ts --stage dev",
     "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run",
     "test:tools": "node --import tsx --test 'tools/**/*.test.ts'",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",
