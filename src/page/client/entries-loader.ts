@@ -2,6 +2,7 @@ import { type Cursor, type EntryLoader, type EntryRecord } from "@earendil-works
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import { encodeEntriesRequest } from "../../entries-request.js";
 import { answerOf, fetchEffect, field, projectPath } from "./api.js";
 
 function isEntryRecord(value: unknown): value is EntryRecord {
@@ -21,11 +22,12 @@ function isCursor(value: unknown): value is Cursor {
 }
 
 function entriesPath(projectId: string, query: Parameters<EntryLoader>[0], limit: number) {
-  const params = new URLSearchParams({ order: query.order ?? "descending", limit: String(limit) });
-
-  if (query.minEntryId !== undefined) params.set("min", String(query.minEntryId));
-
-  if (query.maxEntryId !== undefined) params.set("max", String(query.maxEntryId));
+  const params = encodeEntriesRequest({
+    order: query.order ?? "descending",
+    limit,
+    minEntryId: query.minEntryId,
+    maxEntryId: query.maxEntryId,
+  });
 
   return `${projectPath(projectId, "/entries")}?${params.toString()}`;
 }

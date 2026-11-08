@@ -64,7 +64,7 @@ List the account's Workers, container applications, Durable Object namespaces, a
 
 ### 2. Build the staging copy
 
-Create a worktree and pick a unique stage name. The stack turns any stage other than `prod` into a Worker `cf-stumble-<stage>` with a `workers.dev` subdomain, no route, traces off, and its own container application attached to its `WorkspaceHost` namespace. Every stage boots the production instance size, `WORKSPACE_CONTAINER_INSTANCE` in `src/workspace/container-instance.ts`.
+Create a worktree and pick a unique stage name. The stack turns any stage other than `prod` into a Worker `cf-stumble-<stage>` with a `workers.dev` subdomain, no route, traces off, and its own container application attached to its `WorkspaceHost` namespace. Every stage boots the production instance size, `WORKSPACE_CONTAINER_INSTANCE` in `infra/worker-settings.ts`.
 
 **Complete when:** the stage is unique and is not `prod`, and `pnpm alchemy plan` for it lists only resources named `cf-stumble-<stage>` (plus the state store on an account that has none).
 

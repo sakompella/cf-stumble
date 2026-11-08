@@ -2,8 +2,11 @@ import type { ModelRoute } from "../model-route.js";
 import type { StartupCheckModel } from "../startup-check-model.js";
 import type { HarnessModule, MainHarnessArtifact } from "./artifact.js";
 import type { ConversationFacet } from "./conversation-protocol.js";
+import { FACET_RUNTIME } from "./runtime-contract.js";
 
 export { MainHarnessArtifact } from "./artifact.js";
+
+export { FACET_COMPATIBILITY } from "./runtime-contract.js";
 
 export type { HarnessModule, MainHarnessArtifactProblem } from "./artifact.js";
 
@@ -26,8 +29,7 @@ export function loadMainFacet(
   workerName: string = artifact.harnessCommit,
 ) {
   const worker = loader.get(workerName, () => ({
-    compatibilityDate: "2025-01-01",
-    compatibilityFlags: ["enable_weak_ref", "expose_global_message_channel"],
+    ...FACET_RUNTIME,
     mainModule: artifact.modules[0].name,
     modules: Object.fromEntries(artifact.modules.map(workerModuleEntry)),
     env: capabilities,

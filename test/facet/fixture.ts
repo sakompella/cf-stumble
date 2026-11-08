@@ -1,7 +1,7 @@
 import * as Result from "effect/Result";
 import { MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/artifact.js";
-import { FACET_COMPATIBILITY } from "../../src/facet-compatibility.js";
+import { FACET_COMPATIBILITY } from "../../src/facet/runtime-contract.js";
 import { STARTUP_CHECK_REPLY } from "../../src/startup-check-script.js";
 import { WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 

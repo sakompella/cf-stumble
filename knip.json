@@ -9,7 +9,7 @@
     "tools/ops-check/run.mts!",
     "infra/alchemy.run.ts!"
   ],
-  "project": ["src/**/*.ts!", "tools/**/*.{ts,mts}!", "infra/*.ts!"],
+  "project": ["src/**/*.ts!", "tools/**/*.{ts,mts}!", "infra/**/*.ts!"],
   "include": ["files", "exports", "types", "nsExports", "nsTypes", "duplicates"],
   "ignoreIssues": {
     "tools/**": ["files", "exports", "types", "nsExports", "nsTypes", "duplicates"],

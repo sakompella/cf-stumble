@@ -2,8 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
-import { shellModulesAssetDirectory } from "../infra/worker-settings.ts";
-import { SHELL_MODULES_FILE } from "../src/workspace/project/shell-modules.ts";
+import { SHELL_MODULES_FILE, shellModulesAssetDirectory } from "../infra/worker-settings.ts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 

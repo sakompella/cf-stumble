@@ -17,13 +17,13 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 
 ## Configuration files
 
-`infra/alchemy.run.ts` is the only description of the Worker. It is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.85, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that the stack and `vitest.config.ts` both read, so they cannot drift: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, the entry point, the route, the container image, the static assets settings (`runWorkerFirst`), the cache setting, the observability settings, and the one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"). Neither declares per-instance values or secrets (see "Instance secrets").
+`infra/alchemy.run.ts` is the only description of the Worker. It is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.85, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that the stack, the test Worker and the Worker code read, so they cannot drift: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, the entry point, the route, the container instance size, the shell modules asset, the static assets settings (`runWorkerFirst`), the cache setting, the observability settings, and the one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"). It has no `node:` imports, because the Worker code imports it. Neither file declares per-instance values or secrets (see "Instance secrets").
 
 The stack is a function of the stage:
 
 - The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, no `workers.dev` subdomain, a `standard-3` container, and traces on.
 - Any other stage `<stage>` is a separate Worker, `cf-stumble-<stage>`, with its own container application attached to its `WorkspaceHost` namespace, a `workers.dev` subdomain without preview URLs, no route, and traces off. Every stage boots the production instance size, which the Durable Object requests at launch.
-- Vitest builds its Worker, `cf-stumble-test`, from `infra/worker-settings.ts` through Miniflare options in `vitest.config.ts`. It leaves out the Workers AI binding and the container, because the test runtime has no AI service to reach.
+- Vitest builds its Worker, `cf-stumble-test`, from `infra/worker-settings.ts` through the Miniflare options in `infra/test-worker.ts`, which `vitest.config.ts` passes to the Workers Vitest plugin. It leaves out the Workers AI binding and the container, because the test runtime has no AI service to reach.
 
 Alchemy is its own pnpm project in `infra/`, with its own lockfile, because the Worker's dependency tree, which the Container image copies, should not change for Alchemy. `pnpm install:infra` installs it; `pnpm verify` and `pnpm run deploy` run that first.
 
@@ -145,9 +145,9 @@ Workers Logs keeps events for 7 days. After a deploy that changes lifecycle beha
 
 ## Container image
 
-CI builds the image once. `.github/workflows/workspace-image.yml` builds `containers/computerd.Dockerfile` for linux/amd64 and pushes it to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`, where `<hash>` is `containers/image-tag.sh`: a hash of `.dockerignore`, the Dockerfile and the patch. It skips the build when that tag exists, and on `main` it moves `latest` to it. The Deploy workflow runs it first, so a deploy always finds its image. Nothing else builds the image, and no machine builds it locally: a change to those files is the only reason to rebuild, and CI does it. The package is public (the first publish from this public repository was pullable without a login), so machines pull without credentials.
+CI builds the image once. `.github/workflows/workspace-image.yml` builds `infra/workspace-image/computerd.Dockerfile` for linux/amd64, with `infra/workspace-image` as the build context, and pushes it to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`. `infra/workspace-image/image-ref.sh` prints that reference; `<hash>` is a hash of the Dockerfile and the patch. It skips the build when that tag exists, and on `main` it moves `latest` to it. The Deploy workflow runs it first, so a deploy always finds its image. Nothing else builds the image, and no machine builds it locally: a change to those files is the only reason to rebuild, and CI does it. The package is public (the first publish from this public repository was pullable without a login), so machines pull without credentials.
 
-`infra/worker-settings.ts` holds that reference as `workspaceImage`. Cloudflare Containers only pull images from the deploying account's managed registry or from a registry that account has configured, so a direct reference to a ghcr.io image fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Alchemy's `image` option pulls the image and pushes it to the account's registry on deploy, so the deploy needs Docker and a pull of about a gigabyte, not a build.
+`infra/workspace-image/image.ts` runs that script and holds the reference as `workspaceImage`; only the stack imports it. Cloudflare Containers only pull images from the deploying account's managed registry or from a registry that account has configured, so a direct reference to a ghcr.io image fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Alchemy's `image` option pulls the image and pushes it to the account's registry on deploy, so the deploy needs Docker and a pull of about a gigabyte, not a build.
 
 If you deploy by hand, use Docker. Podman does not work for this deployment because it can rewrite the image manifest when it pushes, leaving the deploy with a local digest that Cloudflare cannot find in the registry. The resulting deployment error is `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
 
@@ -161,7 +161,7 @@ The workspace also has an isolate backend, which runs shell commands in a Dynami
 
 Your first submission is slow. Installing packages and bundling the harness takes most of that time. It is not stuck.
 
-The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk), set by `WORKSPACE_CONTAINER_INSTANCE` in `src/workspace/container-instance.ts`. Activating or rolling back a generation takes under a second.
+The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk), set by `WORKSPACE_CONTAINER_INSTANCE` in `infra/worker-settings.ts`. Activating or rolling back a generation takes under a second.
 
 The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules` and `/tmp`. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
 
@@ -278,7 +278,7 @@ next command starts on the chosen backend. It is refused while a run is active.
    image is linux/amd64. `stumble orb provider` logs a warning on any other platform and carries on. On the
    machine, do nothing to build the image: CI publishes it as `ghcr.io/sakompella/cf-stumble-workspace`
    (see "Container image"). The dispatch scripts default `STUMBLE_IMAGE` to the tag for the checkout's
-   `containers/image-tag.sh` and pull it when it is missing; set `STUMBLE_IMAGE` to use another image.
+   `infra/workspace-image/image-ref.sh` and pull it when it is missing; set `STUMBLE_IMAGE` to use another image.
 4. Run the provider from a checkout:
 
    ```sh
@@ -295,7 +295,7 @@ hp runs the provider with `podman-dispatch.sh`. Rootless podman's host gateway i
 loopback, so the script runs the container on `pasta` with `--map-host-loopback`, and
 `computer.internal` reaches the provider's `127.0.0.1` listener.
 
-1. Pull the image once so the first start does not wait: `podman pull --platform linux/amd64 ghcr.io/sakompella/cf-stumble-workspace:$(containers/image-tag.sh)`. Never build it on hp.
+1. Pull the image once so the first start does not wait: `podman pull --platform linux/amd64 "$(infra/workspace-image/image-ref.sh)"`. Never build it on hp.
 2. Keep the token in `~/.config/cf-stumble/orb-provider-token` (mode 0600), and a wrapper
    `~/.config/cf-stumble/orb-provider.sh` that reads it, so the token never appears in the unit or
    the journal:

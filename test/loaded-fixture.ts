@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { FACET_RUNTIME } from "../src/facet/runtime-contract.js";
 
 declare global {
   interface ImportMeta {
@@ -37,7 +38,7 @@ export async function loadFixtureEntrypoint<T extends Rpc.WorkerEntrypointBrande
   const fixture = await new Response(found[1]).json<BuiltFixtureFile>();
 
   const worker = env.LOADER.load({
-    compatibilityDate: "2025-01-01",
+    compatibilityDate: FACET_RUNTIME.compatibilityDate,
     mainModule: fixture.entryModule,
     modules: Object.fromEntries(fixture.modules.map(moduleEntry)),
     env: environment,

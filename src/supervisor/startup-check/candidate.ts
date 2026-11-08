@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { loadMainFacet } from "../../facet/index.js";
+import { FACET_COMPATIBILITY, loadMainFacet } from "../../facet/index.js";
 import type { MainFacetTarget, MainHarnessArtifact } from "../../facet/index.js";
-import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
 import { candidateFacetName } from "../artifacts/index.js";
 import { checkConversation } from "./conversation.js";
 import type { StartupCheckHost } from "./index.js";
