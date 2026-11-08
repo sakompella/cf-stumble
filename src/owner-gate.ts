@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { logEvent } from "./diagnostics.js";
 import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH } from "./orb-protocol.js";
 import { jsonError, routePattern } from "./routes/index.js";
@@ -85,22 +86,30 @@ function isCrossOriginMutation(request: Request): boolean {
   return crossOrigin;
 }
 
-export async function ownerGateRefusal(
+export function ownerGateRefusal(
   request: Request,
   password: string | undefined,
-): Promise<Response | undefined> {
-  if (isExemptRoute(request)) return undefined;
+): Effect.Effect<Response | undefined> {
+  return Effect.gen(function* () {
+    if (isExemptRoute(request)) return undefined;
 
-  if (password === undefined || password === "") {
-    return new Response("The OWNER_PASSWORD secret is not set on this Worker.\n", { status: 503 });
-  }
+    if (password === undefined || password === "") {
+      return new Response("The OWNER_PASSWORD secret is not set on this Worker.\n", {
+        status: 503,
+      });
+    }
 
-  if (!(await isOwnerCredential(password, request.headers.get("authorization")))) {
-    return new Response("Unauthorized\n", {
-      status: 401,
-      headers: { "www-authenticate": BASIC_CHALLENGE },
-    });
-  }
+    const authorized = yield* Effect.promise(() =>
+      isOwnerCredential(password, request.headers.get("authorization")),
+    );
 
-  return isCrossOriginMutation(request) ? jsonError(403, "cross-origin-request") : undefined;
+    if (!authorized) {
+      return new Response("Unauthorized\n", {
+        status: 401,
+        headers: { "www-authenticate": BASIC_CHALLENGE },
+      });
+    }
+
+    return isCrossOriginMutation(request) ? jsonError(403, "cross-origin-request") : undefined;
+  });
 }

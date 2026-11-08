@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import * as Effect from "effect/Effect";
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { beforeAll, expect, test, vi } from "vitest";
@@ -62,7 +63,7 @@ test("a request passes the credential check exactly when it names aditya and the
       headers: { authorization: basic(name, password) },
     });
 
-    const refusal = await ownerGateRefusal(request, expected);
+    const refusal = await Effect.runPromise(ownerGateRefusal(request, expected));
     const isOwner = name === "aditya" && password === expected;
 
     expect(refusal?.status).toBe(isOwner ? undefined : 401);
@@ -77,9 +78,11 @@ test("a header that is not a well-formed Basic credential is refused with a Basi
 
     const headers: HeadersInit = authorization === null ? {} : { authorization };
 
-    const refusal = await ownerGateRefusal(
-      new Request("https://cf-stumble.test/api/status", { headers }),
-      tc.draw(secret),
+    const refusal = await Effect.runPromise(
+      ownerGateRefusal(
+        new Request("https://cf-stumble.test/api/status", { headers }),
+        tc.draw(secret),
+      ),
     );
 
     expect(refusal?.status).toBe(401);
@@ -98,9 +101,11 @@ test("without the secret every route but the exempt GETs answers 503, and an exe
     const headers: HeadersInit =
       authorization === null ? {} : { authorization: basic(...authorization) };
 
-    const refusal = await ownerGateRefusal(
-      new Request(`https://cf-stumble.test${requestPath}`, { method: requestMethod, headers }),
-      password,
+    const refusal = await Effect.runPromise(
+      ownerGateRefusal(
+        new Request(`https://cf-stumble.test${requestPath}`, { method: requestMethod, headers }),
+        password,
+      ),
     );
 
     if (requestMethod === "GET" && EXEMPT_PATHS.includes(requestPath)) {
@@ -129,9 +134,11 @@ test("an authorized state-changing request is refused 403 exactly when a browser
 
     if (fetchSite !== null) headers.set("sec-fetch-site", fetchSite);
 
-    const refusal = await ownerGateRefusal(
-      new Request(`${own}${tc.draw(path)}`, { method: requestMethod, headers }),
-      "pw",
+    const refusal = await Effect.runPromise(
+      ownerGateRefusal(
+        new Request(`${own}${tc.draw(path)}`, { method: requestMethod, headers }),
+        "pw",
+      ),
     );
 
     const mutation = requestMethod !== "GET" && requestMethod !== "HEAD";
