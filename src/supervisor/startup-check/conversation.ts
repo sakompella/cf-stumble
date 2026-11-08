@@ -5,7 +5,7 @@ import type { MainFacetTarget } from "../../facet/index.js";
 import { AssistantMessage, readFirstView, type Conversation } from "../../page/index.js";
 import { STARTUP_CHECK_REPLY } from "../../startup-check-script.js";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
-import { ConversationHostTarget, endWorkspaceTurn } from "../conversations/index.js";
+import { ConversationHostTarget, endWorkspaceTurn, runAtPort } from "../conversations/index.js";
 import type { ProjectCapabilityStub } from "../projects/index.js";
 import type { StartupCheckOutcome } from "./candidate.js";
 
@@ -39,7 +39,7 @@ export function checkConversation(
     log: () => {},
     running: () => Promise.resolve(),
     workspace: async () => {
-      held ??= Effect.runPromise(obtainWorkspace(released.signal));
+      held ??= runAtPort(obtainWorkspace(released.signal));
       const workspace = await held;
 
       if (workspace === null) throw new Error("the workspace is unavailable");
@@ -101,7 +101,7 @@ function settledAnswer(
   conversationId: string,
   answers: number,
 ): Effect.Effect<AssistantMessage, string> {
-  return candidateCall(() => snapshotLine(candidate, conversationId)).pipe(
+  return snapshotLine(candidate, conversationId).pipe(
     Effect.flatMap((line) => {
       const conversation = readFirstView(line);
 
@@ -120,26 +120,31 @@ function settledAnswer(
   );
 }
 
-async function snapshotLine(
+function snapshotLine(
   candidate: Fetcher<MainFacetTarget>,
   conversationId: string,
-): Promise<string> {
-  const events = await candidate.events(conversationId);
-  const reader = events.pipeThrough(new TextDecoderStream()).getReader();
-  let read = "";
+): Effect.Effect<string, string> {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const events = yield* candidateCall(() => candidate.events(conversationId));
 
-  try {
-    while (!read.includes("\n")) {
-      const next = await reader.read();
+      const reader = yield* Effect.acquireRelease(
+        Effect.sync(() => events.pipeThrough(new TextDecoderStream()).getReader()),
+        (opened) => Effect.promise(() => opened.cancel()),
+      );
 
-      if (next.done) return read;
-      read += next.value;
-    }
-  } finally {
-    await reader.cancel();
-  }
+      let read = "";
 
-  return read.slice(0, read.indexOf("\n"));
+      while (!read.includes("\n")) {
+        const next = yield* candidateCall(() => reader.read());
+
+        if (next.done) return read;
+        read += next.value;
+      }
+
+      return read.slice(0, read.indexOf("\n"));
+    }),
+  );
 }
 
 function finalAnswer(conversation: Conversation, answers: number): AssistantMessage | undefined {

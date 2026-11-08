@@ -1,4 +1,5 @@
-import * as Effect from "effect/Effect";
+import type * as Effect from "effect/Effect";
+import { runAtEntryPoint } from "../../run-entry-point.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { SelectableProject } from "../../selectable-projects.js";
 import type { ProjectCapabilityStub } from "../projects/index.js";
@@ -82,7 +83,7 @@ export class HeldWorkspaces {
 
   #hold(conversationId: string, project: SelectableProject, remainingMs: number): HeldWorkspace {
     const controller = new AbortController();
-    const capability = Effect.runPromise(this.#obtain(project, remainingMs, controller.signal));
+    const capability = runAtPort(this.#obtain(project, remainingMs, controller.signal));
     const held = { capability, release: controller };
 
     this.#held.set(conversationId, held);
@@ -101,6 +102,10 @@ function release(held: HeldWorkspace): void {
   void held.capability.then((capability) => {
     if (capability !== null) endWorkspaceTurn(capability);
   });
+}
+
+export function runAtPort<A>(program: Effect.Effect<A>): Promise<A> {
+  return runAtEntryPoint(program);
 }
 
 export function endWorkspaceTurn(capability: ProjectCapabilityStub): void {

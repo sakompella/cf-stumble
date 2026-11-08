@@ -80,27 +80,37 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     );
   }
 
-  async resetWorkspace(): Promise<SupervisorWorkspaceReset> {
-    if (this.#resetInProgress) return WORKSPACE_BUSY;
+  resetWorkspace(): Promise<SupervisorWorkspaceReset> {
+    if (this.#resetInProgress) return Promise.resolve(WORKSPACE_BUSY);
 
     this.#resetInProgress = true;
 
-    try {
-      if (this.#parts.serving.running()) return { ok: false, problem: { code: "run-active" } };
+    return runAtEntryPoint(
+      Effect.gen({ self: this }, function* () {
+        if (this.#parts.serving.running()) {
+          return { ok: false, problem: { code: "run-active" } } as const;
+        }
 
-      const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
+        const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
 
-      const result = await namespace.getByName(this.#parts.workspaceName).reset();
+        const result = yield* Effect.promise(() =>
+          namespace.getByName(this.#parts.workspaceName).reset(),
+        );
 
-      if (result.ok) {
-        this.#parts.connections.resetWorkspace();
-        this.#parts.serving.endWorkspaces();
-      }
+        if (result.ok) {
+          this.#parts.connections.resetWorkspace();
+          this.#parts.serving.endWorkspaces();
+        }
 
-      return result;
-    } finally {
-      this.#resetInProgress = false;
-    }
+        return result;
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            this.#resetInProgress = false;
+          }),
+        ),
+      ),
+    );
   }
 
   getWorkspaceBackend(): Promise<BackendSetting> {
