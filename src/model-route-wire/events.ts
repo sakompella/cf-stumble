@@ -27,7 +27,7 @@ export type WorkersAiBinding = {
   run(
     model: string,
     input: StreamingProviderPayload,
-    options: { signal: AbortSignal },
+    options: { signal: AbortSignal; extraHeaders: Record<string, string> },
   ): Promise<ReadableStream<Uint8Array>>;
 };
 
