@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import type { Wake } from "@earendil-works/pi-durable";
 import type { RunningConversation } from "../../facet/index.js";
 import type { RunReport } from "./host-target.js";
@@ -105,12 +106,19 @@ export class ConversationRuns {
     return settled.map((run) => run.conversation_id);
   }
 
-  async arm(wake: Wake, now: number): Promise<void> {
-    this.#storage.kv.put(WAKE_KEY, wake);
-    await this.setAlarm(now);
+  arm(wake: Wake, now: number): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      this.#storage.kv.put(WAKE_KEY, wake);
+
+      return this.setAlarm(now);
+    });
   }
 
-  async setAlarm(now: number): Promise<void> {
+  setAlarm(now: number): Effect.Effect<void> {
+    return Effect.suspend(() => this.#writeAlarm(now));
+  }
+
+  #writeAlarm(now: number): Effect.Effect<void> {
     const wake = this.#storage.kv.get<Wake>(WAKE_KEY);
 
     const candidates = [
@@ -121,9 +129,11 @@ export class ConversationRuns {
         .filter((deadline) => deadline > now),
     ].filter((at) => at !== undefined);
 
-    await (candidates.length === 0
-      ? this.#storage.deleteAlarm()
-      : this.#storage.setAlarm(Math.min(...candidates)));
+    return Effect.promise(() =>
+      candidates.length === 0
+        ? this.#storage.deleteAlarm()
+        : this.#storage.setAlarm(Math.min(...candidates)),
+    );
   }
 
   #runs(): readonly Run[] {

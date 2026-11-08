@@ -12,7 +12,7 @@ import {
   type MainFacetMountProblem,
   type MountedFacet,
 } from "../artifacts/index.js";
-import { HeldWorkspaces, type ObtainWorkspace } from "./held-workspaces.js";
+import { HeldWorkspaces, runAtPort, type ObtainWorkspace } from "./held-workspaces.js";
 import {
   servingHosts,
   type EntriesRequest,
@@ -268,7 +268,7 @@ export class ServingConversations {
 
     const targets = servingHosts(
       {
-        arm: (wake) => this.#runs.arm(wake, Date.now()),
+        arm: (wake) => runAtPort(this.#runs.arm(wake, Date.now())),
         log: (level, event, fields) => {
           logEvent(level, `facet.${event.slice(0, 60)}`, {
             ...fields,
@@ -349,7 +349,7 @@ export class ServingConversations {
       this.#workspaces.end(conversationId);
     }
 
-    await this.#runs.setAlarm(now);
+    await runAtPort(this.#runs.setAlarm(now));
   }
 
   #workspace(conversationId: string) {
