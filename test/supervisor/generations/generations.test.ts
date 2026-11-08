@@ -12,7 +12,7 @@ import {
   servingFacetSource,
   testHarnessCommit,
 } from "../helpers.js";
-import { FACET_COMPATIBILITY } from "../../../src/facet-compatibility.js";
+import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 import { readGeneration, readGenerations } from "../generation-reads.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";

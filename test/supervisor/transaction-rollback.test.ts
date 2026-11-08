@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { FACET_COMPATIBILITY } from "../../src/facet-compatibility.js";
+import { FACET_COMPATIBILITY } from "../../src/facet/runtime-contract.js";
 import { afterEach, expect, test, vi } from "vitest";
 import { Generations } from "../../src/supervisor/generations.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
