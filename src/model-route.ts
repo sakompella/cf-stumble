@@ -4,6 +4,7 @@ import * as Result from "effect/Result";
 import { GENERATION_REPLACED } from "./generation-replaced.js";
 import { chatgptTurn, type ChatGPTAccess, type ChatGPTCredential } from "./chatgpt/index.js";
 import { parseRequest, type RouteWire, type ValidationFailure } from "./model-route-request.js";
+import { runAtEntryPoint } from "./run-entry-point.js";
 import { workersAiTurn } from "./model-route-stream.js";
 import type { WorkersAiBinding } from "./model-route-events.js";
 import { modelEventStream, type ModelTurn } from "./model-route-turn.js";
@@ -36,16 +37,12 @@ type ModelRouteEnv = Readonly<{
 export type ModelRouteProps = Readonly<{ supervisor: string; instance: number }>;
 
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps> {
-  async runStream(request: RouteWire): Promise<ReadableStream<Uint8Array> | ValidationFailure> {
+  runStream(request: RouteWire): Promise<ReadableStream<Uint8Array> | ValidationFailure> {
     const parsed = parseRequest(request);
 
-    if (Result.isFailure(parsed)) return parsed.failure;
+    if (Result.isFailure(parsed)) return Promise.resolve(parsed.failure);
     const validated = parsed.success;
     const holder = this.env.SUPERVISOR.getByName(this.ctx.props.supervisor);
-
-    if (!(await holder.admitModelTurn(this.ctx.props.instance))) {
-      return { ok: false, error: { code: "invalid-request", reason: GENERATION_REPLACED } };
-    }
 
     const workersAi = workersAiTurn(
       { run: (model, input, signal) => this.env.AI.run(model, input, { signal }) },
@@ -73,7 +70,15 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
         }),
       );
 
-    return modelEventStream(turn);
+    return runAtEntryPoint(
+      Effect.promise(() => holder.admitModelTurn(this.ctx.props.instance)).pipe(
+        Effect.map((admitted): ReadableStream<Uint8Array> | ValidationFailure =>
+          admitted
+            ? modelEventStream(turn)
+            : { ok: false, error: { code: "invalid-request", reason: GENERATION_REPLACED } },
+        ),
+      ),
+    );
   }
 }
 

@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { logRedactedCause } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import {
@@ -93,7 +94,7 @@ export const handleGenerationSubmission = Effect.fnUntraced(
       supervisor.prepareGeneration(submitted.generation.label),
     ).pipe(Effect.result);
 
-    if (preparation._tag === "Failure") {
+    if (Result.isFailure(preparation)) {
       logRedactedCause(
         "owner-api POST /api/generations/submit: preparation-failed",
         preparation.failure.cause,
