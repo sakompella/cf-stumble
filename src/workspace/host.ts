@@ -73,7 +73,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       setAlarm: (atMs) => ctx.storage.setAlarm(atMs),
       containerRunning: () => this.#platform.containerRunning(),
       closeWorkspace: () => this.#platform.workspace.close(),
-      stopContainer: (reason) => this.#platform.stopContainer(reason),
+      stopContainer: (reason) => runAtEntryPoint(this.#platform.stopContainer(reason)),
     });
   }
 
@@ -136,7 +136,9 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     const backend = readBackendSetting(this.ctx.storage.kv);
 
     return this.#tracked(() =>
-      resetWorkspaceStorage(this.ctx.storage, () => this.#platform.stopContainer("reset")).pipe(
+      resetWorkspaceStorage(this.ctx.storage, () =>
+        runAtEntryPoint(this.#platform.stopContainer("reset")),
+      ).pipe(
         Effect.ensuring(
           Effect.sync(() => {
             writeBackendSetting(this.ctx.storage.kv, backend);
@@ -172,7 +174,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   override fetch(request: Request): Promise<Response> {
-    return this.#platform.handleFetch(request);
+    return runAtEntryPoint(this.#platform.handleFetch(request));
   }
 
   override webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {

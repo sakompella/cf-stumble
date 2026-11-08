@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { ORB_PROVIDER_PATH, ORB_TOKEN_HEADER } from "../../src/orb-protocol.js";
 import { providerTokenMatches } from "../../src/workspace/provider-token.js";
@@ -15,7 +16,7 @@ test.each([
   { expected: undefined, presented: "", matches: false },
   { expected: "", presented: "", matches: false },
 ])("secret $expected, presented $presented: $matches", async ({ expected, presented, matches }) => {
-  await expect(providerTokenMatches(expected, presented)).resolves.toBe(matches);
+  await expect(Effect.runPromise(providerTokenMatches(expected, presented))).resolves.toBe(matches);
 });
 
 test("a Worker without ORB_PROVIDER_TOKEN refuses every provider connection", async () => {
