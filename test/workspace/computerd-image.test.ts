@@ -15,21 +15,15 @@ declare global {
   }
 }
 
-const dockerfiles = import.meta.glob("../../containers/computerd.Dockerfile", {
+const BUILD_CONTEXT = "../../infra/workspace-image/";
+
+const contextFiles = import.meta.glob("../../infra/workspace-image/*", {
   eager: true,
   query: "?raw",
   import: "default",
 });
 
-const dockerignores = import.meta.glob("../../.dockerignore", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-});
-
-const dockerfile = Object.values(dockerfiles).at(0) ?? "";
-
-const dockerignore = Object.values(dockerignores).at(0) ?? "";
+const dockerfile = contextFiles[`${BUILD_CONTEXT}computerd.Dockerfile`] ?? "";
 
 const dockerEnv = (name: string) => new RegExp(`^ENV ${name}=(\\S*)$`, "mu").exec(dockerfile)?.[1];
 
@@ -61,10 +55,7 @@ test("every base image is pinned by digest", () => {
 
 test("the build context admits every file the workspace image copies", () => {
   const admitted = new Set(
-    dockerignore
-      .split("\n")
-      .filter((line) => line.startsWith("!"))
-      .map((line) => line.slice(1)),
+    Object.keys(contextFiles).map((path) => path.slice(BUILD_CONTEXT.length)),
   );
 
   const copied = [...dockerfile.matchAll(/^COPY (?!--from)(.+) \S+$/gmu)].flatMap(

@@ -4,7 +4,7 @@
 
 The workspace image builds `computerd` from Computer source commit
 `9f0ade40196a4ef95ddde4f2b75e1555d9dfeeb1` (release 0.8.0) with one checked-in patch,
-`containers/computerd-walk.patch`, instead of copying the binary out of
+`infra/workspace-image/computerd-walk.patch`, instead of copying the binary out of
 `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:de6f3727a12c8adb2f8ece853105ccc461fef02f90e368fac4e0578eacc461aa`.
 This changes the image half of the pins that ADR-0026 records; the source commit stays the same.
 
@@ -24,7 +24,7 @@ loses them.
 
 The build follows upstream's release workflow. Since 0.8.0 the binary embeds a native FUSE addon,
 which the source stage compiles on Debian trixie and passes to the build through
-`COMPUTERD_FUSE_ADDON`. To upgrade, move `COMPUTER_COMMIT` in `containers/computerd.Dockerfile`
+`COMPUTERD_FUSE_ADDON`. To upgrade, move `COMPUTER_COMMIT` in `infra/workspace-image/computerd.Dockerfile`
 and rebase the walk patch. Delete the walk patch and this record when an upstream release fixes
 the walk.
 

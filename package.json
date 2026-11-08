@@ -22,7 +22,7 @@
     "build:loaded-execution-env-fixture": "pnpm exec tsx tools/build-loaded-execution-env-fixture.mts",
     "verify:project-protocol": "pnpm exec tsx tools/verify-project-protocol.mts",
     "stumble": "tsx src/stumble-cli/orb/main.ts",
-    "ops:check": "pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --since 2h",
+    "ops:check": "pnpm exec tsx tools/ops-check/run.mts --since 2h",
     "test:browser": "pnpm build:page && playwright test -c tools/playwright/playwright.config.mts",
     "verify": "pnpm install:infra && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm knip && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:shell-modules && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"

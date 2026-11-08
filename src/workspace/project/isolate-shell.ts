@@ -1,9 +1,14 @@
 import type { BackendHandle, WorkspaceBackend } from "@cloudflare/computer";
 import type { ShellWorker } from "@cloudflare/computer/backends/worker-shell";
 import * as Schema from "effect/Schema";
+import { SHELL_MODULES_FILE } from "../../../infra/worker-settings.js";
 import { ISOLATE_BACKEND_ID } from "./exec-backend.js";
 import type { IsolateGateProps } from "./isolate-gate.js";
-import { SHELL_MODULES_FILE, type ShellModuleSet } from "./shell-modules.js";
+
+type ShellModuleSet = Readonly<{
+  mainModule: string;
+  modules: Record<string, { js?: string; cjs?: string; text?: string }>;
+}>;
 
 type ShellRpc = BackendHandle["rpc"]["shell"];
 
