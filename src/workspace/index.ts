@@ -1,8 +1,4 @@
-export {
-  PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
-  type ProjectRemovalWorkspaceNamespace,
-  type WorkspaceCommandResult,
-} from "./commands/index.js";
+export { PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE } from "./commands/index.js";
 
 export { type CommandOutput } from "./operations.js";
 
@@ -11,7 +7,6 @@ export {
   CredentialInstallFailed,
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
-  type CredentialWorkspaceNamespace,
   type WorkspaceCredentialInput,
 } from "./credential-access.js";
 
@@ -19,13 +14,17 @@ export {
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
   ProvisionFailed,
-  type HarnessProvisionWorkspaceNamespace,
-  type ProvisionWorkspaceNamespace,
 } from "./provisioning.js";
 
 export { waitForWorkspaceProvision, clearWorkspaceProvision } from "./provision-exclusion.js";
 
 export { WorkspaceHost } from "./host.js";
+
+export type {
+  ProjectCapabilityStub,
+  WorkspaceHostNamespace,
+  WorkspaceHostRpc,
+} from "./host-rpc.js";
 
 export { IsolateWorkspaceGate } from "./project/index.js";
 

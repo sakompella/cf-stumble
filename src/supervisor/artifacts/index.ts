@@ -9,9 +9,10 @@ import type {
 import type { HarnessCommit } from "../../harness-commit.js";
 import { ModuleMapStore } from "./store.js";
 import type { ModuleMapStorage, StoredModuleMapProblem } from "./store.js";
-import { buildModuleMap, type BuildWorkspaceHost, type HarnessBuildProblem } from "./build.js";
+import { buildModuleMap, type HarnessBuildProblem } from "./build.js";
 import { SERVING_FACET_NAME } from "./facet-name.js";
 import type { ActiveGeneration } from "../generations.js";
+import type { WorkspaceHostRpc } from "../../workspace/index.js";
 
 export type ModuleMapProblem = StoredModuleMapProblem | HarnessBuildProblem;
 
@@ -21,9 +22,9 @@ export type MountedFacet = Fetcher<MainFacetTarget>;
 
 export class HarnessArtifacts {
   private readonly store: ModuleMapStore;
-  private readonly workspace: () => BuildWorkspaceHost;
+  private readonly workspace: () => WorkspaceHostRpc<"build">;
 
-  constructor(storage: ModuleMapStorage, workspace: () => BuildWorkspaceHost) {
+  constructor(storage: ModuleMapStorage, workspace: () => WorkspaceHostRpc<"build">) {
     this.store = new ModuleMapStore(storage);
     this.workspace = workspace;
   }
@@ -85,5 +86,3 @@ export { candidateFacetName, SERVING_FACET_NAME } from "./facet-name.js";
 export { ModuleMapStore } from "./store.js";
 
 export type { ModuleMapStorage } from "./store.js";
-
-export { type BuildWorkspaceHost, type BuildWorkspaceNamespace } from "./build.js";

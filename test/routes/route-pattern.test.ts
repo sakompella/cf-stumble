@@ -1,15 +1,15 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
-import type { SupervisorWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
 import { routeClass, routePattern } from "../../src/routes/route-pattern.js";
 import { ownerSession } from "../integration/owner-session.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
+import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
 function spyOnWorkspaceLookups() {
   return replaceWorkspaceHost<
-    Omit<SupervisorWorkspaceHost, "project" | "reset" | "backend" | "setBackend">
+    Omit<WorkspaceHostRpc, "project" | "reset" | "backend" | "setBackend">
   >(env.WORKSPACE_HOST, new FakeTenantWorkspace());
 }
 

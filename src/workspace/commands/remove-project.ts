@@ -96,11 +96,3 @@ export function executeProjectRemovalRequest(
     return commandResult(output);
   }).pipe(answerDurableFailures("workspace.project-removal", () => "workspace-unavailable"));
 }
-
-type ProjectRemovalWorkspaceHost = Readonly<{
-  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult>;
-}>;
-
-export type ProjectRemovalWorkspaceNamespace = Readonly<{
-  getByName(name: string): ProjectRemovalWorkspaceHost;
-}>;

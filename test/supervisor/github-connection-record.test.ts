@@ -2,11 +2,10 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { GitHubCredentialResult } from "../../src/workspace/github-credential.js";
-import type { ResetWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
-import type { CredentialWorkspaceHost } from "../../src/workspace/credential-access.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import { connectSampleProjects } from "./helpers.js";
+import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
 const NOW = 1_700_000_000_000;
 
@@ -20,7 +19,7 @@ afterEach(async () => {
 function workspaceAnswering(answer: GitHubCredentialResult) {
   const credential = vi.fn(() => Promise.resolve(answer));
 
-  const getByName = replaceWorkspaceHost<CredentialWorkspaceHost>(env.WORKSPACE_HOST, {
+  const getByName = replaceWorkspaceHost<WorkspaceHostRpc<"credential">>(env.WORKSPACE_HOST, {
     credential,
   });
 
@@ -97,7 +96,7 @@ function heldCheckWorkspace(resetAnswer: WorkspaceResetResult) {
     return answer;
   });
 
-  const workspace: CredentialWorkspaceHost & ResetWorkspaceHost = {
+  const workspace: WorkspaceHostRpc<"credential" | "reset"> = {
     credential,
     reset: () => Promise.resolve(resetAnswer),
   };

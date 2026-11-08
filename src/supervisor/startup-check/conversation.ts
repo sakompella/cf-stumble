@@ -5,7 +5,7 @@ import { readFirstView, type AssistantMessage } from "../../page/index.js";
 import { runAtEntryPoint } from "../../run-entry-point.js";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import { ConversationHostTarget, endWorkspaceTurn } from "../conversations/index.js";
-import type { ProjectCapabilityStub } from "../projects/index.js";
+import type { ProjectCapabilityStub } from "../../workspace/index.js";
 import { describe, finalAnswer, isReply } from "./answer.js";
 import type { StartupCheckOutcome } from "./candidate.js";
 

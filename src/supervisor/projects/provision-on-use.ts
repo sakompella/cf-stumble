@@ -10,7 +10,7 @@ import {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
   provisionProjectWorkspace,
   ProvisionFailed,
-  type ProvisionWorkspaceNamespace,
+  type WorkspaceHostNamespace,
 } from "../../workspace/index.js";
 import type { GitHubConnection } from "./github-connection.js";
 
@@ -28,7 +28,7 @@ export type ProjectUseResult =
 
 export type ProvisionSources = Readonly<{
   workspaceName: string;
-  namespace: ProvisionWorkspaceNamespace;
+  namespace: WorkspaceHostNamespace<"provision" | "ensureManagedInstructions">;
   github: GitHubConnection;
   catalog: () => ProjectCatalog;
 }>;

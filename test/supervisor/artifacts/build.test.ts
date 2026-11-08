@@ -4,7 +4,6 @@ import { resultOf } from "../../effect-result.js";
 import { HARNESS_BUILD_STEP_NAMES } from "../../../src/harness-build.js";
 import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
-import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
 import { parsedArtifact } from "../../facet/fixture.js";
 import {
   BUILD_COMMIT,
@@ -15,6 +14,7 @@ import {
   helperModule,
   moduleMapFile,
 } from "./scripted-build-host.js";
+import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -166,11 +166,11 @@ test("gives the built module map the commit the Supervisor asked to build", asyn
 });
 
 test("a refused or unreachable build workspace stays a typed failure", async () => {
-  const refused: BuildWorkspaceHost = {
+  const refused: WorkspaceHostRpc<"build"> = {
     build: () => Promise.resolve({ ok: false, error: { code: "unknown-command" } }),
   };
 
-  const gone: BuildWorkspaceHost = {
+  const gone: WorkspaceHostRpc<"build"> = {
     build: () => Promise.reject(new Error("the build workspace is gone")),
   };
 

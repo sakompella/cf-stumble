@@ -9,15 +9,7 @@ import { HARNESS_BUILD_STEP_NAMES } from "../../harness-build.js";
 import type { HarnessBuildRequest, HarnessBuildStepName } from "../../harness-build.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
-import type { CommandOutput, WorkspaceCommandResult } from "../../workspace/index.js";
-
-export type BuildWorkspaceHost = Readonly<{
-  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult>;
-}>;
-
-export type BuildWorkspaceNamespace = Readonly<{
-  getByName(name: string): BuildWorkspaceHost;
-}>;
+import type { CommandOutput, WorkspaceHostRpc } from "../../workspace/index.js";
 
 type BuildStepDiagnostics = Readonly<{
   stdoutTail: string;
@@ -51,7 +43,7 @@ const decodeBuiltModuleMap = Schema.decodeUnknownResult(
 );
 
 export function buildModuleMap(
-  workspace: () => BuildWorkspaceHost,
+  workspace: () => WorkspaceHostRpc<"build">,
   harnessCommit: HarnessCommit,
 ): Effect.Effect<MainHarnessArtifact, HarnessBuildProblem> {
   const steps = Effect.forEach(
@@ -67,7 +59,7 @@ export function buildModuleMap(
 }
 
 function discardScratch(
-  workspace: () => BuildWorkspaceHost,
+  workspace: () => WorkspaceHostRpc<"build">,
   harnessCommit: HarnessCommit,
 ): Effect.Effect<void> {
   return command(workspace, { kind: "build-discard", harnessCommit }, "the scratch cleanup").pipe(
@@ -83,7 +75,7 @@ class BuildWorkspaceRefused extends Data.TaggedError("BuildWorkspaceRefused")<{
 }> {}
 
 function command(
-  workspace: () => BuildWorkspaceHost,
+  workspace: () => WorkspaceHostRpc<"build">,
   request: HarnessBuildRequest,
   label: string,
 ): Effect.Effect<CommandOutput, unknown> {
@@ -105,7 +97,7 @@ function command(
 }
 
 function runStep(
-  workspace: () => BuildWorkspaceHost,
+  workspace: () => WorkspaceHostRpc<"build">,
   harnessCommit: HarnessCommit,
   step: HarnessBuildStepName,
 ): Effect.Effect<void, HarnessBuildProblem> {
@@ -140,7 +132,7 @@ function runStep(
 }
 
 function moduleMapText(
-  workspace: () => BuildWorkspaceHost,
+  workspace: () => WorkspaceHostRpc<"build">,
   harnessCommit: HarnessCommit,
 ): Effect.Effect<string, unknown> {
   return command(workspace, { kind: "build-output", harnessCommit }, "the build output").pipe(
@@ -157,7 +149,7 @@ function moduleMapText(
 }
 
 function readModuleMap(
-  workspace: () => BuildWorkspaceHost,
+  workspace: () => WorkspaceHostRpc<"build">,
   harnessCommit: HarnessCommit,
 ): Effect.Effect<MainHarnessArtifact, HarnessBuildProblem> {
   const text = moduleMapText(workspace, harnessCommit).pipe(

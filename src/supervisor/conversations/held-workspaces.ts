@@ -2,7 +2,7 @@ import type * as Effect from "effect/Effect";
 import { runAtEntryPoint } from "../../run-entry-point.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { SelectableProject } from "../../selectable-projects.js";
-import type { ProjectCapabilityStub } from "../projects/index.js";
+import type { ProjectCapabilityStub } from "../../workspace/index.js";
 
 export type ObtainWorkspace = (
   project: SelectableProject,

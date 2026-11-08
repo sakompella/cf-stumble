@@ -11,8 +11,8 @@ import {
   CredentialInstallFailed,
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
-  type CredentialWorkspaceNamespace,
   type WorkspaceCredentialInput,
+  type WorkspaceHostNamespace,
 } from "../../workspace/index.js";
 import type {
   CheckedStatus,
@@ -44,7 +44,7 @@ export interface GitHubConnectionEnvironment {
 interface GitHubConnectionInput {
   readonly store: GitHubConnectionStore;
   readonly workspaceName: string;
-  readonly namespace: CredentialWorkspaceNamespace;
+  readonly namespace: WorkspaceHostNamespace<"credential">;
   readonly environment: GitHubConnectionEnvironment;
 }
 
@@ -53,7 +53,7 @@ type StatusReadOptions = Pick<WorkspaceCredentialInput, "signal">;
 export class GitHubConnection {
   private readonly store: GitHubConnectionStore;
   private readonly workspaceName: string;
-  private readonly namespace: CredentialWorkspaceNamespace;
+  private readonly namespace: WorkspaceHostNamespace<"credential">;
   private readonly environment: GitHubConnectionEnvironment;
 
   constructor(input: GitHubConnectionInput) {

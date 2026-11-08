@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../../diagnostics.js";
 import type { ProjectId } from "../../project-catalog.js";
-import type { ProjectRemovalWorkspaceNamespace } from "../../workspace/index.js";
+import type { WorkspaceHostNamespace } from "../../workspace/index.js";
 import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 
 export function removeProjectDirectories(
-  namespace: ProjectRemovalWorkspaceNamespace,
+  namespace: WorkspaceHostNamespace<"removeProject">,
   workspaceName: string,
   projectId: ProjectId,
 ): Effect.Effect<"removed" | "failed"> {

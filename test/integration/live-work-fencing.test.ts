@@ -1,8 +1,8 @@
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
-import type { ProjectCapabilityStub } from "../../src/supervisor/projects/index.js";
 import { ProjectRpcTarget } from "../../src/workspace/project/index.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
+import type { ProjectCapabilityStub } from "../../src/workspace/host-rpc.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import {

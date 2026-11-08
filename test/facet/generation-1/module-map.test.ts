@@ -4,8 +4,8 @@ import { afterEach, expect, test } from "vitest";
 import { prepareWithModuleMap, submitCandidate } from "../../supervisor/helpers.js";
 import { ProjectWorkspace } from "../../supervisor/conversations/project-workspace.js";
 import { replaceWorkspaceHost } from "../../workspace-host-spy.js";
-import type { SupervisorWorkspaceHost } from "../../../src/supervisor/supervisor-env.js";
 import { builtGeneration } from "./built-module-map.js";
+import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 const GENERATION_1_COMMIT = "c0de00000000000000000000000000000000c0d1";
 
@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 
 async function checkedWith(name: string, workspace: ProjectWorkspace) {
-  replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "reset" | "backend" | "setBackend">>(
+  replaceWorkspaceHost<Omit<WorkspaceHostRpc, "reset" | "backend" | "setBackend">>(
     env.WORKSPACE_HOST,
     workspace,
   );
