@@ -17,8 +17,8 @@ import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import { transcriptToRouteRequest } from "../../../src/facet/generation-1/route-request.js";
 import { ROUTE_MODEL } from "../../../src/facet/generation-1/route-provider.js";
-import { parseRequest } from "../../../src/model-route-request.js";
-import { decodeWire } from "../../model-route-draws.js";
+import { parseRequest } from "../../../src/model-route-wire/request.js";
+import { decodeWire } from "../../model-route-wire/draws.js";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 

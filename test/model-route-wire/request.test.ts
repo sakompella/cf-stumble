@@ -1,7 +1,10 @@
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
-import type { ModelRouteRequest, ValidationFailure } from "../src/model-route.js";
-import { parseRequest } from "../src/model-route-request.js";
+import {
+  parseRequest,
+  type ModelRouteRequest,
+  type ValidationFailure,
+} from "../../src/model-route-wire/request.js";
 
 function rejected(reason: string): Result.Result<ModelRouteRequest, ValidationFailure> {
   return Result.fail({ ok: false, error: { code: "invalid-request", reason } });
