@@ -3,8 +3,8 @@
 > **Review:** Agent-only
 
 The immutable host composes asynchronous work and recoverable failures with Effect 4. The host is
-the Worker, the owner routes, the model route, the Supervisor, the Workspace Host, and the GitHub
-code. An operation that can fail in an expected way fails with a
+the Worker, the owner routes, the model route, the Supervisor, the Workspace Host, the GitHub
+code, and the orb CLI that runs on the provider machine (`src/stumble-cli/orb`). An operation that can fail in an expected way fails with a
 tagged error in its Effect error channel, and the code that knows what the failure means handles it
 by its tag. One call path uses one style from end to end: no subsystem keeps a Promise API beside an
 Effect API for the same operation.

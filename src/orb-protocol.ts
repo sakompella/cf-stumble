@@ -41,18 +41,33 @@ const HostFrame = Schema.Union([
 
 export type HostFrame = typeof HostFrame.Type;
 
-const ProviderFrame = Schema.Union([
-  Schema.TaggedStruct("hello", { egressPort: Count }),
-  Schema.TaggedStruct("job-done", { id: Count, runtime: Schema.NullOr(Schema.String) }),
-  Schema.TaggedStruct("fetch-result", {
-    id: Count,
-    status: Count,
-    headers: HeaderList,
-    body: Body,
-  }),
-  Schema.TaggedStruct("failed", { id: Count, message: Schema.String }),
-  Schema.TaggedStruct("exited", { runtime: Schema.String, reason: Schema.String }),
-]);
+const Hello = Schema.TaggedStruct("hello", { egressPort: Count });
+
+const JobDone = Schema.TaggedStruct("job-done", {
+  id: Count,
+  runtime: Schema.NullOr(Schema.String),
+});
+
+const FetchResult = Schema.TaggedStruct("fetch-result", {
+  id: Count,
+  status: Count,
+  headers: HeaderList,
+  body: Body,
+});
+
+const Failed = Schema.TaggedStruct("failed", { id: Count, message: Schema.String });
+
+const Exited = Schema.TaggedStruct("exited", { runtime: Schema.String, reason: Schema.String });
+
+const ProviderFrame = Schema.Union([Hello, JobDone, FetchResult, Failed, Exited]);
+
+export const providerFrame = {
+  hello: (fields: Omit<typeof Hello.Type, "_tag">) => Hello.make(fields),
+  jobDone: (fields: Omit<typeof JobDone.Type, "_tag">) => JobDone.make(fields),
+  fetchResult: (fields: Omit<typeof FetchResult.Type, "_tag">) => FetchResult.make(fields),
+  failed: (fields: Omit<typeof Failed.Type, "_tag">) => Failed.make(fields),
+  exited: (fields: Omit<typeof Exited.Type, "_tag">) => Exited.make(fields),
+};
 
 export type ProviderFrame = typeof ProviderFrame.Type;
 

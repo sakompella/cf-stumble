@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
+import * as Effect from "effect/Effect";
 import { printed, refused, type CommandNode, type CommandOutput } from "../tree.js";
+import type { OrbFailure } from "./dispatch.js";
 import { OrbProvider } from "./provider.js";
 
 export type OrbPorts = Readonly<{
@@ -25,7 +26,7 @@ function workerUrl(text: string | undefined): URL | undefined {
   return url?.protocol === "https:" || url?.protocol === "http:" ? url : undefined;
 }
 
-async function provide(script: string, ports: OrbPorts): Promise<CommandOutput> {
+function provide(script: string, ports: OrbPorts): Effect.Effect<CommandOutput, OrbFailure> {
   if (ports.platform !== "linux" || ports.arch !== "x64")
     ports.log(
       `warning: the orb provider is tested on x86_64 Linux only, not ${ports.platform} ${ports.arch}`,
@@ -34,27 +35,47 @@ async function provide(script: string, ports: OrbPorts): Promise<CommandOutput> 
   const url = workerUrl(ports.env["STUMBLE_ORB_URL"]);
   const token = ports.env["STUMBLE_ORB_TOKEN"];
 
-  if (url === undefined) return refused("set STUMBLE_ORB_URL to the Worker's http(s) URL");
+  if (url === undefined)
+    return Effect.succeed(refused("set STUMBLE_ORB_URL to the Worker's http(s) URL"));
 
   if (token === undefined || token === "")
-    return refused("set STUMBLE_ORB_TOKEN to the Worker's ORB_PROVIDER_TOKEN secret");
+    return Effect.succeed(
+      refused("set STUMBLE_ORB_TOKEN to the Worker's ORB_PROVIDER_TOKEN secret"),
+    );
 
   const provider = new OrbProvider({ url, token, script: resolve(script), log: ports.log });
   const listenHost = ports.env["STUMBLE_ORB_LISTEN_HOST"] ?? DEFAULT_LISTEN_HOST;
-  let retryMs = FIRST_RETRY_MS;
 
-  for (;;) {
-    const connectedAt = Date.now();
-    const ended = await provider.run(listenHost, ports.signal);
+  return Effect.gen(function* () {
+    let retryMs = FIRST_RETRY_MS;
 
-    if (ports.signal.aborted) return printed(`stopped: ${ended}`);
+    for (;;) {
+      const connectedAt = Date.now();
+      const ended = yield* provider.run(listenHost, ports.signal);
 
-    if (Date.now() - connectedAt > STEADY_CONNECTION_MS) retryMs = FIRST_RETRY_MS;
+      if (ports.signal.aborted) return printed(`stopped: ${ended}`);
 
-    ports.log(`${ended}; connecting again in ${retryMs / 1_000}s`);
-    await sleep(retryMs, null, { signal: ports.signal }).catch(() => null);
-    retryMs = Math.min(retryMs * 2, LAST_RETRY_MS);
-  }
+      if (Date.now() - connectedAt > STEADY_CONNECTION_MS) retryMs = FIRST_RETRY_MS;
+
+      ports.log(`${ended}; connecting again in ${retryMs / 1_000}s`);
+      yield* Effect.sleep(retryMs).pipe(Effect.raceFirst(aborted(ports.signal)));
+      retryMs = Math.min(retryMs * 2, LAST_RETRY_MS);
+    }
+  });
+}
+
+function aborted(signal: AbortSignal): Effect.Effect<void> {
+  return Effect.callback<void>((resume) => {
+    const onAbort = (): void => {
+      resume(Effect.void);
+    };
+
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    return Effect.sync(() => {
+      signal.removeEventListener("abort", onAbort);
+    });
+  });
 }
 
 export const orbCommands: CommandNode<OrbPorts> = {
@@ -66,7 +87,9 @@ export const orbCommands: CommandNode<OrbPorts> = {
       summary: "Run workspace containers for the Workspace Host with a dispatch script.",
       usage: "<dispatch-script>",
       run: ([script, ...extra], ports) =>
-        script === undefined || extra.length > 0 ? undefined : provide(script, ports),
+        script === undefined || extra.length > 0
+          ? undefined
+          : Effect.runPromise(provide(script, ports)),
     },
   ],
 };
