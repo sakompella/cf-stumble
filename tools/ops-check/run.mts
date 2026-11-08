@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { PRODUCTION_STAGE, workerName } from "../../infra/worker-settings.ts";
 import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.ts";
 import {
   formatReport,
@@ -19,7 +20,7 @@ import {
   ApiFailure,
 } from "./fetch.mts";
 
-const USAGE = "usage: ops-check --worker <name> --since <90m|2h|1d>";
+const USAGE = "usage: ops-check [--worker <name>] --since <90m|2h|1d>";
 
 interface Options {
   readonly worker: string;
@@ -41,8 +42,6 @@ function parseOptions(argv: readonly string[], nowMs: number): Options {
     },
   });
 
-  if (values.worker === undefined) throw new Error("--worker is required");
-
   const since = /^(\d+)([mhd])$/u.exec(values.since ?? "");
   const unitMs = UNIT_MS.get(since?.[2] ?? "");
 
@@ -52,7 +51,7 @@ function parseOptions(argv: readonly string[], nowMs: number): Options {
   const fromMs = nowMs - Number(since[1]) * unitMs;
 
   return {
-    worker: values.worker,
+    worker: values.worker ?? workerName(PRODUCTION_STAGE),
     window: { fromMs, toMs: nowMs },
   };
 }

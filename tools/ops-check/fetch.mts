@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { durableObjectClasses } from "../../infra/worker-settings.ts";
+import {
+  durableObjectClasses,
+  WORKSPACE_CONTAINER_MEMORY_MIB,
+} from "../../infra/worker-settings.ts";
 import { routePattern } from "../../src/routes/route-pattern.ts";
-import { WORKSPACE_CONTAINER_MEMORY_MIB } from "../../src/workspace/container-instance.ts";
 import {
   isJsonArray,
   isJsonNumber,

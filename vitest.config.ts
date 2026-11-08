@@ -2,13 +2,7 @@ import { globSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { build } from "esbuild";
-import {
-  compatibility,
-  durableObjectClasses,
-  plainTextBindings,
-  shellModulesAssetDirectory,
-  workerEntrypoint,
-} from "./infra/worker-settings.ts";
+import { testWorker } from "./infra/test-worker.ts";
 import { defaultExclude, defineConfig, type Plugin } from "vitest/config";
 
 const EFFECT_PATH = /^effect(?:\/[\w-]+)*$/u;
@@ -94,27 +88,7 @@ export default defineConfig({
     onUnhandledError: (error) => !isPlatformStreamNoise(error),
     projects: [
       {
-        plugins: [
-          await effectPrebundle(),
-          cloudflareTest({
-            main: `./${workerEntrypoint}`,
-            miniflare: {
-              compatibilityDate: compatibility.date,
-              compatibilityFlags: [...compatibility.flags],
-              bindings: { ...plainTextBindings, OWNER_PASSWORD: "test-owner-password" },
-              durableObjects: {
-                SUPERVISOR: { className: durableObjectClasses.SUPERVISOR, useSQLite: true },
-                WORKSPACE_HOST: { className: durableObjectClasses.WORKSPACE_HOST, useSQLite: true },
-              },
-              workerLoaders: { LOADER: {} },
-              versionMetadata: "CF_VERSION_METADATA",
-              assets: {
-                directory: resolve(import.meta.dirname, shellModulesAssetDirectory),
-                binding: "ASSETS",
-              },
-            },
-          }),
-        ],
+        plugins: [await effectPrebundle(), cloudflareTest(testWorker)],
         test: {
           name: "workers",
           testTimeout: 20_000,

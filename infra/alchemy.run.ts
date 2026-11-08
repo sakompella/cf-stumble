@@ -14,8 +14,8 @@ import {
   workerEntrypoint,
   workerName,
   shellModulesAssetDirectory,
-  workspaceImage,
 } from "./worker-settings.js";
+import { workspaceImage } from "./workspace-image/image.js";
 
 export default Alchemy.Stack(
   "cf-stumble",

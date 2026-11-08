@@ -41,7 +41,7 @@ RUN mkdir /build \
 ENV COMPUTERD_FUSE_ADDON=/build/build/Release/fuse.node
 
 FROM computerd-source AS computerd
-COPY containers/computerd-walk.patch /tmp/computerd-walk.patch
+COPY computerd-walk.patch /tmp/computerd-walk.patch
 RUN git apply --check /tmp/computerd-walk.patch \
  && git apply /tmp/computerd-walk.patch
 RUN npm run build -w @cloudflare/dofs -w @cloudflare/computer-rpc -w @cloudflare/computerd \

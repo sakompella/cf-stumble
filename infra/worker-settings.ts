@@ -1,5 +1,3 @@
-import { execFileSync } from "node:child_process";
-
 export const PRODUCTION_STAGE = "prod";
 
 const PRODUCTION_WORKER = "cf-stumble";
@@ -22,6 +20,12 @@ export const plainTextBindings = { CHATGPT_MODEL: "gpt-6.1-sol" } as const;
 
 export const shellModulesAssetDirectory = "build/shell-assets";
 
+export const SHELL_MODULES_FILE = "shell-modules.json";
+
+export const WORKSPACE_CONTAINER_INSTANCE = "standard-3";
+
+export const WORKSPACE_CONTAINER_MEMORY_MIB = 8192;
+
 export const assetsConfig = { runWorkerFirst: true };
 
 export const cache = { enabled: false };
@@ -32,10 +36,6 @@ export const productionRoute = {
   pattern: "stumble.akompella.dev/*",
   zone: "akompella.dev",
 } as const;
-
-const imageTagScript = new URL("../containers/image-tag.sh", import.meta.url);
-
-export const workspaceImage = `ghcr.io/sakompella/cf-stumble-workspace:${execFileSync(imageTagScript.pathname, { encoding: "utf8" }).trim()}`;
 
 export function observability(isProduction: boolean) {
   return {

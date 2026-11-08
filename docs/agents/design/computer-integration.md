@@ -1,8 +1,8 @@
 # Computer integration
 
-cf-stumble uses Cloudflare Computer release 0.8.0: `@cloudflare/computer` from npm, source commit `9f0ade40196a4ef95ddde4f2b75e1555d9dfeeb1`, and image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:de6f3727a12c8adb2f8ece853105ccc461fef02f90e368fac4e0578eacc461aa`. ADR-0026 records the decision. The workspace image builds `computerd` from that commit with `containers/computerd-walk.patch` applied. ADR-0042 records why the walk is patched.
+cf-stumble uses Cloudflare Computer release 0.8.0: `@cloudflare/computer` from npm, source commit `9f0ade40196a4ef95ddde4f2b75e1555d9dfeeb1`, and image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:de6f3727a12c8adb2f8ece853105ccc461fef02f90e368fac4e0578eacc461aa`. ADR-0026 records the decision. The workspace image builds `computerd` from that commit with `infra/workspace-image/computerd-walk.patch` applied. ADR-0042 records why the walk is patched.
 
-The Workspace Host runs the container through `ContainerBackend`, with the container scheduled by the Host's Durable Object. The instance size is `WORKSPACE_CONTAINER_INSTANCE` in `src/workspace/container-instance.ts`, and the image is the `app` Container that `infra/alchemy.run.ts` attaches to the `WorkspaceHost` Durable Object class. Upgrade the package, the commit and the image together, and adopt a newer release only if the full application workflow passes against it.
+The Workspace Host runs the container through `ContainerBackend`, with the container scheduled by the Host's Durable Object. The instance size is `WORKSPACE_CONTAINER_INSTANCE` in `infra/worker-settings.ts`, and the image is the `app` Container that `infra/alchemy.run.ts` attaches to the `WorkspaceHost` Durable Object class. Upgrade the package, the commit and the image together, and adopt a newer release only if the full application workflow passes against it.
 
 The workspace image is built once in CI and published to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`. The deploy and every machine that runs the container pull it, and nothing builds it locally.
 

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 engine="${STUMBLE_ENGINE:?}"
-image="${STUMBLE_IMAGE:-ghcr.io/sakompella/cf-stumble-workspace:$("$(dirname "$0")/../../../containers/image-tag.sh")}"
+image="${STUMBLE_IMAGE:-$("$(dirname "$0")/../../../infra/workspace-image/image-ref.sh")}"
 network=(${STUMBLE_NETWORK:+--network "$STUMBLE_NETWORK"})
 name="stumble-${STUMBLE_CONTAINER}"
 
