@@ -3,10 +3,9 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 import { encodeEntriesRequest, parseEntriesRequest } from "../src/entries-request.js";
 
-const entryId = gs.oneOf(
-  gs.just(undefined),
-  gs.integers({ minValue: 0, maxValue: 999_999_999_999_999 }),
-);
+const entryId = gs
+  .optional(gs.integers({ minValue: 0, maxValue: 999_999_999_999_999 }))
+  .map((value) => value ?? undefined);
 
 const request = gs.record({
   minEntryId: entryId,
