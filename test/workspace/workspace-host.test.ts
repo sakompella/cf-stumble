@@ -1,15 +1,16 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
-import {
-  type CommandOutput,
-  type WorkspaceOperations,
-  type WorkspacePathKind,
-} from "../../src/workspace/executor.js";
+import { type CommandOutput } from "../../src/workspace/executor.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../../src/project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { ensureManagedInstructions } from "../../src/workspace/managed-instructions.js";
+import {
+  workspaceEffects,
+  type PromiseOperations,
+  type WorkspacePathKind,
+} from "./promise-operations.js";
 
-class ManagedInstructionsOperations implements WorkspaceOperations {
+class ManagedInstructionsOperations implements PromiseOperations {
   readonly kinds = new Map<string, WorkspacePathKind>([[WORKSPACE_ROOT, "directory"]]);
   readonly files = new Map<string, string>();
 
@@ -36,7 +37,9 @@ class ManagedInstructionsOperations implements WorkspaceOperations {
 test("writes the managed instructions when the workspace has none", async () => {
   const operations = new ManagedInstructionsOperations();
 
-  await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toEqual({
+  await expect(
+    Effect.runPromise(ensureManagedInstructions(workspaceEffects(operations))),
+  ).resolves.toEqual({
     ok: true,
     result: { kind: "written" },
   });
@@ -48,7 +51,9 @@ test("replaces a stale managed instructions file with the current text", async (
   operations.kinds.set(MANAGED_AGENT_INSTRUCTIONS_PATH, "file");
   operations.files.set(MANAGED_AGENT_INSTRUCTIONS_PATH, "# instructions from an older release\n");
 
-  await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toEqual({
+  await expect(
+    Effect.runPromise(ensureManagedInstructions(workspaceEffects(operations))),
+  ).resolves.toEqual({
     ok: true,
     result: { kind: "written" },
   });
@@ -75,7 +80,9 @@ test.each([
     const operations = new ManagedInstructionsOperations();
     operations.kinds.set(path, kind);
 
-    await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toEqual({
+    await expect(
+      Effect.runPromise(ensureManagedInstructions(workspaceEffects(operations))),
+    ).resolves.toEqual({
       ok: false,
       error: { code },
     });

@@ -1,13 +1,7 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
-import { type CommandOutput } from "../../src/workspace/index.js";
-import {
-  executeProjectRemovalRequest,
-  WorkspaceSyncIncomplete,
-  type WorkspaceOperations,
-  type WorkspacePathKind,
-} from "../../src/workspace/executor.js";
+import { executeProjectRemovalRequest } from "../../src/workspace/executor.js";
 import {
   parseProjectRemovalRequest,
   planProjectRemovalRequest,
@@ -17,6 +11,13 @@ import { projectDirectory } from "../../src/workspace-layout.js";
 import { holdProvisionLock, projectProvisionLockPath } from "../../src/project-provision.js";
 import { shellQuote } from "../../src/shell-quote.js";
 import { sampleProjectOne } from "../project-fixtures.js";
+import {
+  workspaceEffects,
+  type PromiseOperations,
+  type CommandOutput,
+  WorkspaceSyncIncomplete,
+  type WorkspacePathKind,
+} from "./promise-operations.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -27,7 +28,7 @@ const request: ProjectRemovalRequest = {
   projectId: sampleProjectOne.id,
 };
 
-class FakeOperations implements WorkspaceOperations {
+class FakeOperations implements PromiseOperations {
   readonly sources: string[] = [];
   readonly statted: string[] = [];
   readonly remaining = new Set<string>();
@@ -64,7 +65,9 @@ test("refuses an invalid project id and the harness", async () => {
     { kind: "remove-project", projectId: "harness" },
   ] as const) {
     await expect(
-      Effect.runPromise(executeProjectRemovalRequest({ operations, request: value })),
+      Effect.runPromise(
+        executeProjectRemovalRequest({ operations: workspaceEffects(operations), request: value }),
+      ),
     ).resolves.toMatchObject({
       ok: false,
     });
@@ -89,7 +92,9 @@ test("derives the removal from the project id and removes only the clone and sta
   const operations = new FakeOperations();
 
   await expect(
-    Effect.runPromise(executeProjectRemovalRequest({ operations, request })),
+    Effect.runPromise(
+      executeProjectRemovalRequest({ operations: workspaceEffects(operations), request }),
+    ),
   ).resolves.toEqual({
     ok: true,
     result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
@@ -126,7 +131,9 @@ test.each([
   [
     "Computer's post-command sync did not complete",
     (operations: FakeOperations) => {
-      operations.syncFailure = new WorkspaceSyncIncomplete("post-command sync pending");
+      operations.syncFailure = new WorkspaceSyncIncomplete({
+        message: "post-command sync pending",
+      });
     },
   ],
   [
@@ -147,7 +154,9 @@ test.each([
   arrange(operations);
 
   await expect(
-    Effect.runPromise(executeProjectRemovalRequest({ operations, request })),
+    Effect.runPromise(
+      executeProjectRemovalRequest({ operations: workspaceEffects(operations), request }),
+    ),
   ).resolves.toEqual({
     ok: false,
     error: { code: "workspace-sync-incomplete" },

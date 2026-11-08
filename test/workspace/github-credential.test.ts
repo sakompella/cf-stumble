@@ -1,17 +1,21 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { REDACTED, type GitHubCredentialState } from "../../src/github/index.js";
-import { type CommandOutput } from "../../src/workspace/index.js";
 import {
   executeGitHubCredentialRequest,
   type GitHubCredentialRequest,
   type GitHubCredentialResult,
 } from "../../src/workspace/github-credential.js";
-import type { WorkspaceOperations, WorkspacePathKind } from "../../src/workspace/executor.js";
+import {
+  workspaceEffects,
+  type PromiseOperations,
+  type CommandOutput,
+  type WorkspacePathKind,
+} from "./promise-operations.js";
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
-class FakeCredentialOperations implements WorkspaceOperations {
+class FakeCredentialOperations implements PromiseOperations {
   readonly writes: (readonly [string, string])[] = [];
   readonly sources: string[] = [];
   readonly stdins: (string | undefined)[] = [];
@@ -46,7 +50,7 @@ class FakeCredentialOperations implements WorkspaceOperations {
   }
 }
 
-class FilesystemlessOperations implements WorkspaceOperations {
+class FilesystemlessOperations implements PromiseOperations {
   readonly sources: string[] = [];
   readonly stdins: (string | undefined)[] = [];
   stdout = "";
@@ -85,7 +89,11 @@ type CredentialOperations = FakeCredentialOperations | FilesystemlessOperations;
 
 function credential(operations: CredentialOperations, request: GitHubCredentialRequest) {
   return Effect.runPromise(
-    executeGitHubCredentialRequest({ operations, installOperations: operations, request }),
+    executeGitHubCredentialRequest({
+      operations: workspaceEffects(operations),
+      installOperations: workspaceEffects(operations),
+      request,
+    }),
   );
 }
 

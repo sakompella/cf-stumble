@@ -4,12 +4,15 @@ import type {
   WorkspaceRuntimeExecOptions,
   WorkspaceRuntimeResult,
 } from "@cloudflare/computer";
+import type * as Effect from "effect/Effect";
 import {
+  attemptWorkspace,
   WorkspaceSyncIncomplete,
   type CommandOutput,
-  type WorkspaceOperations,
+  type WorkspaceEffects,
+  type WorkspaceFault,
   type WorkspacePathKind,
-} from "./executor.js";
+} from "./operations.js";
 import { hasErrnoCode } from "./errno-code.js";
 import { cloneProjectInIsolate } from "./isolate-clone.js";
 import { CONTAINER_BACKEND_ID } from "./project/index.js";
@@ -30,15 +33,15 @@ export function commandOutput(
   sync: CommandSync,
 ): CommandOutput {
   if (sync === "require-complete" && !syncIsComplete(result.sync)) {
-    throw new WorkspaceSyncIncomplete(
-      `post-command sync ${result.sync.status} (exit ${String(result.exitCode)}, skipped ${String(result.sync.skipped.length)})`,
-    );
+    throw new WorkspaceSyncIncomplete({
+      message: `post-command sync ${result.sync.status} (exit ${String(result.exitCode)}, skipped ${String(result.sync.skipped.length)})`,
+    });
   }
 
   return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
 }
 
-export class ComputerWorkspaceOperations implements WorkspaceOperations {
+export class ComputerWorkspaceOperations implements WorkspaceEffects {
   private readonly workspace: Workspace;
   private readonly sync: CommandSync;
 
@@ -47,37 +50,39 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
     this.sync = sync;
   }
 
-  cloneProject(project: Project): Promise<void> {
+  cloneProject(project: Project): Effect.Effect<void, WorkspaceFault> {
     return cloneProjectInIsolate(this.workspace, project);
   }
 
-  async lstat(path: string): Promise<WorkspacePathKind | undefined> {
-    try {
-      const entry = await this.workspace.fs.lstat(path);
+  lstat(path: string): Effect.Effect<WorkspacePathKind | undefined, WorkspaceFault> {
+    return attemptWorkspace(async (): Promise<WorkspacePathKind | undefined> => {
+      try {
+        const entry = await this.workspace.fs.lstat(path);
 
-      if (entry.isSymbolicLink) return "symbolic-link";
+        if (entry.isSymbolicLink) return "symbolic-link";
 
-      return entry.isDirectory ? "directory" : "file";
-    } catch (cause) {
-      if (isNotFound(cause)) return undefined;
-      throw cause;
-    }
+        return entry.isDirectory ? "directory" : "file";
+      } catch (cause) {
+        if (isNotFound(cause)) return undefined;
+        throw cause;
+      }
+    });
   }
 
-  readFile(path: string): Promise<string> {
-    return this.workspace.fs.readFile(path, "utf8");
+  readFile(path: string): Effect.Effect<string, WorkspaceFault> {
+    return attemptWorkspace(() => this.workspace.fs.readFile(path, "utf8"));
   }
 
-  writeFile(path: string, content: string): Promise<void> {
-    return this.workspace.fs.writeFile(path, content);
+  writeFile(path: string, content: string): Effect.Effect<void, WorkspaceFault> {
+    return attemptWorkspace(() => this.workspace.fs.writeFile(path, content));
   }
 
-  async runCommand(
+  runCommand(
     source: string,
     cwd: string,
     timeoutMs: number,
     stdin?: string,
-  ): Promise<CommandOutput> {
+  ): Effect.Effect<CommandOutput, WorkspaceFault> {
     const options: WorkspaceRuntimeExecOptions<"utf8"> = {
       backend: CONTAINER_BACKEND_ID,
       cwd,
@@ -86,8 +91,11 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
     };
 
     if (stdin !== undefined) options.stdin = stdin;
-    const execution = await this.workspace.runtime.exec(source, options);
 
-    return commandOutput(await execution.result(), this.sync);
+    return attemptWorkspace(async () => {
+      const execution = await this.workspace.runtime.exec(source, options);
+
+      return commandOutput(await execution.result(), this.sync);
+    });
   }
 }

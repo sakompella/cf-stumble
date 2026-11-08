@@ -3,10 +3,6 @@ import {
   executeHarnessBuildRequest,
   executeProjectProvisionRequest,
   executeProjectRemovalRequest,
-  WorkspaceSyncIncomplete,
-  type CommandOutput,
-  type WorkspaceOperations,
-  type WorkspacePathKind,
 } from "../../../src/workspace/executor.js";
 import {
   executeGitHubCredentialRequest,
@@ -25,6 +21,13 @@ import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
 } from "../../../src/workspace/decisions.js";
+import {
+  workspaceEffects,
+  WorkspaceSyncIncomplete,
+  type CommandOutput,
+  type PromiseOperations,
+  type WorkspacePathKind,
+} from "../../workspace/promise-operations.js";
 
 export class HeldCommand {
   readonly fragment: string;
@@ -52,7 +55,7 @@ export class HeldCommand {
   }
 }
 
-export class FakeTenantWorkspace implements WorkspaceOperations {
+export class FakeTenantWorkspace implements PromiseOperations {
   readonly commands: string[] = [];
   readonly writes: (readonly [string, string])[] = [];
   readonly stdins: (readonly [string, string])[] = [];
@@ -125,7 +128,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     if (cloned === undefined && removed === undefined) return;
 
     if (this.commandSync === "incomplete") {
-      throw new WorkspaceSyncIncomplete("fake post-command sync pending");
+      throw new WorkspaceSyncIncomplete({ message: "fake post-command sync pending" });
     }
 
     if (cloned !== undefined && remote !== undefined) {
@@ -191,8 +194,8 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
 
     return Effect.runPromise(
       executeGitHubCredentialRequest({
-        operations: this,
-        installOperations: this,
+        operations: workspaceEffects(this),
+        installOperations: workspaceEffects(this),
         request,
       }),
     );
@@ -205,7 +208,9 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
 
     this.provisionRequests.push(request);
 
-    return Effect.runPromise(executeProjectProvisionRequest({ operations: this, request }));
+    return Effect.runPromise(
+      executeProjectProvisionRequest({ operations: workspaceEffects(this), request }),
+    );
   }
 
   build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
@@ -216,7 +221,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return Effect.runPromise(
       executeHarnessBuildRequest({
         configuration: HARNESS_BUILD_CONFIGURATION,
-        operations: this,
+        operations: workspaceEffects(this),
         request,
       }),
     );
@@ -227,7 +232,9 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
 
-    return Effect.runPromise(executeProjectRemovalRequest({ operations: this, request }));
+    return Effect.runPromise(
+      executeProjectRemovalRequest({ operations: workspaceEffects(this), request }),
+    );
   }
 
   ensureManagedInstructions(): Promise<InstructionsWriteResult> {
@@ -235,7 +242,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
 
-    return Effect.runPromise(ensureManagedInstructions(this));
+    return Effect.runPromise(ensureManagedInstructions(workspaceEffects(this)));
   }
 
   get namespace() {

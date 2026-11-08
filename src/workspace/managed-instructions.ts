@@ -3,17 +3,14 @@ import { logRedactedCause } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import type { InstructionsWriteResult } from "./decisions.js";
-import { answerFailures, attemptWorkspace, type WorkspacePathKind } from "./operations.js";
+import { answerFailures, type WorkspaceEffects } from "./operations.js";
 
-type ManagedInstructionOperations = Readonly<{
-  lstat(path: string): Promise<WorkspacePathKind | undefined>;
-  writeFile(path: string, content: string): Promise<void>;
-}>;
+type ManagedInstructionOperations = Pick<WorkspaceEffects, "lstat" | "writeFile">;
 
 export function ensureManagedInstructions(
   operations: ManagedInstructionOperations,
 ): Effect.Effect<InstructionsWriteResult> {
-  const lstat = (path: string) => attemptWorkspace(() => operations.lstat(path));
+  const lstat = (path: string) => operations.lstat(path);
 
   return Effect.gen(function* () {
     for (const path of [WORKSPACE_ROOT, MANAGED_AGENT_INSTRUCTIONS_PATH]) {
@@ -26,9 +23,7 @@ export function ensureManagedInstructions(
       return { ok: false, error: { code: "workspace-unavailable" } } as const;
     }
 
-    yield* attemptWorkspace(() =>
-      operations.writeFile(MANAGED_AGENT_INSTRUCTIONS_PATH, MANAGED_AGENT_INSTRUCTIONS),
-    );
+    yield* operations.writeFile(MANAGED_AGENT_INSTRUCTIONS_PATH, MANAGED_AGENT_INSTRUCTIONS);
 
     return { ok: true, result: { kind: "written" } } as const;
   }).pipe(

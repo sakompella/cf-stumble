@@ -18,23 +18,14 @@ import type { HarnessBuildConfiguration, HarnessBuildRequest } from "../harness-
 import type { Project } from "../project-catalog.js";
 import {
   answerFailures,
-  attemptWorkspace,
-  workspaceEffects,
   WorkspaceSyncIncomplete,
+  WorkspaceUnavailable,
   type CommandOutput,
   type WorkspaceEffects,
   type WorkspaceFault,
-  type WorkspaceOperations,
 } from "./operations.js";
 
-export {
-  WorkspaceSyncIncomplete,
-  type CommandOutput,
-  type WorkspaceEffects,
-  type WorkspaceFault,
-  type WorkspaceOperations,
-  type WorkspacePathKind,
-} from "./operations.js";
+export { type CommandOutput, type WorkspaceEffects, type WorkspaceFault } from "./operations.js";
 
 function syncIncomplete(): WorkspaceFailure {
   return { ok: false, error: { code: "workspace-sync-incomplete" } };
@@ -95,7 +86,7 @@ function timeoutOrUnavailable(cause: unknown): string {
 
 export function executeHarnessBuildRequest(
   input: Readonly<{
-    operations: WorkspaceOperations;
+    operations: WorkspaceEffects;
     configuration: HarnessBuildConfiguration;
     request: HarnessBuildRequest;
   }>,
@@ -105,10 +96,7 @@ export function executeHarnessBuildRequest(
   if ("ok" in parsed) return Effect.succeed(parsed);
 
   return Effect.suspend(() =>
-    executePlan(
-      workspaceEffects(input.operations),
-      planHarnessBuildRequest(input.configuration, parsed),
-    ),
+    executePlan(input.operations, planHarnessBuildRequest(input.configuration, parsed)),
   ).pipe(
     answerFailures((cause): WorkspaceCommandResult => {
       logRedactedCause(
@@ -124,12 +112,12 @@ export function executeHarnessBuildRequest(
 function isolateCloned(
   operations: WorkspaceEffects,
   project: Project,
-  clone: (project: Project) => Promise<void>,
+  clone: (project: Project) => Effect.Effect<void, WorkspaceFault>,
 ): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     if (yield* cloneMarkersAreDurable(operations, project)) return true;
 
-    yield* attemptWorkspace(() => clone(project));
+    yield* clone(project);
 
     const durable = yield* cloneMarkersAreDurable(operations, project);
 
@@ -152,14 +140,14 @@ function logCloneFallback(reason: string): void {
 }
 
 function faultReason(fault: WorkspaceFault): string {
-  const cause = fault._tag === "WorkspaceUnavailable" ? fault.cause : fault;
+  const cause = fault instanceof WorkspaceUnavailable ? fault.cause : fault;
 
   return cause instanceof Error ? cause.message : String(cause);
 }
 
 export function executeProjectProvisionRequest(
   input: Readonly<{
-    operations: WorkspaceOperations;
+    operations: WorkspaceEffects;
     request: ProjectProvisionRequest;
   }>,
 ): Effect.Effect<WorkspaceCommandResult> {
@@ -168,14 +156,13 @@ export function executeProjectProvisionRequest(
   if ("ok" in parsed) return Effect.succeed(parsed);
 
   return Effect.gen(function* () {
-    const operations = workspaceEffects(input.operations);
-
-    const { cloneProject } = input.operations;
+    const { operations } = input;
+    const { cloneProject } = operations;
 
     if (
       cloneProject !== undefined &&
       (yield* isolateCloned(operations, parsed, (project) =>
-        cloneProject.call(input.operations, project),
+        cloneProject.call(operations, project),
       ))
     ) {
       return {
@@ -196,7 +183,7 @@ export function executeProjectProvisionRequest(
 
 export function executeProjectRemovalRequest(
   input: Readonly<{
-    operations: WorkspaceOperations;
+    operations: WorkspaceEffects;
     request: ProjectRemovalRequest;
   }>,
 ): Effect.Effect<WorkspaceCommandResult> {
@@ -205,7 +192,7 @@ export function executeProjectRemovalRequest(
   if ("ok" in parsed) return Effect.succeed(parsed);
 
   return Effect.gen(function* () {
-    const operations = workspaceEffects(input.operations);
+    const { operations } = input;
     const plan = planProjectRemovalRequest(parsed);
     const output = yield* runPlannedCommand(operations, plan);
 

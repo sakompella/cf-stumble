@@ -1,7 +1,7 @@
 import type { ExecSyncResult } from "@cloudflare/computer";
 import { expect, test } from "vitest";
 import { commandOutput } from "../../src/workspace/computer-operations.js";
-import { WorkspaceSyncIncomplete } from "../../src/workspace/executor.js";
+import { WorkspaceSyncIncomplete } from "../../src/workspace/operations.js";
 
 const ran = { stdout: "out", stderr: "", exitCode: 0 } as const;
 
