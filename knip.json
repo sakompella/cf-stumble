@@ -30,6 +30,7 @@
     "src/workspace/computer-operations.ts": ["exports"],
     "src/workspace/credential-access.ts": ["types"],
     "src/workspace/project/computer-adapter.ts": ["exports"],
+    "src/workspace/project/exec-selection.ts": ["exports"],
     "src/workspace/provisioning.ts": ["exports", "types"],
     "src/workspace/workspace-platform.ts": ["exports"]
   }

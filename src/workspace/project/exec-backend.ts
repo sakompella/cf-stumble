@@ -13,6 +13,7 @@ interface ExecBackendReader {
 export interface ExecBackendHandle {
   readonly reader: ExecBackendReader;
   kill(): Promise<void>;
+  readonly backend: ExecBackendChoice;
   readonly fellBackFrom?: "isolate" | undefined;
 }
 

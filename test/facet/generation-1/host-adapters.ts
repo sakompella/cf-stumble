@@ -82,6 +82,7 @@ export function hostExecBackend(root: string): ExecBackend {
 
           return Promise.resolve();
         },
+        backend: "container",
       });
     },
   };

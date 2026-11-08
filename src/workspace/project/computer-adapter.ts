@@ -1,13 +1,10 @@
 import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
 import { shellQuote } from "../../shell-quote.js";
 import {
-  CONTAINER_BACKEND_ID,
   ContainerRestartedError,
   ISOLATE_BACKEND_ID,
   type ContainerLifecycleState,
 } from "./exec-backend.js";
-import { isolateWithContainerFallback } from "./exec-fallback.js";
-import { routedBackend } from "./exec-routing.js";
 import type {
   BackendExecEvent,
   ExecBackend,
@@ -147,25 +144,11 @@ export function computerExecBackend(
         throw new ContainerRestartedError();
       }
 
-      return { reader: guardedReader(handle.getReader(), guard), kill: () => handle.kill() };
-    },
-  };
-}
-
-export function chosenExecBackend(
-  workspace: ExecWorkspace,
-  containerState: ContainerLifecycleState,
-): ExecBackend {
-  const container = computerExecBackend(workspace, CONTAINER_BACKEND_ID, containerState);
-  const isolate = computerExecBackend(workspace, ISOLATE_BACKEND_ID, null);
-
-  const isolateFirst = isolateWithContainerFallback(isolate, container);
-
-  return {
-    exec: (input) => {
-      if (routedBackend(input.command, input.backend) !== "isolate") return container.exec(input);
-
-      return (input.backend === undefined ? isolateFirst : isolate).exec(input);
+      return {
+        reader: guardedReader(handle.getReader(), guard),
+        kill: () => handle.kill(),
+        backend: backendId === ISOLATE_BACKEND_ID ? "isolate" : "container",
+      };
     },
   };
 }

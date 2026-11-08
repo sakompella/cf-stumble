@@ -67,6 +67,7 @@ test.each(["close", "destroy"] as const)(
             cancel: () => Promise.resolve(),
           },
           kill: () => Promise.resolve(),
+          backend: "container",
         });
       },
     };

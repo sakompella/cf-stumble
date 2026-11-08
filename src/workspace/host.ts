@@ -11,10 +11,11 @@ import { afterIdleStop, trackedWork, WorkspaceIdleController } from "./idle-cont
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import {
   chosenExecBackend,
-  isolateWorkspace,
   computerFilesystemProvider,
   durableObjectTransactions,
+  isolateShellBackend,
   ProjectRpcTarget,
+  workspaceGit,
 } from "./project/index.js";
 import { WorkspacePlatform } from "./workspace-platform.js";
 import {
@@ -61,11 +62,14 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       env.ORB_PROVIDER_TOKEN,
       env.CF_VERSION_METADATA?.id ?? null,
       () => readBackendSetting(ctx.storage.kv) === "provider",
-      isolateWorkspace(env, {
-        id: ctx.id,
-        exports: ctx.exports,
-        isolateToken: this.#isolateToken,
-      }),
+      {
+        backend: isolateShellBackend(env.LOADER, env.ASSETS, {
+          id: ctx.id,
+          exports: ctx.exports,
+          isolateToken: this.#isolateToken,
+        }),
+        git: workspaceGit,
+      },
     );
     this.#idle = new WorkspaceIdleController({
       nowMs: () => Date.now(),
