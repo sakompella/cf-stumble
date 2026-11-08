@@ -81,6 +81,7 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 
 COPY --from=computerd /usr/local/bin/computerd /usr/local/bin/computerd
+COPY git-readonly.sh /usr/local/bin/git
 
 ENV PORT=8080
 ENV MOUNT_POINT=/workspace

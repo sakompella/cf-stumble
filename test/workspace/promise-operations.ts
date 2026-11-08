@@ -1,3 +1,5 @@
+import type { HarnessBuildConfiguration } from "../../src/harness-build.js";
+import type { HarnessCommit } from "../../src/harness-commit.js";
 import type { Project } from "../../src/project-catalog.js";
 import {
   attemptWorkspace,
@@ -14,6 +16,10 @@ export {
 
 export type PromiseOperations = Readonly<{
   cloneProject?(project: Project): Promise<void>;
+  provisionHarness?(
+    configuration: HarnessBuildConfiguration,
+    commit: HarnessCommit,
+  ): Promise<CommandOutput>;
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
@@ -28,7 +34,7 @@ export type PromiseOperations = Readonly<{
 type Mutable = { -readonly [K in keyof WorkspaceEffects]: WorkspaceEffects[K] };
 
 export function workspaceEffects(operations: PromiseOperations): WorkspaceEffects {
-  const { cloneProject } = operations;
+  const { cloneProject, provisionHarness } = operations;
 
   const effects: Mutable = {
     lstat: (path) => attemptWorkspace(() => operations.lstat(path)),
@@ -36,6 +42,12 @@ export function workspaceEffects(operations: PromiseOperations): WorkspaceEffect
     writeFile: (path, content) => attemptWorkspace(() => operations.writeFile(path, content)),
     runCommand: (source, cwd, timeoutMs, stdin) =>
       attemptWorkspace(() => operations.runCommand(source, cwd, timeoutMs, stdin)),
+    provisionHarness: (configuration, commit) =>
+      attemptWorkspace(() =>
+        provisionHarness === undefined
+          ? Promise.reject(new Error("this fake provisions no harness"))
+          : provisionHarness.call(operations, configuration, commit),
+      ),
   };
 
   if (cloneProject !== undefined) {

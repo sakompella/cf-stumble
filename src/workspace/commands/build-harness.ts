@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import { durableGitHubConfigurationSource } from "../../github/index.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
   type HarnessBuildConfiguration,
@@ -12,9 +11,9 @@ import { invariant } from "../../invariant.js";
 import { shellQuote } from "../../shell-quote.js";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import type { WorkspaceEffects } from "../operations.js";
-import { reconcileClone } from "./clone-script.js";
 import {
   answerUnavailable,
+  commandResult,
   executePlan,
   invalidRequest,
   type WorkspaceCommandResult,
@@ -40,57 +39,9 @@ export type HarnessBuildStep = Readonly<{
 
 export type HarnessBuildPlan = Readonly<{
   directory: string;
-  steps: readonly [HarnessBuildStep, ...HarnessBuildStep[]];
+  steps: readonly HarnessBuildStep[];
   moduleMapPath: string;
 }>;
-
-export const HARNESS_PROVISION_LOCK = "/tmp/cf-stumble-harness-provision.lock";
-
-function obtainHarnessCommit(): readonly string[] {
-  return [
-    'if ! git --git-dir="$git_dir" cat-file -e "${commit}^{commit}" 2>/dev/null; then',
-    '  git --git-dir="$git_dir" fetch --no-tags --quiet origin "$commit" 2>/dev/null ||',
-    '    git --git-dir="$git_dir" fetch --no-tags --quiet origin ||',
-    "    true",
-    '  if ! git --git-dir="$git_dir" cat-file -e "${commit}^{commit}" 2>/dev/null; then',
-    '    printf "harness commit %s is not in %s\\n" "$commit" "$expected_remote" >&2',
-    "    exit 1",
-    "  fi",
-    "fi",
-  ];
-}
-
-function advanceCheckout(): readonly string[] {
-  return [
-    'if test -n "$(git -C "$repository" status --porcelain --untracked-files=no)"; then',
-    '  printf "harness checkout has local changes; left at %s\\n" "$(git -C "$repository" rev-parse --short HEAD)" >&2',
-    'elif ! git -C "$repository" fetch --no-tags --quiet origin; then',
-    '  printf "harness checkout not updated: fetch failed\\n" >&2',
-    'elif ! git -C "$repository" merge --ff-only --quiet "@{upstream}"; then',
-    '  printf "harness checkout not updated: cannot fast-forward from %s\\n" "$(git -C "$repository" rev-parse --short HEAD)" >&2',
-    "fi",
-  ];
-}
-
-export function provisionHarnessRepository(
-  configuration: HarnessBuildConfiguration,
-  harnessCommit: HarnessCommit,
-): string {
-  return [
-    "set -eu",
-    ...durableGitHubConfigurationSource(),
-    `mkdir -p ${shellQuote(WORKSPACE_ROOT)}`,
-    `lock=${shellQuote(HARNESS_PROVISION_LOCK)}`,
-    `repository=${shellQuote(configuration.harnessRepositoryRoot)}`,
-    `git_dir=${shellQuote(configuration.harnessGitDir)}`,
-    `staging=${shellQuote(`${configuration.harnessRepositoryRoot}.provisioning`)}`,
-    `expected_remote=${shellQuote(configuration.harnessGitRemote)}`,
-    `commit=${shellQuote(harnessCommit)}`,
-    ...reconcileClone(),
-    ...obtainHarnessCommit(),
-    ...advanceCheckout(),
-  ].join("\n");
-}
 
 function checkoutSource(
   configuration: HarnessBuildConfiguration,
@@ -131,11 +82,6 @@ export function planHarnessBuild(
   return {
     directory,
     steps: [
-      {
-        name: "provision",
-        source: provisionHarnessRepository(configuration, harnessCommit),
-        cwd: WORKSPACE_ROOT,
-      },
       {
         name: "isolate",
         source: `mkdir -p ${configuration.buildRoot} && rm -rf ${directory} && mkdir -p ${directory}`,
@@ -229,7 +175,13 @@ export function executeHarnessBuildRequest(
 
   if ("ok" in parsed) return Effect.succeed(parsed);
 
+  const { operations, configuration } = input;
+
   return Effect.suspend(() =>
-    executePlan(input.operations, planHarnessBuildRequest(input.configuration, parsed)),
+    parsed.kind === "build-step" && parsed.step === "provision"
+      ? operations
+          .provisionHarness(configuration, parsed.harnessCommit)
+          .pipe(Effect.map(commandResult))
+      : executePlan(operations, planHarnessBuildRequest(configuration, parsed)),
   ).pipe(answerUnavailable(`workspace.harness-build.${parsed.kind}`));
 }

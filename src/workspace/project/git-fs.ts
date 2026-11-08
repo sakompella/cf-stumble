@@ -1,12 +1,20 @@
 import { Buffer } from "node:buffer";
 import type { SQLiteWorkspaceProvider } from "@cloudflare/computer";
-import { createGitClient } from "@cloudflare/computer/git";
+import {
+  createGitClient,
+  type GitAuth,
+  type GitCliInput,
+  type GitCliResult,
+  type GitClientFactory,
+} from "@cloudflare/computer/git";
+import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
+import { gitCli } from "./git-cli.js";
 
 type ReadOptions = Parameters<SQLiteWorkspaceProvider["readFile"]>[1];
 
 type WriteOptions = Parameters<SQLiteWorkspaceProvider["writeFile"]>[2];
 
-export const workspaceGit = createGitClient({
+const sqliteGit = createGitClient({
   adapter: (provider) =>
     Promise.resolve({
       promises: {
@@ -55,3 +63,55 @@ export const workspaceGit = createGitClient({
       },
     }),
 });
+
+const TOKEN_LINE = /^\s*oauth_token:\s*(\S+)\s*$/mu;
+
+export function githubTokenFromHosts(hosts: string): string | undefined {
+  return TOKEN_LINE.exec(hosts)?.[1];
+}
+
+async function readHosts(provider: SQLiteWorkspaceProvider): Promise<string> {
+  try {
+    const hosts = await provider.readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`);
+
+    return hosts.toString();
+  } catch {
+    return "";
+  }
+}
+
+async function githubAuth(provider: SQLiteWorkspaceProvider): Promise<GitAuth | undefined> {
+  const token = githubTokenFromHosts(await readHosts(provider));
+
+  return token === undefined ? undefined : { username: "x-access-token", password: token };
+}
+
+export const workspaceGit: GitClientFactory = (options) => {
+  const client = sqliteGit(options);
+  const onAuth = () => githubAuth(options.ws.provider());
+  const clone = client.clone.bind(client);
+  const fetch = client.fetch.bind(client);
+  const push = client.push.bind(client);
+  const pull = client.pull.bind(client);
+  const cli = client.cli.bind(client);
+
+  return Object.assign(client, {
+    clone: async (input: Parameters<typeof clone>[0]) => {
+      const auth = input.url.startsWith("https://github.com/") ? await onAuth() : undefined;
+
+      const basic =
+        auth === undefined ? undefined : `${auth.username ?? ""}:${auth.password ?? ""}`;
+
+      const headers =
+        basic === undefined
+          ? {}
+          : { Authorization: `Basic ${Buffer.from(basic).toString("base64")}` };
+
+      await clone({ headers, ...input });
+    },
+    fetch: (input: Parameters<typeof fetch>[0]) => fetch({ onAuth, ...input }),
+    push: (input: Parameters<typeof push>[0]) => push({ onAuth, ...input }),
+    pull: (input: Parameters<typeof pull>[0]) => pull({ onAuth, ...input }),
+    cli: (input: GitCliInput): Promise<GitCliResult> => gitCli(client, cli, input),
+  });
+};

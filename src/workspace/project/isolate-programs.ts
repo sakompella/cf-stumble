@@ -4,7 +4,7 @@ const RUNS_OTHER_PROGRAMS = ["xargs", "env", "bash", "sh", "time", "timeout", "s
 
 const NOT_IN_ISOLATE = new Set([...RUNS_OTHER_PROGRAMS, "html-to-markdown"]);
 
-const ISOLATE_SHELL_FEATURES = ["cd", "test"];
+const ISOLATE_SHELL_FEATURES = ["cd", "test", "git"];
 
 export const ISOLATE_PROGRAMS: ReadonlySet<string> = new Set([
   ...ISOLATE_COMMAND_NAMES.filter((name) => !NOT_IN_ISOLATE.has(name)),
