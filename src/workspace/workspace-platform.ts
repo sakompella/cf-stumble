@@ -5,14 +5,14 @@ import {
   type WorkspaceOptions,
 } from "@cloudflare/computer";
 import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
+import * as Effect from "effect/Effect";
 import { logEvent } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore, type HostedBackend } from "./backend-sync-ignore.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
 import { WORKSPACE_CONTAINER_INSTANCE } from "./container-instance.js";
-import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH, ORB_TOKEN_HEADER } from "../orb-protocol.js";
 import { ProviderContainerAPI } from "./provider-container.js";
 import { ProviderLink } from "./provider-link.js";
-import { providerTokenMatches } from "./provider-token.js";
+import { routeFetch } from "./route-fetch.js";
 
 type WorkspaceHostBackend = HostedBackend<Parameters<WorkspaceBackend["connect"]>[0]>;
 
@@ -90,37 +90,38 @@ export class WorkspacePlatform {
     return (this.#platformContainer?.running ?? false) || this.#providerContainer.running();
   }
 
-  async stopContainer(reason: "idle" | "reset" | "backend"): Promise<void> {
-    if (this.#platformContainer?.running === true) await this.#platformContainer.destroy(reason);
+  stopContainer(reason: "idle" | "reset" | "backend"): Effect.Effect<void> {
+    const container = this.#platformContainer;
 
-    if (reason === "reset" && this.provider.egressPort() !== undefined)
-      await this.#providerContainer.remove();
-    else if (this.#providerContainer.running()) await this.#providerContainer.stop();
+    const destroy =
+      container?.running === true ? Effect.promise(() => container.destroy(reason)) : Effect.void;
 
-    this.lifecycle.stoppedByHost();
+    return destroy.pipe(
+      Effect.andThen(Effect.suspend(() => this.#stopProvider(reason))),
+      Effect.andThen(
+        Effect.sync(() => {
+          this.lifecycle.stoppedByHost();
+        }),
+      ),
+    );
   }
 
-  async handleFetch(request: Request): Promise<Response> {
-    const { pathname } = new URL(request.url);
+  #stopProvider(reason: "idle" | "reset" | "backend"): Effect.Effect<void> {
+    if (reason === "reset" && this.provider.egressPort() !== undefined)
+      return Effect.promise(() => this.#providerContainer.remove());
 
-    if (pathname !== ORB_PROVIDER_PATH && pathname !== ORB_COMPUTERD_PATH)
-      return this.#containerBackend.handleFetch(request);
+    return this.#providerContainer.running()
+      ? Effect.promise(() => this.#providerContainer.stop())
+      : Effect.void;
+  }
 
-    const token = request.headers.get(ORB_TOKEN_HEADER);
-
-    if (!(await providerTokenMatches(this.#providerToken, token)))
-      return new Response("unauthorized", { status: 401 });
-
-    if (request.headers.get("upgrade") !== "websocket")
-      return new Response("websocket upgrade required", { status: 426 });
-
-    if (pathname === ORB_PROVIDER_PATH) return this.provider.accept();
-
-    const backend = this.#providerBackend?.backend;
-
-    if (backend === undefined) return new Response("no provider container", { status: 404 });
-
-    return backend.handleFetch(new Request("http://computer.internal/api", request));
+  handleFetch(request: Request): Effect.Effect<Response> {
+    return routeFetch(request, {
+      token: this.#providerToken,
+      provider: this.provider,
+      container: this.#containerBackend,
+      computerd: this.#providerBackend?.backend,
+    });
   }
 
   #cloudflareContainer(): WorkspaceContainerAPI {
