@@ -159,3 +159,63 @@ test("git checkout -b in the isolate keeps local changes and commit refuses an e
     /^ M a\.txt\nOn branch topic\nChanges not staged for commit:\n[^]*no changes added to commit[^]*\n\[topic [0-9a-f]{7}\] kept\n 1 file changed, 1 insertion\(\+\)\n$/u,
   );
 });
+
+test("git add -u stages changes and deletions of tracked files only", async () => {
+  const { stdout } = await shell(
+    "isolate-git-add-u",
+    `${SETUP} && echo x >> a.txt && rm b.txt && echo y > c.txt && git add -u && git status -s`,
+  );
+
+  expect(stdout).toBe("M  a.txt\nD  b.txt\n?? c.txt\n");
+});
+
+test("git add . stages new files", async () => {
+  const { stdout } = await shell(
+    "isolate-git-add-dot",
+    `${SETUP} && echo y > c.txt && git add . && git status -s`,
+  );
+
+  expect(stdout).toBe("A  c.txt\n");
+});
+
+test("git reset --soft moves the branch and keeps the index", async () => {
+  const { stdout } = await shell(
+    "isolate-git-reset-soft",
+    `${SETUP} && echo x >> a.txt && git commit -q -am second && git reset --soft HEAD~1 && git status -s && git log --oneline | wc -l`,
+  );
+
+  expect(stdout).toBe("M  a.txt\n1\n");
+});
+
+test("git reset and git reset --mixed unstage and move the branch", async () => {
+  const { stdout } = await shell(
+    "isolate-git-reset-mixed",
+    `${SETUP} && echo x >> a.txt && git add a.txt && git reset && git status -s && git add a.txt && git commit -q -m second && git reset --mixed HEAD~1 && git status -s && git log --oneline | wc -l`,
+  );
+
+  expect(stdout).toBe(" M a.txt\n M a.txt\n1\n");
+});
+
+test("git reset <paths> and git restore --staged unstage only those paths", async () => {
+  const { stdout } = await shell(
+    "isolate-git-unstage-paths",
+    `${SETUP} && echo x >> a.txt && echo x >> b.txt && git add -A && git reset a.txt && git status -s && git restore --staged b.txt && git status -s`,
+  );
+
+  expect(stdout).toBe(" M a.txt\nM  b.txt\n M a.txt\n M b.txt\n");
+});
+
+test("git reset to an unknown revision fails with a message", async () => {
+  const { stderr } = await shell("isolate-git-reset-unknown", `${SETUP} && git reset --soft nope`);
+
+  expect(stderr).toContain("unknown revision");
+});
+
+test("git push origin :branch deletes the remote branch", async () => {
+  const { stderr } = await shell(
+    "isolate-git-push-delete",
+    `${SETUP} && git remote add origin file:///remote.git && git push origin :topic`,
+  );
+
+  expect(stderr).toBe("git push: git push failed: Could not find topic.\n");
+});

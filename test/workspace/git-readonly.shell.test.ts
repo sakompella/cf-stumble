@@ -79,6 +79,14 @@ test.each([
   expect(git(repository, "config", "--local", "--list")).not.toContain("user.name");
 });
 
+test("a refusal after the isolate fallback says the form is unsupported", () => {
+  const ran = wrapped(["reset", "--hard"], { CF_STUMBLE_GIT_FALLBACK: "1" });
+
+  expect(ran.status).toBe(1);
+  expect(ran.stderr).toContain("does not support this form");
+  expect(ran.stderr).not.toContain("own command");
+});
+
 test("clones into a new directory", () => {
   const ran = wrapped(["clone", "-q", repository, join(root, "copy")]);
 

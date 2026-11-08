@@ -160,7 +160,12 @@ test.each([127, 129])("an isolate exit %i reruns the command in the container", 
     [out("* main\n"), exit(0)],
   );
 
-  expect(containerRuns).toEqual([expect.objectContaining({ backend: "container" })]);
+  expect(containerRuns).toEqual([
+    expect.objectContaining({
+      backend: "container",
+      command: "export CF_STUMBLE_GIT_FALLBACK=1; grep foo file",
+    }),
+  ]);
   expect(text).toContain("* main");
   expect(text).not.toContain("unknown option");
   expect(log).toHaveBeenCalledWith(
