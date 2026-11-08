@@ -18,7 +18,7 @@ Run every Alchemy command from the worktree root, because the stack names its fi
 
 ```sh
 pnpm alchemy plan --config infra/alchemy.run.ts --stage <stage>
-pnpm alchemy deploy --config infra/alchemy.run.ts --stage <stage>
+pnpm run deploy <stage>
 ```
 
 A stage other than `prod` has a `workers.dev` subdomain without preview URLs, no route, traces off (one cold start writes about 12,600 spans that drown the events), and the same container instance size as production, which the Durable Object requests at launch.

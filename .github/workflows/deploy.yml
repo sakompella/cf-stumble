@@ -60,9 +60,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # --yes approves the plan without a terminal. It also lets Alchemy create
       # or upgrade the state store, which it refuses in CI without it.
-      - run: >-
-          pnpm run install:infra && pnpm run build:page && pnpm run build:shell-modules &&
-          pnpm alchemy deploy --config infra/alchemy.run.ts --stage "$STAGE" --yes
+      - run: pnpm run deploy "$STAGE" --yes
         env:
           STAGE: ${{ inputs.stage || 'prod' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
