@@ -28,7 +28,7 @@ Work from a clean tree on `main`. Run `pnpm verify` (CI runs it again before it 
 
 ### 2. Deploy
 
-The normal path for production is a push or merge to `main`. GitHub Actions runs Verify on the commit, and when it passes, the Deploy workflow runs `pnpm run deploy --yes` for the stage `prod` (`docs/deploy.md`, "Deploying from CI"). Before you merge, run `pnpm run build:page` and `pnpm run build:shell-modules`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change: CI approves the plan without showing it to anyone. After the push, follow the run with `gh run watch` and read the plan in the job log.
+The normal path for production is a push or merge to `main`. GitHub Actions runs Verify on the commit, and when it passes, the Deploy workflow runs `pnpm run deploy prod --yes` (`docs/deploy.md`, "Deploying from CI"). Before you merge, run `pnpm run build:page` and `pnpm run build:shell-modules`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change: CI approves the plan without showing it to anyone. After the push, follow the run with `gh run watch` and read the plan in the job log.
 
 Deploy from a machine with `pnpm run deploy` only when CI cannot. Never deploy the Worker with another tool. If anything changed the Worker outside Alchemy (the dashboard, `cf deploy`), run `pnpm run deploy --force` from a machine: a plain deploy is then a no-op. If the image push fails with "use of closed network connection", run the deploy again on a steady network.
 
@@ -70,7 +70,7 @@ Create a worktree and pick a unique stage name. The stack turns any stage other 
 
 ### 3. Deploy and exercise
 
-Deploy with `pnpm alchemy deploy --config infra/alchemy.run.ts --stage <stage>` after `pnpm run build:page` and `pnpm run build:shell-modules`. Set the secrets with `pnpm exec cf workers secrets update`. Exercise the change, then read the events (`docs/agents/design/observability.md`, "Querying") and `pnpm ops:check --worker <name>`.
+Deploy with `pnpm run deploy <stage>`. Set the secrets with `pnpm exec cf workers secrets update`. Exercise the change, then read the events (`docs/agents/design/observability.md`, "Querying") and `pnpm ops:check --worker <name>`.
 
 **Complete when:** the change did what you claim, with timestamps and event names as evidence, and you recorded the container minutes used (the instances API, start to `inactive`).
 

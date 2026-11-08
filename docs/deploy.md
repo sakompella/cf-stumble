@@ -29,7 +29,7 @@ Alchemy is its own pnpm project in `infra/`, with its own lockfile, because the 
 
 Run Alchemy from the repository root, because the stack names its files relative to it: `pnpm alchemy <command> --config infra/alchemy.run.ts --stage <stage>`. The commands you need:
 
-- `pnpm run deploy` writes the owner page's script with `pnpm run build:page`, writes the shell module set for the isolate with `pnpm run build:shell-modules`, and deploys the stage `prod`. Alchemy does not run a build command of its own, so a deploy of another stage needs both first.
+- `pnpm run deploy [<stage>] [flags]` runs `infra/deploy.sh`. It installs `infra/`, writes the owner page's script with `pnpm run build:page`, writes the shell module set for the isolate with `pnpm run build:shell-modules`, and deploys the stage, `prod` when you name none. It passes the remaining flags, such as `--yes` or `--force`, to `alchemy deploy`. Alchemy does not run a build command of its own, so deploy every stage through this script.
 - `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod` lists what a deploy would change, and changes nothing.
 - `pnpm alchemy logs --config infra/alchemy.run.ts --stage prod --tail` streams the Worker's logs.
 - `pnpm alchemy destroy --config infra/alchemy.run.ts --stage <stage>` deletes a stage's Worker and container application.
@@ -82,7 +82,7 @@ A request that changes state (any method but `GET` and `HEAD`) must also come fr
 GitHub Actions deploys production. Two workflows in `.github/workflows/` do the work:
 
 - `verify.yml` runs `pnpm verify` on Ubuntu for every push and every pull request.
-- `deploy.yml` runs the same steps as `pnpm run deploy --yes` for the stage `prod` when Verify passes on a push to `main`. It checks out the commit that Verify tested. A concurrency group per stage lets only one deploy of a stage run at a time; a second deploy waits for the first to finish.
+- `deploy.yml` runs `pnpm run deploy prod --yes` when Verify passes on a push to `main`. It checks out the commit that Verify tested. A concurrency group per stage lets only one deploy of a stage run at a time; a second deploy waits for the first to finish.
 
 The normal deploy path is therefore a push or merge to `main`. The runner has Docker, so it pulls the Container image that CI published and pushes it to the account's registry. Pushing that image from the Mac through OrbStack failed with "use of closed network connection" during the staging rehearsal, which is why deploys moved to CI.
 
