@@ -68,5 +68,6 @@ export function update(model: Model, message: Message): UpdateReturn {
     ...submitHandlers(model),
     ...controlHandlers(model),
     CompletedFollowTranscript: () => ({ model }),
+    SettledTranscript: () => ({ model }),
   });
 }

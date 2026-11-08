@@ -3,6 +3,7 @@ import type { Html, HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import { Model } from "./model.js";
 import { subscriptions } from "./events-stream.js";
+import { managedResources } from "./transcript-store.js";
 import { init, update } from "./update.js";
 import { view } from "./view.js";
 
@@ -24,6 +25,7 @@ Runtime.run(
     update,
     view,
     subscriptions,
+    managedResources,
     crash: { view: crashView },
     container: document.querySelector<HTMLElement>(`#${ID.root}`),
   }),

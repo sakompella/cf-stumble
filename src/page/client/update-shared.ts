@@ -2,8 +2,9 @@ import type { Update } from "foldkit";
 import { FetchStatus } from "./commands.js";
 import type { Message } from "./message.js";
 import { StatusRead, type Model } from "./model.js";
+import type { TranscriptService } from "./transcript-store.js";
 
-export type UpdateReturn = Update.Return<Model, Message>;
+export type UpdateReturn = Update.Return<Model, Message, TranscriptService>;
 
 type Tag = Message["_tag"];
 

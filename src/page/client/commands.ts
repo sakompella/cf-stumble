@@ -228,7 +228,7 @@ export const LoadTranscript = Command.define("LoadTranscript", {
   args: { streamId: Schema.Number, maybeGapIndex: Schema.Option(Schema.Number) },
   messages: [Message.LoadedTranscript, Message.FailedLoadTranscript],
   execute: ({ streamId, maybeGapIndex }) =>
-    loadIntoTranscript(streamId, Option.getOrUndefined(maybeGapIndex)).pipe(
+    loadIntoTranscript(Option.getOrUndefined(maybeGapIndex)).pipe(
       Effect.map((loaded) =>
         Message.LoadedTranscript({
           streamId,

@@ -1,38 +1,36 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Subscription } from "foldkit";
 import { answerOf, fetchEffect, problemText, projectPath, transportDetail } from "./api.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
 import {
-  closeTranscript,
-  openTranscript,
-  viewReader,
-  type HeldTranscript,
+  MaybeTranscriptKey,
+  TranscriptResource,
+  type TranscriptService,
 } from "./transcript-store.js";
+import { viewReader } from "./view-reader.js";
 
 const RECONNECT_PAUSE = "1 second";
 
 const STALL_TIMEOUT = "10 seconds";
 
-const EventsStream = Schema.Struct({ streamId: Schema.Number, projectId: Schema.String });
-
-type EventsStream = typeof EventsStream.Type;
-
-function resumePath(projectId: string, held: HeldTranscript): string {
-  const from = held.transcript.resume?.from;
-
+function resumePath(projectId: string, from: number | undefined): string {
   return `${projectPath(projectId, "/events")}${from === undefined ? "" : `?from=${from}`}`;
 }
 
-function connection(
-  { streamId, projectId }: EventsStream,
-  held: HeldTranscript,
-): Stream.Stream<Message> {
+function connection({
+  streamId,
+  projectId,
+}: {
+  readonly streamId: number;
+  readonly projectId: string;
+}): Stream.Stream<Message, never, TranscriptService> {
   const opened = Effect.gen(function* () {
+    const held = yield* TranscriptResource.get.pipe(Effect.mapError(transportDetail));
+
     const controller = yield* Effect.acquireRelease(
       Effect.sync(() => new AbortController()),
       (owned) =>
@@ -42,7 +40,7 @@ function connection(
     );
 
     const response = yield* fetchEffect(
-      resumePath(projectId, held),
+      resumePath(projectId, held.transcript.resume?.from),
       { method: "GET", accept: "application/x-ndjson", maybeBody: Option.none() },
       controller.signal,
     );
@@ -78,9 +76,9 @@ function connection(
   );
 }
 
-export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+export const subscriptions = Subscription.make<Model, Message, TranscriptService>()((entry) => ({
   events: entry(
-    { maybeStream: Schema.Option(EventsStream) },
+    { maybeStream: MaybeTranscriptKey },
     {
       modelToDependencies: (model) => ({
         maybeStream: Option.map(model.maybeProjectId, (projectId) => ({
@@ -92,19 +90,7 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
         Option.match(maybeStream, {
           onNone: () => Stream.empty,
           onSome: (stream) =>
-            Stream.unwrap(
-              Effect.acquireRelease(
-                Effect.sync(() => openTranscript(stream.streamId, stream.projectId)),
-                () =>
-                  Effect.sync(() => {
-                    closeTranscript(stream.streamId);
-                  }),
-              ).pipe(
-                Effect.map((held) =>
-                  connection(stream, held).pipe(Stream.repeat(Schedule.spaced(RECONNECT_PAUSE))),
-                ),
-              ),
-            ),
+            connection(stream).pipe(Stream.repeat(Schedule.spaced(RECONNECT_PAUSE))),
         }),
     },
   ),
