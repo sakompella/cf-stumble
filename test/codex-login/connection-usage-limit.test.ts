@@ -3,10 +3,10 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import * as Effect from "effect/Effect";
 import {
-  type ChatGPTConnection,
-  ChatGPTCredentialStore,
-  chatgptTurn,
-} from "../../src/chatgpt/index.js";
+  type CodexLoginConnection,
+  CodexLoginCredentialStore,
+  codexLoginTurn,
+} from "../../src/codex-login/index.js";
 import {
   ACCESS_ONE,
   ACCESS_TWO,
@@ -23,8 +23,8 @@ afterEach(async () => {
 
 const noTokenServer = () => Promise.reject(new Error("no refresh is expected"));
 
-test("a usage limit with a reset time skips ChatGPT until then, and the view says so", async () => {
-  await withConnection("chatgpt-limit-until", noTokenServer, async (harness) => {
+test("a usage limit with a reset time skips Codex until then, and the view says so", async () => {
+  await withConnection("codex-login-limit-until", noTokenServer, async (harness) => {
     connected(harness);
     const { connection, clock } = harness;
     const reachedAt = clock.now;
@@ -46,8 +46,8 @@ test("a usage limit with a reset time skips ChatGPT until then, and the view say
   });
 });
 
-test("a usage limit without a reset time shows until ChatGPT is asked again", async () => {
-  await withConnection("chatgpt-limit-unknown", noTokenServer, async (harness) => {
+test("a usage limit without a reset time shows until Codex is asked again", async () => {
+  await withConnection("codex-login-limit-unknown", noTokenServer, async (harness) => {
     connected(harness);
     const { connection, clock } = harness;
 
@@ -63,7 +63,7 @@ test("a usage limit without a reset time shows until ChatGPT is asked again", as
 });
 
 test("a new sign-in and a disconnect forget a usage limit", async () => {
-  await withConnection("chatgpt-limit-forgotten", noTokenServer, (harness) => {
+  await withConnection("codex-login-limit-forgotten", noTokenServer, (harness) => {
     connected(harness);
     const { connection, clock } = harness;
 
@@ -79,7 +79,7 @@ test("a new sign-in and a disconnect forget a usage limit", async () => {
   });
 });
 
-function heldCall(connection: ChatGPTConnection) {
+function heldCall(connection: CodexLoginConnection) {
   const provider = heldReply();
   let markSent: (() => void) | undefined;
 
@@ -88,7 +88,7 @@ function heldCall(connection: ChatGPTConnection) {
   });
 
   const outcome = Effect.runPromise(
-    chatgptTurn(
+    codexLoginTurn(
       {
         credential: {
           access: (rejected) => access(connection, rejected),
@@ -109,7 +109,7 @@ function heldCall(connection: ChatGPTConnection) {
       { messages: [{ role: "user", content: "hi" }] },
     )(() => {}).pipe(
       Effect.as("answered"),
-      Effect.catchTag("ChatGPTUsageLimited", () => Effect.succeed("usage-limited")),
+      Effect.catchTag("CodexLoginUsageLimited", () => Effect.succeed("usage-limited")),
     ),
   );
 
@@ -117,7 +117,7 @@ function heldCall(connection: ChatGPTConnection) {
 }
 
 test("a usage limit an old call meets after a new sign-in does not pause the new account", async () => {
-  await withConnection("chatgpt-limit-stale", noTokenServer, async (harness) => {
+  await withConnection("codex-login-limit-stale", noTokenServer, async (harness) => {
     connected(harness);
     const { connection, store, clock } = harness;
     const call = heldCall(connection);
@@ -147,11 +147,11 @@ test("a usage limit an old call meets after a new sign-in does not pause the new
 });
 
 test("the Supervisor records a usage limit the route reports and shows it in the owner's view", async () => {
-  const supervisor = env.SUPERVISOR.getByName("chatgpt-limit-rpc");
+  const supervisor = env.SUPERVISOR.getByName("codex-login-limit-rpc");
   const limitedUntil = Date.now() + HOUR;
 
   await runInDurableObject(supervisor, (_instance, state) => {
-    new ChatGPTCredentialStore(state.storage).connect(
+    new CodexLoginCredentialStore(state.storage).connect(
       {
         accessToken: ACCESS_ONE,
         refreshToken: REFRESH_ONE,
@@ -162,19 +162,19 @@ test("the Supervisor records a usage limit the route reports and shows it in the
     );
   });
 
-  await supervisor.markChatGPTUsageLimited(ACCESS_ONE, limitedUntil);
+  await supervisor.markCodexLoginUsageLimited(ACCESS_ONE, limitedUntil);
 
-  await expect(supervisor.getChatGPTConnection()).resolves.toMatchObject({
+  await expect(supervisor.getCodexLoginConnection()).resolves.toMatchObject({
     connection: { state: "connected", usageLimit: { limitedUntil } },
   });
-  await expect(supervisor.chatgptAccess()).resolves.toEqual({
+  await expect(supervisor.codexLoginAccess()).resolves.toEqual({
     kind: "usage-limited",
     limitedUntil,
   });
 
-  await supervisor.markChatGPTUsageLimited(ACCESS_ONE, Number.NaN);
+  await supervisor.markCodexLoginUsageLimited(ACCESS_ONE, Number.NaN);
 
-  await expect(supervisor.getChatGPTConnection()).resolves.toMatchObject({
+  await expect(supervisor.getCodexLoginConnection()).resolves.toMatchObject({
     connection: { state: "connected", usageLimit: { limitedUntil: null } },
   });
 });

@@ -111,7 +111,7 @@ export const STATUS_PAYLOAD: JsonValue = {
   },
 };
 
-export const CHATGPT_PAYLOAD: JsonValue = {
+export const CODEX_LOGIN_PAYLOAD: JsonValue = {
   ok: true,
-  chatgpt: { connection: { state: "disconnected" }, login: null, model: "gpt-6.1-sol" },
+  codexLogin: { connection: { state: "disconnected" }, login: null, model: "gpt-6.1-sol" },
 };

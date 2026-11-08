@@ -65,12 +65,16 @@ const ANSWERS: readonly Step[] = [
   () => Message.SucceededGitHub({ github: { _tag: "Unknown" } }),
   () => Message.RejectedGitHub({ wording: "rejected: x" }),
   () => Message.FailedGitHub({ detail: "x" }),
-  () => Message.SucceededChatGPT({ chatgpt: CONNECTED_CHATGPT }),
+  () => Message.SucceededCodexLogin({ codexLogin: CONNECTED_CODEX_LOGIN }),
   () => Message.SucceededFetchProjects({ projects: PROJECTS }),
   () => Message.ClickedAuthorize({ path: "/api/github/authorization" }),
 ];
 
-const CONNECTED_CHATGPT = { connection: "connected", isConnected: true, maybeLogin: Option.none() };
+const CONNECTED_CODEX_LOGIN = {
+  connection: "connected",
+  isConnected: true,
+  maybeLogin: Option.none(),
+};
 
 function listedPage(): Model {
   return update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS })).model;

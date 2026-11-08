@@ -1,33 +1,33 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
-import { chatgptTurn, type ChatGPTCredential } from "../../src/chatgpt/index.js";
-import type { ProviderFetch } from "../../src/chatgpt/oauth.js";
+import { codexLoginTurn, type CodexLoginCredential } from "../../src/codex-login/index.js";
+import type { ProviderFetch } from "../../src/codex-login/oauth.js";
 import { modelEventStream, type ModelTurn } from "../../src/model-route-turn.js";
 import { PROMPTLY_MS, readFirstEvent, REQUEST, until } from "../stream-cancel-fixture.js";
 import { ACCESS_ONE, responsesEvent } from "./fixtures.js";
 
-const CONNECTED: ChatGPTCredential = {
+const CONNECTED: CodexLoginCredential = {
   access: () => Promise.resolve({ kind: "ready", accessToken: ACCESS_ONE }),
   markRefused: () => Promise.resolve(),
   markUsageLimited: () => Promise.resolve(),
 };
 
-function chatgptOnly(fetcher: ProviderFetch): ModelTurn {
-  const turn = chatgptTurn({ credential: CONNECTED, fetcher, model: "gpt-test" }, REQUEST);
+function codexLoginOnly(fetcher: ProviderFetch): ModelTurn {
+  const turn = codexLoginTurn({ credential: CONNECTED, fetcher, model: "gpt-test" }, REQUEST);
 
   return (emit) =>
     turn(emit).pipe(
-      Effect.catchTag(["ChatGPTNotConnected", "ChatGPTUsageLimited"], () =>
+      Effect.catchTag(["CodexLoginNotConnected", "CodexLoginUsageLimited"], () =>
         Effect.die(new Error("this test expects a connected credential with no usage limit")),
       ),
     );
 }
 
-test("cancelling the model stream before ChatGPT answers aborts the provider fetch", async () => {
+test("cancelling the model stream before Codex answers aborts the provider fetch", async () => {
   const seen = { aborted: false, asked: false };
 
   const stream = modelEventStream(
-    chatgptOnly(
+    codexLoginOnly(
       (_url, init) =>
         new Promise((_resolve, reject) => {
           seen.asked = true;
@@ -45,7 +45,7 @@ test("cancelling the model stream before ChatGPT answers aborts the provider fet
   expect(seen.aborted).toBe(true);
 });
 
-test("cancelling the model stream cancels a quiet ChatGPT response body", async () => {
+test("cancelling the model stream cancels a quiet Codex response body", async () => {
   const seen = { cancelled: false };
 
   const body = new ReadableStream<Uint8Array>({
@@ -62,7 +62,7 @@ test("cancelling the model stream cancels a quiet ChatGPT response body", async 
   });
 
   const reader = modelEventStream(
-    chatgptOnly(() =>
+    codexLoginOnly(() =>
       Promise.resolve(new Response(body, { headers: { "content-type": "text/event-stream" } })),
     ),
   ).getReader();

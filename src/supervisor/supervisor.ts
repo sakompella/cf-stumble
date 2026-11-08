@@ -152,36 +152,36 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return runAtEntryPoint(this.#parts.github.completeAuthorization(now));
   }
 
-  getChatGPTConnection() {
-    return this.#parts.chatgpt.view();
+  getCodexLoginConnection() {
+    return this.#parts.codexLogin.view();
   }
 
-  startChatGPTLogin() {
-    return runAtEntryPoint(this.#parts.chatgpt.startLogin());
+  startCodexLogin() {
+    return runAtEntryPoint(this.#parts.codexLogin.startLogin());
   }
 
-  completeChatGPTLogin(attemptId: string, callbackUrl: string) {
-    return runAtEntryPoint(this.#parts.chatgpt.completeLogin(attemptId, callbackUrl));
+  completeCodexLogin(attemptId: string, callbackUrl: string) {
+    return runAtEntryPoint(this.#parts.codexLogin.completeLogin(attemptId, callbackUrl));
   }
 
-  disconnectChatGPT() {
-    return this.#parts.chatgpt.disconnect();
+  disconnectCodexLogin() {
+    return this.#parts.codexLogin.disconnect();
   }
 
   admitModelTurn(instance: number): boolean {
     return this.#parts.serving.admitModelTurn(instance);
   }
 
-  chatgptAccess(rejected?: string) {
-    return runAtEntryPoint(this.#parts.chatgpt.access(rejected));
+  codexLoginAccess(rejected?: string) {
+    return runAtEntryPoint(this.#parts.codexLogin.access(rejected));
   }
 
-  markChatGPTRefused(accessToken: string): void {
-    this.#parts.chatgpt.markRefused(accessToken);
+  markCodexLoginRefused(accessToken: string): void {
+    this.#parts.codexLogin.markRefused(accessToken);
   }
 
-  markChatGPTUsageLimited(accessToken: string, limitedUntil: number | null): void {
-    this.#parts.chatgpt.markUsageLimited(
+  markCodexLoginUsageLimited(accessToken: string, limitedUntil: number | null): void {
+    this.#parts.codexLogin.markUsageLimited(
       accessToken,
       limitedUntil !== null && Number.isFinite(limitedUntil) ? limitedUntil : null,
     );

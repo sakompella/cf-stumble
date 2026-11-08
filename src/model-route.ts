@@ -2,7 +2,11 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { GENERATION_REPLACED } from "./generation-replaced.js";
-import { chatgptTurn, type ChatGPTAccess, type ChatGPTCredential } from "./chatgpt/index.js";
+import {
+  codexLoginTurn,
+  type CodexLoginAccess,
+  type CodexLoginCredential,
+} from "./codex-login/index.js";
 import { parseRequest, type RouteWire, type ValidationFailure } from "./model-route-request.js";
 import { workersAiTurn } from "./model-route-stream.js";
 import type { WorkersAiBinding } from "./model-route-events.js";
@@ -21,9 +25,9 @@ export type { ModelStreamEvent, ModelUsage, ToolCallDelta } from "./model-route-
 type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{
     admitModelTurn(instance: number): Promise<boolean>;
-    chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
-    markChatGPTRefused(accessToken: string): Promise<void>;
-    markChatGPTUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
+    codexLoginAccess(rejected?: string): Promise<CodexLoginAccess>;
+    markCodexLoginRefused(accessToken: string): Promise<void>;
+    markCodexLoginUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
   }>;
 }>;
 
@@ -52,9 +56,9 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
       validated,
     );
 
-    const chatgpt = chatgptTurn(
+    const codexLogin = codexLoginTurn(
       {
-        credential: chatgptCredential(holder),
+        credential: codexLoginCredential(holder),
         fetcher: (url, init) => fetch(url, init),
         model: this.env.CHATGPT_MODEL,
       },
@@ -62,10 +66,10 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
     );
 
     const turn: ModelTurn = (emit) =>
-      chatgpt(emit).pipe(
+      codexLogin(emit).pipe(
         Effect.catchTags({
-          ChatGPTNotConnected: () => workersAi(emit),
-          ChatGPTUsageLimited: ({ limitedUntil }) => {
+          CodexLoginNotConnected: () => workersAi(emit),
+          CodexLoginUsageLimited: ({ limitedUntil }) => {
             emit({ type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil });
 
             return workersAi(emit);
@@ -77,11 +81,13 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
   }
 }
 
-function chatgptCredential(holder: ReturnType<CredentialHolders["getByName"]>): ChatGPTCredential {
+function codexLoginCredential(
+  holder: ReturnType<CredentialHolders["getByName"]>,
+): CodexLoginCredential {
   return {
-    access: (rejected) => holder.chatgptAccess(rejected),
-    markRefused: (accessToken) => holder.markChatGPTRefused(accessToken),
+    access: (rejected) => holder.codexLoginAccess(rejected),
+    markRefused: (accessToken) => holder.markCodexLoginRefused(accessToken),
     markUsageLimited: (accessToken, limitedUntil) =>
-      holder.markChatGPTUsageLimited(accessToken, limitedUntil),
+      holder.markCodexLoginUsageLimited(accessToken, limitedUntil),
   };
 }

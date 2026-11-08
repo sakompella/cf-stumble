@@ -1,5 +1,11 @@
 import * as Option from "effect/Option";
-import { AbortRun, FetchChatGPT, MintRequestId, ReplaceThread, SendMessage } from "./commands.js";
+import {
+  AbortRun,
+  FetchCodexLogin,
+  MintRequestId,
+  ReplaceThread,
+  SendMessage,
+} from "./commands.js";
 import { EMPTY_CONVERSATION, newestEntryId, type Conversation } from "./conversation.js";
 import type { Model } from "./model.js";
 import { unseenOutbox, type OutboxItem } from "./outbox.js";
@@ -98,7 +104,7 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
       outbox: settledOutbox(model, conversation),
       runNote: Option.getOrElse(note, () => model.runNote),
     },
-    commands: ended && model.chatgpt.isConnected ? [FetchChatGPT()] : [],
+    commands: ended && model.codexLogin.isConnected ? [FetchCodexLogin()] : [],
   };
 }
 

@@ -2,7 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
-import { parseCallback, parseTokenGrant } from "../../src/chatgpt/oauth.js";
+import { parseCallback, parseTokenGrant } from "../../src/codex-login/oauth.js";
 
 const REDIRECT_URI = "http://127.0.0.1:1455/auth/callback";
 

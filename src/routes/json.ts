@@ -10,7 +10,7 @@ type ApiErrorCode =
   | "invalid-message-request"
   | "invalid-events-request"
   | "invalid-entries-request"
-  | "invalid-chatgpt-request"
+  | "invalid-codex-login-request"
   | "invalid-backend-request"
   | "cross-origin-request"
   | "not-found"

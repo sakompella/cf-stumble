@@ -1,13 +1,13 @@
-import type { ChatGPTAccess, ChatGPTCredential } from "../../src/chatgpt/index.js";
-import type { ProviderFetch } from "../../src/chatgpt/oauth.js";
+import type { CodexLoginAccess, CodexLoginCredential } from "../../src/codex-login/index.js";
+import type { ProviderFetch } from "../../src/codex-login/oauth.js";
 
-export const ACCESS_ONE = "chatgpt-access-FAKE-one-0123456789abcdef";
+export const ACCESS_ONE = "codex-login-access-FAKE-one-0123456789abcdef";
 
-export const ACCESS_TWO = "chatgpt-access-FAKE-two-0123456789abcdef";
+export const ACCESS_TWO = "codex-login-access-FAKE-two-0123456789abcdef";
 
-export const REFRESH_ONE = "chatgpt-refresh-FAKE-one-0123456789abcdef";
+export const REFRESH_ONE = "codex-login-refresh-FAKE-one-0123456789abcdef";
 
-export const REFRESH_TWO = "chatgpt-refresh-FAKE-two-0123456789abcdef";
+export const REFRESH_TWO = "codex-login-refresh-FAKE-two-0123456789abcdef";
 
 export const CLIENT_ID = "oaiapp_FAKEclient";
 
@@ -98,15 +98,15 @@ export const COMPLETED = responsesEvent({
   response: { usage: { input_tokens: 12, output_tokens: 3 } },
 });
 
-export const ready = (accessToken: string): ChatGPTAccess => ({ kind: "ready", accessToken });
+export const ready = (accessToken: string): CodexLoginAccess => ({ kind: "ready", accessToken });
 
-export type FakeCredential = ChatGPTCredential & {
+export type FakeCredential = CodexLoginCredential & {
   readonly asked: (string | undefined)[];
   readonly refused: string[];
   readonly limited: (readonly [accessToken: string, limitedUntil: number | null])[];
 };
 
-export function fakeCredential(answers: readonly ChatGPTAccess[]): FakeCredential {
+export function fakeCredential(answers: readonly CodexLoginAccess[]): FakeCredential {
   const asked: (string | undefined)[] = [];
   const refused: string[] = [];
   const limited: FakeCredential["limited"] = [];

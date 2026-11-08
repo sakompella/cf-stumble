@@ -1,7 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { ResponsesStreamReader } from "../../src/chatgpt/responses.js";
+import { ResponsesStreamReader } from "../../src/codex-login/responses.js";
 import { ProviderStreamAccumulator } from "../../src/model-route-stream.js";
 
 function streamed(events: readonly object[]) {

@@ -13,7 +13,7 @@
   "include": ["files", "exports", "types", "nsExports", "nsTypes", "duplicates"],
   "ignoreIssues": {
     "tools/**": ["files", "exports", "types", "nsExports", "nsTypes", "duplicates"],
-    "src/chatgpt/oauth.ts": ["exports"],
+    "src/codex-login/oauth.ts": ["exports"],
     "src/github/redaction.ts": ["exports"],
     "src/github/repository-size-guard.ts": ["exports"],
     "src/harness-build.ts": ["exports"],

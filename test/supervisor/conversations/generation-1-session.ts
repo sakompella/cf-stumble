@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { ChatGPTCredentialStore } from "../../../src/chatgpt/index.js";
+import { CodexLoginCredentialStore } from "../../../src/codex-login/index.js";
 import type { SupervisorWorkspaceHost } from "../../../src/supervisor/supervisor-env.js";
 import type { Entry } from "../../../src/page/client/pi-message.js";
 import { builtGeneration } from "../../facet/generation-1/built-module-map.js";
@@ -34,10 +34,10 @@ export async function servingGeneration1(
   const control = await connectedSupervisor(name);
 
   await runInDurableObject(control, (_instance, state) => {
-    new ChatGPTCredentialStore(state.storage).connect(
+    new CodexLoginCredentialStore(state.storage).connect(
       {
-        accessToken: "chatgpt-access-FAKE-generation-1",
-        refreshToken: "chatgpt-refresh-FAKE-generation-1",
+        accessToken: "codex-login-access-FAKE-generation-1",
+        refreshToken: "codex-login-refresh-FAKE-generation-1",
         expiresAt: Date.now() + 3_600_000,
         clientId: "oaiapp_FAKEclient",
       },

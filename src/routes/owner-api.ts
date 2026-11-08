@@ -9,7 +9,7 @@ import {
   type GenerationControlSupervisor,
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
-import { routeChatGPTApiRequest, type ChatGPTApiSupervisor } from "./chatgpt.js";
+import { routeCodexLoginApiRequest, type CodexLoginApiSupervisor } from "./codex-login.js";
 import { callSupervisor, jsonError, SupervisorCallFailed } from "./json.js";
 import { routePattern } from "./route-pattern.js";
 import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
@@ -26,7 +26,7 @@ type WorkspaceResetResult =
       problem: Readonly<{ code: "run-active" | "workspace-busy" }>;
     }>;
 
-export type OwnerApiSupervisor = ChatGPTApiSupervisor &
+export type OwnerApiSupervisor = CodexLoginApiSupervisor &
   GenerationStatusSupervisor &
   GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
@@ -87,10 +87,10 @@ function ownerApiRoute(
     return backendRoute;
   }
 
-  const chatgptRoute = routeChatGPTApiRequest(request, supervisor);
+  const codexLoginRoute = routeCodexLoginApiRequest(request, supervisor);
 
-  if (chatgptRoute !== undefined) {
-    return chatgptRoute;
+  if (codexLoginRoute !== undefined) {
+    return codexLoginRoute;
   }
 
   const isGet = request.method === "GET";

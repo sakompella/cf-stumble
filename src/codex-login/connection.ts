@@ -12,14 +12,14 @@ import {
   type ProviderFetch,
   type TokenFailure,
 } from "./oauth.js";
-import type { ChatGPTCredentialStore, StoredConnection } from "./credential-store.js";
+import type { CodexLoginCredentialStore, StoredConnection } from "./credential-store.js";
 import type {
-  ChatGPTAccess,
-  ChatGPTConnectionStatus,
-  ChatGPTConnectionView,
-  ChatGPTLoginFailure,
-  ChatGPTLoginOutcome,
-  ChatGPTUsageLimit,
+  CodexLoginAccess,
+  CodexLoginConnectionStatus,
+  CodexLoginConnectionView,
+  CodexLoginFailure,
+  CodexLoginOutcome,
+  CodexLoginUsageLimit,
 } from "./connection-view.js";
 
 const LOGIN_TTL_MS = 10 * 60 * 1000;
@@ -28,7 +28,7 @@ const REFRESH_WINDOW_MS = 8 * 60 * 1000;
 
 type ConnectedCredential = Extract<StoredConnection, { state: "connected" }>;
 
-function loginFailure(failure: TokenFailure): ChatGPTLoginFailure {
+function loginFailure(failure: TokenFailure): CodexLoginFailure {
   switch (failure) {
     case "rate-limited":
     case "temporary":
@@ -46,35 +46,35 @@ function loginFailure(failure: TokenFailure): ChatGPTLoginFailure {
   }
 }
 
-export type ChatGPTConnectionInput = Readonly<{
-  store: ChatGPTCredentialStore;
+export type CodexLoginConnectionInput = Readonly<{
+  store: CodexLoginCredentialStore;
   fetcher: ProviderFetch;
   model: string;
   clock: () => number;
 }>;
 
-export class ChatGPTConnection {
-  private readonly store: ChatGPTCredentialStore;
+export class CodexLoginConnection {
+  private readonly store: CodexLoginCredentialStore;
   private readonly fetcher: ProviderFetch;
   private readonly model: string;
   private readonly clock: () => number;
-  private refreshing: Deferred.Deferred<ChatGPTAccess> | undefined;
+  private refreshing: Deferred.Deferred<CodexLoginAccess> | undefined;
   private exchanging: string | undefined;
 
-  constructor(input: ChatGPTConnectionInput) {
+  constructor(input: CodexLoginConnectionInput) {
     this.store = input.store;
     this.fetcher = input.fetcher;
     this.model = input.model;
     this.clock = input.clock;
   }
 
-  view(): ChatGPTConnectionView {
+  view(): CodexLoginConnectionView {
     const stored = this.store.connection();
     const login = this.store.login();
 
     const usageLimit = this.currentUsageLimit();
 
-    const connection: ChatGPTConnectionStatus =
+    const connection: CodexLoginConnectionStatus =
       stored === undefined
         ? { state: "disconnected" }
         : stored.state === "needs-reconnect"
@@ -97,7 +97,7 @@ export class ChatGPTConnection {
     };
   }
 
-  startLogin(): Effect.Effect<ChatGPTConnectionView> {
+  startLogin(): Effect.Effect<CodexLoginConnectionView> {
     const state = randomSecret();
     const verifier = randomSecret();
 
@@ -117,11 +117,11 @@ export class ChatGPTConnection {
     );
   }
 
-  completeLogin(attemptId: string, callbackUrl: string): Effect.Effect<ChatGPTLoginOutcome> {
+  completeLogin(attemptId: string, callbackUrl: string): Effect.Effect<CodexLoginOutcome> {
     return Effect.gen({ self: this }, function* () {
       const outcome = yield* this.redeem(attemptId, callbackUrl);
 
-      logEvent(outcome.ok ? "info" : "warn", "chatgpt.login.complete", {
+      logEvent(outcome.ok ? "info" : "warn", "codex-login.login.complete", {
         outcome: outcome.ok ? "connected" : outcome.problem.code,
       });
 
@@ -129,14 +129,14 @@ export class ChatGPTConnection {
     });
   }
 
-  disconnect(): ChatGPTConnectionView {
+  disconnect(): CodexLoginConnectionView {
     this.exchanging = undefined;
     this.store.disconnect();
 
     return this.view();
   }
 
-  access(rejected?: string): Effect.Effect<ChatGPTAccess> {
+  access(rejected?: string): Effect.Effect<CodexLoginAccess> {
     return Effect.suspend(() => {
       if (this.refreshing !== undefined) return Deferred.await(this.refreshing);
 
@@ -168,14 +168,14 @@ export class ChatGPTConnection {
 
   markRefused(accessToken: string): void {
     this.store.markNeedsReconnect(accessToken, "provider-refused", this.clock());
-    logEvent("error", "chatgpt.provider-refused");
+    logEvent("error", "codex-login.provider-refused");
   }
 
   markUsageLimited(accessToken: string, limitedUntil: number | null): void {
     this.store.markUsageLimited(accessToken, { reachedAt: this.clock(), limitedUntil });
   }
 
-  private currentUsageLimit(): ChatGPTUsageLimit | undefined {
+  private currentUsageLimit(): CodexLoginUsageLimit | undefined {
     const limit = this.store.usageLimit();
 
     if (limit === undefined || limit.limitedUntil === null) return limit;
@@ -183,9 +183,9 @@ export class ChatGPTConnection {
     return limit.limitedUntil > this.clock() ? limit : undefined;
   }
 
-  private redeem(attemptId: string, callbackUrl: string): Effect.Effect<ChatGPTLoginOutcome> {
-    const refused = (code: ChatGPTLoginFailure) =>
-      Effect.sync(() => ({ ok: false, problem: { code }, chatgpt: this.view() }) as const);
+  private redeem(attemptId: string, callbackUrl: string): Effect.Effect<CodexLoginOutcome> {
+    const refused = (code: CodexLoginFailure) =>
+      Effect.sync(() => ({ ok: false, problem: { code }, codexLogin: this.view() }) as const);
 
     return Effect.suspend(() => {
       const login = this.store.login();
@@ -207,7 +207,7 @@ export class ChatGPTConnection {
       return requestTokens(this.fetcher, exchangeFields(callback.success, login.verifier)).pipe(
         Effect.matchEffect({
           onFailure: ({ failure }) => refused(loginFailure(failure)),
-          onSuccess: (grant): Effect.Effect<ChatGPTLoginOutcome> => {
+          onSuccess: (grant): Effect.Effect<CodexLoginOutcome> => {
             if (this.exchanging !== attemptId) return refused("no-sign-in");
             this.exchanging = undefined;
 
@@ -222,7 +222,7 @@ export class ChatGPTConnection {
                 this.clock(),
               );
 
-              return { ok: true, chatgpt: this.view() } as const;
+              return { ok: true, codexLogin: this.view() } as const;
             });
           },
         }),
@@ -230,8 +230,11 @@ export class ChatGPTConnection {
     });
   }
 
-  private refreshOnce(stored: ConnectedCredential, forced: boolean): Effect.Effect<ChatGPTAccess> {
-    const shared = Deferred.makeUnsafe<ChatGPTAccess>();
+  private refreshOnce(
+    stored: ConnectedCredential,
+    forced: boolean,
+  ): Effect.Effect<CodexLoginAccess> {
+    const shared = Deferred.makeUnsafe<CodexLoginAccess>();
     this.refreshing = shared;
 
     return this.refresh(stored, forced).pipe(
@@ -245,11 +248,11 @@ export class ChatGPTConnection {
     );
   }
 
-  private refresh(stored: ConnectedCredential, forced: boolean): Effect.Effect<ChatGPTAccess> {
+  private refresh(stored: ConnectedCredential, forced: boolean): Effect.Effect<CodexLoginAccess> {
     return requestTokens(this.fetcher, refreshFields(stored.clientId, stored.refreshToken)).pipe(
       Effect.match({
-        onFailure: ({ failure }): ChatGPTAccess => {
-          logEvent(failure === "rejected" ? "error" : "warn", "chatgpt.refresh", {
+        onFailure: ({ failure }): CodexLoginAccess => {
+          logEvent(failure === "rejected" ? "error" : "warn", "codex-login.refresh", {
             outcome: failure,
           });
 
@@ -273,7 +276,7 @@ export class ChatGPTConnection {
             ? { kind: "ready", accessToken: stored.accessToken }
             : { kind: "unavailable" };
         },
-        onSuccess: (grant): ChatGPTAccess => {
+        onSuccess: (grant): CodexLoginAccess => {
           const now = this.clock();
 
           const replaced = this.store.replaceRefreshed(
@@ -292,7 +295,7 @@ export class ChatGPTConnection {
     );
   }
 
-  private storedAccess(): ChatGPTAccess {
+  private storedAccess(): CodexLoginAccess {
     const stored = this.store.connection();
 
     if (stored === undefined) return { kind: "not-connected" };
