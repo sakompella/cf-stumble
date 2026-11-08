@@ -7,6 +7,7 @@ import { subscriptions } from "../../../src/page/client/events-stream.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { openedTranscript } from "./transcript-resource.js";
 import { received, running, viewing } from "./views.js";
 
 const PROJECTS = [
@@ -113,7 +114,7 @@ test("stopping the stream aborts its request and cancels the response body", asy
   const dependencies = events.modelToDependencies(listedPage());
 
   const first = await Effect.runPromise(
-    events.dependenciesToStream(dependencies).pipe(Stream.runHead),
+    openedTranscript().provide(events.dependenciesToStream(dependencies).pipe(Stream.runHead)),
   );
 
   expect(Option.map(first, (message) => message._tag)).toEqual(Option.some("ReceivedConversation"));
@@ -134,7 +135,9 @@ test("the page reads past blank lines, and reconnects when the stream ends", asy
   const dependencies = events.modelToDependencies(listedPage());
 
   const messages = await Effect.runPromise(
-    Stream.runCollect(events.dependenciesToStream(dependencies).pipe(Stream.take(4))),
+    openedTranscript().provide(
+      Stream.runCollect(events.dependenciesToStream(dependencies).pipe(Stream.take(4))),
+    ),
   );
 
   expect([...messages].map((message) => message._tag)).toEqual([
@@ -173,7 +176,9 @@ test("a stream that falls silent for ten seconds is dropped and opened again", a
   const dependencies = events.modelToDependencies(listedPage());
 
   const messages = Effect.runPromise(
-    Stream.runCollect(events.dependenciesToStream(dependencies).pipe(Stream.take(3))),
+    openedTranscript().provide(
+      Stream.runCollect(events.dependenciesToStream(dependencies).pipe(Stream.take(3))),
+    ),
   );
 
   await oneTimerArmed();
@@ -201,7 +206,7 @@ test("a refused stream says why, and a line it cannot read is reported", async (
   const dependencies = events.modelToDependencies(listedPage());
 
   const refused = await Effect.runPromise(
-    events.dependenciesToStream(dependencies).pipe(Stream.runHead),
+    openedTranscript().provide(events.dependenciesToStream(dependencies).pipe(Stream.runHead)),
   );
 
   expect(refused).toEqual(
@@ -211,7 +216,9 @@ test("a refused stream says why, and a line it cannot read is reported", async (
   vi.stubGlobal("fetch", () => ndjson('{"type":"message_end","entry":3}\nnot json\n'));
 
   const unreadable = await Effect.runPromise(
-    Stream.runCollect(events.dependenciesToStream(dependencies).pipe(Stream.take(2))),
+    openedTranscript().provide(
+      Stream.runCollect(events.dependenciesToStream(dependencies).pipe(Stream.take(2))),
+    ),
   );
 
   expect([...unreadable].map((message) => message._tag)).toEqual([

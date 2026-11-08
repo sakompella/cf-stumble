@@ -1,14 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  loadIntoTranscript,
-  openTranscript,
-  viewReader,
-} from "../../../src/page/client/transcript-store.js";
+import { loadIntoTranscript, viewReader } from "../../../src/page/client/transcript-store.js";
 import type { Conversation } from "../../../src/page/client/conversation.js";
 import { Message } from "../../../src/page/client/message.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { openedTranscript } from "./transcript-resource.js";
 import { received, viewing } from "./views.js";
 
 afterEach(() => {
@@ -42,11 +39,11 @@ test("earlier messages load from the entries page the Worker sends", async () =>
     Promise.resolve(Response.json({ items: [entry(9), entry(8)], next: { after: 8 } })),
   );
 
-  const held = openTranscript(10, "repo");
+  const { held, provide } = openedTranscript();
 
   viewReader(held)(viewLine(1, [entry(10)], 9));
 
-  const loaded = Option.getOrUndefined(await Effect.runPromise(loadIntoTranscript(10)));
+  const loaded = Option.getOrUndefined(await Effect.runPromise(provide(loadIntoTranscript())));
 
   expect(loaded?.items.map((item) => (item.kind === "entry" ? item.entry.id : item.kind))).toEqual([
     "earlier",
@@ -67,11 +64,11 @@ test("a tab whose conversation was replaced starts its transcript over, and a la
       }),
   );
 
-  const held = openTranscript(11, "repo");
+  const { held, provide } = openedTranscript();
 
   expect(ids(viewReader(held)(viewLine(1, [entry(10)], 9)))).toEqual([10]);
 
-  const loading = Effect.runPromise(loadIntoTranscript(11));
+  const loading = Effect.runPromise(provide(loadIntoTranscript()));
 
   await vi.waitFor(() => {
     expect(answer).toBeDefined();

@@ -8,12 +8,20 @@ import {
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import { ManagedResource } from "foldkit";
 import { answerOf, fetchEffect, field, projectPath, transportDetail } from "./api.js";
+import { Message } from "./message.js";
+import type { Model } from "./model.js";
 import { heldTranscript, type HeldTranscript } from "./view-reader.js";
 
 export { viewReader, type HeldTranscript } from "./view-reader.js";
 
-const held = new Map<number, HeldTranscript>();
+export const TranscriptKey = Schema.Struct({ streamId: Schema.Number, projectId: Schema.String });
+
+export const TranscriptResource = ManagedResource.tag<HeldTranscript>()("Transcript");
+
+export type TranscriptService = ManagedResource.ServiceOf<typeof TranscriptResource>;
 
 function isEntryRecord(value: unknown): value is EntryRecord {
   return (
@@ -63,30 +71,26 @@ function loaderFor(projectId: string): EntryLoader {
     );
 }
 
-export function openTranscript(streamId: number, projectId: string): HeldTranscript {
-  const existing = held.get(streamId);
+export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
+  transcript: entry(Schema.Option(TranscriptKey), {
+    resource: TranscriptResource,
+    modelToMaybeRequirements: (model) =>
+      Option.map(model.maybeProjectId, (projectId) => ({
+        streamId: model.eventsStreamId,
+        projectId,
+      })),
+    acquire: ({ projectId }) => Effect.sync(() => heldTranscript(loaderFor(projectId))),
+    release: () => Effect.void,
+    onAcquired: () => Message.SettledTranscript(),
+    onReleased: () => Message.SettledTranscript(),
+    onAcquireError: () => Message.SettledTranscript(),
+  }),
+}));
 
-  if (existing !== undefined) return existing;
-
-  const opened = heldTranscript(loaderFor(projectId));
-
-  held.set(streamId, opened);
-
-  return opened;
-}
-
-export function closeTranscript(streamId: number): void {
-  held.delete(streamId);
-}
-
-export function loadIntoTranscript(
-  streamId: number,
-  itemIndex?: number,
+function loadInto(
+  current: HeldTranscript,
+  itemIndex: number | undefined,
 ): Effect.Effect<Option.Option<TranscriptView>, string> {
-  const current = held.get(streamId);
-
-  if (current === undefined) return Effect.succeed(Option.none());
-
   const gap = itemIndex === undefined ? undefined : current.latest?.items[itemIndex];
 
   const { transcript } = current;
@@ -105,5 +109,14 @@ export function loadIntoTranscript(
 
       return Option.some(loaded);
     }),
+  );
+}
+
+export function loadIntoTranscript(
+  itemIndex?: number,
+): Effect.Effect<Option.Option<TranscriptView>, string, TranscriptService> {
+  return TranscriptResource.get.pipe(
+    Effect.flatMap((current) => loadInto(current, itemIndex)),
+    Effect.catchTag("ResourceNotAvailable", () => Effect.succeed(Option.none())),
   );
 }

@@ -8,19 +8,16 @@ import { answerOf, fetchEffect, problemText, projectPath, transportDetail } from
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
 import {
-  closeTranscript,
-  openTranscript,
+  TranscriptKey,
+  TranscriptResource,
   viewReader,
   type HeldTranscript,
+  type TranscriptService,
 } from "./transcript-store.js";
 
 const RECONNECT_PAUSE = "1 second";
 
 const STALL_TIMEOUT = "10 seconds";
-
-const EventsStream = Schema.Struct({ streamId: Schema.Number, projectId: Schema.String });
-
-type EventsStream = typeof EventsStream.Type;
 
 function resumePath(projectId: string, held: HeldTranscript): string {
   const from = held.transcript.resume?.from;
@@ -28,11 +25,13 @@ function resumePath(projectId: string, held: HeldTranscript): string {
   return `${projectPath(projectId, "/events")}${from === undefined ? "" : `?from=${from}`}`;
 }
 
-function connection(
-  { streamId, projectId }: EventsStream,
-  held: HeldTranscript,
-): Stream.Stream<Message> {
+function connection({
+  streamId,
+  projectId,
+}: typeof TranscriptKey.Type): Stream.Stream<Message, never, TranscriptService> {
   const opened = Effect.gen(function* () {
+    const held = yield* TranscriptResource.get.pipe(Effect.mapError(transportDetail));
+
     const controller = yield* Effect.acquireRelease(
       Effect.sync(() => new AbortController()),
       (owned) =>
@@ -78,9 +77,9 @@ function connection(
   );
 }
 
-export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+export const subscriptions = Subscription.make<Model, Message, TranscriptService>()((entry) => ({
   events: entry(
-    { maybeStream: Schema.Option(EventsStream) },
+    { maybeStream: Schema.Option(TranscriptKey) },
     {
       modelToDependencies: (model) => ({
         maybeStream: Option.map(model.maybeProjectId, (projectId) => ({
@@ -92,19 +91,7 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
         Option.match(maybeStream, {
           onNone: () => Stream.empty,
           onSome: (stream) =>
-            Stream.unwrap(
-              Effect.acquireRelease(
-                Effect.sync(() => openTranscript(stream.streamId, stream.projectId)),
-                () =>
-                  Effect.sync(() => {
-                    closeTranscript(stream.streamId);
-                  }),
-              ).pipe(
-                Effect.map((held) =>
-                  connection(stream, held).pipe(Stream.repeat(Schedule.spaced(RECONNECT_PAUSE))),
-                ),
-              ),
-            ),
+            connection(stream).pipe(Stream.repeat(Schedule.spaced(RECONNECT_PAUSE))),
         }),
     },
   ),
