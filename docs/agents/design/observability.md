@@ -56,7 +56,7 @@ the question from the platform's records; name it `area.thing` and add it to the
 
 Plain `logRedactedCause` lines cover the rest, for example `workspace.idle-alarm: not armed`,
 `workspace.idle-stop: container not stopped`, and `<surface>: sync-incomplete` when a clone or
-removal did not reach the durable store (`src/workspace/executor.ts`). Container exits and restarts
+removal did not reach the durable store (`src/workspace/commands/command-result.ts`). Container exits and restarts
 appear only in Computer's own log lines and in the container metrics.
 
 ## Querying

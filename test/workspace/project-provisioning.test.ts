@@ -5,7 +5,7 @@ import type { WorkspaceCommandResult } from "../../src/workspace/index.js";
 import {
   parseProjectProvisionRequest,
   type ProjectProvisionRequest,
-} from "../../src/workspace/project-provision.js";
+} from "../../src/workspace/commands/provision-project.js";
 import { ProvisionUnavailable } from "../../src/workspace/provisioning.js";
 import { provisionerFor, ScriptedProvisionHost, TENANT_WORKSPACE } from "./provisioning-fakes.js";
 

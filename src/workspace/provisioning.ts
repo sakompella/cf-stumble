@@ -7,10 +7,10 @@ import type { Project, ProjectId } from "../project-catalog.js";
 import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import type {
   InstructionsWriteResult,
+  ProjectProvisionRequest,
   WorkspaceCommandResult,
   WorkspaceFailure,
-} from "./decisions.js";
-import type { ProjectProvisionRequest } from "./project-provision.js";
+} from "./commands/index.js";
 import { provisionInWorkspace } from "./provision-exclusion.js";
 
 export class ProvisionFailed extends Data.TaggedError("ProvisionFailed")<{

@@ -1,9 +1,11 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
-import { type CommandOutput } from "../../src/workspace/executor.js";
-import { MANAGED_AGENT_INSTRUCTIONS } from "../../src/project-provision.js";
+import { type CommandOutput } from "../../src/workspace/operations.js";
+import {
+  MANAGED_AGENT_INSTRUCTIONS,
+  ensureManagedInstructions,
+} from "../../src/workspace/managed-instructions.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
-import { ensureManagedInstructions } from "../../src/workspace/managed-instructions.js";
 import {
   workspaceEffects,
   type PromiseOperations,

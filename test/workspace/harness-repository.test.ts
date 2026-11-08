@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { harnessBuildConfiguration, HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
+import { harnessBuildConfiguration } from "../../src/workspace/commands/build-harness.js";
+import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 
 test("a deployment builds from the repository its variable names", () => {
   const forked = harnessBuildConfiguration("https://github.com/somebody/cf-stumble.git");

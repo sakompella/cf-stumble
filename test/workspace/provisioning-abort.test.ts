@@ -11,7 +11,7 @@ import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js
 import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
-} from "../../src/workspace/decisions.js";
+} from "../../src/workspace/commands/command-result.js";
 import { runToResult } from "./workspace-results.js";
 
 class AbortAwareHost implements ProvisionWorkspaceHost {

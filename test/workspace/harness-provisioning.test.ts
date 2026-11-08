@@ -14,7 +14,7 @@ import {
 import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
-} from "../../src/workspace/decisions.js";
+} from "../../src/workspace/commands/command-result.js";
 import { runToResult } from "./workspace-results.js";
 
 const parsedHarnessCommit = parseHarnessCommit("5000000000000000000000000000000000000003");

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
-import { projectCloneSource } from "../../src/project-provision.js";
+import { projectCloneSource } from "../../src/workspace/commands/provision-project.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import {
   FLOCK_STAND_IN,

@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { HARNESS_BUILD_CONFIGURATION, type HarnessBuildRequest } from "../../src/harness-build.js";
-import { executeHarnessBuildRequest } from "../../src/workspace/executor.js";
+import { executeHarnessBuildRequest } from "../../src/workspace/commands/build-harness.js";
 import {
   workspaceEffects,
   type PromiseOperations,

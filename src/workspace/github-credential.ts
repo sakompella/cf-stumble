@@ -13,9 +13,9 @@ import {
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { WORKSPACE_SHORT_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import { runPlannedCommand } from "./executor.js";
 import {
   answerFailures,
+  runPlannedCommand,
   WorkspaceSyncIncomplete,
   type CommandOutput,
   type WorkspaceEffects,

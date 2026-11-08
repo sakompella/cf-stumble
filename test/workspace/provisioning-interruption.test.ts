@@ -9,7 +9,7 @@ import {
   type ProvisionWorkspaceHost,
 } from "../../src/workspace/provisioning.js";
 import { waitForWorkspaceProvision } from "../../src/workspace/provision-exclusion.js";
-import type { WorkspaceCommandResult } from "../../src/workspace/decisions.js";
+import type { WorkspaceCommandResult } from "../../src/workspace/commands/command-result.js";
 
 const tick = () =>
   new Promise<void>((resolve) => {

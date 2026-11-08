@@ -1,14 +1,15 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
-import { executeProjectRemovalRequest } from "../../src/workspace/executor.js";
 import {
+  executeProjectRemovalRequest,
   parseProjectRemovalRequest,
   planProjectRemovalRequest,
   type ProjectRemovalRequest,
-} from "../../src/workspace/project-removal.js";
+} from "../../src/workspace/commands/remove-project.js";
 import { projectDirectory } from "../../src/workspace-layout.js";
-import { holdProvisionLock, projectProvisionLockPath } from "../../src/project-provision.js";
+import { holdProvisionLock } from "../../src/workspace/commands/clone-script.js";
+import { projectProvisionLockPath } from "../../src/workspace/commands/provision-project.js";
 import { shellQuote } from "../../src/shell-quote.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import {

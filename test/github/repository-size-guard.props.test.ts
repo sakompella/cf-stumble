@@ -6,7 +6,7 @@ import {
   MAX_REPOSITORY_BLOB_COUNT,
   MAX_REPOSITORY_SIZE_KB,
 } from "../../src/github/repository-size-guard.js";
-import { PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE } from "../../src/project-provision.js";
+import { PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE } from "../../src/workspace/commands/provision-project.js";
 import {
   answered,
   blobs,

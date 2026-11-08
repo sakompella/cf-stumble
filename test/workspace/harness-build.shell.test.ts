@@ -1,13 +1,12 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { HARNESS_BUILD_CONFIGURATION, type HarnessBuildStepName } from "../../src/harness-build.js";
 import {
-  HARNESS_BUILD_CONFIGURATION,
   harnessBuildStep,
   planHarnessBuild,
-  type HarnessBuildStepName,
-} from "../../src/harness-build.js";
-import { planHarnessBuildRequest } from "../../src/workspace/harness-build.js";
+  planHarnessBuildRequest,
+} from "../../src/workspace/commands/build-harness.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { writeExecutable } from "./planned-shell-fixture.js";
 import {

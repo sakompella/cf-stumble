@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE } from "../../project-provision.js";
 import {
   resolveProject,
   type Project,
@@ -8,6 +7,7 @@ import {
   type ProjectId,
 } from "../../project-catalog.js";
 import {
+  PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
   provisionProjectWorkspace,
   ProvisionFailed,
   type ProvisionWorkspaceNamespace,
