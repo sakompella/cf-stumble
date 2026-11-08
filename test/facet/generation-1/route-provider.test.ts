@@ -1,7 +1,7 @@
 import { isContextOverflow } from "@earendil-works/pi-ai/utils/overflow";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/utils/retry";
 import { expect, test } from "vitest";
-import type { ValidationFailure } from "../../../src/model-route.js";
+import type { ValidationFailure } from "../../../src/model-route-wire/request.js";
 import {
   GO,
   NO_USAGE,

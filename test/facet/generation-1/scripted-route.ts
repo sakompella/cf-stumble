@@ -4,9 +4,9 @@ import type { ModelCapability } from "../../../src/facet/generation-1/capabiliti
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
 import type {
   ModelRouteRequest,
-  ModelStreamEvent,
   ValidationFailure,
-} from "../../../src/model-route.js";
+} from "../../../src/model-route-wire/request.js";
+import type { ModelStreamEvent } from "../../../src/model-route-wire/events.js";
 
 const encoder = new TextEncoder();
 

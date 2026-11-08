@@ -1,7 +1,10 @@
 import { expect, test } from "vitest";
 import { capturedEvents, named } from "./log-capture.js";
-import type { ModelRouteRequest } from "../src/model-route.js";
-import type { ModelStreamInference, StreamingProviderPayload } from "../src/model-route-events.js";
+import type { ModelRouteRequest } from "../src/model-route-wire/request.js";
+import type {
+  ModelStreamInference,
+  StreamingProviderPayload,
+} from "../src/model-route-wire/events.js";
 import {
   collectEvents,
   DONE_LINE,

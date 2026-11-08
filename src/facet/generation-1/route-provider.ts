@@ -6,7 +6,7 @@ import type {
   StreamOptions,
   TranscriptContext,
 } from "@earendil-works/pi-ai";
-import { isModelStreamEvent } from "../../model-route-events.js";
+import { isModelStreamEvent } from "../../model-route-wire/events.js";
 import type { ModelCapability } from "./capabilities.js";
 import { transcriptToRouteRequest } from "./route-request.js";
 import { ReplyAssembler } from "./route-reply.js";

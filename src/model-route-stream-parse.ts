@@ -1,7 +1,7 @@
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { lenient } from "./lenient-schema.js";
-import type { ToolCallDelta } from "./model-route-events.js";
+import type { ToolCallDelta } from "./model-route-wire/events.js";
 
 export const TokenCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
