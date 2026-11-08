@@ -10,7 +10,6 @@ import {
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { writeExecutable } from "./planned-shell-fixture.js";
 import {
-  commitFile,
   git,
   makeRoot,
   originRepository,
@@ -51,6 +50,10 @@ function runOk(name: HarnessBuildStepName, commit = head): void {
   const ran = runStep(name, commit);
 
   expect(ran.status, ran.stderr).toBe(0);
+}
+
+function cloneHarness(): void {
+  git(layout.workspace, "clone", "-q", origin.url, "harness");
 }
 
 function keep(path: string): string {
@@ -128,7 +131,7 @@ describe("a build phase", () => {
 
 describe("the checkout step", () => {
   test("unpacks the commit into the build directory and leaves no archive behind", () => {
-    runOk("provision");
+    cloneHarness();
     runOk("isolate");
     runOk("checkout");
 
@@ -136,81 +139,12 @@ describe("the checkout step", () => {
   });
 
   test("fails on its own when the archive cannot be made", () => {
-    runOk("provision");
+    cloneHarness();
     const missing = testHarnessCommit("5".repeat(40));
     runOk("isolate", missing);
 
     const ran = runStep("checkout", missing);
 
     expect(ran.status).not.toBe(0);
-  });
-});
-
-describe("the provision step", () => {
-  test("clones the harness and has the requested commit", () => {
-    runOk("provision");
-
-    expect(git(harness(), "cat-file", "-t", head)).toBe("commit");
-    expect(git(harness(), "config", "--get", "remote.origin.url")).toBe(origin.url);
-  });
-
-  test("fetches a commit pushed after a checkout that holds no promisor remote was made", () => {
-    git(layout.workspace, "clone", "-q", origin.url, "harness");
-    const pushed = testHarnessCommit(commitFile(origin.path, "second.txt", "second"));
-
-    runOk("provision", pushed);
-
-    expect(git(harness(), "cat-file", "-t", pushed)).toBe("commit");
-  });
-
-  test("fails, naming the commit and the remote, when the remote does not have the commit", () => {
-    const absent = testHarnessCommit("7".repeat(40));
-
-    const ran = runStep("provision", absent);
-
-    expect(ran.status).toBe(1);
-    expect(ran.stderr).toContain(absent);
-    expect(ran.stderr).toContain(origin.url);
-  });
-
-  test("leaves an existing checkout's history, working tree and configuration as they were", () => {
-    runOk("provision");
-    git(harness(), "config", "core.fileMode", "true");
-    const local = commitFile(harness(), "local.txt", "local");
-    const untracked = keep(join(harness(), "scratch.txt"));
-
-    runOk("provision");
-
-    expect(git(harness(), "rev-parse", "HEAD")).toBe(local);
-    expect(existsSync(untracked)).toBe(true);
-    expect(git(harness(), "config", "core.fileMode")).toBe("true");
-  });
-
-  test("refuses a populated directory that is not a repository and leaves it alone", () => {
-    const owned = keep(join(harness(), "owned.txt"));
-
-    const ran = runStep("provision");
-
-    expect(ran.status).toBe(1);
-    expect(readFileSync(owned, "utf8")).toBe("precious");
-    expect(readdirSync(harness())).toEqual(["owned.txt"]);
-  });
-
-  test("refuses an existing checkout whose origin is another repository and leaves it alone", () => {
-    runOk("provision");
-    const local = commitFile(harness(), "local.txt", "local");
-
-    const ran = runStep("provision", head, `file://${layout.root}/another-origin`);
-
-    expect(ran.status).toBe(1);
-    expect(git(harness(), "rev-parse", "HEAD")).toBe(local);
-    expect(git(harness(), "config", "--get", "remote.origin.url")).toBe(origin.url);
-  });
-
-  test("leaves no checkout and no staging tree when the clone fails", () => {
-    const ran = runStep("provision", head, `file://${layout.root}/no-such-remote`);
-
-    expect(ran.status).not.toBe(0);
-    expect(readdirSync(layout.workspace)).toEqual([]);
   });
 });

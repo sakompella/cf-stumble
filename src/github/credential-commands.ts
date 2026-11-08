@@ -29,7 +29,7 @@ export function installCredentialSource(): string {
     "  exit 0",
     "fi",
     `gh auth login --hostname ${GITHUB_HOSTNAME} --with-token`,
-    `gh auth setup-git --hostname ${GITHUB_HOSTNAME}`,
+    `CF_STUMBLE_CONTAINER_GIT_WRITE=1 gh auth setup-git --hostname ${GITHUB_HOSTNAME}`,
     "printf 'installed\\n'",
   ].join("\n");
 }

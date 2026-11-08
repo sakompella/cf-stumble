@@ -5,6 +5,7 @@ import type {
   WorkspaceRuntimeResult,
 } from "@cloudflare/computer";
 import type * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import {
   attemptWorkspace,
   WorkspaceSyncIncomplete,
@@ -14,6 +15,7 @@ import {
   type WorkspacePathKind,
 } from "./operations.js";
 import { hasErrnoCode } from "./errno-code.js";
+import { provisionHarness } from "./harness-provision.js";
 import { cloneProjectInIsolate } from "./isolate-clone.js";
 import { CONTAINER_BACKEND_ID } from "./project/index.js";
 import type { Project } from "../project-catalog.js";
@@ -41,14 +43,23 @@ export function commandOutput(
   return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
 }
 
+export function newHarnessPermit(): Semaphore.Semaphore {
+  return Semaphore.makeUnsafe(1);
+}
+
 export class ComputerWorkspaceOperations implements WorkspaceEffects {
   private readonly workspace: Workspace;
   private readonly sync: CommandSync;
+  private readonly harnessPermit: Semaphore.Semaphore;
 
-  constructor(workspace: Workspace, sync: CommandSync) {
+  constructor(workspace: Workspace, sync: CommandSync, harnessPermit: Semaphore.Semaphore) {
     this.workspace = workspace;
     this.sync = sync;
+    this.harnessPermit = harnessPermit;
   }
+
+  provisionHarness: WorkspaceEffects["provisionHarness"] = (configuration, commit) =>
+    this.harnessPermit.withPermits(1)(provisionHarness(this.workspace, configuration, commit));
 
   cloneProject(project: Project): Effect.Effect<void, WorkspaceFault> {
     return cloneProjectInIsolate(this.workspace, project);

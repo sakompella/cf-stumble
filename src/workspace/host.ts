@@ -31,6 +31,7 @@ import {
   executeProjectProvisionRequest,
   executeProjectRemovalRequest,
   harnessBuildConfiguration,
+  newHarnessPermit,
   type GitHubCredentialRequest,
   type GitHubCredentialResult,
   type HarnessBuildRequest,
@@ -59,6 +60,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #platform: WorkspacePlatform;
   readonly #idle: WorkspaceIdleController;
   readonly #isolateToken = crypto.randomUUID();
+  readonly #harnessPermit = newHarnessPermit();
   #resetting = false;
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
@@ -96,11 +98,19 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   #lenient(): ComputerWorkspaceOperations {
-    return new ComputerWorkspaceOperations(this.#platform.workspace, "not-required");
+    return new ComputerWorkspaceOperations(
+      this.#platform.workspace,
+      "not-required",
+      this.#harnessPermit,
+    );
   }
 
   #durable(): ComputerWorkspaceOperations {
-    return new ComputerWorkspaceOperations(this.#platform.workspace, "require-complete");
+    return new ComputerWorkspaceOperations(
+      this.#platform.workspace,
+      "require-complete",
+      this.#harnessPermit,
+    );
   }
 
   build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {

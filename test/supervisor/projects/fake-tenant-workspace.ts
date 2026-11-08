@@ -183,6 +183,12 @@ export class FakeTenantWorkspace implements PromiseOperations {
     return { stdout: `${stdout}\n`, stderr: "", exitCode: 0 };
   }
 
+  provisionHarness(): Promise<CommandOutput> {
+    this.durablePaths.set(HARNESS_BUILD_CONFIGURATION.harnessRepositoryRoot, "directory");
+
+    return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
+  }
+
   credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
