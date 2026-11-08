@@ -66,7 +66,7 @@ Sending computerd straight to the Worker fails because `ContainerBackend` gives 
 `http://` base. A Cloudflare Tunnel to the machine would need an inbound route and an account
 resource for each machine.
 
-**Backend setting.** The Host stores one setting, `provider` (the default) or `cloudflare`, set
+**Backend setting.** The Host stores one setting, `provider` or `cloudflare` (the default), set
 with `GET`/`POST /api/workspace/backend` and a control in the page sidebar. `provider` uses a
 connected provider and falls back to Cloudflare, as above. `cloudflare` always uses the Cloudflare
 container. The choice is made at connect time (`WorkspacePlatform`), so a change affects the next
