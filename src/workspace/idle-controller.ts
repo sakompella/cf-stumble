@@ -1,4 +1,6 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { runAtEntryPoint } from "../run-entry-point.js";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
 import type { ExecBackend } from "./project/index.js";
 import { decideIdleStop, type WorkspaceActivity } from "./idle-stop.js";
@@ -16,6 +18,18 @@ type IdleControllerPorts = Readonly<{
   closeWorkspace(): Promise<void>;
   stopContainer(reason: "idle" | "backend"): Promise<void>;
 }>;
+
+class IdlePortFailed extends Data.TaggedError("IdlePortFailed")<{ cause: unknown }> {}
+
+function attempt<A>(call: () => Promise<A>): Effect.Effect<A, IdlePortFailed> {
+  return Effect.tryPromise({ try: call, catch: (cause) => new IdlePortFailed({ cause }) });
+}
+
+function atEntryPoint(program: Effect.Effect<void, IdlePortFailed>): Promise<void> {
+  return runAtEntryPoint(
+    program.pipe(Effect.catchTag("IdlePortFailed", ({ cause }) => Effect.die(cause))),
+  );
+}
 
 export class WorkspaceIdleController implements ProjectActivity {
   readonly #ports: IdleControllerPorts;
@@ -85,90 +99,121 @@ export class WorkspaceIdleController implements ProjectActivity {
 
     if (this.#alarmAtMs !== null && this.#alarmAtMs <= dueAtMs) return;
 
-    this.#arm(dueAtMs).catch(() => {});
+    void runAtEntryPoint(this.#arm(dueAtMs).pipe(Effect.ignore));
   }
 
-  async #arm(atMs: number): Promise<void> {
-    this.#alarmAtMs = atMs;
+  #arm(atMs: number): Effect.Effect<void, IdlePortFailed> {
+    return Effect.suspend(() => {
+      this.#alarmAtMs = atMs;
 
-    try {
-      await this.#ports.setAlarm(atMs);
-    } catch (cause) {
+      return attempt(() => this.#ports.setAlarm(atMs));
+    }).pipe(
+      Effect.tapError(({ cause }) =>
+        Effect.sync(() => {
+          this.#alarmAtMs = null;
+          logRedactedCause("workspace.idle-alarm: not armed", cause);
+        }),
+      ),
+    );
+  }
+
+  onAlarm(): Promise<void> {
+    return atEntryPoint(this.#onAlarm());
+  }
+
+  #onAlarm(): Effect.Effect<void, IdlePortFailed> {
+    return Effect.suspend(() => {
       this.#alarmAtMs = null;
-      logRedactedCause("workspace.idle-alarm: not armed", cause);
 
-      throw cause;
-    }
-  }
+      if (!this.#ports.containerRunning() || this.#stopping !== undefined) return Effect.void;
 
-  async onAlarm(): Promise<void> {
-    this.#alarmAtMs = null;
+      const decision = decideIdleStop(
+        this.snapshot(),
+        this.#ports.nowMs(),
+        this.#ports.idleLimitMs,
+      );
 
-    if (!this.#ports.containerRunning() || this.#stopping !== undefined) return;
+      if (decision.kind === "check-at") return this.#arm(decision.atMs);
 
-    const decision = decideIdleStop(this.snapshot(), this.#ports.nowMs(), this.#ports.idleLimitMs);
-
-    if (decision.kind === "check-at") return this.#arm(decision.atMs);
-
-    await this.#whileStopping(() => this.#stop(decision.idleForMs));
-  }
-
-  async stopForBackendChange(): Promise<void> {
-    if (!this.#ports.containerRunning() || this.#stopping !== undefined) return;
-
-    await this.#whileStopping(async () => {
-      await this.#ports.closeWorkspace();
-      await this.#ports.stopContainer("backend");
+      return this.#whileStopping(this.#stop(decision.idleForMs));
     });
   }
 
-  async #whileStopping(stop: () => Promise<void>): Promise<void> {
-    this.#stopping = new Promise((done) => {
-      this.#finishStop = done;
-    });
+  stopForBackendChange(): Promise<void> {
+    return atEntryPoint(
+      Effect.suspend(() => {
+        if (!this.#ports.containerRunning() || this.#stopping !== undefined) return Effect.void;
 
-    try {
-      await stop();
-    } finally {
-      this.#stopping = undefined;
-      this.#finishStop();
-    }
+        return this.#whileStopping(
+          attempt(() => this.#ports.closeWorkspace()).pipe(
+            Effect.andThen(attempt(() => this.#ports.stopContainer("backend"))),
+          ),
+        );
+      }),
+    );
   }
 
-  async #stop(idleForMs: number): Promise<void> {
-    try {
-      await this.#ports.closeWorkspace();
-    } catch (cause) {
-      logRedactedCause("workspace.idle-stop: workspace close failed", cause);
-    }
+  #whileStopping<E>(stop: Effect.Effect<void, E>): Effect.Effect<void, E> {
+    return Effect.suspend(() => {
+      this.#stopping = new Promise((done) => {
+        this.#finishStop = done;
+      });
 
-    const outcome = await this.#destroyIfStillIdle();
-    logEvent(outcome === "threw" ? "warn" : "info", "workspace.container.idle-stop", {
-      idleForMs,
-      outcome,
-    });
-
-    if (outcome === "skipped-busy" || outcome === "threw") {
-      await this.#arm(this.#ports.nowMs() + this.#ports.idleLimitMs);
-    }
+      return stop;
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#stopping = undefined;
+          this.#finishStop();
+        }),
+      ),
+    );
   }
 
-  async #destroyIfStillIdle(): Promise<"stopped" | "not-running" | "skipped-busy" | "threw"> {
-    const decision = decideIdleStop(this.snapshot(), this.#ports.nowMs(), this.#ports.idleLimitMs);
+  #stop(idleForMs: number): Effect.Effect<void, IdlePortFailed> {
+    return attempt(() => this.#ports.closeWorkspace()).pipe(
+      Effect.catchTag("IdlePortFailed", ({ cause }) =>
+        Effect.sync(() => {
+          logRedactedCause("workspace.idle-stop: workspace close failed", cause);
+        }),
+      ),
+      Effect.andThen(this.#destroyIfStillIdle()),
+      Effect.flatMap((outcome) => {
+        logEvent(outcome === "threw" ? "warn" : "info", "workspace.container.idle-stop", {
+          idleForMs,
+          outcome,
+        });
 
-    if (decision.kind !== "stop") return "skipped-busy";
+        return outcome === "skipped-busy" || outcome === "threw"
+          ? this.#arm(this.#ports.nowMs() + this.#ports.idleLimitMs)
+          : Effect.void;
+      }),
+    );
+  }
 
-    if (!this.#ports.containerRunning()) return "not-running";
+  #destroyIfStillIdle(): Effect.Effect<"stopped" | "not-running" | "skipped-busy" | "threw"> {
+    return Effect.suspend(() => {
+      const decision = decideIdleStop(
+        this.snapshot(),
+        this.#ports.nowMs(),
+        this.#ports.idleLimitMs,
+      );
 
-    try {
-      await this.#ports.stopContainer("idle");
+      if (decision.kind !== "stop") return Effect.succeed("skipped-busy" as const);
 
-      return "stopped";
-    } catch (cause) {
-      logRedactedCause("workspace.idle-stop: container not stopped", cause);
+      if (!this.#ports.containerRunning()) return Effect.succeed("not-running" as const);
 
-      return "threw";
-    }
+      return attempt(() => this.#ports.stopContainer("idle")).pipe(
+        Effect.as("stopped" as const),
+        Effect.catchTag("IdlePortFailed", ({ cause }) =>
+          Effect.sync(() => {
+            logRedactedCause("workspace.idle-stop: container not stopped", cause);
+
+            return "threw" as const;
+          }),
+        ),
+      );
+    });
   }
 }
 

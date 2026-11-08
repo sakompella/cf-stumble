@@ -15,11 +15,14 @@ export function resetWorkspaceStorage(
   storage: WorkspaceStorageReset,
   stopContainer: () => Promise<void>,
 ): Effect.Effect<WorkspaceResetResult> {
-  return Effect.promise(async () => {
-    await storage.deleteAll();
-    await stopContainer();
-    logEvent("info", "workspace.reset");
+  return Effect.promise(() => storage.deleteAll()).pipe(
+    Effect.andThen(Effect.promise(() => stopContainer())),
+    Effect.andThen(
+      Effect.sync(() => {
+        logEvent("info", "workspace.reset");
 
-    return { ok: true, reset: "workspace" } as const;
-  });
+        return { ok: true, reset: "workspace" } as const;
+      }),
+    ),
+  );
 }
