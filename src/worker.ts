@@ -54,7 +54,7 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
 }
 
 function gatedRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Response> {
-  return Effect.promise(() => ownerGateRefusal(request, env.OWNER_PASSWORD)).pipe(
+  return ownerGateRefusal(request, env.OWNER_PASSWORD).pipe(
     Effect.flatMap((refusal) =>
       refusal === undefined ? ownerRequest(request, env) : Effect.succeed(noStore(refusal)),
     ),

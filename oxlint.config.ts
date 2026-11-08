@@ -12,6 +12,7 @@ export default defineConfig({
   jsPlugins: [
     { name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" },
     { name: "foldkit", specifier: "@foldkit/oxlint-plugin" },
+    { name: "anti-slop-effect", specifier: "./tools/oxlint/anti-slop/effect/index.ts" },
     { name: "cf-stumble", specifier: "./tools/oxlint/cf-stumble/index.ts" },
   ],
   plugins: ["typescript", "unicorn", "oxc", "import"],
@@ -80,6 +81,38 @@ export default defineConfig({
   },
 
   overrides: [
+    {
+      files: ["src/**"],
+      rules: {
+        "anti-slop-effect/no-manual-effect-error-tag": "error",
+        "anti-slop-effect/no-manual-tag-comparison": "error",
+        "anti-slop-effect/no-manual-tagged-construction": "error",
+        "anti-slop-effect/prefer-effect-match": "error",
+      },
+    },
+    {
+      files: [
+        "src/facet/generation-1/**",
+        "src/facet-compatibility.ts",
+        "src/facet/entries-query.ts",
+        "src/facet/conversation-protocol.ts",
+        "src/shell-quote.ts",
+        "src/workspace/project/protocol.ts",
+        "src/workspace-layout.ts",
+        "src/harness-commit.ts",
+        "src/stumble-cli/index.ts",
+        "src/stumble-cli/tree.ts",
+        "src/stumble-cli/generation-commands.ts",
+        "src/turn-budget.ts",
+        "src/model-route-events.ts",
+      ],
+      rules: {
+        "anti-slop-effect/no-manual-effect-error-tag": "off",
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/prefer-effect-match": "off",
+      },
+    },
     {
       files: [
         "src/github/**",

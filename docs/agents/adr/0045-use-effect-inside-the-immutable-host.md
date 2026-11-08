@@ -54,6 +54,14 @@ Worker bundle. The Vitest workers pool loads each module again in every test fil
 to that bundle. Importing the `effect` index in the Worker's `fetch` path nearly doubled the full
 suite's time; the prebundled module path costs about 23 ms per isolate.
 
+**Lint.** `oxlint.config.ts` enables four rules of the vendored `anti-slop-effect` plugin as errors for
+`src/**`: `no-manual-effect-error-tag`, `no-manual-tag-comparison`, `no-manual-tagged-construction`,
+and `prefer-effect-match`. Code builds a tagged value with its Schema or `Data.TaggedError` constructor,
+such as the `src/orb-protocol.ts` frame and job constructors, and branches on it with `Match.tag` or
+`Predicate.isTagged`. The rules are off for `src/facet/generation-1/**` and for the host files that
+the generation-1 module map bundles, because those files stay free of Effect. The fifth rule,
+`no-service-constructor-imports`, stays off: the host has no services, `Context`, or `Layer`.
+
 **Alternatives.** Keeping better-result for results and adding Effect only for concurrency would
 leave two systems for composing failures. Publishing Effect RPC or schema envelopes across Workers
 RPC would change contracts that callers depend on, with no product need. Neither is adopted.

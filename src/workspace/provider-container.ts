@@ -3,9 +3,10 @@ import type {
   ContainerRuntimeInfo,
   IWorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
-import { decodeBody, encodeBody } from "../orb-protocol.js";
+import * as Predicate from "effect/Predicate";
+import { decodeBody, encodeBody, orbJob } from "../orb-protocol.js";
 import type { ProviderLink } from "./provider-link.js";
-import type { ProviderExit } from "./provider-state.js";
+import { providerEvent, type ProviderExit } from "./provider-state.js";
 
 type ContainerStatus = Awaited<ReturnType<IWorkspaceContainerAPI["status"]>>;
 
@@ -31,11 +32,11 @@ export class ProviderContainerAPI implements IWorkspaceContainerAPI {
   async start(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
     const secret = clientSecret();
     const env = { ...spec.env, RPC_CLIENT_SECRET: secret };
-    const runtime = await this.#link.job({ _tag: "start", container: this.#container, env });
+    const runtime = await this.#link.job(orbJob.start({ container: this.#container, env }));
 
     if (runtime === null) throw new Error("the workspace provider started no container");
 
-    this.#link.update({ _tag: "started", runtime });
+    this.#link.update(providerEvent.started({ runtime }));
 
     return { runtimeId: runtime, clientSecret: secret, outcome: "launched" };
   }
@@ -45,24 +46,24 @@ export class ProviderContainerAPI implements IWorkspaceContainerAPI {
   }
 
   async stop(): Promise<void> {
-    await this.#link.job({ _tag: "stop", container: this.#container });
-    this.#link.update({ _tag: "stopped" });
+    await this.#link.job(orbJob.stop({ container: this.#container }));
+    this.#link.update(providerEvent.stopped());
   }
 
   async remove(): Promise<void> {
-    await this.#link.job({ _tag: "delete", container: this.#container });
-    this.#link.update({ _tag: "stopped" });
+    await this.#link.job(orbJob.delete({ container: this.#container }));
+    this.#link.update(providerEvent.stopped());
   }
 
   running(): boolean {
-    return this.#link.state()._tag === "running";
+    return Predicate.isTagged(this.#link.state(), "running");
   }
 
   status(): Promise<ContainerStatus> {
     const state = this.#link.state();
 
     return Promise.resolve(
-      state._tag === "running"
+      Predicate.isTagged(state, "running")
         ? { running: true, exit: null }
         : { running: false, exit: state.exit },
     );
@@ -71,7 +72,7 @@ export class ProviderContainerAPI implements IWorkspaceContainerAPI {
   exitInfo(): Promise<ProviderExit | null> {
     const state = this.#link.state();
 
-    return Promise.resolve(state._tag === "stopped" ? state.exit : null);
+    return Promise.resolve(Predicate.isTagged(state, "stopped") ? state.exit : null);
   }
 
   interceptOutboundHttp(): Promise<void> {

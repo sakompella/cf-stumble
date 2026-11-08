@@ -1,18 +1,13 @@
 import * as Effect from "effect/Effect";
 import { answered, fail, parseMessage, type ConversationProblem } from "./conversation-result.js";
-import {
-  resolveSelectableProject,
-  type SelectableCatalog,
-  type SelectableProject,
-} from "../../selectable-projects.js";
-import { selectedWorkingDirectory } from "../../workspace-layout.js";
 import { logEvent, logRedactedCause } from "../../diagnostics.js";
 import {
   SERVING_FACET_NAME,
   type MainFacetMountProblem,
   type MountedFacet,
 } from "../artifacts/index.js";
-import { HeldWorkspaces, runAtPort, type ObtainWorkspace } from "./held-workspaces.js";
+import { runAtEntryPoint } from "../../run-entry-point.js";
+import { HeldWorkspaces, type ObtainWorkspace } from "./held-workspaces.js";
 import {
   servingHosts,
   type EntriesRequest,
@@ -20,6 +15,12 @@ import {
   type RunReport,
 } from "./host-target.js";
 import { ProjectConversations } from "./project-conversations.js";
+import {
+  createConversation,
+  resolveProject,
+  type SelectableCatalog,
+  type SelectableProject,
+} from "./project-selection.js";
 import { ConversationRuns } from "./runs.js";
 
 type ServingPorts = Readonly<{
@@ -161,9 +162,7 @@ export class ServingConversations {
         if (previous !== undefined)
           yield* this.#call(() => facet.abort(this.#runs.cancelled(previous)));
 
-        const conversationId = yield* this.#call(() =>
-          facet.createConversation(selectedWorkingDirectory(project)),
-        );
+        const conversationId = yield* this.#call(() => createConversation(facet, project));
 
         this.#projects.point(project.id, conversationId);
 
@@ -211,9 +210,7 @@ export class ServingConversations {
   }
 
   #project(projectId: string): Effect.Effect<SelectableProject, ConversationProblem> {
-    const resolved = resolveSelectableProject(projectId, this.#ports.catalog());
-
-    return resolved.ok ? Effect.succeed(resolved.project) : fail(resolved.reason);
+    return resolveProject(projectId, this.#ports.catalog());
   }
 
   #call<T>(call: () => Promise<T>): Effect.Effect<T, ConversationProblem> {
@@ -235,7 +232,7 @@ export class ServingConversations {
 
     if (existing !== undefined) return Effect.succeed(existing);
 
-    return this.#call(() => facet.createConversation(selectedWorkingDirectory(project))).pipe(
+    return this.#call(() => createConversation(facet, project)).pipe(
       Effect.map((created) => {
         const raced = this.#projects.conversationOf(project.id);
 
@@ -268,7 +265,7 @@ export class ServingConversations {
 
     const targets = servingHosts(
       {
-        arm: (wake) => runAtPort(this.#runs.arm(wake, Date.now())),
+        arm: (wake) => runAtEntryPoint(this.#runs.arm(wake, Date.now())),
         log: (level, event, fields) => {
           logEvent(level, `facet.${event.slice(0, 60)}`, {
             ...fields,
@@ -349,7 +346,7 @@ export class ServingConversations {
       this.#workspaces.end(conversationId);
     }
 
-    await runAtPort(this.#runs.setAlarm(now));
+    await runAtEntryPoint(this.#runs.setAlarm(now));
   }
 
   #workspace(conversationId: string) {

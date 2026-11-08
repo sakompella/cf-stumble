@@ -83,7 +83,7 @@ export class HeldWorkspaces {
 
   #hold(conversationId: string, project: SelectableProject, remainingMs: number): HeldWorkspace {
     const controller = new AbortController();
-    const capability = runAtPort(this.#obtain(project, remainingMs, controller.signal));
+    const capability = runAtEntryPoint(this.#obtain(project, remainingMs, controller.signal));
     const held = { capability, release: controller };
 
     this.#held.set(conversationId, held);
@@ -102,10 +102,6 @@ function release(held: HeldWorkspace): void {
   void held.capability.then((capability) => {
     if (capability !== null) endWorkspaceTurn(capability);
   });
-}
-
-export function runAtPort<A>(program: Effect.Effect<A>): Promise<A> {
-  return runAtEntryPoint(program);
 }
 
 export function endWorkspaceTurn(capability: ProjectCapabilityStub): void {

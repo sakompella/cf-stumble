@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { logEvent } from "./diagnostics.js";
 import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH } from "./orb-protocol.js";
 import { jsonError, routePattern } from "./routes/index.js";
@@ -85,7 +86,7 @@ function isCrossOriginMutation(request: Request): boolean {
   return crossOrigin;
 }
 
-export async function ownerGateRefusal(
+async function gateRefusal(
   request: Request,
   password: string | undefined,
 ): Promise<Response | undefined> {
@@ -103,4 +104,11 @@ export async function ownerGateRefusal(
   }
 
   return isCrossOriginMutation(request) ? jsonError(403, "cross-origin-request") : undefined;
+}
+
+export function ownerGateRefusal(
+  request: Request,
+  password: string | undefined,
+): Effect.Effect<Response | undefined> {
+  return Effect.promise(() => gateRefusal(request, password));
 }

@@ -1,19 +1,17 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import type { MainFacetTarget } from "../../facet/index.js";
-import { AssistantMessage, readFirstView, type Conversation } from "../../page/index.js";
-import { STARTUP_CHECK_REPLY } from "../../startup-check-script.js";
+import { readFirstView, type AssistantMessage } from "../../page/index.js";
+import { runAtEntryPoint } from "../../run-entry-point.js";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
-import { ConversationHostTarget, endWorkspaceTurn, runAtPort } from "../conversations/index.js";
+import { ConversationHostTarget, endWorkspaceTurn } from "../conversations/index.js";
 import type { ProjectCapabilityStub } from "../projects/index.js";
+import { describe, finalAnswer, isReply } from "./answer.js";
 import type { StartupCheckOutcome } from "./candidate.js";
 
 const PROBE_MESSAGE = "Run the startup check.";
 
 const POLL_MS = 100;
-
-const isAssistantMessage = Schema.is(AssistantMessage);
 
 const PASSED: StartupCheckOutcome = {
   stage: "ready",
@@ -39,7 +37,7 @@ export function checkConversation(
     log: () => {},
     running: () => Promise.resolve(),
     workspace: async () => {
-      held ??= runAtPort(obtainWorkspace(released.signal));
+      held ??= runAtEntryPoint(obtainWorkspace(released.signal));
       const workspace = await held;
 
       if (workspace === null) throw new Error("the workspace is unavailable");
@@ -79,14 +77,6 @@ export function checkConversation(
     Effect.catch((reason) => Effect.succeed(failed(reason))),
     Effect.ensuring(release),
   );
-}
-
-function isReply(answer: AssistantMessage): boolean {
-  return answer.stopReason === "stop" && answerText(answer) === STARTUP_CHECK_REPLY;
-}
-
-function describe(answer: AssistantMessage): string {
-  return `${answer.stopReason}: ${answerText(answer)}`;
 }
 
 function candidateCall<T>(call: () => Promise<T>): Effect.Effect<T, string> {
@@ -145,28 +135,4 @@ function snapshotLine(
       return read.slice(0, read.indexOf("\n"));
     }),
   );
-}
-
-function finalAnswer(conversation: Conversation, answers: number): AssistantMessage | undefined {
-  if (conversation.isRunning) return undefined;
-
-  const messages = conversation.items.flatMap((item) =>
-    item.kind === "entry" ? (item.entry.model ?? []) : [],
-  );
-
-  const final = messages.filter(
-    (message) => isAssistantMessage(message) && message.stopReason !== "toolUse",
-  );
-
-  const last = messages.at(-1);
-
-  return final.length >= answers && isAssistantMessage(last) && last.stopReason !== "toolUse"
-    ? last
-    : undefined;
-}
-
-function answerText(answer: AssistantMessage): string {
-  const text = answer.content.flatMap((block) => ("text" in block ? [block.text] : [])).join("");
-
-  return text === "" ? (answer.errorMessage ?? "") : text;
 }
