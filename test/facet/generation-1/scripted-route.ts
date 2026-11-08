@@ -2,8 +2,11 @@ import { createModels } from "@earendil-works/pi-ai";
 import type { Context } from "@earendil-works/pi-ai";
 import type { ModelCapability } from "../../../src/facet/generation-1/capabilities.js";
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
-import type { ModelRouteRequest, ValidationFailure } from "../../../src/model-route-request.js";
-import type { ModelStreamEvent } from "../../../src/model-route-events.js";
+import type {
+  ModelRouteRequest,
+  ValidationFailure,
+} from "../../../src/model-route-wire/request.js";
+import type { ModelStreamEvent } from "../../../src/model-route-wire/events.js";
 
 const encoder = new TextEncoder();
 

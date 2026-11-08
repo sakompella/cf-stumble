@@ -10,8 +10,8 @@ import {
   sseLine,
 } from "./model-route-provider-stream.js";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
-import type { StreamingProviderPayload, WorkersAiBinding } from "../src/model-route-events.js";
-import type { ModelRouteRequest, ValidationFailure } from "../src/model-route-request.js";
+import type { StreamingProviderPayload, WorkersAiBinding } from "../src/model-route-wire/events.js";
+import type { ModelRouteRequest, ValidationFailure } from "../src/model-route-wire/request.js";
 
 type RecordedCall = Readonly<{ model: string; input: StreamingProviderPayload }>;
 

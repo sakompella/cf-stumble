@@ -8,8 +8,8 @@ import {
   type AssistantMessage,
   type ModelRouteRequest,
   type RouteMessage,
-} from "../src/model-route-request.js";
-import { decodeWire, drawRequest, text } from "./model-route-draws.js";
+} from "../../src/model-route-wire/request.js";
+import { decodeWire, drawRequest, text } from "./draws.js";
 
 const MAX_REQUEST_BYTES = 1_048_576;
 

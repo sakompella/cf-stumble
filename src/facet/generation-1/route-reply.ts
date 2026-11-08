@@ -9,7 +9,7 @@ import type {
   ToolCall,
   Usage,
 } from "@earendil-works/pi-ai";
-import type { ModelStreamEvent, ModelUsage, ToolCallDelta } from "../../model-route-events.js";
+import type { ModelStreamEvent, ModelUsage, ToolCallDelta } from "../../model-route-wire/events.js";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 

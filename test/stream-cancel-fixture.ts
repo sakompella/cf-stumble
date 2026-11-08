@@ -1,4 +1,4 @@
-import type { ModelRouteRequest } from "../src/model-route-request.js";
+import type { ModelRouteRequest } from "../src/model-route-wire/request.js";
 
 export const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 

@@ -5,14 +5,14 @@ import {
   type ParsedProviderChunk,
   type TokenUsage,
 } from "./model-route-stream-parse.js";
-import type { AssistantMessage, ModelRouteRequest } from "./model-route-request.js";
+import type { AssistantMessage, ModelRouteRequest } from "./model-route-wire/request.js";
 import type {
   ModelStreamEvent,
   ModelStreamInference,
   ModelUsage,
   StreamingProviderPayload,
   ToolCallDelta,
-} from "./model-route-events.js";
+} from "./model-route-wire/events.js";
 import {
   modelUnavailable,
   modelUnavailableBecause,

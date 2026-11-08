@@ -4,7 +4,7 @@ import {
   parseRequest,
   type ModelRouteRequest,
   type ValidationFailure,
-} from "../src/model-route-request.js";
+} from "../../src/model-route-wire/request.js";
 
 function rejected(reason: string): Result.Result<ModelRouteRequest, ValidationFailure> {
   return Result.fail({ ok: false, error: { code: "invalid-request", reason } });
