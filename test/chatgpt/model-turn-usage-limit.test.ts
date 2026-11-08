@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { chatgptTurn, type ChatGPTCredential } from "../../src/chatgpt/index.js";
-import type { ModelRouteRequest, ModelStreamEvent } from "../../src/model-route.js";
+import type { ModelRouteRequest } from "../../src/model-route-request.js";
+import type { ModelStreamEvent } from "../../src/model-route-events.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
   ACCESS_ONE,

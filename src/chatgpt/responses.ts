@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { ModelRouteRequest, RouteMessage } from "../model-route.js";
+import type { ModelRouteRequest, RouteMessage } from "../model-route-request.js";
 import type { ProviderStreamAccumulator } from "../model-route-stream.js";
 import { lenient } from "../lenient-schema.js";
 import {

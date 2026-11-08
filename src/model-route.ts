@@ -9,16 +9,6 @@ import { workersAiTurn } from "./model-route-stream.js";
 import type { WorkersAiBinding } from "./model-route-events.js";
 import { modelEventStream, type ModelTurn } from "./model-route-turn.js";
 
-export type {
-  AssistantMessage,
-  RouteMessage,
-  ToolDefinition,
-  ModelRouteRequest,
-  ValidationFailure,
-} from "./model-route-request.js";
-
-export type { ModelStreamEvent, ModelUsage, ToolCallDelta } from "./model-route-events.js";
-
 type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{
     admitModelTurn(instance: number): Promise<boolean>;

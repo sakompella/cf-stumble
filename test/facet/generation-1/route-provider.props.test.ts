@@ -2,7 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 import type { ModelCapability } from "../../../src/facet/generation-1/capabilities.js";
-import type { ModelStreamEvent } from "../../../src/model-route.js";
+import type { ModelStreamEvent } from "../../../src/model-route-events.js";
 import { GO, NO_USAGE, streamThroughProvider } from "./scripted-route.js";
 
 const encoder = new TextEncoder();

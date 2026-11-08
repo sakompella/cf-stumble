@@ -11,7 +11,7 @@ import {
 } from "./model-route-provider-stream.js";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
 import type { StreamingProviderPayload, WorkersAiBinding } from "../src/model-route-events.js";
-import type { ModelRouteRequest, ValidationFailure } from "../src/model-route.js";
+import type { ModelRouteRequest, ValidationFailure } from "../src/model-route-request.js";
 
 type RecordedCall = Readonly<{ model: string; input: StreamingProviderPayload }>;
 

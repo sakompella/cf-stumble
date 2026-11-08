@@ -5,14 +5,14 @@ import {
   type ParsedProviderChunk,
   type TokenUsage,
 } from "./model-route-stream-parse.js";
-import type { AssistantMessage, ModelRouteRequest } from "./model-route.js";
+import type { AssistantMessage, ModelRouteRequest } from "./model-route-request.js";
 import type {
   ModelStreamEvent,
   ModelStreamInference,
+  ModelUsage,
   StreamingProviderPayload,
   ToolCallDelta,
 } from "./model-route-events.js";
-import { resolveUsage } from "./model-route-usage.js";
 import {
   modelUnavailable,
   modelUnavailableBecause,
@@ -115,6 +115,40 @@ export class ProviderStreamAccumulator {
   usage(): TokenUsage | undefined {
     return this.reportedUsage;
   }
+}
+
+const USAGE_BYTES = new TextEncoder();
+
+const ESTIMATED_BYTES_PER_TOKEN = 3;
+
+function estimateTokens(byteLength: number): number {
+  return Math.ceil(byteLength / ESTIMATED_BYTES_PER_TOKEN);
+}
+
+function resolveUsage(
+  reported: Readonly<{ inputTokens: number; outputTokens: number }> | undefined,
+  request: ModelRouteRequest,
+  message: AssistantMessage,
+): ModelUsage {
+  if (reported !== undefined) {
+    return {
+      inputTokens: reported.inputTokens,
+      outputTokens: reported.outputTokens,
+      estimated: false,
+    };
+  }
+
+  const promptBytes = USAGE_BYTES.encode(JSON.stringify(request.messages)).length;
+
+  const completionBytes = USAGE_BYTES.encode(
+    (message.content ?? "") + JSON.stringify(message.tool_calls),
+  ).length;
+
+  return {
+    inputTokens: estimateTokens(promptBytes),
+    outputTokens: estimateTokens(completionBytes),
+    estimated: true,
+  };
 }
 
 export function finishedTurn(

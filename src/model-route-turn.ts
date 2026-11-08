@@ -1,7 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { redactedExcerpt } from "./diagnostics.js";
-import type { AssistantMessage } from "./model-route.js";
+import type { AssistantMessage } from "./model-route-request.js";
 import type { ModelRouteErrorCode, ModelStreamEvent, ModelUsage } from "./model-route-events.js";
 import { runResponseBody } from "./run-entry-point.js";
 import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";

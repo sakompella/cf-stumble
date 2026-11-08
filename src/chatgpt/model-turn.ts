@@ -1,7 +1,8 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { logEvent } from "../diagnostics.js";
-import type { ModelRouteRequest, ModelStreamEvent } from "../model-route.js";
+import type { ModelRouteRequest } from "../model-route-request.js";
+import type { ModelStreamEvent } from "../model-route-events.js";
 import { finishedTurn, ProviderStreamAccumulator } from "../model-route-stream.js";
 import {
   ModelTurnFailed,

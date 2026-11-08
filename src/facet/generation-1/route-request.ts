@@ -14,7 +14,7 @@ import type {
   TranscriptContext,
   UserMessage,
 } from "@earendil-works/pi-ai";
-import type { ModelRouteRequest, RouteMessage, ToolDefinition } from "../../model-route.js";
+import type { ModelRouteRequest, RouteMessage, ToolDefinition } from "../../model-route-request.js";
 
 type Block = TextContent | ImageContent;
 

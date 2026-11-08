@@ -1,7 +1,7 @@
 import type * as Schema from "effect/Schema";
 import { isModelStreamEvent } from "../src/model-route-events.js";
-import type { ModelRouteRequest, ModelStreamEvent } from "../src/model-route.js";
-import type { ModelStreamInference } from "../src/model-route-events.js";
+import type { ModelRouteRequest } from "../src/model-route-request.js";
+import type { ModelStreamInference, ModelStreamEvent } from "../src/model-route-events.js";
 import { workersAiTurn } from "../src/model-route-stream.js";
 import { modelEventStream } from "../src/model-route-turn.js";
 import { byteChunkStream } from "./byte-stream-fixture.js";

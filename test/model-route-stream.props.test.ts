@@ -1,7 +1,8 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import type { ModelRouteRequest, ModelStreamEvent } from "../src/model-route.js";
+import type { ModelRouteRequest } from "../src/model-route-request.js";
+import type { ModelStreamEvent } from "../src/model-route-events.js";
 import {
   collectEvents,
   DONE_LINE,
