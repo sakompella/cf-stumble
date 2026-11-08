@@ -113,7 +113,10 @@ test("without the secret every route but the exempt GETs answers 503, and an exe
     } else if (password === undefined || password === "") {
       expect(refusal?.status).toBe(503);
     } else {
-      expect(refusal?.status).toBe(401);
+      const isOwner =
+        authorization !== null && authorization[0] === "aditya" && authorization[1] === password;
+
+      expect(refusal?.status).toBe(isOwner ? undefined : 401);
     }
   });
 });
