@@ -4,6 +4,8 @@ import type {
   ExecBackendHandle,
   ExecBackendInput,
 } from "../../../src/workspace/project/exec-backend.js";
+import { routedBackend } from "../../../src/workspace/project/exec-selection.js";
+import type { ExecBackendChoice } from "../../../src/workspace/project/protocol.js";
 import type {
   ProjectFilesystemProvider,
   ProjectStat,
@@ -179,6 +181,7 @@ export class ManualExecHandle implements ExecBackendHandle {
   #ended = false;
   readCalls = 0;
   killCalls = 0;
+  backend: ExecBackendChoice = "container";
   killBehavior: () => Promise<void> = () => Promise.resolve();
 
   readonly reader = {
@@ -261,6 +264,7 @@ export class FakeExecBackend implements ExecBackend {
 
     if (deferred !== undefined) return deferred;
     const handle = new ManualExecHandle();
+    handle.backend = routedBackend(input.command, input.backend);
     this.handles.push(handle);
 
     return Promise.resolve(handle);

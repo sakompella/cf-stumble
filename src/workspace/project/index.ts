@@ -1,10 +1,10 @@
-export {
-  chosenExecBackend,
-  computerFilesystemProvider,
-  durableObjectTransactions,
-} from "./computer-adapter.js";
+export { computerFilesystemProvider, durableObjectTransactions } from "./computer-adapter.js";
 
-export { isolateWorkspace } from "./isolate.js";
+export { chosenExecBackend } from "./exec-selection.js";
+
+export { workspaceGit } from "./git-fs.js";
+
+export { isolateShellBackend } from "./isolate-shell.js";
 
 export { IsolateWorkspaceGate } from "./isolate-gate.js";
 

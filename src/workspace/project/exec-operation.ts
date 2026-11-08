@@ -1,5 +1,4 @@
 import { logEvent } from "../../diagnostics.js";
-import { routedBackend } from "./exec-routing.js";
 import {
   isContainerRestartedError,
   type BackendExecEvent,
@@ -19,7 +18,6 @@ export interface ExecOperation {
 
 interface SettleState {
   readonly requested: ExecBackendChoice | "automatic";
-  readonly backend: ExecBackendChoice;
   readonly startedAt: number;
   settled: boolean;
   seq: number;
@@ -48,7 +46,7 @@ function settle(
     "exec.finished",
     {
       requested: state.requested,
-      backend: state.backend,
+      backend: state.handle?.backend ?? null,
       durationMs: Date.now() - state.startedAt,
       outcome: outcome.outcome,
       exitCode: outcome.outcome === "exited" ? outcome.exitCode : null,
@@ -269,7 +267,6 @@ export function startExecOperation(
 ): ExecOperation {
   const state: SettleState = {
     requested: input.backend ?? "automatic",
-    backend: routedBackend(input.command, input.backend),
     startedAt: Date.now(),
     settled: false,
     seq: 0,
