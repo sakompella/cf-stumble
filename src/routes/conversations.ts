@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import type { EntriesRequest } from "../entries-request.js";
-import { entriesRequest, eventsFrom } from "./entries-request.js";
+import { type EntriesRequest, eventsFrom, parseEntriesRequest } from "../entries-request.js";
 import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
 import { projectIdFromPath, type ProjectRouteSuffix } from "./route-pattern.js";
 import type {
@@ -122,7 +121,7 @@ export function routeConversationRequest(
   const entries = routeFor(request, "GET", "/entries");
 
   if (entries !== undefined) {
-    const query = entriesRequest(new URL(request.url).searchParams);
+    const query = parseEntriesRequest(new URL(request.url).searchParams);
 
     if (query === undefined) return Effect.succeed(jsonError(400, "invalid-entries-request"));
 

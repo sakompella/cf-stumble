@@ -2,7 +2,7 @@ import type { ServerResponse } from "node:http";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import type { ConversationApiSupervisor } from "../../src/routes/conversations.js";
 import type { ConversationProblem } from "../../src/supervisor/conversations/conversation-result.js";
-import { entriesRequest, eventsFrom } from "../../src/routes/entries-request.js";
+import { eventsFrom, parseEntriesRequest } from "../../src/entries-request.js";
 import { sendJson } from "./server-routes.mjs";
 import type { RequestRecord, ScenarioState } from "./server-state.mjs";
 
@@ -88,7 +88,7 @@ async function serveEntries(
   params: URLSearchParams,
   record: RequestRecord,
 ): Promise<void> {
-  const request = entriesRequest(params);
+  const request = parseEntriesRequest(params);
 
   if (request === undefined) {
     record.status = 400;
