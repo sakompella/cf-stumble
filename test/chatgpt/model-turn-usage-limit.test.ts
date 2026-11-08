@@ -84,6 +84,25 @@ test("a usage limit in the stream before any output is the typed failure the rou
   expect(everythingLogged()).not.toMatch(/chatgpt-access-FAKE/u);
 });
 
+test("a workspace member's own usage limit falls back like the subscription limit", async () => {
+  const credential = fakeCredential([ready(ACCESS_ONE)]);
+
+  const { outcome } = await outcomeOf(credential, () =>
+    Promise.resolve(
+      sseResponse([
+        responsesEvent({
+          type: "response.failed",
+          response: {
+            error: { code: "subscription_sharing_workplace_individual_usage_limit_exceeded" },
+          },
+        }),
+      ]),
+    ),
+  );
+
+  expect(outcome).toEqual({ kind: "usage-limited", limitedUntil: null });
+});
+
 test("a usage limit after output errors the call as before, and the limit is still recorded", async () => {
   const credential = fakeCredential([ready(ACCESS_ONE)]);
   const logged = capturedEvents();

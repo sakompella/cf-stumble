@@ -215,7 +215,7 @@ The model route answers from the fixed Workers AI model until you connect a Chat
 
 Connect from the owner page:
 
-1. Select **Connect ChatGPT** in the sidebar, then open the sign-in link it shows.
+1. Select **Log in with ChatGPT** in the sidebar, then open the sign-in link it shows.
 2. Sign in to ChatGPT and approve cf-stumble.
 3. OpenAI sends the browser to `http://127.0.0.1:1455/auth/callback?...`. Nothing listens there, so the browser shows a connection error. That is expected. Copy the whole address from the address bar.
 4. Paste it into the sidebar and select **Finish**. The panel says the account is connected.

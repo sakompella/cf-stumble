@@ -48,11 +48,29 @@ function reconnectReason(value: string | null): ReconnectReason {
   return value === "refresh-refused" || value === "missing-scope" ? value : "provider-refused";
 }
 
+const RENAMED_TABLES = ["connection", "login", "usage_limit", "host"] as const;
+
+function restoreRenamedTables(sql: SqlStorage): void {
+  const existing = new Set(
+    sql
+      .exec<{ readonly name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .toArray()
+      .map((row) => row.name),
+  );
+
+  for (const table of RENAMED_TABLES) {
+    if (existing.has(`codex_login_${table}`) && !existing.has(`chatgpt_${table}`)) {
+      sql.exec(`ALTER TABLE codex_login_${table} RENAME TO chatgpt_${table}`);
+    }
+  }
+}
+
 export class ChatGPTCredentialStore {
   private readonly sql: SqlStorage;
 
   constructor(storage: DurableObjectStorage) {
     this.sql = storage.sql;
+    restoreRenamedTables(this.sql);
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS chatgpt_connection (
         id INTEGER PRIMARY KEY CHECK (id = 1),
