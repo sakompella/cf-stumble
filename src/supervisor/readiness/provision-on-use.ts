@@ -8,11 +8,10 @@ import {
 } from "../../project-catalog.js";
 import {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
-  provisionProjectWorkspace,
-  ProvisionFailed,
   type WorkspaceHostNamespace,
 } from "../../workspace/index.js";
-import type { GitHubConnection } from "./github-connection.js";
+import type { GitHubConnection } from "../projects/index.js";
+import { provisionProjectWorkspace, ProvisionFailed } from "./provisioning.js";
 
 type ProjectUseProblem = Readonly<{
   code:

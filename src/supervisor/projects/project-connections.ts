@@ -12,13 +12,9 @@ import {
   type PublicRepositoryUrl,
 } from "../../project-catalog.js";
 import { selectableCatalog, type SelectableCatalog } from "../../selectable-projects.js";
-import {
-  checkRepositoryAccess,
-  clearWorkspaceProvision,
-  type WorkspaceHostNamespace,
-} from "../../workspace/index.js";
+import { checkRepositoryAccess, type WorkspaceHostNamespace } from "../../workspace/index.js";
+import { provisionOnUse } from "../readiness/index.js";
 import { removeProjectDirectories } from "./project-removal.js";
-import { provisionOnUse } from "./provision-on-use.js";
 
 export type DisconnectRepositoryResult =
   | Readonly<{ ok: true; projectId: ProjectId; workspace: "removed" | "failed" }>
@@ -167,11 +163,6 @@ export class ProjectConnections {
         return { ok: true, projectId: resolved.project.id, workspace } as const;
       }),
     );
-  }
-
-  resetWorkspace(): void {
-    clearWorkspaceProvision(this.workspaceName);
-    this.github.resetWorkspace();
   }
 
   ensureProvisioned(projectId: ProjectId, signal?: AbortSignal) {

@@ -1,12 +1,16 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { logRedactedCause } from "../diagnostics.js";
-import type { HarnessCommit } from "../harness-commit.js";
-import type { Project, ProjectId } from "../project-catalog.js";
-import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import type { WorkspaceCommandResult, WorkspaceFailure } from "./commands/index.js";
-import type { WorkspaceHostNamespace, WorkspaceHostRpc } from "./host-rpc.js";
-import { provisionInWorkspace } from "./provision-exclusion.js";
+import { logRedactedCause } from "../../diagnostics.js";
+import type { HarnessCommit } from "../../harness-commit.js";
+import type { Project, ProjectId } from "../../project-catalog.js";
+import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
+import type {
+  WorkspaceCommandResult,
+  WorkspaceFailure,
+  WorkspaceHostNamespace,
+  WorkspaceHostRpc,
+} from "../../workspace/index.js";
+import { provisionInWorkspace } from "./provision-fence.js";
 
 export class ProvisionFailed extends Data.TaggedError("ProvisionFailed")<{
   readonly exitCode: number;

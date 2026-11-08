@@ -25,6 +25,7 @@
     "src/supervisor/artifacts/store.ts": ["exports"],
     "src/supervisor/conversations/host-target.ts": ["exports"],
     "src/supervisor/generations.ts": ["exports", "types"],
+    "src/supervisor/readiness/provisioning.ts": ["exports"],
     "src/workspace/commands/build-harness.ts": ["exports", "types"],
     "src/workspace/commands/provision-project.ts": ["exports"],
     "src/workspace/commands/remove-project.ts": ["exports"],
@@ -32,7 +33,6 @@
     "src/workspace/managed-instructions.ts": ["exports"],
     "src/workspace/project/computer-adapter.ts": ["exports"],
     "src/workspace/project/exec-selection.ts": ["exports"],
-    "src/workspace/provisioning.ts": ["exports"],
     "src/workspace/workspace-platform.ts": ["exports"]
   }
 }

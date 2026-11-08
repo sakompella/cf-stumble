@@ -11,12 +11,17 @@ import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, type MainFacetCapabilities } from "./artifacts/index.js";
 import { ServingConversations } from "./conversations/index.js";
-import { obtainProjectWorkspace, obtainScratchWorkspace } from "./obtain-workspace.js";
+import { WorkspaceReadiness } from "./readiness/index.js";
 import { supervisorNames, type SupervisorEnv } from "./supervisor-env.js";
 
 export type SupervisorParts = ReturnType<typeof supervisorParts>;
 
-function projectParts(storage: DurableObjectStorage, env: SupervisorEnv, workspaceName: string) {
+function projectParts(
+  storage: DurableObjectStorage,
+  env: SupervisorEnv,
+  workspaceName: string,
+  generations: Generations,
+) {
   const environment: GitHubConnectionEnvironment = {
     clientId: env.GITHUB_OAUTH_CLIENT_ID,
     fallbackToken: env.GH_TOKEN,
@@ -37,7 +42,15 @@ function projectParts(storage: DurableObjectStorage, env: SupervisorEnv, workspa
     github,
   });
 
-  return { github, connections };
+  const readiness = new WorkspaceReadiness({
+    workspaceName,
+    namespace: env.WORKSPACE_HOST,
+    generations,
+    github,
+    ensureProvisioned: (projectId, signal) => connections.ensureProvisioned(projectId, signal),
+  });
+
+  return { github, connections, readiness };
 }
 
 export function supervisorParts(
@@ -56,9 +69,7 @@ export function supervisorParts(
   const modelRoute = (instance: number): MainFacetCapabilities["MODEL"] =>
     ctx.exports.ModelRoute({ props: { supervisor: name, instance } });
 
-  const { github, connections } = projectParts(ctx.storage, env, workspaceName);
-
-  const sources = { workspaceName, namespace: env.WORKSPACE_HOST, generations, connections };
+  const projects = projectParts(ctx.storage, env, workspaceName, generations);
 
   return {
     workspaceName,
@@ -70,20 +81,19 @@ export function supervisorParts(
       generations,
       model: () => ctx.exports.StartupCheckModel({}),
       workspace: (remainingMs: number, signal: AbortSignal) =>
-        obtainScratchWorkspace(sources, remainingMs, signal),
+        projects.readiness.obtain(null, remainingMs, signal),
     },
-    github,
-    connections,
+    ...projects,
     serving: new ServingConversations({
       ctx,
       mount: (instance) =>
         Effect.fromResult(
           artifacts.mount(generations.active(), env.LOADER, ctx.facets, modelRoute(instance)),
         ),
-      catalog: () => connections.catalog(),
+      catalog: () => projects.connections.catalog(),
       resetting,
       obtainWorkspace: (project, remainingMs, signal) =>
-        obtainProjectWorkspace(sources, project, remainingMs, signal),
+        projects.readiness.obtain(project, remainingMs, signal),
       generations: generationOperations,
       selection: generations,
     }),
