@@ -1,29 +1,29 @@
 import * as Predicate from "effect/Predicate";
 import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
-import { codexLoginConnection } from "../../../src/page/client/api.js";
+import { chatGPTConnection } from "../../../src/page/client/api.js";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
-import type { CodexLoginConnection } from "../../../src/page/client/model.js";
+import type { ChatGPTConnection } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
 
 const LOGIN = { attemptId: "attempt-1", authorizeUrl: "https://auth.example/authorize?state=s" };
 
-const DISCONNECTED = codexLoginConnection({
+const DISCONNECTED = chatGPTConnection({
   connection: { state: "disconnected" },
   login: null,
   model: "gpt-6.1-sol",
 });
 
-const SIGNING_IN = codexLoginConnection({
+const SIGNING_IN = chatGPTConnection({
   connection: { state: "disconnected" },
   login: LOGIN,
   model: "gpt-6.1-sol",
 });
 
-const CONNECTED = codexLoginConnection({
+const CONNECTED = chatGPTConnection({
   connection: { state: "connected", expiresAt: 1 },
   login: null,
   model: "gpt-6.1-sol",
@@ -41,12 +41,12 @@ function findById(node: Rendered | string, id: string): Rendered | undefined {
     : (node.children ?? []).map((child) => findById(child, id)).find(Predicate.isNotUndefined);
 }
 
-function rendered(codexLogin: CodexLoginConnection): (id: string) => Rendered | undefined {
+function rendered(chatgpt: ChatGPTConnection): (id: string) => Rendered | undefined {
   let html: Rendered | undefined;
 
   Scene.scene(
     { update, view },
-    Scene.given({ ...init().model, codexLogin }),
+    Scene.given({ ...init().model, chatgpt }),
     Scene.tap((simulation) => {
       html = simulation.html;
     }),
@@ -57,7 +57,7 @@ function rendered(codexLogin: CodexLoginConnection): (id: string) => Rendered | 
 }
 
 test("the sign-in link opens in its own tab without an opener or a referrer", () => {
-  const link = rendered(SIGNING_IN)(ID.codexLoginSignInLink);
+  const link = rendered(SIGNING_IN)(ID.chatgptSignInLink);
 
   expect(link?.data?.props).toMatchObject({
     href: LOGIN.authorizeUrl,
@@ -68,15 +68,15 @@ test("the sign-in link opens in its own tab without an opener or a referrer", ()
 
 test("the sidebar offers one way forward for each state", () => {
   const controls = {
-    connect: ID.codexLoginConnectButton,
-    link: ID.codexLoginSignInLink,
-    input: ID.codexLoginCallbackInput,
-    finish: ID.codexLoginFinishButton,
-    disconnect: ID.codexLoginDisconnectButton,
+    connect: ID.chatgptConnectButton,
+    link: ID.chatgptSignInLink,
+    input: ID.chatgptCallbackInput,
+    finish: ID.chatgptFinishButton,
+    disconnect: ID.chatgptDisconnectButton,
   };
 
-  const offered = (codexLogin: CodexLoginConnection) => {
-    const find = rendered(codexLogin);
+  const offered = (chatgpt: ChatGPTConnection) => {
+    const find = rendered(chatgpt);
 
     return Object.entries(controls)
       .filter(([, id]) => find(id) !== undefined)

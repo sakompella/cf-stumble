@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
 import type { ConversationApiSupervisor } from "../../src/routes/conversations.js";
-import type { CodexLoginConnectionView } from "../../src/codex-login/index.js";
+import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
 
 export function ownerApiResponse(
   request: Request,
@@ -11,7 +11,7 @@ export function ownerApiResponse(
   return Effect.runPromise(routeOwnerApiRequest(request, supervisor));
 }
 
-export const disconnectedCodexLogin: CodexLoginConnectionView = {
+export const disconnectedChatGPT: ChatGPTConnectionView = {
   connection: { state: "disconnected" },
   login: null,
   model: "gpt-test",
@@ -19,14 +19,14 @@ export const disconnectedCodexLogin: CodexLoginConnectionView = {
 
 const notCalled = (what: string) => () => Promise.reject(new Error(`this test must not ${what}`));
 
-const codexLoginSupervisor: Pick<
+const chatgptSupervisor: Pick<
   OwnerApiSupervisor,
-  "getCodexLoginConnection" | "startCodexLogin" | "completeCodexLogin" | "disconnectCodexLogin"
+  "getChatGPTConnection" | "startChatGPTLogin" | "completeChatGPTLogin" | "disconnectChatGPT"
 > = {
-  getCodexLoginConnection: () => Promise.resolve(disconnectedCodexLogin),
-  startCodexLogin: notCalled("start a Codex sign-in"),
-  completeCodexLogin: notCalled("complete a Codex sign-in"),
-  disconnectCodexLogin: notCalled("disconnect Codex"),
+  getChatGPTConnection: () => Promise.resolve(disconnectedChatGPT),
+  startChatGPTLogin: notCalled("start a ChatGPT sign-in"),
+  completeChatGPTLogin: notCalled("complete a ChatGPT sign-in"),
+  disconnectChatGPT: notCalled("disconnect ChatGPT"),
 };
 
 export function ownerApiSupervisor(
@@ -72,7 +72,7 @@ export function ownerApiSupervisor(
     },
     getWorkspaceBackend: () => Promise.resolve("provider"),
     setWorkspaceBackend: (backend) => Promise.resolve({ ok: true, backend }),
-    ...codexLoginSupervisor,
+    ...chatgptSupervisor,
     ...overrides,
   };
 }

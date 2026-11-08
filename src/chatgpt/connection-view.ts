@@ -1,26 +1,26 @@
 import type { ReconnectReason, StoredUsageLimit } from "./credential-store.js";
 import type { CallbackProblem } from "./oauth.js";
 
-export type CodexLoginUsageLimit = StoredUsageLimit;
+export type ChatGPTUsageLimit = StoredUsageLimit;
 
-export type CodexLoginConnectionStatus =
+export type ChatGPTConnectionStatus =
   | Readonly<{ state: "disconnected" }>
-  | Readonly<{ state: "connected"; expiresAt: number; usageLimit?: CodexLoginUsageLimit }>
+  | Readonly<{ state: "connected"; expiresAt: number; usageLimit?: ChatGPTUsageLimit }>
   | Readonly<{ state: "needs-reconnect"; reason: ReconnectReason }>;
 
-type CodexLoginView = Readonly<{
+type ChatGPTLoginView = Readonly<{
   attemptId: string;
   authorizeUrl: string;
   expiresAt: number;
 }>;
 
-export type CodexLoginConnectionView = Readonly<{
-  connection: CodexLoginConnectionStatus;
-  login: CodexLoginView | null;
+export type ChatGPTConnectionView = Readonly<{
+  connection: ChatGPTConnectionStatus;
+  login: ChatGPTLoginView | null;
   model: string;
 }>;
 
-export type CodexLoginFailure =
+export type ChatGPTLoginFailure =
   | "no-sign-in"
   | "expired"
   | CallbackProblem
@@ -28,15 +28,15 @@ export type CodexLoginFailure =
   | "exchange-unavailable"
   | "missing-scope";
 
-export type CodexLoginOutcome =
-  | Readonly<{ ok: true; codexLogin: CodexLoginConnectionView }>
+export type ChatGPTLoginOutcome =
+  | Readonly<{ ok: true; chatgpt: ChatGPTConnectionView }>
   | Readonly<{
       ok: false;
-      problem: Readonly<{ code: CodexLoginFailure }>;
-      codexLogin: CodexLoginConnectionView;
+      problem: Readonly<{ code: ChatGPTLoginFailure }>;
+      chatgpt: ChatGPTConnectionView;
     }>;
 
-export type CodexLoginAccess =
+export type ChatGPTAccess =
   | Readonly<{ kind: "ready"; accessToken: string }>
   | Readonly<{ kind: "not-connected" }>
   | Readonly<{ kind: "reconnect-required" }>

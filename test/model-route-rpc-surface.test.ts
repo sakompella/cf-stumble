@@ -1,7 +1,7 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { CodexLoginCredentialStore } from "../src/codex-login/credential-store.js";
+import { ChatGPTCredentialStore } from "../src/chatgpt/credential-store.js";
 import { loadMainFacet } from "../src/facet/index.js";
 import { parsedArtifact } from "./facet/fixture.js";
 
@@ -27,7 +27,7 @@ async function probe(read) {
 export default {
   async fetch(_request, env) {
     const outcomes = {
-      codexLoginCredential: await probe(() => env.MODEL.codexLoginCredential()),
+      chatgptCredential: await probe(() => env.MODEL.chatgptCredential()),
       ctx: await probe(() => env.MODEL.ctx),
       env: await probe(() => env.MODEL.env),
     };
@@ -44,7 +44,7 @@ test("a generation holding the model route cannot reach its credential helper or
   const supervisor = "rpc-surface-credential-holder";
 
   await runInDurableObject(env.SUPERVISOR.getByName(supervisor), (_instance, state) => {
-    new CodexLoginCredentialStore(state.storage).connect(
+    new ChatGPTCredentialStore(state.storage).connect(
       {
         accessToken: ACCESS_TOKEN,
         refreshToken: REFRESH_TOKEN,
@@ -74,6 +74,6 @@ test("a generation holding the model route cannot reach its credential helper or
   expect(body).not.toContain(ACCESS_TOKEN);
   expect(body).not.toContain(REFRESH_TOKEN);
   expect(JSON.parse(body)).toMatchObject({
-    outcomes: { codexLoginCredential: "refused", ctx: "refused", env: "refused" },
+    outcomes: { chatgptCredential: "refused", ctx: "refused", env: "refused" },
   });
 });

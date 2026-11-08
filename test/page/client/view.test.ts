@@ -4,7 +4,7 @@ import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
-import type { CodexLoginConnection, Model } from "../../../src/page/client/model.js";
+import type { ChatGPTConnection, Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
 import { entryItem, followResolved, pageShowing, running } from "./views.js";
@@ -80,19 +80,19 @@ function idsRendered(model: Model): readonly string[] {
   return ids;
 }
 
-function withCodexLogin(codexLogin: CodexLoginConnection): Model {
-  return update(init().model, Message.SucceededCodexLogin({ codexLogin })).model;
+function withChatGPT(chatgpt: ChatGPTConnection): Model {
+  return update(init().model, Message.SucceededChatGPT({ chatgpt })).model;
 }
 
 test("the page renders every stable element id, and none twice", () => {
   const pages = [
     shownWithDiagnostics(),
-    withCodexLogin({
+    withChatGPT({
       connection: "not connected",
       isConnected: false,
       maybeLogin: Option.some({ attemptId: "a", authorizeUrl: "https://auth.example/authorize" }),
     }),
-    withCodexLogin({ connection: "connected", isConnected: true, maybeLogin: Option.none() }),
+    withChatGPT({ connection: "connected", isConnected: true, maybeLogin: Option.none() }),
   ].map((model) => idsRendered(model));
 
   for (const id of Object.values(ID)) {

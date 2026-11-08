@@ -4,7 +4,7 @@ import {
   connectPayload,
   projectsPayload,
   refreshPayload,
-  CODEX_LOGIN_PAYLOAD,
+  CHATGPT_PAYLOAD,
   STATUS_PAYLOAD,
 } from "./fixtures.mjs";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
@@ -74,8 +74,8 @@ const JSON_ROUTES: readonly Readonly<{
   },
   {
     method: "GET",
-    path: "/api/codex-login/connection",
-    answer: () => ({ status: 200, payload: CODEX_LOGIN_PAYLOAD }),
+    path: "/api/chatgpt/connection",
+    answer: () => ({ status: 200, payload: CHATGPT_PAYLOAD }),
   },
   {
     method: "GET",

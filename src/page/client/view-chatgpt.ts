@@ -13,7 +13,7 @@ function buttonRow(id: string, label: string, onClick: Message, h: HtmlBuilder<M
 }
 
 function loginRows(model: Model, h: HtmlBuilder<Message>): readonly Html[] {
-  return Option.match(model.codexLogin.maybeLogin, {
+  return Option.match(model.chatgpt.maybeLogin, {
     onNone: () => [],
     onSome: (login) => [
       h.p(
@@ -21,12 +21,12 @@ function loginRows(model: Model, h: HtmlBuilder<Message>): readonly Html[] {
         [
           h.a(
             [
-              h.Id(ID.codexLoginSignInLink),
+              h.Id(ID.chatgptSignInLink),
               h.Href(login.authorizeUrl),
               h.Rel("noreferrer noopener"),
               h.Target("_blank"),
             ],
-            ["Codex sign-in"],
+            ["ChatGPT sign-in"],
           ),
         ],
       ),
@@ -34,13 +34,13 @@ function loginRows(model: Model, h: HtmlBuilder<Message>): readonly Html[] {
       controlRow(
         {
           label: "address",
-          inputId: ID.codexLoginCallbackInput,
+          inputId: ID.chatgptCallbackInput,
           isNumber: false,
-          value: model.codexLoginCallbackInput,
-          onInput: (value) => Message.UpdatedCodexLoginCallbackInput({ value }),
-          buttonId: ID.codexLoginFinishButton,
+          value: model.chatgptCallbackInput,
+          onInput: (value) => Message.UpdatedChatGPTCallbackInput({ value }),
+          buttonId: ID.chatgptFinishButton,
           buttonText: "Finish",
-          onClick: Message.ClickedCodexLoginFinish(),
+          onClick: Message.ClickedChatGPTFinish(),
         },
         h,
       ),
@@ -48,26 +48,26 @@ function loginRows(model: Model, h: HtmlBuilder<Message>): readonly Html[] {
   });
 }
 
-export function codexLoginPanel(model: Model, h: HtmlBuilder<Message>): Html {
+export function chatGPTPanel(model: Model, h: HtmlBuilder<Message>): Html {
   return h.div(
     [h.Class("sidebar-panel")],
     [
-      h.h3([], ["Codex"]),
-      valueRow("connection", ID.codexLoginConnection, model.codexLogin.connection, h),
-      ...(model.codexLogin.isConnected
+      h.h3([], ["ChatGPT"]),
+      valueRow("connection", ID.chatgptConnection, model.chatgpt.connection, h),
+      ...(model.chatgpt.isConnected
         ? [
             buttonRow(
-              ID.codexLoginDisconnectButton,
+              ID.chatgptDisconnectButton,
               "Disconnect",
-              Message.ClickedCodexLoginDisconnect(),
+              Message.ClickedChatGPTDisconnect(),
               h,
             ),
           ]
         : [
-            buttonRow(ID.codexLoginConnectButton, "Connect Codex", Message.ClickedCodexLogin(), h),
+            buttonRow(ID.chatgptConnectButton, "Connect ChatGPT", Message.ClickedChatGPTLogin(), h),
             ...loginRows(model, h),
           ]),
-      valueRow("result", ID.codexLoginResult, model.codexLoginResult, h),
+      valueRow("result", ID.chatgptResult, model.chatgptResult, h),
     ],
   );
 }

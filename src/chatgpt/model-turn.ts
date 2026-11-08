@@ -10,7 +10,7 @@ import {
   pumpSseStream,
   type ModelTurnAnswer,
 } from "../model-route-turn.js";
-import type { CodexLoginAccess } from "./connection-view.js";
+import type { ChatGPTAccess } from "./connection-view.js";
 import { discardBody, type ProviderFetch } from "./oauth.js";
 import {
   isUsageLimit,
@@ -23,22 +23,22 @@ import {
   type ProviderError,
 } from "./responses.js";
 
-export type CodexLoginCredential = Readonly<{
-  access(rejected?: string): Promise<CodexLoginAccess>;
+export type ChatGPTCredential = Readonly<{
+  access(rejected?: string): Promise<ChatGPTAccess>;
   markRefused(accessToken: string): Promise<void>;
   markUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
 }>;
 
-class CodexLoginNotConnected extends Data.TaggedError("CodexLoginNotConnected") {}
+class ChatGPTNotConnected extends Data.TaggedError("ChatGPTNotConnected") {}
 
-class CodexLoginUsageLimited extends Data.TaggedError("CodexLoginUsageLimited")<{
+class ChatGPTUsageLimited extends Data.TaggedError("ChatGPTUsageLimited")<{
   readonly limitedUntil: number | null;
 }> {}
 
-type CodexLoginRefusal = ModelTurnFailed | CodexLoginNotConnected | CodexLoginUsageLimited;
+type ChatGPTRefusal = ModelTurnFailed | ChatGPTNotConnected | ChatGPTUsageLimited;
 
-export type CodexLoginTurnInput = Readonly<{
-  credential: CodexLoginCredential;
+export type ChatGPTTurnInput = Readonly<{
+  credential: ChatGPTCredential;
   fetcher: ProviderFetch;
   model: string;
 }>;
@@ -49,21 +49,21 @@ const reconnectRequired = (): ModelTurnFailed =>
 const MAX_ERROR_BODY_BYTES = 4096;
 
 function accessToken(
-  credential: CodexLoginCredential,
+  credential: ChatGPTCredential,
   rejected?: string,
-): Effect.Effect<string, CodexLoginRefusal> {
+): Effect.Effect<string, ChatGPTRefusal> {
   return Effect.tryPromise({
     try: () => credential.access(rejected),
     catch: modelUnavailable,
   }).pipe(
-    Effect.flatMap((access): Effect.Effect<string, CodexLoginRefusal> => {
+    Effect.flatMap((access): Effect.Effect<string, ChatGPTRefusal> => {
       switch (access.kind) {
         case "ready":
           return Effect.succeed(access.accessToken);
         case "not-connected":
-          return Effect.fail(new CodexLoginNotConnected());
+          return Effect.fail(new ChatGPTNotConnected());
         case "usage-limited":
-          return Effect.fail(new CodexLoginUsageLimited({ limitedUntil: access.limitedUntil }));
+          return Effect.fail(new ChatGPTUsageLimited({ limitedUntil: access.limitedUntil }));
         case "reconnect-required":
           return Effect.fail(reconnectRequired());
         case "unavailable":
@@ -93,13 +93,13 @@ function errorOf(response: Response): Effect.Effect<ProviderError> {
 }
 
 function refused(
-  credential: CodexLoginCredential,
+  credential: ChatGPTCredential,
   token: string,
   outcome: "http-error" | "stream-failed",
   response: Response,
   error: ProviderError,
   outputSent: boolean,
-): Effect.Effect<never, CodexLoginRefusal> {
+): Effect.Effect<never, ChatGPTRefusal> {
   const fields = { outcome, status: response.status, type: error.type, code: error.code };
 
   const unavailable = modelUnavailableBecause(
@@ -107,7 +107,7 @@ function refused(
   );
 
   if (!isUsageLimit(response.status, error)) {
-    logEvent("error", "codex-login.model-call", fields);
+    logEvent("error", "chatgpt.model-call", fields);
 
     return Effect.fail(unavailable);
   }
@@ -117,7 +117,7 @@ function refused(
 
   logEvent(
     outputSent ? "error" : "warn",
-    "codex-login.model-call",
+    "chatgpt.model-call",
     limitedUntil === null ? limitFields : { ...limitFields, limitedUntil },
   );
 
@@ -125,13 +125,13 @@ function refused(
     credential.markUsageLimited(token, limitedUntil).catch(() => {}),
   ).pipe(
     Effect.andThen(
-      Effect.fail(outputSent ? unavailable : new CodexLoginUsageLimited({ limitedUntil })),
+      Effect.fail(outputSent ? unavailable : new ChatGPTUsageLimited({ limitedUntil })),
     ),
   );
 }
 
 function send(
-  input: CodexLoginTurnInput,
+  input: ChatGPTTurnInput,
   body: string,
   token: string,
 ): Effect.Effect<Response, ModelTurnFailed> {
@@ -153,10 +153,10 @@ function send(
 }
 
 function refusedTwice(
-  credential: CodexLoginCredential,
+  credential: ChatGPTCredential,
   token: string,
 ): Effect.Effect<never, ModelTurnFailed> {
-  logEvent("error", "codex-login.model-call", { outcome: "refused", status: 401 });
+  logEvent("error", "chatgpt.model-call", { outcome: "refused", status: 401 });
 
   return Effect.promise(() => credential.markRefused(token).catch(() => {})).pipe(
     Effect.andThen(Effect.fail(reconnectRequired())),
@@ -165,17 +165,14 @@ function refusedTwice(
 
 type Answer = Readonly<{ response: Response; token: string }>;
 
-function answered(
-  input: CodexLoginTurnInput,
-  body: string,
-): Effect.Effect<Answer, CodexLoginRefusal> {
+function answered(input: ChatGPTTurnInput, body: string): Effect.Effect<Answer, ChatGPTRefusal> {
   return Effect.gen(function* () {
     const first = yield* accessToken(input.credential);
     const response = yield* send(input, body, first);
 
     if (response.status !== 401) return { response, token: first };
     yield* Effect.promise(() => discardBody(response));
-    logEvent("warn", "codex-login.model-call", { outcome: "retrying", status: 401 });
+    logEvent("warn", "chatgpt.model-call", { outcome: "retrying", status: 401 });
 
     const second = yield* accessToken(input.credential, first);
     const retried = yield* send(input, body, second);
@@ -187,10 +184,10 @@ function answered(
   });
 }
 
-export function codexLoginTurn(
-  input: CodexLoginTurnInput,
+export function chatgptTurn(
+  input: ChatGPTTurnInput,
   request: ModelRouteRequest,
-): (emit: (event: ModelStreamEvent) => void) => Effect.Effect<ModelTurnAnswer, CodexLoginRefusal> {
+): (emit: (event: ModelStreamEvent) => void) => Effect.Effect<ModelTurnAnswer, ChatGPTRefusal> {
   const body = JSON.stringify(responsesRequest(input.model, request));
 
   return (emit) =>

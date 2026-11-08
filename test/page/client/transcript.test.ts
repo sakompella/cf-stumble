@@ -64,7 +64,7 @@ test("an answer that holds only tool calls adds no empty entry, and a running ca
   ]);
 });
 
-test("an answer Workers AI gave after Codex's usage limit is preceded by a notice", () => {
+test("an answer Workers AI gave after ChatGPT's usage limit is preceded by a notice", () => {
   const conversation = conversationOf({
     ...answer([{ type: "text", text: "from Workers AI" }]),
     diagnostics: [{ type: "provider-fallback" }],
@@ -74,7 +74,7 @@ test("an answer Workers AI gave after Codex's usage limit is preceded by a notic
     {
       role: "system",
       who: "notice",
-      text: "Codex usage limit reached; answered with Workers AI",
+      text: "ChatGPT usage limit reached; answered with Workers AI",
     },
     { role: "assistant", text: "from Workers AI" },
   ]);

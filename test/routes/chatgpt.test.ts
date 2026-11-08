@@ -1,8 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { CodexLoginConnectionView, CodexLoginOutcome } from "../../src/codex-login/index.js";
+import type { ChatGPTConnectionView, ChatGPTLoginOutcome } from "../../src/chatgpt/index.js";
 import {
   controlRequest,
-  disconnectedCodexLogin,
+  disconnectedChatGPT,
   ownerApiResponse,
   ownerApiSupervisor,
 } from "./helpers.js";
@@ -11,8 +11,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const signingIn: CodexLoginConnectionView = {
-  ...disconnectedCodexLogin,
+const signingIn: ChatGPTConnectionView = {
+  ...disconnectedChatGPT,
   login: {
     attemptId: "attempt-1",
     authorizeUrl: "https://auth.openai.com/api/accounts/authorize?state=s",
@@ -22,28 +22,25 @@ const signingIn: CodexLoginConnectionView = {
 
 test("the connection, a started sign-in and a disconnect each answer the view", async () => {
   const supervisor = ownerApiSupervisor({
-    startCodexLogin: () => Promise.resolve(signingIn),
-    disconnectCodexLogin: () => Promise.resolve(disconnectedCodexLogin),
+    startChatGPTLogin: () => Promise.resolve(signingIn),
+    disconnectChatGPT: () => Promise.resolve(disconnectedChatGPT),
   });
 
   const read = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/codex-login/connection"),
+    new Request("https://cf-stumble.test/api/chatgpt/connection"),
     supervisor,
   );
 
-  const started = await ownerApiResponse(
-    controlRequest("/api/codex-login/login", "{}"),
-    supervisor,
-  );
+  const started = await ownerApiResponse(controlRequest("/api/chatgpt/login", "{}"), supervisor);
 
   const disconnected = await ownerApiResponse(
-    controlRequest("/api/codex-login/disconnect", "{}"),
+    controlRequest("/api/chatgpt/disconnect", "{}"),
     supervisor,
   );
 
-  expect(await read.json()).toEqual({ ok: true, codexLogin: disconnectedCodexLogin });
-  expect(await started.json()).toEqual({ ok: true, codexLogin: signingIn });
-  expect(await disconnected.json()).toEqual({ ok: true, codexLogin: disconnectedCodexLogin });
+  expect(await read.json()).toEqual({ ok: true, chatgpt: disconnectedChatGPT });
+  expect(await started.json()).toEqual({ ok: true, chatgpt: signingIn });
+  expect(await disconnected.json()).toEqual({ ok: true, chatgpt: disconnectedChatGPT });
 });
 
 const COMPLETION_BODY = {
@@ -55,15 +52,15 @@ test("finishing a sign-in hands the supervisor the attempt and the address from 
   const received: string[][] = [];
 
   const supervisor = ownerApiSupervisor({
-    completeCodexLogin: (attemptId, callbackUrl) => {
+    completeChatGPTLogin: (attemptId, callbackUrl) => {
       received.push([attemptId, callbackUrl]);
 
-      return Promise.resolve({ ok: true, codexLogin: disconnectedCodexLogin });
+      return Promise.resolve({ ok: true, chatgpt: disconnectedChatGPT });
     },
   });
 
   await ownerApiResponse(
-    controlRequest("/api/codex-login/login/complete", JSON.stringify(COMPLETION_BODY)),
+    controlRequest("/api/chatgpt/login/complete", JSON.stringify(COMPLETION_BODY)),
     supervisor,
   );
 
@@ -71,20 +68,20 @@ test("finishing a sign-in hands the supervisor the attempt and the address from 
 });
 
 test.each([
-  { code: "wrong-sign-in", status: 400, codexLogin: signingIn },
-  { code: "exchange-unavailable", status: 503, codexLogin: disconnectedCodexLogin },
+  { code: "wrong-sign-in", status: 400, chatgpt: signingIn },
+  { code: "exchange-unavailable", status: 503, chatgpt: disconnectedChatGPT },
 ] as const)(
   "a sign-in the supervisor refuses as $code answers $status with the outcome",
   async (refusal) => {
-    const outcome: CodexLoginOutcome = {
+    const outcome: ChatGPTLoginOutcome = {
       ok: false,
       problem: { code: refusal.code },
-      codexLogin: refusal.codexLogin,
+      chatgpt: refusal.chatgpt,
     };
 
     const response = await ownerApiResponse(
-      controlRequest("/api/codex-login/login/complete", JSON.stringify(COMPLETION_BODY)),
-      ownerApiSupervisor({ completeCodexLogin: () => Promise.resolve(outcome) }),
+      controlRequest("/api/chatgpt/login/complete", JSON.stringify(COMPLETION_BODY)),
+      ownerApiSupervisor({ completeChatGPTLogin: () => Promise.resolve(outcome) }),
     );
 
     expect(response.status).toBe(refusal.status);
@@ -97,14 +94,14 @@ test("a sign-in body with a field beyond the attempt and the address never reach
 
   const response = await ownerApiResponse(
     controlRequest(
-      "/api/codex-login/login/complete",
+      "/api/chatgpt/login/complete",
       JSON.stringify({ ...COMPLETION_BODY, clientId: "c" }),
     ),
     ownerApiSupervisor({
-      completeCodexLogin: () => {
+      completeChatGPTLogin: () => {
         reached = true;
 
-        return Promise.resolve({ ok: true, codexLogin: disconnectedCodexLogin });
+        return Promise.resolve({ ok: true, chatgpt: disconnectedChatGPT });
       },
     }),
   );

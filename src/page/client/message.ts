@@ -3,7 +3,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { BackendSetting } from "../../backend-setting.js";
 import { Conversation } from "./conversation.js";
 import {
-  CodexLoginConnection,
+  ChatGPTConnection,
   ControlKind,
   GenerationReading,
   GitHubReport,
@@ -17,10 +17,10 @@ export const Message = defineMessageUnion({
   ClickedConnect: {},
   ClickedAuthorize: { path: Schema.String },
   ClickedRefreshGitHub: {},
-  ClickedCodexLogin: {},
-  UpdatedCodexLoginCallbackInput: { value: Schema.String },
-  ClickedCodexLoginFinish: {},
-  ClickedCodexLoginDisconnect: {},
+  ClickedChatGPTLogin: {},
+  UpdatedChatGPTCallbackInput: { value: Schema.String },
+  ClickedChatGPTFinish: {},
+  ClickedChatGPTDisconnect: {},
   ClickedBackend: { backend: BackendSetting },
 
   UpdatedPrompt: { value: Schema.String },
@@ -54,12 +54,9 @@ export const Message = defineMessageUnion({
   RejectedGitHub: { wording: Schema.String },
   FailedGitHub: { detail: Schema.String },
 
-  SucceededCodexLogin: { codexLogin: CodexLoginConnection },
-  RejectedCodexLogin: {
-    wording: Schema.String,
-    maybeCodexLogin: Schema.Option(CodexLoginConnection),
-  },
-  FailedCodexLogin: { detail: Schema.String },
+  SucceededChatGPT: { chatgpt: ChatGPTConnection },
+  RejectedChatGPT: { wording: Schema.String, maybeChatGPT: Schema.Option(ChatGPTConnection) },
+  FailedChatGPT: { detail: Schema.String },
 
   SucceededBackend: { backend: BackendSetting },
   RejectedBackend: { wording: Schema.String },

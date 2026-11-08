@@ -4,11 +4,11 @@ import * as Predicate from "effect/Predicate";
 import {
   AuthorizeGitHub,
   ConnectRepository,
-  DisconnectCodexLogin,
+  DisconnectChatGPT,
   FetchProjects,
-  FinishCodexLogin,
+  FinishChatGPTLogin,
   RefreshGitHub,
-  StartCodexLogin,
+  StartChatGPTLogin,
 } from "./commands.js";
 import type { GitHubReport, Model, Project } from "./model.js";
 import { EMPTY_CONVERSATION } from "./conversation.js";
@@ -199,70 +199,65 @@ export function gitHubHandlers(
   };
 }
 
-const ASKING = "asking Codex";
+const ASKING = "asking ChatGPT";
 
 function asking(model: Model): Model {
-  return { ...clearError(model), codexLoginResult: ASKING };
+  return { ...clearError(model), chatgptResult: ASKING };
 }
 
 function finish(model: Model): UpdateReturn {
-  return Option.match(model.codexLogin.maybeLogin, {
+  return Option.match(model.chatgpt.maybeLogin, {
     onNone: () => ({ model }),
     onSome: (login) => {
-      const callbackUrl = model.codexLoginCallbackInput.trim();
+      const callbackUrl = model.chatgptCallbackInput.trim();
 
       return callbackUrl === ""
-        ? { model: { ...clearError(model), codexLoginResult: "paste the address first" } }
+        ? { model: { ...clearError(model), chatgptResult: "paste the address first" } }
         : {
             model: asking(model),
-            commands: [FinishCodexLogin({ attemptId: login.attemptId, callbackUrl })],
+            commands: [FinishChatGPTLogin({ attemptId: login.attemptId, callbackUrl })],
           };
     },
   });
 }
 
-export function codexLoginHandlers(
+export function chatGPTHandlers(
   model: Model,
 ): Handlers<
-  | "ClickedCodexLogin"
-  | "UpdatedCodexLoginCallbackInput"
-  | "ClickedCodexLoginFinish"
-  | "ClickedCodexLoginDisconnect"
-  | "SucceededCodexLogin"
-  | "RejectedCodexLogin"
-  | "FailedCodexLogin"
+  | "ClickedChatGPTLogin"
+  | "UpdatedChatGPTCallbackInput"
+  | "ClickedChatGPTFinish"
+  | "ClickedChatGPTDisconnect"
+  | "SucceededChatGPT"
+  | "RejectedChatGPT"
+  | "FailedChatGPT"
 > {
   return {
-    ClickedCodexLogin: () => ({ model: asking(model), commands: [StartCodexLogin()] }),
-    UpdatedCodexLoginCallbackInput: ({ value }) => ({
-      model: { ...model, codexLoginCallbackInput: value },
+    ClickedChatGPTLogin: () => ({ model: asking(model), commands: [StartChatGPTLogin()] }),
+    UpdatedChatGPTCallbackInput: ({ value }) => ({
+      model: { ...model, chatgptCallbackInput: value },
     }),
-    ClickedCodexLoginFinish: () => finish(model),
-    ClickedCodexLoginDisconnect: () => ({
-      model: asking(model),
-      commands: [DisconnectCodexLogin()],
+    ClickedChatGPTFinish: () => finish(model),
+    ClickedChatGPTDisconnect: () => ({ model: asking(model), commands: [DisconnectChatGPT()] }),
+    SucceededChatGPT: ({ chatgpt }) => ({
+      model: { ...model, chatgpt, chatgptCallbackInput: "", chatgptResult: "" },
     }),
-    SucceededCodexLogin: ({ codexLogin }) => ({
-      model: { ...model, codexLogin, codexLoginCallbackInput: "", codexLoginResult: "" },
-    }),
-    RejectedCodexLogin: ({ wording, maybeCodexLogin }) => {
-      const codexLogin = Option.getOrElse(maybeCodexLogin, () => model.codexLogin);
+    RejectedChatGPT: ({ wording, maybeChatGPT }) => {
+      const chatgpt = Option.getOrElse(maybeChatGPT, () => model.chatgpt);
 
       return {
         model: {
           ...model,
-          codexLogin,
-          codexLoginCallbackInput: Option.isSome(codexLogin.maybeLogin)
-            ? model.codexLoginCallbackInput
-            : "",
-          codexLoginResult: wording,
+          chatgpt,
+          chatgptCallbackInput: Option.isSome(chatgpt.maybeLogin) ? model.chatgptCallbackInput : "",
+          chatgptResult: wording,
         },
       };
     },
-    FailedCodexLogin: ({ detail }) => ({
+    FailedChatGPT: ({ detail }) => ({
       model: {
-        ...withError(model, "the Codex request", detail),
-        codexLoginResult: "request failed",
+        ...withError(model, "the ChatGPT request", detail),
+        chatgptResult: "request failed",
       },
     }),
   };

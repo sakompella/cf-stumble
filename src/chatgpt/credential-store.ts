@@ -48,26 +48,13 @@ function reconnectReason(value: string | null): ReconnectReason {
   return value === "refresh-refused" || value === "missing-scope" ? value : "provider-refused";
 }
 
-export class CodexLoginCredentialStore {
+export class ChatGPTCredentialStore {
   private readonly sql: SqlStorage;
 
   constructor(storage: DurableObjectStorage) {
     this.sql = storage.sql;
-
-    for (const table of ["connection", "login", "usage_limit", "host"]) {
-      const legacy = this.sql
-        .exec(
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
-          `chatgpt_${table}`,
-        )
-        .toArray();
-
-      if (legacy.length > 0)
-        this.sql.exec(`ALTER TABLE chatgpt_${table} RENAME TO codex_login_${table}`);
-    }
-
     this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS codex_login_connection (
+      CREATE TABLE IF NOT EXISTS chatgpt_connection (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         status TEXT NOT NULL CHECK (status IN ('connected', 'needs-reconnect')),
         reconnect_reason TEXT,
@@ -77,7 +64,7 @@ export class CodexLoginCredentialStore {
         client_id TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
-      CREATE TABLE IF NOT EXISTS codex_login_login (
+      CREATE TABLE IF NOT EXISTS chatgpt_login (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         attempt_id TEXT NOT NULL,
         state TEXT NOT NULL,
@@ -85,12 +72,12 @@ export class CodexLoginCredentialStore {
         authorize_url TEXT NOT NULL,
         expires_at INTEGER NOT NULL
       );
-      CREATE TABLE IF NOT EXISTS codex_login_usage_limit (
+      CREATE TABLE IF NOT EXISTS chatgpt_usage_limit (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         reached_at INTEGER NOT NULL,
         limited_until INTEGER
       );
-      CREATE TABLE IF NOT EXISTS codex_login_host (
+      CREATE TABLE IF NOT EXISTS chatgpt_host (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         agent_host_id TEXT NOT NULL
       );
@@ -101,7 +88,7 @@ export class CodexLoginCredentialStore {
     const row = this.sql
       .exec<ConnectionRow>(
         `SELECT status, reconnect_reason, access_token, refresh_token, expires_at, client_id
-         FROM codex_login_connection WHERE id = 1`,
+         FROM chatgpt_connection WHERE id = 1`,
       )
       .toArray()[0];
 
@@ -121,7 +108,7 @@ export class CodexLoginCredentialStore {
   connect(grant: StoredGrant, now: number): void {
     this.clearUsageLimit();
     this.sql.exec(
-      `INSERT OR REPLACE INTO codex_login_connection
+      `INSERT OR REPLACE INTO chatgpt_connection
          (id, status, reconnect_reason, access_token, refresh_token, expires_at, client_id, updated_at)
        VALUES (1, 'connected', NULL, ?, ?, ?, ?, ?)`,
       grant.accessToken,
@@ -136,7 +123,7 @@ export class CodexLoginCredentialStore {
     return (
       this.sql
         .exec(
-          `UPDATE codex_login_connection
+          `UPDATE chatgpt_connection
            SET access_token = ?, refresh_token = ?, expires_at = ?, updated_at = ?
            WHERE id = 1 AND status = 'connected' AND refresh_token = ?
            RETURNING id`,
@@ -152,7 +139,7 @@ export class CodexLoginCredentialStore {
 
   markNeedsReconnect(accessToken: string, reason: ReconnectReason, now: number): void {
     this.sql.exec(
-      `UPDATE codex_login_connection SET status = 'needs-reconnect', reconnect_reason = ?, updated_at = ?
+      `UPDATE chatgpt_connection SET status = 'needs-reconnect', reconnect_reason = ?, updated_at = ?
        WHERE id = 1 AND access_token = ?`,
       reason,
       now,
@@ -161,15 +148,15 @@ export class CodexLoginCredentialStore {
   }
 
   disconnect(): void {
-    this.sql.exec("DELETE FROM codex_login_connection");
-    this.sql.exec("DELETE FROM codex_login_login");
+    this.sql.exec("DELETE FROM chatgpt_connection");
+    this.sql.exec("DELETE FROM chatgpt_login");
     this.clearUsageLimit();
   }
 
   usageLimit(): StoredUsageLimit | undefined {
     const row = this.sql
       .exec<{ readonly reached_at: number; readonly limited_until: number | null }>(
-        "SELECT reached_at, limited_until FROM codex_login_usage_limit WHERE id = 1",
+        "SELECT reached_at, limited_until FROM chatgpt_usage_limit WHERE id = 1",
       )
       .toArray()[0];
 
@@ -180,8 +167,8 @@ export class CodexLoginCredentialStore {
 
   markUsageLimited(accessToken: string, limit: StoredUsageLimit): void {
     this.sql.exec(
-      `INSERT OR REPLACE INTO codex_login_usage_limit (id, reached_at, limited_until)
-       SELECT 1, ?, ? FROM codex_login_connection
+      `INSERT OR REPLACE INTO chatgpt_usage_limit (id, reached_at, limited_until)
+       SELECT 1, ?, ? FROM chatgpt_connection
        WHERE id = 1 AND status = 'connected' AND access_token = ?`,
       limit.reachedAt,
       limit.limitedUntil,
@@ -190,13 +177,13 @@ export class CodexLoginCredentialStore {
   }
 
   clearUsageLimit(): void {
-    this.sql.exec("DELETE FROM codex_login_usage_limit");
+    this.sql.exec("DELETE FROM chatgpt_usage_limit");
   }
 
   login(): StoredLogin | undefined {
     const row = this.sql
       .exec<LoginRow>(
-        `SELECT attempt_id, state, verifier, authorize_url, expires_at FROM codex_login_login WHERE id = 1`,
+        `SELECT attempt_id, state, verifier, authorize_url, expires_at FROM chatgpt_login WHERE id = 1`,
       )
       .toArray()[0];
 
@@ -213,7 +200,7 @@ export class CodexLoginCredentialStore {
 
   startLogin(login: StoredLogin): void {
     this.sql.exec(
-      `INSERT OR REPLACE INTO codex_login_login (id, attempt_id, state, verifier, authorize_url, expires_at)
+      `INSERT OR REPLACE INTO chatgpt_login (id, attempt_id, state, verifier, authorize_url, expires_at)
        VALUES (1, ?, ?, ?, ?, ?)`,
       login.attemptId,
       login.state,
@@ -224,18 +211,18 @@ export class CodexLoginCredentialStore {
   }
 
   clearLogin(): void {
-    this.sql.exec("DELETE FROM codex_login_login");
+    this.sql.exec("DELETE FROM chatgpt_login");
   }
 
   agentHostId(): string {
     this.sql.exec(
-      "INSERT OR IGNORE INTO codex_login_host (id, agent_host_id) VALUES (1, ?)",
+      "INSERT OR IGNORE INTO chatgpt_host (id, agent_host_id) VALUES (1, ?)",
       crypto.randomUUID(),
     );
 
     return this.sql
       .exec<{ readonly agent_host_id: string }>(
-        "SELECT agent_host_id FROM codex_login_host WHERE id = 1",
+        "SELECT agent_host_id FROM chatgpt_host WHERE id = 1",
       )
       .one().agent_host_id;
   }

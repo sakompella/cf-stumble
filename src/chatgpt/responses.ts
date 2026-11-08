@@ -160,7 +160,6 @@ export function providerErrorOfText(text: string): ProviderError {
 
 const USAGE_LIMITS: ReadonlySet<string> = new Set([
   "subscription_sharing_usage_limit_exceeded",
-  "subscription_sharing_workplace_individual_usage_limit_exceeded",
   "rate_limit_exceeded",
   "rate_limit_error",
   "insufficient_quota",

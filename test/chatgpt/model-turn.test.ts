@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import { codexLoginTurn, type CodexLoginCredential } from "../../src/codex-login/index.js";
+import { chatgptTurn, type ChatGPTCredential } from "../../src/chatgpt/index.js";
 import { modelEventStream } from "../../src/model-route-turn.js";
 import type { ModelRouteRequest } from "../../src/model-route.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
@@ -42,15 +42,15 @@ const REQUEST: ModelRouteRequest = {
 };
 
 function run(
-  credential: CodexLoginCredential,
+  credential: ChatGPTCredential,
   reply: (call: RecordedCall) => Promise<Response>,
 ): Promise<Readonly<{ events: Awaited<ReturnType<typeof collectEvents>>; calls: RecordedCall[] }>> {
   const { fetcher, calls } = recordingFetch(reply);
-  const turn = codexLoginTurn({ credential, fetcher, model: "gpt-test" }, REQUEST);
+  const turn = chatgptTurn({ credential, fetcher, model: "gpt-test" }, REQUEST);
 
   const stream = modelEventStream((emit) =>
     turn(emit).pipe(
-      Effect.catchTag(["CodexLoginNotConnected", "CodexLoginUsageLimited"], () =>
+      Effect.catchTag(["ChatGPTNotConnected", "ChatGPTUsageLimited"], () =>
         Effect.die(new Error("this test expects a connected credential with no usage limit")),
       ),
     ),
@@ -164,11 +164,11 @@ test("a second 401 marks the refreshed token refused and says reconnect is requi
 
   expect(events).toEqual([{ type: "error", error: { code: "chatgpt-reconnect-required" } }]);
   expect(credential.refused).toEqual([ACCESS_TWO]);
-  expect(named(logged(), "codex-login.model-call").map((event) => event.outcome)).toEqual([
+  expect(named(logged(), "chatgpt.model-call").map((event) => event.outcome)).toEqual([
     "retrying",
     "refused",
   ]);
-  expect(everythingLogged()).not.toMatch(/codex-login-access-FAKE/u);
+  expect(everythingLogged()).not.toMatch(/chatgpt-access-FAKE/u);
 });
 
 test("an error object without a type, then [DONE], keeps the text already streamed, logs the code, and errors the call", async () => {
@@ -189,7 +189,7 @@ test("an error object without a type, then [DONE], keeps the text already stream
     { type: "text-delta", delta: "part" },
     { type: "error", error: { code: "model-unavailable", detail: "server_error" } },
   ]);
-  expect(named(logged(), "codex-login.model-call")).toEqual([
+  expect(named(logged(), "chatgpt.model-call")).toEqual([
     expect.objectContaining({ outcome: "stream-failed", code: "server_error" }),
   ]);
   expect(everythingLogged()).not.toContain("Read a.txt");
