@@ -30,9 +30,6 @@ importers:
         specifier: 0.28.2
         version: 0.28.2
     devDependencies:
-      '@cloudflare/vite-plugin':
-        specifier: 2.0.0-beta.v.11
-        version: 2.0.0-beta.v.11(@types/node@22.20.5)(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(workerd@1.20261103.1)
       '@cloudflare/vitest-plugin':
         specifier: ^1.5.1
         version: 1.5.1(@cloudflare/workers-types@5.20261104.1)(@types/node@22.20.5)(vitest@5.1.0(@types/node@22.20.5)(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))
@@ -189,9 +186,6 @@ packages:
   '@cloudflare/build-output-utils@0.9.7':
     resolution: {integrity: sha512-bp2uexgnQp4W5w57oBdDfjzgyGvJAiKbfl6/73uiKVPMv0xHI0be98vfYUCKOBlXMNZ1PwWbNza1Ghbg9M6Bpw==}
 
-  '@cloudflare/build-output-utils@0.9.9':
-    resolution: {integrity: sha512-8bsxwE0sBANpEXHD2SWCfMw82wdacUsr1b0p9a9WbGNeMASmXHUzUfMvRkq9k6aKnC9uPeeYJ/m4ErXsC+cy/Q==}
-
   '@cloudflare/computer@0.8.0':
     resolution: {integrity: sha512-4wbPyQYdO1PC4q03vMXALFM8HgHYHVcGuxxxgAoXgGM7QlYgfRBaJC5cI4tN/trplxxGfiICpoQpL5C04bpO1g==}
     peerDependencies:
@@ -218,18 +212,12 @@ packages:
   '@cloudflare/config@0.29.1':
     resolution: {integrity: sha512-3wWliifIE9yLDp+56Y5iLT1a6fIjBVjkHpJ5Q48UpJwcGOrQ23cNppLlvjVSjxV4+S5gZEZwElLC1fwQ2hmOEQ==}
 
-  '@cloudflare/config@0.30.1':
-    resolution: {integrity: sha512-16yO439yuhX1cM1l2IoNDVxJM4cZ9oE+eLtxFAe32EamS/7e4t42CzzyTE+dHQfFcKNvkmiZRxx9JinO4l7ynQ==}
-
   '@cloudflare/kv-asset-handler@0.5.0':
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
     engines: {node: '>=22.0.0'}
 
   '@cloudflare/runtime-types@0.1.20':
     resolution: {integrity: sha512-m0m/MHEIiGAm9+RgKiSG/KDgTh8wJHNBYRFCBqtBUrnpirTdA3LwDuajOMZgu+sPcg5btccoecpXtVKQzcbsuQ==}
-
-  '@cloudflare/runtime-types@0.1.22':
-    resolution: {integrity: sha512-9t9HWbHzSvJt4NQac6n4lS73p635++PyeN/zIuW9FZXV1Zt0+pnySnMr1lsrrh77dXd+soedhamYb9wbs1QGDQ==}
 
   '@cloudflare/unenv-preset@2.16.2':
     resolution: {integrity: sha512-JBP1+Z7ZSNG/d4mRP+y8VC5dka3tZVMLEZRvS+rzQ4DGV1EoxRFQckcJTTkXbHSQiTj0DtNI01Zwb/V2fX0mvQ==}
@@ -239,12 +227,6 @@ packages:
     peerDependenciesMeta:
       workerd:
         optional: true
-
-  '@cloudflare/vite-plugin@2.0.0-beta.v.11':
-    resolution: {integrity: sha512-C4BEbt5Im85Q0Mx5kVfrWp4b1IBdIacXugkCnLu4hE/VucZKvL9vvrMsv/+3h3XLhBX2xr18BPNoXexgf14Ukg==}
-    hasBin: true
-    peerDependencies:
-      vite: ^7.0.0 || ^8.0.0
 
   '@cloudflare/vitest-plugin@1.5.1':
     resolution: {integrity: sha512-W/Ekr5ks53nY0Ke5DcRJp5YKw3gZ8Y68x8VLTWlJAL578sXn5hnuRjTbQrEt5xmNjBfe/+JS6csNVivhHw/GRQ==}
@@ -2734,10 +2716,6 @@ snapshots:
     dependencies:
       '@cloudflare/config': 0.29.1
 
-  '@cloudflare/build-output-utils@0.9.9':
-    dependencies:
-      '@cloudflare/config': 0.30.1
-
   '@cloudflare/computer@0.8.0(@cloudflare/workers-types@5.20261104.1)(@platformatic/vfs@0.5.0)(just-bash@3.4.2(supports-color@10.2.2))(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(zod@4.6.6)':
     dependencies:
       capnweb: 0.10.0
@@ -2752,10 +2730,6 @@ snapshots:
     dependencies:
       zod: 4.6.6
 
-  '@cloudflare/config@0.30.1':
-    dependencies:
-      zod: 4.6.6
-
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
   '@cloudflare/runtime-types@0.1.20(@types/node@22.20.5)':
@@ -2767,36 +2741,11 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@cloudflare/runtime-types@0.1.22(@types/node@22.20.5)':
-    dependencies:
-      miniflare: 5.20261103.0-beta(@types/node@22.20.5)
-      workerd: 1.20261103.1
-    transitivePeerDependencies:
-      - '@types/node'
-      - bufferutil
-      - utf-8-validate
-
   '@cloudflare/unenv-preset@2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261103.1)':
     dependencies:
       unenv: 2.0.0-rc.24
     optionalDependencies:
       workerd: 1.20261103.1
-
-  '@cloudflare/vite-plugin@2.0.0-beta.v.11(@types/node@22.20.5)(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(workerd@1.20261103.1)':
-    dependencies:
-      '@cloudflare/build-output-utils': 0.9.9
-      '@cloudflare/config': 0.30.1
-      '@cloudflare/runtime-types': 0.1.22(@types/node@22.20.5)
-      '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261103.1)
-      miniflare: 5.20261103.0-beta(@types/node@22.20.5)
-      unenv: 2.0.0-rc.24
-      vite: 8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
-      ws: 8.21.0
-    transitivePeerDependencies:
-      - '@types/node'
-      - bufferutil
-      - utf-8-validate
-      - workerd
 
   '@cloudflare/vitest-plugin@1.5.1(@cloudflare/workers-types@5.20261104.1)(@types/node@22.20.5)(vitest@5.1.0(@types/node@22.20.5)(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
