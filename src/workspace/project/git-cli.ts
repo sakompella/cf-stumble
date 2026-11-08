@@ -2,6 +2,13 @@ import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/
 import { verboseBranches } from "./git-branch-text.js";
 import { checkoutWithMessages } from "./git-checkout-text.js";
 import { commitWithSummary } from "./git-commit-text.js";
+import {
+  addCommand,
+  pushDelete,
+  reportingFailure,
+  resetCommand,
+  restoreCommand,
+} from "./git-index-commands.js";
 import { statusCommand } from "./git-status-command.js";
 
 export type RunCli = (input: GitCliInput) => Promise<GitCliResult>;
@@ -77,6 +84,14 @@ export async function gitCli(
       return checkoutWithMessages(client, cli, input);
     case "branch":
       return verboseBranches(client, cli, input);
+    case "add":
+      return reportingFailure(() => addCommand(client, cli, input));
+    case "reset":
+      return reportingFailure(() => resetCommand(client, cli, input));
+    case "restore":
+      return reportingFailure(() => restoreCommand(client, cli, input));
+    case "push":
+      return cli(pushDelete(input));
     default:
       return cli(input);
   }

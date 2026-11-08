@@ -130,5 +130,9 @@ if [ -z "$sub" ] || [ "$(verdict "$index" "$sub" "$@")" = read ]; then
   GIT_OPTIONAL_LOCKS=0 exec "$real_git" "$@"
 fi
 
-printf 'git %s changes .git; the workspace'"'"'s git runs in the Worker. Run it as its own command (no pipes, &&, or other programs), e.g. "git commit -m msg".\n' "$sub" >&2
+if [ "${CF_STUMBLE_GIT_FALLBACK:-}" = 1 ]; then
+  printf 'git %s: the workspace git does not support this form. Use another form of the command.\n' "$sub" >&2
+else
+  printf 'git %s changes .git, so it only runs as its own command (no pipes, &&, or other programs), e.g. "git commit -m msg".\n' "$sub" >&2
+fi
 exit 1

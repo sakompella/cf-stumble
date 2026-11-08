@@ -107,6 +107,16 @@ export function routedBackend(
   return isolateCanRun(command) ? "isolate" : "container";
 }
 
+const GIT_FALLBACK_VARIABLE = "CF_STUMBLE_GIT_FALLBACK";
+
+function fallbackInput(input: ExecBackendInput): ExecBackendInput {
+  return {
+    ...input,
+    command: `export ${GIT_FALLBACK_VARIABLE}=1; ${input.command}`,
+    backend: "container",
+  };
+}
+
 const NOTHING_RAN_EXIT_CODES: ReadonlySet<number> = new Set([127, 129]);
 
 export function isolateWithContainerFallback(
@@ -142,7 +152,7 @@ export function isolateWithContainerFallback(
             holding = false;
             held = [];
             fellBack = true;
-            current = await container.exec({ ...input, backend: "container" });
+            current = await container.exec(fallbackInput(input));
           } else {
             holding = false;
             ready = [...held, result.value];
