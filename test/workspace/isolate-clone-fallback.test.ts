@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import { executeProjectProvisionRequest } from "../../src/workspace/executor.js";
+import { executeProjectProvisionRequest } from "../../src/workspace/commands/provision-project.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { workspaceEffects, type PromiseOperations } from "./promise-operations.js";
 

@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
+import { HARNESS_BUILD_CONFIGURATION } from "../src/harness-build.js";
 import {
-  HARNESS_BUILD_CONFIGURATION,
   HARNESS_PROVISION_LOCK,
   provisionHarnessRepository,
-} from "../src/harness-build.js";
-import { holdProvisionLock } from "../src/project-provision.js";
+} from "../src/workspace/commands/build-harness.js";
+import { holdProvisionLock } from "../src/workspace/commands/clone-script.js";
 import { shellQuote } from "../src/shell-quote.js";
 import { WORKSPACE_ROOT } from "../src/workspace-layout.js";
 import { testHarnessCommit } from "./harness-commit-fixtures.js";

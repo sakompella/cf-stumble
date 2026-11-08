@@ -24,15 +24,21 @@ import {
   type WorkspaceResetResult,
 } from "./workspace-reset.js";
 import {
-  workspaceSurfaces,
+  ComputerWorkspaceOperations,
+  ensureManagedInstructions,
+  executeGitHubCredentialRequest,
+  executeHarnessBuildRequest,
+  executeProjectProvisionRequest,
+  executeProjectRemovalRequest,
+  harnessBuildConfiguration,
   type GitHubCredentialRequest,
   type GitHubCredentialResult,
   type HarnessBuildRequest,
+  type InstructionsWriteResult,
   type ProjectProvisionRequest,
   type ProjectRemovalRequest,
-  type InstructionsWriteResult,
   type WorkspaceCommandResult,
-} from "./workspace-surfaces.js";
+} from "./commands/index.js";
 
 const CHANGE_REFUSED = { ok: false, error: { code: "workspace-busy" } } as const;
 
@@ -89,30 +95,54 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return this.#resetting ? Promise.resolve(refused) : this.#tracked(work);
   }
 
-  #surfaces(): ReturnType<typeof workspaceSurfaces> {
-    return workspaceSurfaces(this.#platform.workspace, this.env.HARNESS_REPOSITORY_URL);
+  #lenient(): ComputerWorkspaceOperations {
+    return new ComputerWorkspaceOperations(this.#platform.workspace, "not-required");
+  }
+
+  #durable(): ComputerWorkspaceOperations {
+    return new ComputerWorkspaceOperations(this.#platform.workspace, "require-complete");
   }
 
   build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
-    return this.#unlessResetting(CHANGE_REFUSED, () => this.#surfaces().build(request));
-  }
-
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
-    return this.#unlessResetting(CHANGE_REFUSED, () => this.#surfaces().provision(request));
-  }
-
-  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult> {
-    return this.#unlessResetting(CHANGE_REFUSED, () => this.#surfaces().removeProject(request));
-  }
-
-  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
-      this.#surfaces().ensureManagedInstructions(),
+      executeHarnessBuildRequest({
+        configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
+        operations: this.#lenient(),
+        request,
+      }),
     );
   }
 
+  provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
+    return this.#unlessResetting(CHANGE_REFUSED, () =>
+      executeProjectProvisionRequest({
+        operations: this.#durable(),
+        request,
+      }),
+    );
+  }
+
+  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult> {
+    return this.#unlessResetting(CHANGE_REFUSED, () =>
+      executeProjectRemovalRequest({
+        operations: this.#durable(),
+        request,
+      }),
+    );
+  }
+
+  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
+    return this.#unlessResetting(CHANGE_REFUSED, () => ensureManagedInstructions(this.#lenient()));
+  }
+
   credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult> {
-    return this.#unlessResetting(CREDENTIAL_REFUSED, () => this.#surfaces().credential(request));
+    return this.#unlessResetting(CREDENTIAL_REFUSED, () =>
+      executeGitHubCredentialRequest({
+        operations: this.#lenient(),
+        installOperations: this.#durable(),
+        request,
+      }),
+    );
   }
 
   backend(): Promise<BackendSetting> {

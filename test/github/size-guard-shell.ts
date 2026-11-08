@@ -7,7 +7,7 @@ import {
   REPOSITORY_SIZE_VERDICT_FUNCTION,
   repositorySizeVerdictSource,
 } from "../../src/github/index.js";
-import { projectCloneSource } from "../../src/project-provision.js";
+import { projectCloneSource } from "../../src/workspace/commands/provision-project.js";
 import {
   FLOCK_STAND_IN,
   STUB_GIT,

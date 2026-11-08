@@ -2,14 +2,14 @@ import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
   WorkspacePlan,
-} from "../../src/workspace/decisions.js";
+} from "../../src/workspace/commands/command-result.js";
 import type { Project } from "../../src/project-catalog.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
   type ProjectProvisionRequest,
-} from "../../src/workspace/project-provision.js";
+} from "../../src/workspace/commands/provision-project.js";
 import {
   provisionProjectWorkspace,
   type ProvisionWorkspaceHost,

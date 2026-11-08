@@ -5,7 +5,7 @@ import {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
   projectCloneSource,
   projectProvisionLockPath,
-} from "../../src/project-provision.js";
+} from "../../src/workspace/commands/provision-project.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { writeExecutable } from "./planned-shell-fixture.js";
 import {

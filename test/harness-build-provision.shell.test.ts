@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
-import { holdProvisionLock } from "../src/project-provision.js";
+import { holdProvisionLock } from "../src/workspace/commands/clone-script.js";
 import { shellQuote } from "../src/shell-quote.js";
 import { writeExecutable } from "./workspace/planned-shell-fixture.js";
 

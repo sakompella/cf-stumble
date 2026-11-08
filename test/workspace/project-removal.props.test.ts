@@ -3,8 +3,11 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
-import { projectCloneSource, projectProvisionLockPath } from "../../src/project-provision.js";
-import { planProjectRemovalRequest } from "../../src/workspace/project-removal.js";
+import {
+  projectCloneSource,
+  projectProvisionLockPath,
+} from "../../src/workspace/commands/provision-project.js";
+import { planProjectRemovalRequest } from "../../src/workspace/commands/remove-project.js";
 import { projectDirectory } from "../../src/workspace-layout.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import {

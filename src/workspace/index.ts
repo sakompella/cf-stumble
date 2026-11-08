@@ -1,6 +1,10 @@
-export { type WorkspaceCommandResult } from "./decisions.js";
+export {
+  PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
+  type ProjectRemovalWorkspaceNamespace,
+  type WorkspaceCommandResult,
+} from "./commands/index.js";
 
-export { type CommandOutput } from "./executor.js";
+export { type CommandOutput } from "./operations.js";
 
 export {
   checkRepositoryAccess,
@@ -26,5 +30,3 @@ export { WorkspaceHost } from "./host.js";
 export { IsolateWorkspaceGate } from "./project/index.js";
 
 export { WORKSPACE_BUSY, type WorkspaceResetResult } from "./workspace-reset.js";
-
-export { type ProjectRemovalWorkspaceNamespace } from "./project-removal.js";

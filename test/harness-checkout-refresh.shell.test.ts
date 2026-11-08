@@ -3,7 +3,8 @@ import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { devShellTool } from "./dev-shell-tool.js";
-import { HARNESS_BUILD_CONFIGURATION, provisionHarnessRepository } from "../src/harness-build.js";
+import { HARNESS_BUILD_CONFIGURATION } from "../src/harness-build.js";
+import { provisionHarnessRepository } from "../src/workspace/commands/build-harness.js";
 import { testHarnessCommit } from "./harness-commit-fixtures.js";
 import {
   FLOCK_STAND_IN,

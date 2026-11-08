@@ -1,9 +1,7 @@
 import * as Effect from "effect/Effect";
-import {
-  executeHarnessBuildRequest,
-  executeProjectProvisionRequest,
-  executeProjectRemovalRequest,
-} from "../../../src/workspace/executor.js";
+import { executeHarnessBuildRequest } from "../../../src/workspace/commands/build-harness.js";
+import { executeProjectProvisionRequest } from "../../../src/workspace/commands/provision-project.js";
+import { executeProjectRemovalRequest } from "../../../src/workspace/commands/remove-project.js";
 import {
   executeGitHubCredentialRequest,
   type GitHubCredentialRequest,
@@ -14,13 +12,13 @@ import {
   HARNESS_BUILD_CONFIGURATION,
   type HarnessBuildRequest,
 } from "../../../src/harness-build.js";
-import type { ProjectProvisionRequest } from "../../../src/workspace/project-provision.js";
-import type { ProjectRemovalRequest } from "../../../src/workspace/project-removal.js";
+import type { ProjectProvisionRequest } from "../../../src/workspace/commands/provision-project.js";
+import type { ProjectRemovalRequest } from "../../../src/workspace/commands/remove-project.js";
 import { ensureManagedInstructions } from "../../../src/workspace/managed-instructions.js";
 import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
-} from "../../../src/workspace/decisions.js";
+} from "../../../src/workspace/commands/command-result.js";
 import {
   workspaceEffects,
   WorkspaceSyncIncomplete,

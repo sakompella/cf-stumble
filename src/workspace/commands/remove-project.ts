@@ -1,12 +1,21 @@
 import * as Effect from "effect/Effect";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import { parseProjectId, type ProjectId } from "../project-catalog.js";
-import { HARNESS_PROJECT_ID } from "../selectable-projects.js";
-import { shellQuote } from "../shell-quote.js";
-import { projectDirectory } from "../workspace-layout.js";
-import { holdProvisionLock, projectProvisionLockPath } from "../project-provision.js";
-import type { WorkspaceFailure, WorkspacePlan, WorkspaceCommandResult } from "./decisions.js";
-import type { WorkspaceEffects, WorkspaceFault } from "./operations.js";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js";
+import { parseProjectId, type ProjectId } from "../../project-catalog.js";
+import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
+import { shellQuote } from "../../shell-quote.js";
+import { projectDirectory } from "../../workspace-layout.js";
+import { runPlannedCommand, type WorkspaceEffects, type WorkspaceFault } from "../operations.js";
+import { holdProvisionLock } from "./clone-script.js";
+import { projectProvisionLockPath } from "./provision-project.js";
+import {
+  answerDurableFailures,
+  commandResult,
+  invalidRequest,
+  syncIncomplete,
+  type WorkspaceCommandResult,
+  type WorkspaceFailure,
+  type WorkspacePlan,
+} from "./command-result.js";
 
 export type ProjectRemovalRequest = Readonly<{
   kind: "remove-project";
@@ -17,10 +26,6 @@ type ParsedProjectRemovalRequest = Readonly<{
   kind: "remove-project";
   projectId: ProjectId;
 }>;
-
-function invalidRequest(): WorkspaceFailure {
-  return { ok: false, error: { code: "invalid-request" } };
-}
 
 export function parseProjectRemovalRequest(
   request: ProjectRemovalRequest,
@@ -67,6 +72,29 @@ export function removalIsDurable(
 
     return true;
   });
+}
+
+export function executeProjectRemovalRequest(
+  input: Readonly<{
+    operations: WorkspaceEffects;
+    request: ProjectRemovalRequest;
+  }>,
+): Effect.Effect<WorkspaceCommandResult> {
+  const parsed = parseProjectRemovalRequest(input.request);
+
+  if ("ok" in parsed) return Effect.succeed(parsed);
+
+  return Effect.gen(function* () {
+    const { operations } = input;
+    const plan = planProjectRemovalRequest(parsed);
+    const output = yield* runPlannedCommand(operations, plan);
+
+    if (output.exitCode === 0 && !(yield* removalIsDurable(operations, parsed.projectId))) {
+      return syncIncomplete();
+    }
+
+    return commandResult(output);
+  }).pipe(answerDurableFailures("workspace.project-removal", () => "workspace-unavailable"));
 }
 
 type ProjectRemovalWorkspaceHost = Readonly<{

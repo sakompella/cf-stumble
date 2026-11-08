@@ -1,16 +1,16 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
-import { projectCloneSource } from "../../src/project-provision.js";
-import type { Project } from "../../src/project-catalog.js";
-import { projectDirectory, projectGitDirectory } from "../../src/workspace-layout.js";
-import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
-import { executeProjectProvisionRequest } from "../../src/workspace/executor.js";
 import {
+  projectCloneSource,
+  executeProjectProvisionRequest,
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
   type ProjectProvisionRequest,
-} from "../../src/workspace/project-provision.js";
+} from "../../src/workspace/commands/provision-project.js";
+import type { Project } from "../../src/project-catalog.js";
+import { projectDirectory, projectGitDirectory } from "../../src/workspace-layout.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   workspaceEffects,
   type PromiseOperations,
