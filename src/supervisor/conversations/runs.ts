@@ -4,6 +4,7 @@ import type { RunningConversation } from "../../facet/index.js";
 import type { RunReport } from "./host-target.js";
 import { logEvent } from "../../diagnostics.js";
 import { PROJECT_RUN_DEADLINE_MS } from "../../turn-budget.js";
+import type { RunOutcome } from "../probation.js";
 
 const HEARTBEAT_MS = 60_000;
 
@@ -18,7 +19,18 @@ function continues(run: Run, reported: RunningConversation): boolean {
   );
 }
 
-type RunEnding = "cancelled" | "interrupted";
+type RunEnding = Extract<RunOutcome, "cancelled" | "interrupted">;
+
+export type FacetReplacement = Readonly<{
+  command: Readonly<{ kind: "activate" | "rollback"; label: number }>;
+  epoch: number;
+}>;
+
+export type Settlement = Readonly<{
+  conversationId: string;
+  outcome: RunOutcome;
+  errorCode: string | null;
+}>;
 
 export class ConversationRuns {
   readonly #storage: DurableObjectStorage;
@@ -71,27 +83,32 @@ export class ConversationRuns {
     { running, failed }: RunReport,
     now: number,
     generation: number | null,
-  ): readonly string[] {
+  ): readonly Settlement[] {
     const runs = this.#runs();
     const settled = runs.filter((run) => !running.some((reported) => continues(run, reported)));
     const started = running.filter((reported) => !runs.some((run) => continues(run, reported)));
 
-    for (const run of settled) {
+    const settlements = settled.map((run): Settlement => {
       this.#storage.sql.exec(
         "DELETE FROM conversation_runs WHERE conversation_id = ?",
         run.conversation_id,
       );
+
       const errorCode = failed[run.conversation_id] ?? null;
+
+      const outcome =
+        this.#endings.get(run.conversation_id) ?? (errorCode === null ? "completed" : "failed");
 
       logEvent("info", "run.settled", {
         totalMs: now - (run.deadline - PROJECT_RUN_DEADLINE_MS),
         generation,
-        outcome:
-          this.#endings.get(run.conversation_id) ?? (errorCode === null ? "completed" : "failed"),
+        outcome,
         errorCode,
       });
       this.#endings.delete(run.conversation_id);
-    }
+
+      return { conversationId: run.conversation_id, outcome, errorCode };
+    });
 
     for (const { conversationId, run } of started) {
       this.#storage.sql.exec(
@@ -103,7 +120,7 @@ export class ConversationRuns {
       logEvent("info", "run.started", { generation });
     }
 
-    return settled.map((run) => run.conversation_id);
+    return settlements;
   }
 
   arm(wake: Wake, now: number): Effect.Effect<void> {

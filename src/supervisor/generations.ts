@@ -1,4 +1,6 @@
+import { logEvent } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
+import { GenerationProbation, type RunOutcome } from "./probation.js";
 
 export type GenerationStatus = "candidate" | "ready" | "failed";
 
@@ -157,11 +159,13 @@ export class Generations {
   readonly #storage: DurableObjectStorage;
   readonly #sql: SqlStorage;
   readonly #compatibility: string;
+  readonly #probation: GenerationProbation;
 
   constructor(storage: DurableObjectStorage, compatibility: string) {
     this.#storage = storage;
     this.#sql = storage.sql;
     this.#compatibility = compatibility;
+    this.#probation = new GenerationProbation(storage.kv);
     this.#sql.exec(`
       CREATE TABLE IF NOT EXISTS generations (
         label INTEGER PRIMARY KEY CHECK (label >= 0),
@@ -230,10 +234,45 @@ export class Generations {
 
       if (result.ok && result.outcome.effect === "activated") {
         this.#select(command.label, result.outcome.epoch);
+        this.#probation.activated(command.label);
       }
 
       return result;
     });
+  }
+
+  settled({
+    outcome,
+    errorCode,
+  }: Readonly<{ outcome: RunOutcome; errorCode: string | null }>):
+    | Readonly<{ command: ActivationCommand; epoch: number }>
+    | undefined {
+    const { activeLabel } = this.#selection();
+
+    const fallback =
+      activeLabel === undefined ? undefined : this.#probation.settled(activeLabel, outcome);
+
+    if (fallback === undefined) return undefined;
+
+    const command = {
+      kind: "rollback",
+      label: fallback,
+      observedEpoch: this.#selection().epoch,
+    } as const;
+
+    const result = this.activate(command);
+
+    logEvent("warn", "generation.probation-failed", {
+      label: activeLabel ?? null,
+      fallback,
+      outcome,
+      errorCode,
+      refused: result.ok ? null : result.problem.code,
+    });
+
+    return result.ok && result.outcome.effect === "activated"
+      ? { command, epoch: result.outcome.epoch }
+      : undefined;
   }
 
   recordPreparation(
