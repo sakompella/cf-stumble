@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { ModelStreamInference } from "../src/model-route-events.js";
+import type { ModelStreamInference } from "../src/model-route-wire/events.js";
 import { loadFixtureEntrypoint } from "./loaded-fixture.js";
 import { sseLine, streamModelEvents } from "./model-route-provider-stream.js";
 import { PROMPTLY_MS, readFirstEvent, REQUEST, until } from "./stream-cancel-fixture.js";

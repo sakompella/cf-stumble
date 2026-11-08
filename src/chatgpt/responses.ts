@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { ModelRouteRequest, RouteMessage } from "../model-route.js";
+import type { ModelRouteRequest, RouteMessage } from "../model-route-wire/request.js";
 import type { ProviderStreamAccumulator } from "../model-route-stream.js";
 import { lenient } from "../lenient-schema.js";
 import {
@@ -9,7 +9,7 @@ import {
   TokenCount,
   type TokenUsage,
 } from "../model-route-stream-parse.js";
-import type { ToolCallDelta } from "../model-route-events.js";
+import type { ToolCallDelta } from "../model-route-wire/events.js";
 
 export const RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 

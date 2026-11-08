@@ -7,7 +7,7 @@ import type {
   ModelRouteRequest,
   RouteMessage,
   ToolDefinition,
-} from "../src/model-route-request.js";
+} from "../../src/model-route-wire/request.js";
 
 export const decodeWire = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
 

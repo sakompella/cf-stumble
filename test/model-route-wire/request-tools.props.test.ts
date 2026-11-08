@@ -3,8 +3,8 @@ import * as gs from "@hegeldev/hegel/generators";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 
-import { parseRequest, type ToolDefinition } from "../src/model-route-request.js";
-import { decodeWire, drawTools, drawTool } from "./model-route-draws.js";
+import { parseRequest, type ToolDefinition } from "../../src/model-route-wire/request.js";
+import { decodeWire, drawTools, drawTool } from "./draws.js";
 
 const USER = { role: "user", content: "Hi" } as const;
 

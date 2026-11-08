@@ -7,7 +7,7 @@ import {
   type RouteMessage,
   type RouteWire,
   type ValidationFailure,
-} from "./model-route-request.js";
+} from "./model-route-wire/request.js";
 import { modelEventStream } from "./model-route-turn.js";
 import {
   STARTUP_CHECK_COMMAND,
