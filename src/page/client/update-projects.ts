@@ -1,5 +1,6 @@
 import * as Array from "effect/Array";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import {
   AuthorizeGitHub,
   ConnectRepository,
@@ -16,15 +17,14 @@ import { clearError, withError, type Handlers, type UpdateReturn } from "./updat
 export { backendHandlers, FetchBackend } from "./update-backend.js";
 
 function withGitHub(model: Model, report: GitHubReport): Model {
-  const github =
-    report._tag === "Known"
-      ? report.connection
-      : {
-          state: "unknown",
-          detail: "",
-          verificationUri: model.github.verificationUri,
-          checked: "",
-        };
+  const github = Predicate.isTagged(report, "Known")
+    ? report.connection
+    : {
+        state: "unknown",
+        detail: "",
+        verificationUri: model.github.verificationUri,
+        checked: "",
+      };
 
   return { ...model, github };
 }

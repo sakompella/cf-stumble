@@ -121,7 +121,7 @@ function assistantEntries(message: AssistantMessage): readonly TranscriptEntry[]
 }
 
 function withLiveOutput(entry: TranscriptEntry, conversation: Conversation): TranscriptEntry {
-  if (entry._tag !== "Tool" || Option.isSome(entry.maybeOutput)) {
+  if (!Predicate.isTagged(entry, "Tool") || Option.isSome(entry.maybeOutput)) {
     return entry;
   }
 
@@ -137,7 +137,7 @@ function addMessage(
 ): void {
   if ("stopReason" in message) {
     for (const entry of assistantEntries(message)) {
-      if (entry._tag === "Tool") {
+      if (Predicate.isTagged(entry, "Tool")) {
         toolBlocks.set(entry.toolCallId, entries.length);
       }
 
