@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { afterEach, expect, test, vi } from "vitest";
 import {
@@ -45,7 +46,7 @@ test("earlier messages load from the entries page the Worker sends", async () =>
 
   viewReader(held)(viewLine(1, [entry(10)], 9));
 
-  const loaded = await loadIntoTranscript(10);
+  const loaded = Option.getOrUndefined(await Effect.runPromise(loadIntoTranscript(10)));
 
   expect(loaded?.items.map((item) => (item.kind === "entry" ? item.entry.id : item.kind))).toEqual([
     "earlier",
@@ -70,7 +71,7 @@ test("a tab whose conversation was replaced starts its transcript over, and a la
 
   expect(ids(viewReader(held)(viewLine(1, [entry(10)], 9)))).toEqual([10]);
 
-  const loading = loadIntoTranscript(11);
+  const loading = Effect.runPromise(loadIntoTranscript(11));
 
   await vi.waitFor(() => {
     expect(answer).toBeDefined();
@@ -81,7 +82,7 @@ test("a tab whose conversation was replaced starts its transcript over, and a la
   expect(ids(reconnected)).toEqual([]);
 
   answer?.(Response.json({ items: [entry(8), entry(9)] }));
-  await expect(loading).resolves.toBeUndefined();
+  await expect(loading).resolves.toEqual(Option.none());
   expect(ids(viewReader(held)(viewLine(2, [entry(20, 2)])))).toEqual([20]);
 });
 

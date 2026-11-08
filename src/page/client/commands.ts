@@ -19,7 +19,6 @@ import {
   requestJson,
   sendRefusalText,
   submitRejection,
-  transportDetail,
   text,
   truthy,
 } from "./api.js";
@@ -229,14 +228,11 @@ export const LoadTranscript = Command.define("LoadTranscript", {
   args: { streamId: Schema.Number, maybeGapIndex: Schema.Option(Schema.Number) },
   messages: [Message.LoadedTranscript, Message.FailedLoadTranscript],
   execute: ({ streamId, maybeGapIndex }) =>
-    Effect.tryPromise({
-      try: () => loadIntoTranscript(streamId, Option.getOrUndefined(maybeGapIndex)),
-      catch: transportDetail,
-    }).pipe(
+    loadIntoTranscript(streamId, Option.getOrUndefined(maybeGapIndex)).pipe(
       Effect.map((loaded) =>
         Message.LoadedTranscript({
           streamId,
-          maybeItems: Option.flatMap(Option.fromUndefinedOr(loaded), (view) =>
+          maybeItems: Option.flatMap(loaded, (view) =>
             Option.map(conversationOf(view), (conversation) => conversation.items),
           ),
         }),

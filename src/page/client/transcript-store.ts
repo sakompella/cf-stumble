@@ -8,7 +8,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
-import { answerOf, fetchEffect, field, projectPath } from "./api.js";
+import { answerOf, fetchEffect, field, projectPath, transportDetail } from "./api.js";
 import { heldTranscript, type HeldTranscript } from "./view-reader.js";
 
 export { viewReader, type HeldTranscript } from "./view-reader.js";
@@ -79,26 +79,31 @@ export function closeTranscript(streamId: number): void {
   held.delete(streamId);
 }
 
-export async function loadIntoTranscript(
+export function loadIntoTranscript(
   streamId: number,
   itemIndex?: number,
-): Promise<TranscriptView | undefined> {
+): Effect.Effect<Option.Option<TranscriptView>, string> {
   const current = held.get(streamId);
 
-  if (current === undefined) return undefined;
+  if (current === undefined) return Effect.succeed(Option.none());
 
   const gap = itemIndex === undefined ? undefined : current.latest?.items[itemIndex];
 
   const { transcript } = current;
 
-  const loaded =
-    gap?.kind === "gap"
-      ? await transcript.fillGap(gap, BACKGROUND_CONTEXT)
-      : await transcript.loadEarlier(BACKGROUND_CONTEXT);
+  return Effect.tryPromise({
+    try: () =>
+      gap?.kind === "gap"
+        ? transcript.fillGap(gap, BACKGROUND_CONTEXT)
+        : transcript.loadEarlier(BACKGROUND_CONTEXT),
+    catch: transportDetail,
+  }).pipe(
+    Effect.map((loaded) => {
+      if (current.transcript !== transcript) return Option.none();
 
-  if (current.transcript !== transcript) return undefined;
+      current.latest = loaded;
 
-  current.latest = loaded;
-
-  return loaded;
+      return Option.some(loaded);
+    }),
+  );
 }
