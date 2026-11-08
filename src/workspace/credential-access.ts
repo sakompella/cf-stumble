@@ -4,14 +4,7 @@ import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
 import { boundedRpc, WORKSPACE_SHORT_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
-
-export type CredentialWorkspaceHost = Readonly<{
-  credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult>;
-}>;
-
-export type CredentialWorkspaceNamespace = Readonly<{
-  getByName(name: string): CredentialWorkspaceHost;
-}>;
+import type { WorkspaceHostNamespace } from "./host-rpc.js";
 
 function signalAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
@@ -37,7 +30,7 @@ type CredentialInstallation = "installed" | "tooling-missing";
 
 export interface WorkspaceCredentialInput {
   readonly workspaceName: string;
-  readonly namespace: CredentialWorkspaceNamespace;
+  readonly namespace: WorkspaceHostNamespace<"credential">;
   readonly signal?: AbortSignal | undefined;
 }
 

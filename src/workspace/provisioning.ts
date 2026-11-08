@@ -1,16 +1,11 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../diagnostics.js";
-import type { HarnessBuildRequest } from "../harness-build.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { Project, ProjectId } from "../project-catalog.js";
 import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import type {
-  InstructionsWriteResult,
-  ProjectProvisionRequest,
-  WorkspaceCommandResult,
-  WorkspaceFailure,
-} from "./commands/index.js";
+import type { WorkspaceCommandResult, WorkspaceFailure } from "./commands/index.js";
+import type { WorkspaceHostNamespace, WorkspaceHostRpc } from "./host-rpc.js";
 import { provisionInWorkspace } from "./provision-exclusion.js";
 
 export class ProvisionFailed extends Data.TaggedError("ProvisionFailed")<{
@@ -20,28 +15,6 @@ export class ProvisionFailed extends Data.TaggedError("ProvisionFailed")<{
 export class ProvisionUnavailable extends Data.TaggedError("ProvisionUnavailable") {}
 
 type ProvisionProblem = ProvisionFailed | ProvisionUnavailable;
-
-type ManagedInstructionsWorkspaceHost = Readonly<{
-  ensureManagedInstructions(): Promise<InstructionsWriteResult>;
-}>;
-
-export type ProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
-  Readonly<{
-    provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult>;
-  }>;
-
-export type HarnessProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
-  Readonly<{
-    build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult>;
-  }>;
-
-export type ProvisionWorkspaceNamespace = Readonly<{
-  getByName(name: string): ProvisionWorkspaceHost;
-}>;
-
-export type HarnessProvisionWorkspaceNamespace = Readonly<{
-  getByName(name: string): HarnessProvisionWorkspaceHost;
-}>;
 
 function hostStep<R>(
   context: string,
@@ -80,7 +53,7 @@ function commandStep(
 
 function instructionsStep(
   context: string,
-  host: ManagedInstructionsWorkspaceHost,
+  host: WorkspaceHostRpc<"ensureManagedInstructions">,
   signal: AbortSignal | undefined,
 ): Effect.Effect<void, ProvisionUnavailable> {
   return Effect.asVoid(hostStep(context, signal, () => host.ensureManagedInstructions()));
@@ -90,7 +63,7 @@ export function provisionProjectWorkspace(
   input: Readonly<{
     workspaceName: string;
     project: Project;
-    namespace: ProvisionWorkspaceNamespace;
+    namespace: WorkspaceHostNamespace<"provision" | "ensureManagedInstructions">;
     signal?: AbortSignal | undefined;
   }>,
 ): Effect.Effect<void, ProvisionProblem> {
@@ -122,7 +95,7 @@ export function provisionHarnessWorkspace(
     workspaceName: string;
     projectId: ProjectId;
     harnessCommit: HarnessCommit;
-    namespace: HarnessProvisionWorkspaceNamespace;
+    namespace: WorkspaceHostNamespace<"build" | "ensureManagedInstructions">;
     signal?: AbortSignal | undefined;
   }>,
 ): Effect.Effect<void, ProvisionProblem> {

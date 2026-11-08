@@ -10,15 +10,15 @@ import {
   planProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
-import {
-  provisionProjectWorkspace,
-  type ProvisionWorkspaceHost,
-} from "../../src/workspace/provisioning.js";
+import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { runToResult } from "./workspace-results.js";
+import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
-export class FakeProvisionHost implements ProvisionWorkspaceHost {
+export class FakeProvisionHost implements WorkspaceHostRpc<
+  "provision" | "ensureManagedInstructions"
+> {
   readonly requests: ProjectProvisionRequest[] = [];
   readonly steps: string[] = [];
 
@@ -139,7 +139,7 @@ export class ScriptedProvisionHost extends FakeProvisionHost {
 
 export const TENANT_WORKSPACE = tenantWorkspaceName("supervisor-name-of-tenant-1");
 
-export function provisionerFor(host: ProvisionWorkspaceHost) {
+export function provisionerFor(host: WorkspaceHostRpc<"provision" | "ensureManagedInstructions">) {
   const namespace = namespaceFor(host);
 
   return {

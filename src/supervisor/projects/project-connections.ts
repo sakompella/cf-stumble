@@ -15,10 +15,7 @@ import { selectableCatalog, type SelectableCatalog } from "../../selectable-proj
 import {
   checkRepositoryAccess,
   clearWorkspaceProvision,
-  type CredentialWorkspaceNamespace,
-  type HarnessProvisionWorkspaceNamespace,
-  type ProvisionWorkspaceNamespace,
-  type ProjectRemovalWorkspaceNamespace,
+  type WorkspaceHostNamespace,
 } from "../../workspace/index.js";
 import { removeProjectDirectories } from "./project-removal.js";
 import { provisionOnUse } from "./provision-on-use.js";
@@ -61,13 +58,14 @@ export type ConnectRepositoryResult =
     }>
   | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy"; detail: "" }> }>;
 
+type ConnectionsNamespace = WorkspaceHostNamespace<
+  "credential" | "provision" | "build" | "ensureManagedInstructions" | "removeProject"
+>;
+
 interface ProjectConnectionsInput {
   readonly storage: DurableObjectStorage;
   readonly workspaceName: string;
-  readonly namespace: CredentialWorkspaceNamespace &
-    ProvisionWorkspaceNamespace &
-    HarnessProvisionWorkspaceNamespace &
-    ProjectRemovalWorkspaceNamespace;
+  readonly namespace: ConnectionsNamespace;
   readonly github: GitHubConnection;
 }
 
@@ -76,10 +74,7 @@ export class ProjectConnections {
   private readonly lifecycle = new ProjectLifecycleQueue();
   private readonly github: GitHubConnection;
   private readonly workspaceName: string;
-  private readonly namespace: CredentialWorkspaceNamespace &
-    ProvisionWorkspaceNamespace &
-    HarnessProvisionWorkspaceNamespace &
-    ProjectRemovalWorkspaceNamespace;
+  private readonly namespace: ConnectionsNamespace;
 
   constructor(input: ProjectConnectionsInput) {
     this.projects = new ConnectedProjects(input.storage);

@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { ActivationCommand, GenerationLabel } from "./generations.js";
-import { WORKSPACE_BUSY } from "../workspace/index.js";
+import { WORKSPACE_BUSY, type WorkspaceHostNamespace } from "../workspace/index.js";
 import type { EntriesRequest } from "../entries-request.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import {
@@ -13,7 +13,6 @@ import {
 import { supervisorParts, type SupervisorParts } from "./supervisor-parts.js";
 import type {
   BackendSetting,
-  ResetWorkspaceNamespace,
   SupervisorEnv,
   SupervisorWorkspaceReset,
   WorkspaceBackendChange,
@@ -91,7 +90,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
           return { ok: false, problem: { code: "run-active" } } as const;
         }
 
-        const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
+        const namespace: WorkspaceHostNamespace<"reset"> = this.env.WORKSPACE_HOST;
 
         const result = yield* Effect.promise(() =>
           namespace.getByName(this.#parts.workspaceName).reset(),

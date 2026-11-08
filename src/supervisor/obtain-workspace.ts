@@ -1,20 +1,17 @@
 import * as Effect from "effect/Effect";
 import type { Generations } from "./generations.js";
-import type {
-  ProjectCapabilityStub,
-  ProjectConnections,
-  ProjectWorkspaceNamespace,
-} from "./projects/index.js";
+import type { ProjectConnections } from "./projects/index.js";
 import type { SelectableProject } from "../selectable-projects.js";
 import {
   provisionHarnessWorkspace,
   waitForWorkspaceProvision,
-  type HarnessProvisionWorkspaceNamespace,
+  type ProjectCapabilityStub,
+  type WorkspaceHostNamespace,
 } from "../workspace/index.js";
 
 export type WorkspaceSources = Readonly<{
   workspaceName: string;
-  namespace: ProjectWorkspaceNamespace & HarnessProvisionWorkspaceNamespace;
+  namespace: WorkspaceHostNamespace<"project" | "build" | "ensureManagedInstructions">;
   generations: Generations;
   connections: ProjectConnections;
 }>;

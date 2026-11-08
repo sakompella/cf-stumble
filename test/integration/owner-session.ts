@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 import worker from "../../src/worker.js";
 import { ownerRequest } from "../owner-credentials.js";
-import type { SupervisorWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
 import type { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import {
@@ -11,6 +10,7 @@ import {
   prepareWithModuleMap,
   submitCandidate,
 } from "../supervisor/helpers.js";
+import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
 const ORIGIN = "https://cf-stumble.test";
 
@@ -29,9 +29,10 @@ export function ownerSession() {
 export function stubExternalBoundaries<Workspace extends FakeTenantWorkspace>(
   workspace: Workspace,
 ): Workspace {
-  replaceWorkspaceHost<
-    Omit<SupervisorWorkspaceHost, "project" | "reset" | "backend" | "setBackend">
-  >(env.WORKSPACE_HOST, workspace);
+  replaceWorkspaceHost<Omit<WorkspaceHostRpc, "project" | "reset" | "backend" | "setBackend">>(
+    env.WORKSPACE_HOST,
+    workspace,
+  );
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     Promise.resolve(new Response("{}", { status: 404 })),
   );

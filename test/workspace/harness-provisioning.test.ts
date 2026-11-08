@@ -8,9 +8,8 @@ import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
-  type HarnessProvisionWorkspaceHost,
-  type ProvisionWorkspaceHost,
-} from "../../src/workspace/provisioning.js";
+  type WorkspaceHostRpc,
+} from "../../src/workspace/index.js";
 import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
@@ -27,7 +26,7 @@ const harnessCommit: HarnessCommit = parsedHarnessCommit;
 
 const harnessProjectId = projectIdOf("harness");
 
-class FakeHarnessHost implements HarnessProvisionWorkspaceHost {
+class FakeHarnessHost implements WorkspaceHostRpc<"build" | "ensureManagedInstructions"> {
   readonly builds: HarnessBuildRequest[] = [];
   instructions = 0;
   delayedBuild = false;
@@ -166,10 +165,13 @@ test("does not hold a harness provision behind a project provision in flight", a
     provision: delayed.provision.bind(delayed),
     build: harness.build.bind(harness),
     ensureManagedInstructions: harness.ensureManagedInstructions.bind(harness),
-  } satisfies ProvisionWorkspaceHost & HarnessProvisionWorkspaceHost;
+  } satisfies WorkspaceHostRpc<"provision" | "build" | "ensureManagedInstructions">;
 
-  const projectNamespace = namespaceFor<ProvisionWorkspaceHost>(host);
-  const harnessNamespace = namespaceFor<HarnessProvisionWorkspaceHost>(host);
+  const projectNamespace =
+    namespaceFor<WorkspaceHostRpc<"provision" | "ensureManagedInstructions">>(host);
+
+  const harnessNamespace =
+    namespaceFor<WorkspaceHostRpc<"build" | "ensureManagedInstructions">>(host);
 
   const workspaceName = tenantWorkspaceName("harness-beside-project-provision");
 

@@ -2,8 +2,9 @@ import { resultOf } from "../../effect-result.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import type { HarnessBuildRequest, HarnessBuildStepName } from "../../../src/harness-build.js";
 import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
-import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
-import type { CommandOutput, WorkspaceCommandResult } from "../../../src/workspace/index.js";
+import type { CommandOutput } from "../../../src/workspace/index.js";
+import type { WorkspaceCommandResult } from "../../../src/workspace/commands/command-result.js";
+import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 export const BUILD_COMMIT = testHarnessCommit("6000000000000000000000000000000000000001");
 
@@ -21,7 +22,7 @@ function answered(output: CommandOutput): Promise<WorkspaceCommandResult> {
   return Promise.resolve({ ok: true, result: { kind: "command", ...output } });
 }
 
-export class FakeBuildHost implements BuildWorkspaceHost {
+export class FakeBuildHost implements WorkspaceHostRpc<"build"> {
   readonly requests: HarnessBuildRequest[] = [];
   output: string | undefined = moduleMapFile([helperModule, entryModule]);
   answers: Partial<Record<HarnessBuildStepName, CommandOutput>> = {};
@@ -59,6 +60,6 @@ export function failingAt(
   return host;
 }
 
-export function built(host: BuildWorkspaceHost) {
+export function built(host: WorkspaceHostRpc<"build">) {
   return resultOf(buildModuleMap(() => host, BUILD_COMMIT));
 }

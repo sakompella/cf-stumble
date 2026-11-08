@@ -4,12 +4,10 @@ import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import {
-  provisionProjectWorkspace,
-  type ProvisionWorkspaceHost,
-} from "../../src/workspace/provisioning.js";
+import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
 import { waitForWorkspaceProvision } from "../../src/workspace/provision-exclusion.js";
 import type { WorkspaceCommandResult } from "../../src/workspace/commands/command-result.js";
+import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
 const tick = () =>
   new Promise<void>((resolve) => {
@@ -20,7 +18,7 @@ test("an interrupted plan keeps the exclusion until its RPC settles", async () =
   vi.spyOn(console, "log").mockImplementation(() => {});
   const rpc = { settle: (): void => {} };
 
-  const host: ProvisionWorkspaceHost = {
+  const host: WorkspaceHostRpc<"provision" | "ensureManagedInstructions"> = {
     provision: () =>
       new Promise<WorkspaceCommandResult>((resolve) => {
         rpc.settle = () => {

@@ -4,13 +4,12 @@ import { parseGitHubToken, REDACTED } from "../../src/github/index.js";
 import {
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
-  type CredentialWorkspaceNamespace,
 } from "../../src/workspace/index.js";
-import type { CredentialWorkspaceHost } from "../../src/workspace/credential-access.js";
 import { textLines } from "../log-capture.js";
 import { runToResult } from "./workspace-results.js";
+import type { WorkspaceHostNamespace, WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
-function namespaceOf(host: CredentialWorkspaceHost): CredentialWorkspaceNamespace {
+function namespaceOf(host: WorkspaceHostRpc<"credential">): WorkspaceHostNamespace<"credential"> {
   return { getByName: () => host };
 }
 
@@ -21,7 +20,7 @@ afterEach(() => {
 test("does not continue a credential step after its turn signal aborts", async () => {
   const controller = new AbortController();
 
-  const host: CredentialWorkspaceHost = {
+  const host: WorkspaceHostRpc<"credential"> = {
     credential: () => {
       controller.abort();
 

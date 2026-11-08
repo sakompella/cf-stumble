@@ -1,8 +1,7 @@
 import { vi } from "vitest";
-import type { ResetWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
-import type { CredentialWorkspaceHost } from "../../src/workspace/credential-access.js";
 import type { GitHubCredentialResult } from "../../src/workspace/github-credential.js";
+import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
 export function fakeWorkspace(resetResult: WorkspaceResetResult) {
   let credentialState: "connected" | "missing" = "connected";
@@ -24,7 +23,7 @@ export function fakeWorkspace(resetResult: WorkspaceResetResult) {
     return Promise.resolve(resetResult);
   });
 
-  const workspace: CredentialWorkspaceHost & ResetWorkspaceHost = {
+  const workspace: WorkspaceHostRpc<"credential" | "reset"> = {
     credential,
     reset: resetWorkspace,
   };
@@ -51,7 +50,7 @@ export function heldWorkspace() {
       return answer;
     });
 
-  const workspace: ResetWorkspaceHost = { reset: resetWorkspace };
+  const workspace: WorkspaceHostRpc<"reset"> = { reset: resetWorkspace };
 
   return { started, finish: held.finish, resetWorkspace, workspace };
 }

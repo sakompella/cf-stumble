@@ -1,7 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { ChatGPTCredentialStore } from "../../../src/chatgpt/index.js";
-import type { SupervisorWorkspaceHost } from "../../../src/supervisor/supervisor-env.js";
 import type { Entry } from "../../../src/page/client/pi-message.js";
 import { builtGeneration } from "../../facet/generation-1/built-module-map.js";
 import { replaceWorkspaceHost } from "../../workspace-host-spy.js";
@@ -13,6 +12,7 @@ import {
 } from "../helpers.js";
 import { answerCount, lines, openReader, type Line } from "./generation-1-transcript.js";
 import type { ProjectWorkspace } from "./project-workspace.js";
+import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 type Control = Awaited<ReturnType<typeof connectedSupervisor>>;
 
@@ -26,7 +26,7 @@ export async function servingGeneration1(
   name: string,
   workspace: ProjectWorkspace,
 ): Promise<Control> {
-  replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "reset" | "backend" | "setBackend">>(
+  replaceWorkspaceHost<Omit<WorkspaceHostRpc, "reset" | "backend" | "setBackend">>(
     env.WORKSPACE_HOST,
     workspace,
   );

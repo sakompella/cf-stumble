@@ -8,11 +8,7 @@ export {
   type ProjectProvisionRequest,
 } from "./provision-project.js";
 
-export {
-  executeProjectRemovalRequest,
-  type ProjectRemovalRequest,
-  type ProjectRemovalWorkspaceNamespace,
-} from "./remove-project.js";
+export { executeProjectRemovalRequest, type ProjectRemovalRequest } from "./remove-project.js";
 
 export {
   type InstructionsWriteResult,

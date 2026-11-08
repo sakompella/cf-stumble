@@ -1,7 +1,7 @@
 import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
-import type { WorkspaceCommandResult } from "../../src/workspace/index.js";
+import type { WorkspaceCommandResult } from "../../src/workspace/commands/command-result.js";
 import {
   parseProjectProvisionRequest,
   type ProjectProvisionRequest,

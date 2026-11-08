@@ -3,18 +3,16 @@ import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import {
-  provisionProjectWorkspace,
-  type ProvisionWorkspaceHost,
-} from "../../src/workspace/provisioning.js";
+import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
 } from "../../src/workspace/commands/command-result.js";
 import { runToResult } from "./workspace-results.js";
+import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
-class AbortAwareHost implements ProvisionWorkspaceHost {
+class AbortAwareHost implements WorkspaceHostRpc<"provision" | "ensureManagedInstructions"> {
   readonly steps: string[] = [];
   controller: AbortController | undefined;
 
@@ -56,7 +54,7 @@ test("does not start the next provisioning step after the turn aborts", async ()
 test("bounds a running provisioning RPC after the turn aborts", async () => {
   vi.useFakeTimers();
 
-  const host: ProvisionWorkspaceHost = {
+  const host: WorkspaceHostRpc<"provision" | "ensureManagedInstructions"> = {
     provision: (request) => {
       return new Promise<WorkspaceCommandResult>(() => {
         void request;

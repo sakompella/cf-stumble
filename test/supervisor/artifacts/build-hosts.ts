@@ -1,6 +1,6 @@
 import type { HarnessBuildRequest, HarnessBuildStepName } from "../../../src/harness-build.js";
-import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
-import type { WorkspaceCommandResult } from "../../../src/workspace/index.js";
+import type { WorkspaceCommandResult } from "../../../src/workspace/commands/command-result.js";
+import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 const builtModuleMapFile = JSON.stringify({
   entryModule: "main.js",
@@ -20,7 +20,7 @@ export default { fetch() { return new Response(body); } };
   ],
 });
 
-export class BuildHost implements BuildWorkspaceHost {
+export class BuildHost implements WorkspaceHostRpc<"build"> {
   readonly requests: HarnessBuildRequest[] = [];
   failing: HarnessBuildStepName | undefined;
 
@@ -40,6 +40,6 @@ export class BuildHost implements BuildWorkspaceHost {
   }
 }
 
-export const unreachableHost: BuildWorkspaceHost = {
+export const unreachableHost: WorkspaceHostRpc<"build"> = {
   build: () => Promise.resolve({ ok: false, error: { code: "unknown-command" } }),
 };
