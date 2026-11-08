@@ -9,20 +9,20 @@ export function removeProjectDirectories(
   workspaceName: string,
   projectId: ProjectId,
 ): Effect.Effect<"removed" | "failed"> {
-  return Effect.promise(() =>
-    boundedRpc(
-      () => namespace.getByName(workspaceName).removeProject({ kind: "remove-project", projectId }),
-      WORKSPACE_RPC_TIMEOUT_MS,
-    ).then(
-      (result) =>
+  return boundedRpc(
+    () => namespace.getByName(workspaceName).removeProject({ kind: "remove-project", projectId }),
+    WORKSPACE_RPC_TIMEOUT_MS,
+  ).pipe(
+    Effect.match({
+      onSuccess: (result) =>
         result.ok && result.result.kind === "command" && result.result.exitCode === 0
           ? "removed"
           : "failed",
-      (cause: unknown) => {
+      onFailure: (cause) => {
         logRedactedCause(`project-disconnect.${projectId}: workspace-unavailable`, cause);
 
         return "failed";
       },
-    ),
+    }),
   );
 }

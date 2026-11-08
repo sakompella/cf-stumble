@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -69,28 +70,38 @@ function discardScratch(
   workspace: () => BuildWorkspaceHost,
   harnessCommit: HarnessCommit,
 ): Effect.Effect<void> {
-  return Effect.tryPromise({
-    try: () => command(workspace, { kind: "build-discard", harnessCommit }, "the scratch cleanup"),
-    catch: (error) => {
+  return command(workspace, { kind: "build-discard", harnessCommit }, "the scratch cleanup").pipe(
+    Effect.mapError((error) => {
       logRedactedCause(`harness-build.discard ${harnessCommit}: scratch-left-behind`, error);
-    },
-  }).pipe(Effect.ignore);
+    }),
+    Effect.ignore,
+  );
 }
 
-async function command(
+class BuildWorkspaceRefused extends Data.TaggedError("BuildWorkspaceRefused")<{
+  readonly message: string;
+}> {}
+
+function command(
   workspace: () => BuildWorkspaceHost,
   request: HarnessBuildRequest,
   label: string,
-): Promise<CommandOutput> {
-  const result = await boundedRpc(() => workspace().build(request), WORKSPACE_RPC_TIMEOUT_MS);
+): Effect.Effect<CommandOutput, unknown> {
+  return boundedRpc(() => workspace().build(request), WORKSPACE_RPC_TIMEOUT_MS).pipe(
+    Effect.flatMap((result) => {
+      if (!result.ok) {
+        return Effect.fail(
+          new BuildWorkspaceRefused({
+            message: `the build workspace refused ${label}: ${result.error.code}`,
+          }),
+        );
+      }
 
-  if (!result.ok) {
-    throw new Error(`the build workspace refused ${label}: ${result.error.code}`);
-  }
+      const { stdout, stderr, exitCode } = result.result;
 
-  const { stdout, stderr, exitCode } = result.result;
-
-  return { stdout, stderr, exitCode };
+      return Effect.succeed({ stdout, stderr, exitCode });
+    }),
+  );
 }
 
 function runStep(
@@ -98,17 +109,20 @@ function runStep(
   harnessCommit: HarnessCommit,
   step: HarnessBuildStepName,
 ): Effect.Effect<void, HarnessBuildProblem> {
-  const ran = Effect.tryPromise({
-    try: () => command(workspace, { kind: "build-step", harnessCommit, step }, `the ${step} step`),
-    catch: (error): HarnessBuildProblem => {
+  const ran = command(
+    workspace,
+    { kind: "build-step", harnessCommit, step },
+    `the ${step} step`,
+  ).pipe(
+    Effect.mapError((error): HarnessBuildProblem => {
       logRedactedCause(
         `harness-build.${step}: ${isTimeoutFailure(error) ? "timeout" : "build-workspace-unavailable"}`,
         error,
       );
 
       return { code: "build-workspace-unavailable", harnessCommit };
-    },
-  });
+    }),
+  );
 
   return ran.pipe(
     Effect.flatMap((output) =>
@@ -125,35 +139,34 @@ function runStep(
   );
 }
 
-async function moduleMapText(
+function moduleMapText(
   workspace: () => BuildWorkspaceHost,
   harnessCommit: HarnessCommit,
-): Promise<string> {
-  const output = await command(
-    workspace,
-    { kind: "build-output", harnessCommit },
-    "the build output",
+): Effect.Effect<string, unknown> {
+  return command(workspace, { kind: "build-output", harnessCommit }, "the build output").pipe(
+    Effect.flatMap((output) =>
+      output.exitCode === 0
+        ? Effect.succeed(output.stdout)
+        : Effect.fail(
+            new BuildWorkspaceRefused({
+              message: `the build wrote no readable module map: exit ${output.exitCode}`,
+            }),
+          ),
+    ),
   );
-
-  if (output.exitCode !== 0) {
-    throw new Error(`the build wrote no readable module map: exit ${output.exitCode}`);
-  }
-
-  return output.stdout;
 }
 
 function readModuleMap(
   workspace: () => BuildWorkspaceHost,
   harnessCommit: HarnessCommit,
 ): Effect.Effect<MainHarnessArtifact, HarnessBuildProblem> {
-  const text = Effect.tryPromise({
-    try: () => moduleMapText(workspace, harnessCommit),
-    catch: (error): HarnessBuildProblem => {
+  const text = moduleMapText(workspace, harnessCommit).pipe(
+    Effect.mapError((error): HarnessBuildProblem => {
       logRedactedCause(`harness-build.output ${harnessCommit}: build-output-missing`, error);
 
       return { code: "build-output-missing", harnessCommit };
-    },
-  });
+    }),
+  );
 
   return text.pipe(
     Effect.flatMap((built) => Effect.fromResult(parsedOutput(harnessCommit, built))),
