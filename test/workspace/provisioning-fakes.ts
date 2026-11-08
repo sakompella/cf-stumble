@@ -10,7 +10,7 @@ import {
   planProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
-import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
+import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { runToResult } from "./workspace-results.js";

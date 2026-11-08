@@ -97,7 +97,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         );
 
         if (result.ok) {
-          this.#parts.connections.resetWorkspace();
+          this.#parts.readiness.forget();
           this.#parts.serving.endWorkspaces();
         }
 

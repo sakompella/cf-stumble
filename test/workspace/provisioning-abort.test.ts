@@ -3,7 +3,7 @@ import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
+import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import type {
   InstructionsWriteResult,

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { ProjectId } from "../project-catalog.js";
+import type { ProjectId } from "../../project-catalog.js";
 
 const activeProvisions = new Map<string, Map<ProjectId, Promise<void>>>();
 

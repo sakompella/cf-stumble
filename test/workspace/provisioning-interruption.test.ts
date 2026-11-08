@@ -4,8 +4,8 @@ import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
-import { waitForWorkspaceProvision } from "../../src/workspace/provision-exclusion.js";
+import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
+import { waitForWorkspaceProvision } from "../../src/supervisor/readiness/provision-fence.js";
 import type { WorkspaceCommandResult } from "../../src/workspace/commands/command-result.js";
 import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 

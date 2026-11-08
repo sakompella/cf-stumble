@@ -6,7 +6,7 @@ import {
   parseProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
-import { ProvisionUnavailable } from "../../src/workspace/provisioning.js";
+import { ProvisionUnavailable } from "../../src/supervisor/readiness/provisioning.js";
 import { provisionerFor, ScriptedProvisionHost, TENANT_WORKSPACE } from "./provisioning-fakes.js";
 
 test("clones and then writes the managed instructions into the tenant's workspace", async () => {

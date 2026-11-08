@@ -8,13 +8,13 @@ import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
-  type WorkspaceHostRpc,
-} from "../../src/workspace/index.js";
-import type {
-  InstructionsWriteResult,
-  WorkspaceCommandResult,
-} from "../../src/workspace/commands/command-result.js";
+} from "../../src/supervisor/readiness/provisioning.js";
+import type { WorkspaceCommandResult, WorkspaceHostRpc } from "../../src/workspace/index.js";
 import { runToResult } from "./workspace-results.js";
+
+type InstructionsWrite = ReturnType<
+  WorkspaceHostRpc<"ensureManagedInstructions">["ensureManagedInstructions"]
+>;
 
 const parsedHarnessCommit = parseHarnessCommit("5000000000000000000000000000000000000003");
 
@@ -60,7 +60,7 @@ class FakeHarnessHost implements WorkspaceHostRpc<"build" | "ensureManagedInstru
     });
   }
 
-  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
+  ensureManagedInstructions(): InstructionsWrite {
     this.instructions += 1;
 
     return Promise.resolve({ ok: true, result: { kind: "written" } });

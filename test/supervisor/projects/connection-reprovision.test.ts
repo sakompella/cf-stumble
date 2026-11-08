@@ -68,9 +68,9 @@ test("a clone that fails after a reset succeeds once the configured credential i
   const subject = tenant("credential-after-failed-clone", { workspace, fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
-  await subject.connections((connections) =>
+  await subject.github((github) =>
     Effect.sync(() => {
-      connections.resetWorkspace();
+      github.resetWorkspace();
     }),
   );
   workspace.credentialState = "missing";
@@ -107,9 +107,9 @@ test("still attempts the clone without a credential, so a public repository re-c
 
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
-  await subject.connections((connections) =>
+  await subject.github((github) =>
     Effect.sync(() => {
-      connections.resetWorkspace();
+      github.resetWorkspace();
     }),
   );
   workspace.credentialState = "missing";
@@ -150,9 +150,9 @@ test("clears cached GitHub status after resetting the workspace", async () => {
   const subject = tenant("reset-clears-connection", { workspace, fallbackToken: FAKE_TOKEN });
 
   await subject.github((github) => github.ensureCredential(NOW));
-  await subject.connections((connections) =>
+  await subject.github((github) =>
     Effect.sync(() => {
-      connections.resetWorkspace();
+      github.resetWorkspace();
     }),
   );
   workspace.credentialState = "missing";

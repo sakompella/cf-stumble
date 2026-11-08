@@ -7,8 +7,8 @@ import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   clearWorkspaceProvision,
   waitForWorkspaceProvision,
-} from "../../src/workspace/provision-exclusion.js";
-import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
+} from "../../src/supervisor/readiness/provision-fence.js";
+import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
 import { delayedProvisionHost, NeverSettlingProvisionHost } from "./provisioning-fakes.js";
 import { runToResult } from "./workspace-results.js";
 
