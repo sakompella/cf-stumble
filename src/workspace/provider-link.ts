@@ -1,9 +1,12 @@
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import {
   decodeProviderFrame,
   encodeFrame,
+  hostFrame,
   ORB_PING,
   ORB_PONG,
+  type HostFrame,
   type HostRequest,
   type OrbJob,
   type ProviderReply,
@@ -11,6 +14,8 @@ import {
 import {
   NEW_PROVIDER,
   nextProviderState,
+  providerEvent,
+  stoppedState,
   decodeProviderAttachment,
   type ProviderAttachment,
   type ProviderContainerEvent,
@@ -80,7 +85,7 @@ export class ProviderLink {
   state(): ProviderContainerState {
     const socket = this.#socket();
 
-    if (socket === undefined) return { _tag: "stopped", exit: this.#lastExit };
+    if (socket === undefined) return stoppedState(this.#lastExit);
 
     return attachmentOf(socket).container;
   }
@@ -100,23 +105,18 @@ export class ProviderLink {
       return;
     }
 
-    switch (frame._tag) {
-      case "hello":
-        socket.serializeAttachment({ ...attachmentOf(socket), egressPort: frame.egressPort });
-
-        return;
-      case "exited":
-        this.#updateOn(socket, {
-          _tag: "exited",
+    if (Predicate.isTagged(frame, "hello")) {
+      socket.serializeAttachment({ ...attachmentOf(socket), egressPort: frame.egressPort });
+    } else if (Predicate.isTagged(frame, "exited")) {
+      this.#updateOn(
+        socket,
+        providerEvent.exited({
           runtime: frame.runtime,
           exit: { exitedAt: Date.now(), reason: frame.reason },
-        });
-
-        return;
-      case "job-done":
-      case "fetch-result":
-      case "failed":
-        this.#settle(frame);
+        }),
+      );
+    } else {
+      this.#settle(frame);
     }
   }
 
@@ -125,7 +125,7 @@ export class ProviderLink {
 
     if (socket.readyState !== WebSocket.CLOSED) socket.close(1000, "provider disconnected");
 
-    this.#updateOn(socket, { _tag: "disconnected", exit });
+    this.#updateOn(socket, providerEvent.disconnected({ exit }));
 
     for (const [id, pending] of this.#pending) {
       if (pending.socket !== socket) continue;
@@ -136,17 +136,17 @@ export class ProviderLink {
   }
 
   async job(job: OrbJob): Promise<string | null> {
-    const reply = await this.#request({ _tag: "job", job });
+    const reply = await this.#request((id) => hostFrame.job({ id, job }));
 
-    if (reply._tag !== "job-done") throw unexpected(reply);
+    if (!Predicate.isTagged(reply, "job-done")) throw unexpected(reply);
 
     return reply.runtime;
   }
 
   async fetch(request: FetchRequest, signal?: AbortSignal | null): Promise<FetchResult> {
-    const reply = await this.#request({ _tag: "fetch", ...request }, signal);
+    const reply = await this.#request((id) => hostFrame.fetch({ id, ...request }), signal);
 
-    if (reply._tag !== "fetch-result") throw unexpected(reply);
+    if (!Predicate.isTagged(reply, "fetch-result")) throw unexpected(reply);
 
     return reply;
   }
@@ -163,7 +163,7 @@ export class ProviderLink {
     const attachment = attachmentOf(socket);
     const container = nextProviderState(attachment.container, event);
 
-    if (container !== attachment.container && container._tag === "stopped")
+    if (container !== attachment.container && Predicate.isTagged(container, "stopped"))
       this.#lastExit = container.exit;
 
     socket.serializeAttachment({ ...attachment, container } satisfies ProviderAttachment);
@@ -176,11 +176,11 @@ export class ProviderLink {
 
     this.#pending.delete(reply.id);
 
-    if (reply._tag === "failed") pending.reject(new Error(reply.message));
+    if (Predicate.isTagged(reply, "failed")) pending.reject(new Error(reply.message));
     else pending.resolve(reply);
   }
 
-  #request(request: HostRequest, signal?: AbortSignal | null): Promise<ProviderReply> {
+  #request(frame: (id: number) => HostFrame, signal?: AbortSignal | null): Promise<ProviderReply> {
     const socket = this.#socket();
 
     if (socket === undefined)
@@ -209,7 +209,7 @@ export class ProviderLink {
           reject(error);
         },
       });
-      socket.send(encodeFrame({ ...request, id }));
+      socket.send(encodeFrame(frame(id)));
     });
   }
 }

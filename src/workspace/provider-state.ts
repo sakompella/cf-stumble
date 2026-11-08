@@ -1,13 +1,16 @@
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 
 const ProviderExit = Schema.Struct({ exitedAt: Schema.Number, reason: Schema.String });
 
 export type ProviderExit = typeof ProviderExit.Type;
 
-const ProviderContainerState = Schema.Union([
-  Schema.TaggedStruct("stopped", { exit: Schema.NullOr(ProviderExit) }),
-  Schema.TaggedStruct("running", { runtime: Schema.String }),
-]);
+const Stopped = Schema.TaggedStruct("stopped", { exit: Schema.NullOr(ProviderExit) });
+
+const Running = Schema.TaggedStruct("running", { runtime: Schema.String });
+
+const ProviderContainerState = Schema.Union([Stopped, Running]);
 
 export type ProviderContainerState = typeof ProviderContainerState.Type;
 
@@ -18,13 +21,30 @@ const ProviderAttachment = Schema.Struct({
 
 export type ProviderAttachment = typeof ProviderAttachment.Type;
 
-export type ProviderContainerEvent =
-  | Readonly<{ _tag: "started"; runtime: string }>
-  | Readonly<{ _tag: "stopped" }>
-  | Readonly<{ _tag: "exited"; runtime: string; exit: ProviderExit }>
-  | Readonly<{ _tag: "disconnected"; exit: ProviderExit }>;
+const Started = Schema.TaggedStruct("started", { runtime: Schema.String });
 
-const NEVER_STARTED: ProviderContainerState = { _tag: "stopped", exit: null };
+const Halted = Schema.TaggedStruct("stopped", {});
+
+const Exited = Schema.TaggedStruct("exited", { runtime: Schema.String, exit: ProviderExit });
+
+const Disconnected = Schema.TaggedStruct("disconnected", { exit: ProviderExit });
+
+const ProviderContainerEvent = Schema.Union([Started, Halted, Exited, Disconnected]);
+
+export type ProviderContainerEvent = typeof ProviderContainerEvent.Type;
+
+export const providerEvent = {
+  started: (fields: Omit<typeof Started.Type, "_tag">) => Started.make(fields),
+  stopped: () => Halted.make({}),
+  exited: (fields: Omit<typeof Exited.Type, "_tag">) => Exited.make(fields),
+  disconnected: (fields: Omit<typeof Disconnected.Type, "_tag">) => Disconnected.make(fields),
+};
+
+export function stoppedState(exit: ProviderExit | null): ProviderContainerState {
+  return Stopped.make({ exit });
+}
+
+const NEVER_STARTED = stoppedState(null);
 
 export const NEW_PROVIDER: ProviderAttachment = { egressPort: null, container: NEVER_STARTED };
 
@@ -35,22 +55,22 @@ function stoppedIfRunning(
   exit: ProviderExit,
   runtime?: string,
 ): ProviderContainerState {
-  if (state._tag !== "running") return state;
+  if (!Predicate.isTagged(state, "running")) return state;
 
   if (runtime !== undefined && runtime !== state.runtime) return state;
 
-  return { _tag: "stopped", exit };
+  return stoppedState(exit);
 }
 
 export function nextProviderState(
   state: ProviderContainerState,
   event: ProviderContainerEvent,
 ): ProviderContainerState {
-  if (event._tag === "started") return { _tag: "running", runtime: event.runtime };
-
-  if (event._tag === "stopped") return NEVER_STARTED;
-
-  if (event._tag === "exited") return stoppedIfRunning(state, event.exit, event.runtime);
-
-  return stoppedIfRunning(state, event.exit);
+  return Match.value(event).pipe(
+    Match.tag("started", ({ runtime }) => Running.make({ runtime })),
+    Match.tag("stopped", () => NEVER_STARTED),
+    Match.tag("exited", ({ exit, runtime }) => stoppedIfRunning(state, exit, runtime)),
+    Match.tag("disconnected", ({ exit }) => stoppedIfRunning(state, exit)),
+    Match.exhaustive,
+  );
 }

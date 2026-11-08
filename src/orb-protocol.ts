@@ -16,28 +16,42 @@ const HeaderList = Schema.Array(Schema.Tuple([Schema.String, Schema.String]));
 
 const Body = Schema.NullOr(Schema.String);
 
-const OrbJob = Schema.Union([
-  Schema.TaggedStruct("start", {
-    container: Schema.String,
-    env: Schema.Record(Schema.String, Schema.String),
-  }),
-  Schema.TaggedStruct("stop", { container: Schema.String }),
-  Schema.TaggedStruct("delete", { container: Schema.String }),
-]);
+const StartJob = Schema.TaggedStruct("start", {
+  container: Schema.String,
+  env: Schema.Record(Schema.String, Schema.String),
+});
+
+const StopJob = Schema.TaggedStruct("stop", { container: Schema.String });
+
+const DeleteJob = Schema.TaggedStruct("delete", { container: Schema.String });
+
+const OrbJob = Schema.Union([StartJob, StopJob, DeleteJob]);
+
+export const orbJob = {
+  start: (fields: Omit<typeof StartJob.Type, "_tag">) => StartJob.make(fields),
+  stop: (fields: Omit<typeof StopJob.Type, "_tag">) => StopJob.make(fields),
+  delete: (fields: Omit<typeof DeleteJob.Type, "_tag">) => DeleteJob.make(fields),
+};
 
 export type OrbJob = typeof OrbJob.Type;
 
-const HostFrame = Schema.Union([
-  Schema.TaggedStruct("job", { id: Count, job: OrbJob }),
-  Schema.TaggedStruct("fetch", {
-    id: Count,
-    port: Count,
-    method: Schema.String,
-    path: Schema.String,
-    headers: HeaderList,
-    body: Body,
-  }),
-]);
+const JobFrame = Schema.TaggedStruct("job", { id: Count, job: OrbJob });
+
+const FetchFrame = Schema.TaggedStruct("fetch", {
+  id: Count,
+  port: Count,
+  method: Schema.String,
+  path: Schema.String,
+  headers: HeaderList,
+  body: Body,
+});
+
+const HostFrame = Schema.Union([JobFrame, FetchFrame]);
+
+export const hostFrame = {
+  job: (fields: Omit<typeof JobFrame.Type, "_tag">) => JobFrame.make(fields),
+  fetch: (fields: Omit<typeof FetchFrame.Type, "_tag">) => FetchFrame.make(fields),
+};
 
 export type HostFrame = typeof HostFrame.Type;
 

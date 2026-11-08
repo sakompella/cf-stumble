@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Server } from "node:net";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import {
@@ -139,7 +140,7 @@ export class OrbProvider {
   }
 
   #answer(frame: HostFrame, send: Send): Effect.Effect<ProviderFrame, OrbFailure> {
-    if (frame._tag === "fetch")
+    if (Predicate.isTagged(frame, "fetch"))
       return Effect.map(this.#fetch(frame), (result) =>
         providerFrame.fetchResult({ id: frame.id, ...result }),
       );
@@ -175,7 +176,7 @@ export class OrbProvider {
     return Effect.suspend(() => {
       this.#options.log(`job ${job._tag} ${job.container}`);
 
-      if (job._tag !== "start") {
+      if (!Predicate.isTagged(job, "start")) {
         this.#launch = undefined;
 
         return this.#script(job._tag, job.container).pipe(Effect.as(null));
