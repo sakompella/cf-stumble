@@ -4,19 +4,18 @@ import * as Effect from "effect/Effect";
 import type { Project } from "../project-catalog.js";
 import { attemptWorkspace, RepositoryNotEligible, type WorkspaceFault } from "./operations.js";
 import { GITHUB_CLI_CONFIG_DIRECTORY, projectDirectory } from "../workspace-layout.js";
+import { githubTokenFromHosts } from "./project/index.js";
 
 const ISOLATE_CLONE_DEPTH = 1;
 
 const ISOLATE_CLONE_MAX_KB = 20_000;
-
-const TOKEN_LINE = /^\s*oauth_token:\s*(\S+)\s*$/mu;
 
 function githubToken(workspace: Workspace): Effect.Effect<string | undefined> {
   return Effect.tryPromise(() =>
     workspace.fs.readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`, "utf8"),
   ).pipe(
     Effect.orElseSucceed(() => ""),
-    Effect.map((hosts) => TOKEN_LINE.exec(hosts)?.[1]),
+    Effect.map(githubTokenFromHosts),
   );
 }
 

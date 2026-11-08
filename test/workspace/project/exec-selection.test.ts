@@ -17,15 +17,15 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
   ["cd src && find . -name '*.ts' | wc -l", undefined, "isolate"],
   ["grep 'a|b; c' file > out.txt 2>&1", undefined, "isolate"],
   ["jq .name package.json", undefined, "isolate"],
-  ["git status", undefined, "container"],
-  ["git status --short", undefined, "container"],
-  ["git branch -vv", undefined, "container"],
-  ["git stash list", undefined, "container"],
-  ["git log --oneline | head", undefined, "container"],
-  ["ls && git diff", undefined, "container"],
-  ["git log", "isolate", "container"],
-  ["git push origin main", undefined, "container"],
-  ["git -C x status", undefined, "container"],
+  ["git status", undefined, "isolate"],
+  ["git status --short", undefined, "isolate"],
+  ["git branch -vv", undefined, "isolate"],
+  ["git stash list", undefined, "isolate"],
+  ["git log --oneline | head", undefined, "isolate"],
+  ["ls && git diff", undefined, "isolate"],
+  ["git log", "isolate", "isolate"],
+  ["git push origin main", undefined, "isolate"],
+  ["git -C x status", undefined, "isolate"],
   ["git log && node --version", undefined, "container"],
   ["pnpm test", undefined, "container"],
   ["ls && pnpm test", undefined, "container"],
@@ -46,7 +46,7 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
   ["", undefined, "container"],
   ["ls", "container", "container"],
   ["ls", "isolate", "isolate"],
-  ["git pull", "isolate", "container"],
+  ["git pull", "isolate", "isolate"],
   ["node -e 1 | cat", "isolate", "container"],
 ];
 
@@ -73,7 +73,7 @@ describe("chosenExecBackend routing", () => {
     const backend = chosenExecBackend(recordingWorkspace(backends), { generation: 1 });
 
     for (const [command, backendChoice] of [
-      ["git push", "isolate"],
+      ["pnpm test", "isolate"],
       ["pnpm install", undefined],
       ["ls", undefined],
       ["ls", "container"],

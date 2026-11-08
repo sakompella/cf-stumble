@@ -9,14 +9,14 @@ async function linesOf(stream: ReadableStream<Uint8Array>): Promise<string[]> {
   return text.split("\n").filter((line) => line !== "");
 }
 
-function runIn(name: string, backend?: "isolate") {
+function runIn(name: string, backend?: "isolate", command = "grep two notes.txt") {
   return runInDurableObject(env.WORKSPACE_HOST.getByName(name), async (host, state) => {
     await seedWorkspaceRoot(state);
     const project = host.project({ remainingMs: 60_000 });
     await project.writeFile("/notes.txt", new TextEncoder().encode("one\ntwo\n"), "overwrite");
 
     const started = await project.startExec({
-      command: "grep two notes.txt",
+      command,
       timeoutMs: 10_000,
       backend,
     });
@@ -40,6 +40,13 @@ test("a command with no backend and only isolate programs runs in the isolate", 
   const lines = await runIn("isolate-routing-auto");
 
   expect(lines.at(-1)).toContain('"outcome":"exited"');
+});
+
+test("git runs in the isolate and prints status the way real git does", async () => {
+  const lines = await runIn("isolate-git-status", undefined, "git init && git status");
+
+  expect(lines.join("\n")).toContain("On branch main");
+  expect(lines.join("\n")).toContain("Untracked files:");
 });
 
 test("a holder of the WORKSPACE_HOST binding cannot get the workspace without the isolate's token", async () => {

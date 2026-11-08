@@ -10,7 +10,7 @@ describe("isolate programs", () => {
 
     assert.deepEqual(
       [...ISOLATE_PROGRAMS].filter((program) => !registered.has(program)),
-      ["cd", "test"],
+      ["cd", "test", "git"],
     );
     assert.deepEqual([...ISOLATE_COMMAND_NAMES], JUST_BASH_COMMAND_NAMES);
   });

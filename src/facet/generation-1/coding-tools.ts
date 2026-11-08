@@ -16,8 +16,8 @@ import type { ComputerEnv } from "./execution-env.js";
 
 const BACKEND_DESCRIPTION = [
   "Optional override; leave it out. The host routes each command by itself.",
-  "A command whose programs are all simple file tools or local git, with no network, runs in a fast Worker isolate that starts at once and costs little:",
-  "ls, cat, head, tail, grep, find, sed, awk, sort, wc, diff, jq, yq, echo, mkdir, cp, mv, rm, and git except clone, fetch, pull, push and remote.",
+  "A command whose programs are all simple file tools or git runs in a fast Worker isolate that starts at once and costs little:",
+  "ls, cat, head, tail, grep, find, sed, awk, sort, wc, diff, jq, yq, echo, mkdir, cp, mv, rm, and git, including fetch, pull and push to GitHub over HTTPS. Run git as its own command, not mixed with container programs.",
   "Anything else runs in the container, a Linux machine with the project's toolchain and the internet: node, npm, pnpm, python, gh, curl, builds, tests, subshells, $(...), env assignments.",
   "isolate: ask for the isolate; a command it cannot run goes to the container instead.",
   "container: always the container.",
