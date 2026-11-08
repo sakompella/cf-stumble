@@ -1,5 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type { HarnessBuildConfiguration } from "../harness-build.js";
+import type { HarnessCommit } from "../harness-commit.js";
 import type { Project } from "../project-catalog.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
@@ -22,6 +24,10 @@ export type WorkspaceFault = WorkspaceUnavailable | WorkspaceSyncIncomplete | Re
 
 export type WorkspaceEffects = Readonly<{
   cloneProject?(project: Project): Effect.Effect<void, WorkspaceFault>;
+  provisionHarness(
+    configuration: HarnessBuildConfiguration,
+    commit: HarnessCommit,
+  ): Effect.Effect<CommandOutput, WorkspaceFault>;
   lstat(path: string): Effect.Effect<WorkspacePathKind | undefined, WorkspaceFault>;
   readFile(path: string): Effect.Effect<string, WorkspaceFault>;
   writeFile(path: string, content: string): Effect.Effect<void, WorkspaceFault>;

@@ -24,4 +24,4 @@ export {
 
 export { ensureManagedInstructions } from "../managed-instructions.js";
 
-export { ComputerWorkspaceOperations } from "../computer-operations.js";
+export { ComputerWorkspaceOperations, newHarnessPermit } from "../computer-operations.js";
