@@ -5,10 +5,11 @@ import * as Stream from "effect/Stream";
 import { afterEach, expect, test, vi } from "vitest";
 import { subscriptions } from "../../../src/page/client/events-stream.js";
 import { Message } from "../../../src/page/client/message.js";
-import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { openedTranscript } from "./transcript-resource.js";
 import { received, running, viewing } from "./views.js";
+
+type Model = ReturnType<typeof init>["model"];
 
 const PROJECTS = [
   { id: "repo", displayName: "hello-world", isHarness: false, location: "https://github.com/o/r" },

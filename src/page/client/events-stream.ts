@@ -1,34 +1,33 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Subscription } from "foldkit";
 import { answerOf, fetchEffect, problemText, projectPath, transportDetail } from "./api.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
 import {
-  TranscriptKey,
+  MaybeTranscriptKey,
   TranscriptResource,
-  viewReader,
-  type HeldTranscript,
   type TranscriptService,
 } from "./transcript-store.js";
+import { viewReader } from "./view-reader.js";
 
 const RECONNECT_PAUSE = "1 second";
 
 const STALL_TIMEOUT = "10 seconds";
 
-function resumePath(projectId: string, held: HeldTranscript): string {
-  const from = held.transcript.resume?.from;
-
+function resumePath(projectId: string, from: number | undefined): string {
   return `${projectPath(projectId, "/events")}${from === undefined ? "" : `?from=${from}`}`;
 }
 
 function connection({
   streamId,
   projectId,
-}: typeof TranscriptKey.Type): Stream.Stream<Message, never, TranscriptService> {
+}: {
+  readonly streamId: number;
+  readonly projectId: string;
+}): Stream.Stream<Message, never, TranscriptService> {
   const opened = Effect.gen(function* () {
     const held = yield* TranscriptResource.get.pipe(Effect.mapError(transportDetail));
 
@@ -41,7 +40,7 @@ function connection({
     );
 
     const response = yield* fetchEffect(
-      resumePath(projectId, held),
+      resumePath(projectId, held.transcript.resume?.from),
       { method: "GET", accept: "application/x-ndjson", maybeBody: Option.none() },
       controller.signal,
     );
@@ -79,7 +78,7 @@ function connection({
 
 export const subscriptions = Subscription.make<Model, Message, TranscriptService>()((entry) => ({
   events: entry(
-    { maybeStream: Schema.Option(TranscriptKey) },
+    { maybeStream: MaybeTranscriptKey },
     {
       modelToDependencies: (model) => ({
         maybeStream: Option.map(model.maybeProjectId, (projectId) => ({

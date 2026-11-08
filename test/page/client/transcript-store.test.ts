@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { afterEach, expect, test, vi } from "vitest";
-import { loadIntoTranscript, viewReader } from "../../../src/page/client/transcript-store.js";
+import { loadIntoTranscript } from "../../../src/page/client/transcript-store.js";
+import { viewReader } from "../../../src/page/client/view-reader.js";
 import type { Conversation } from "../../../src/page/client/conversation.js";
 import { Message } from "../../../src/page/client/message.js";
 import { init, update } from "../../../src/page/client/update.js";
