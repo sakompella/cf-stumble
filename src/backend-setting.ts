@@ -15,7 +15,7 @@ const BACKEND_SETTING_KEY = "workspace-backend";
 export const decodeBackendSetting = Schema.decodeUnknownOption(BackendSetting);
 
 export function readBackendSetting(kv: SettingStore): BackendSetting {
-  return Option.getOrElse(decodeBackendSetting(kv.get(BACKEND_SETTING_KEY)), () => "provider");
+  return Option.getOrElse(decodeBackendSetting(kv.get(BACKEND_SETTING_KEY)), () => "cloudflare");
 }
 
 export function writeBackendSetting(kv: SettingStore, setting: BackendSetting): void {

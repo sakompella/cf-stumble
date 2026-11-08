@@ -3,6 +3,7 @@ import * as Result from "effect/Result";
 import { FACET_COMPATIBILITY, loadMainFacet } from "../../facet/index.js";
 import type { MainFacetTarget, MainHarnessArtifact } from "../../facet/index.js";
 import { candidateFacetName } from "../artifacts/index.js";
+import { GenerationHostTarget } from "../conversations/index.js";
 import { checkConversation } from "./conversation.js";
 import type { StartupCheckHost } from "./index.js";
 
@@ -77,6 +78,7 @@ function checkCandidate(
       writer.success,
       () => Effect.fromResult(remount(host, artifact, name)),
       (signal) => host.workspace(deadlines.conversationMs, signal),
+      statusOnlyGenerations(host),
     ).pipe(
       withinDeadline(
         deadlines.conversationMs,
@@ -84,6 +86,22 @@ function checkCandidate(
       ),
     );
   });
+}
+
+function refused(): never {
+  throw new Error("a startup check may only read the generation status");
+}
+
+function statusOnlyGenerations(host: StartupCheckHost): GenerationHostTarget {
+  return new GenerationHostTarget(
+    {
+      getActiveGeneration: () => host.generations.active(),
+      submitGeneration: refused,
+      prepareGeneration: refused,
+      controlGeneration: refused,
+    },
+    () => true,
+  );
 }
 
 function previousArtifact(

@@ -13,7 +13,11 @@ import type { ChatGPTAccess } from "../src/chatgpt/index.js";
 import type { StreamingProviderPayload, WorkersAiBinding } from "../src/model-route-wire/events.js";
 import type { ModelRouteRequest, ValidationFailure } from "../src/model-route-wire/request.js";
 
-type RecordedCall = Readonly<{ model: string; input: StreamingProviderPayload }>;
+type RecordedCall = Readonly<{
+  model: string;
+  input: StreamingProviderPayload;
+  headers: Record<string, string>;
+}>;
 
 type FakeBinding = Readonly<{ ai: WorkersAiBinding; calls: readonly RecordedCall[] }>;
 
@@ -21,8 +25,8 @@ function fakeAiBinding(answer: () => Promise<ReadableStream<Uint8Array>>): FakeB
   const calls: RecordedCall[] = [];
 
   const binding: WorkersAiBinding = {
-    run(model, input) {
-      calls.push({ model, input });
+    run(model, input, options) {
+      calls.push({ model, input, headers: options.extraHeaders });
 
       return answer();
     },
@@ -140,6 +144,7 @@ test("with no ChatGPT credential connected, the Supervisor's route answers from 
   const events = await collectEvents(await streamOf(routeOver(binding).runStream(REQUEST)));
 
   expect(binding.calls).toHaveLength(1);
+  expect(binding.calls[0]?.headers).toEqual({ "x-session-affinity": "owner" });
   expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "fallback" } });
 });
 
