@@ -147,3 +147,15 @@ test("git checkout in the isolate prints the messages of real git", async () => 
   );
   expect(stdout).toMatch(/^\* main {2}[0-9a-f]{7} first\n {2}topic [0-9a-f]{7} first\n$/u);
 });
+
+test("git checkout -b in the isolate keeps local changes and commit refuses an empty index", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-dirty-branch",
+    `${SETUP} && echo x >> a.txt && git checkout -b topic && git status -s && git commit -m nothing; git commit -am kept`,
+  );
+
+  expect(stderr).toBe("Switched to a new branch 'topic'\n");
+  expect(stdout).toMatch(
+    /^ M a\.txt\nOn branch topic\nChanges not staged for commit:\n[^]*no changes added to commit[^]*\n\[topic [0-9a-f]{7}\] kept\n 1 file changed, 1 insertion\(\+\)\n$/u,
+  );
+});

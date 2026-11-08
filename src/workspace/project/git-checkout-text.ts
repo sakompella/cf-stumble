@@ -36,6 +36,17 @@ async function restorePaths(
     : result;
 }
 
+function createBranch(client: GitClient, dir: string, name: string): Promise<GitCliResult> {
+  return client.branch({ dir, name, checkout: true }).then(
+    () => ({ stdout: "", stderr: "", exitCode: 0 }),
+    () => ({
+      stdout: "",
+      stderr: `fatal: a branch named '${name}' already exists\n`,
+      exitCode: 128,
+    }),
+  );
+}
+
 async function switchMessages(
   client: GitClient,
   dir: string,
@@ -87,7 +98,11 @@ export async function checkoutWithMessages(
   const created = args.some((arg) => CREATE.has(arg));
   const target = args.find((arg) => !arg.startsWith("-"));
   const before = await client.currentBranch({ dir }).catch((): undefined => {});
-  const result = await cli(input);
+
+  const result =
+    created && args.length === 2 && target !== undefined
+      ? await createBranch(client, dir, target)
+      : await cli(input);
 
   if (result.exitCode !== 0 || target === undefined) return result;
 
