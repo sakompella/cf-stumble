@@ -1,4 +1,4 @@
-import type { AssistantMessage, RouteMessage, ToolDefinition } from "./model-route.js";
+import type { AssistantMessage, RouteMessage, ToolDefinition } from "./request.js";
 
 export type StreamingProviderPayload = Readonly<{
   messages: ReadonlyArray<RouteMessage>;

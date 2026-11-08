@@ -3,21 +3,15 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { GENERATION_REPLACED } from "./generation-replaced.js";
 import { chatgptTurn, type ChatGPTAccess, type ChatGPTCredential } from "./chatgpt/index.js";
-import { parseRequest, type RouteWire, type ValidationFailure } from "./model-route-request.js";
+import {
+  parseRequest,
+  type RouteWire,
+  type ValidationFailure,
+} from "./model-route-wire/request.js";
 import { runAtEntryPoint } from "./run-entry-point.js";
 import { workersAiTurn } from "./model-route-stream.js";
-import type { WorkersAiBinding } from "./model-route-events.js";
+import type { WorkersAiBinding } from "./model-route-wire/events.js";
 import { modelEventStream, type ModelTurn } from "./model-route-turn.js";
-
-export type {
-  AssistantMessage,
-  RouteMessage,
-  ToolDefinition,
-  ModelRouteRequest,
-  ValidationFailure,
-} from "./model-route-request.js";
-
-export type { ModelStreamEvent, ModelUsage, ToolCallDelta } from "./model-route-events.js";
 
 type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{

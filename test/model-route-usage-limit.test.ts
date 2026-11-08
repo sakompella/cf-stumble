@@ -1,8 +1,9 @@
 import { createExecutionContext } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
-import type { WorkersAiBinding } from "../src/model-route-events.js";
-import { ModelRoute, type ModelRouteRequest } from "../src/model-route.js";
+import type { WorkersAiBinding } from "../src/model-route-wire/events.js";
+import { ModelRoute } from "../src/model-route.js";
+import type { ModelRouteRequest } from "../src/model-route-wire/request.js";
 import {
   collectEvents,
   DONE_LINE,
