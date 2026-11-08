@@ -98,7 +98,7 @@ function assistantEntries(message: AssistantMessage): readonly TranscriptEntry[]
 
   return [
     ...(isFallbackAnswer(message)
-      ? [textEntry("system", "notice", "ChatGPT usage limit reached; answered with Workers AI")]
+      ? [textEntry("system", "notice", "Codex usage limit reached; answered with Workers AI")]
       : []),
     ...(text === "" ? [] : [textEntry("assistant", "assistant", text)]),
     ...message.content.flatMap((block) =>

@@ -29,18 +29,18 @@ export const GitHubReport = defineTaggedUnion({
 
 export type GitHubReport = typeof GitHubReport.Type;
 
-const ChatGPTLogin = Schema.Struct({
+const CodexLogin = Schema.Struct({
   attemptId: Schema.String,
   authorizeUrl: Schema.String,
 });
 
-export const ChatGPTConnection = Schema.Struct({
+export const CodexLoginConnection = Schema.Struct({
   connection: Schema.String,
   isConnected: Schema.Boolean,
-  maybeLogin: Schema.Option(ChatGPTLogin),
+  maybeLogin: Schema.Option(CodexLogin),
 });
 
-export type ChatGPTConnection = typeof ChatGPTConnection.Type;
+export type CodexLoginConnection = typeof CodexLoginConnection.Type;
 
 export const ControlKind = Schema.Literals(["activate", "rollback"]);
 
@@ -106,9 +106,9 @@ export const Model = Schema.Struct({
   github: GitHubConnection,
   connectRepositoryInput: Schema.String,
   connectStatus: Schema.String,
-  chatgpt: ChatGPTConnection,
-  chatgptCallbackInput: Schema.String,
-  chatgptResult: Schema.String,
+  codexLogin: CodexLoginConnection,
+  codexLoginCallbackInput: Schema.String,
+  codexLoginResult: Schema.String,
   maybeBackend: Schema.Option(BackendSetting),
   backendResult: Schema.String,
 

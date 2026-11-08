@@ -209,13 +209,13 @@ A connection is refused when the repository is over the size limits in `docs/age
 
 To remove a connected project, send `POST /api/projects/{id}/disconnect`. The request refuses an unknown project, the harness, or any request while a run is active (`run-active`). Otherwise it drops the project's conversation pointer, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The conversation itself stays in storage, unused. The clone removal is best-effort: it can fail after the catalog entry is already gone, leaving the project's files on disk with no project that owns them.
 
-## Connect ChatGPT
+## Connect Codex
 
 The model route answers from the fixed Workers AI model until you connect a ChatGPT account. After that it answers from OpenAI's Responses API with your ChatGPT subscription, using the model that `CHATGPT_MODEL` names in `infra/worker-settings.ts` (`gpt-6.1-sol`). The Supervisor keeps the access and refresh tokens in its SQLite and refreshes them itself, so you connect once per instance. Your browser and the harness never receive a token. See ADR-0047.
 
 Connect from the owner page:
 
-1. Select **Connect ChatGPT** in the sidebar, then open the sign-in link it shows.
+1. Select **Connect Codex** in the sidebar, then open the sign-in link it shows.
 2. Sign in to ChatGPT and approve cf-stumble.
 3. OpenAI sends the browser to `http://127.0.0.1:1455/auth/callback?...`. Nothing listens there, so the browser shows a connection error. That is expected. Copy the whole address from the address bar.
 4. Paste it into the sidebar and select **Finish**. The panel says the account is connected.

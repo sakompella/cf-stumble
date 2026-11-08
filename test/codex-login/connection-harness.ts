@@ -2,10 +2,10 @@ import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
 import {
-  ChatGPTConnection,
-  ChatGPTCredentialStore,
-  type ChatGPTAccess,
-} from "../../src/chatgpt/index.js";
+  CodexLoginConnection,
+  CodexLoginCredentialStore,
+  type CodexLoginAccess,
+} from "../../src/codex-login/index.js";
 import {
   ACCESS_ONE,
   CLIENT_ID,
@@ -17,8 +17,8 @@ import {
 export const HOUR = 3_600_000;
 
 export type Harness = Readonly<{
-  connection: ChatGPTConnection;
-  store: ChatGPTCredentialStore;
+  connection: CodexLoginConnection;
+  store: CodexLoginCredentialStore;
   calls: RecordedCall[];
   clock: { now: number };
 }>;
@@ -30,10 +30,10 @@ export function withConnection<T>(
 ): Promise<T> {
   return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) => {
     const clock = { now: 1_000_000 };
-    const store = new ChatGPTCredentialStore(state.storage);
+    const store = new CodexLoginCredentialStore(state.storage);
     const { fetcher, calls } = recordingFetch(reply);
 
-    const connection = new ChatGPTConnection({
+    const connection = new CodexLoginConnection({
       store,
       fetcher,
       model: "gpt-test",
@@ -44,7 +44,10 @@ export function withConnection<T>(
   });
 }
 
-export function access(connection: ChatGPTConnection, rejected?: string): Promise<ChatGPTAccess> {
+export function access(
+  connection: CodexLoginConnection,
+  rejected?: string,
+): Promise<CodexLoginAccess> {
   return Effect.runPromise(connection.access(rejected));
 }
 

@@ -1,6 +1,6 @@
 import { createExecutionContext } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
-import type { ChatGPTAccess } from "../src/chatgpt/index.js";
+import type { CodexLoginAccess } from "../src/codex-login/index.js";
 import type { WorkersAiBinding } from "../src/model-route-events.js";
 import { ModelRoute, type ModelRouteRequest } from "../src/model-route.js";
 import {
@@ -30,7 +30,7 @@ function workersAi(text: string) {
   return { ai: binding, calls };
 }
 
-function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess) {
+function supervisedRoute(ai: WorkersAiBinding, access: CodexLoginAccess) {
   const limited: (readonly [string, number | null])[] = [];
   const context = createExecutionContext();
   Object.defineProperty(context, "props", { value: { supervisor: "owner", instance: 0 } });
@@ -40,9 +40,9 @@ function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess) {
     SUPERVISOR: {
       getByName: () => ({
         admitModelTurn: () => Promise.resolve(true),
-        chatgptAccess: () => Promise.resolve(access),
-        markChatGPTRefused: () => Promise.resolve(),
-        markChatGPTUsageLimited: (accessToken, limitedUntil) => {
+        codexLoginAccess: () => Promise.resolve(access),
+        markCodexLoginRefused: () => Promise.resolve(),
+        markCodexLoginUsageLimited: (accessToken, limitedUntil) => {
           limited.push([accessToken, limitedUntil]);
 
           return Promise.resolve();
@@ -77,7 +77,7 @@ const USAGE_LIMIT_FAILED = {
   response: { error: { code: "subscription_sharing_usage_limit_exceeded", message: "limit" } },
 };
 
-const READY: ChatGPTAccess = { kind: "ready", accessToken: "chatgpt-access-FAKE-route" };
+const READY: CodexLoginAccess = { kind: "ready", accessToken: "codex-login-access-FAKE-route" };
 
 test("a usage limit before any output is answered by Workers AI after one fallback notice", async () => {
   const fetchSpy = responsesAnswer([
@@ -118,10 +118,10 @@ test("a usage limit after output ends the call with one error and never asks Wor
   expect(binding.calls).toEqual([]);
 });
 
-test("while a usage limit with a named end lasts, ChatGPT is not asked and the notice says when it ends", async () => {
+test("while a usage limit with a named end lasts, Codex is not asked and the notice says when it ends", async () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch");
   const binding = workersAi("ok");
-  const access: ChatGPTAccess = { kind: "usage-limited", limitedUntil: 1_800_000_000_000 };
+  const access: CodexLoginAccess = { kind: "usage-limited", limitedUntil: 1_800_000_000_000 };
 
   const events = await supervisedRoute(binding.ai, access).events();
 

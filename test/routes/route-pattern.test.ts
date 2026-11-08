@@ -20,7 +20,12 @@ afterEach(async () => {
 
 const classOf = (path: string) => routeClass(routePattern(path));
 
-test.each(["/api/status", "/api/projects", "/api/github/connection", "/api/chatgpt/connection"])(
+test.each([
+  "/api/status",
+  "/api/projects",
+  "/api/github/connection",
+  "/api/codex-login/connection",
+])(
   "GET %s is record-only: the real Supervisor answers it without asking for the workspace",
   async (path) => {
     const hostLookups = spyOnWorkspaceLookups();

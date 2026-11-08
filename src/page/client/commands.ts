@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import {
   type Answer,
   type JsonBody,
-  chatGPTConnection,
+  codexLoginConnection,
   diagnosticsText,
   field,
   generationReading,
@@ -121,52 +121,65 @@ export const RefreshGitHub = Command.define("RefreshGitHub", {
   execute: gitHubRequest("POST", "/api/github/connection/refresh"),
 });
 
-type ChatGPTAnswer = Extract<Message, { readonly _tag: "SucceededChatGPT" | "RejectedChatGPT" }>;
+type CodexLoginAnswer = Extract<
+  Message,
+  { readonly _tag: "SucceededCodexLogin" | "RejectedCodexLogin" }
+>;
 
-function chatGPTAnswer(answer: Answer): ChatGPTAnswer {
-  const chatgpt = field(answer.payload, "chatgpt");
+function codexLoginAnswer(answer: Answer): CodexLoginAnswer {
+  const codexLogin = field(answer.payload, "codexLogin");
 
   return isOk(answer.payload)
-    ? Message.SucceededChatGPT({ chatgpt: chatGPTConnection(chatgpt) })
-    : Message.RejectedChatGPT({
+    ? Message.SucceededCodexLogin({ codexLogin: codexLoginConnection(codexLogin) })
+    : Message.RejectedCodexLogin({
         wording: problemText(answer),
-        maybeChatGPT: truthy(chatgpt) ? Option.some(chatGPTConnection(chatgpt)) : Option.none(),
+        maybeCodexLogin: truthy(codexLogin)
+          ? Option.some(codexLoginConnection(codexLogin))
+          : Option.none(),
       });
 }
 
-const CHATGPT_MESSAGES = [
-  Message.SucceededChatGPT,
-  Message.RejectedChatGPT,
-  Message.FailedChatGPT,
+const CODEX_LOGIN_MESSAGES = [
+  Message.SucceededCodexLogin,
+  Message.RejectedCodexLogin,
+  Message.FailedCodexLogin,
 ] as const;
 
-function chatGPTRequest(method: "GET" | "POST", path: string, maybeBody: Option.Option<JsonBody>) {
+function codexLoginRequest(
+  method: "GET" | "POST",
+  path: string,
+  maybeBody: Option.Option<JsonBody>,
+) {
   return requestJson(method, path, maybeBody).pipe(
-    Effect.map(chatGPTAnswer),
-    Effect.catch((detail) => Effect.succeed(Message.FailedChatGPT({ detail }))),
+    Effect.map(codexLoginAnswer),
+    Effect.catch((detail) => Effect.succeed(Message.FailedCodexLogin({ detail }))),
   );
 }
 
-export const FetchChatGPT = Command.define("FetchChatGPT", {
-  messages: CHATGPT_MESSAGES,
-  execute: chatGPTRequest("GET", "/api/chatgpt/connection", Option.none()),
+export const FetchCodexLogin = Command.define("FetchCodexLogin", {
+  messages: CODEX_LOGIN_MESSAGES,
+  execute: codexLoginRequest("GET", "/api/codex-login/connection", Option.none()),
 });
 
-export const StartChatGPTLogin = Command.define("StartChatGPTLogin", {
-  messages: CHATGPT_MESSAGES,
-  execute: chatGPTRequest("POST", "/api/chatgpt/login", Option.some({})),
+export const StartCodexLogin = Command.define("StartCodexLogin", {
+  messages: CODEX_LOGIN_MESSAGES,
+  execute: codexLoginRequest("POST", "/api/codex-login/login", Option.some({})),
 });
 
-export const FinishChatGPTLogin = Command.define("FinishChatGPTLogin", {
+export const FinishCodexLogin = Command.define("FinishCodexLogin", {
   args: { attemptId: Schema.String, callbackUrl: Schema.String },
-  messages: CHATGPT_MESSAGES,
+  messages: CODEX_LOGIN_MESSAGES,
   execute: ({ attemptId, callbackUrl }) =>
-    chatGPTRequest("POST", "/api/chatgpt/login/complete", Option.some({ attemptId, callbackUrl })),
+    codexLoginRequest(
+      "POST",
+      "/api/codex-login/login/complete",
+      Option.some({ attemptId, callbackUrl }),
+    ),
 });
 
-export const DisconnectChatGPT = Command.define("DisconnectChatGPT", {
-  messages: CHATGPT_MESSAGES,
-  execute: chatGPTRequest("POST", "/api/chatgpt/disconnect", Option.some({})),
+export const DisconnectCodexLogin = Command.define("DisconnectCodexLogin", {
+  messages: CODEX_LOGIN_MESSAGES,
+  execute: codexLoginRequest("POST", "/api/codex-login/disconnect", Option.some({})),
 });
 
 export const MintRequestId = Command.define("MintRequestId", {

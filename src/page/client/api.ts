@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
 import {
   GitHubReport,
-  type ChatGPTConnection,
+  type CodexLoginConnection,
   type GenerationReading,
   type Project,
 } from "./model.js";
@@ -187,13 +187,13 @@ export function gitHubReport(status: Wire, checkedAt: Wire, now: number): GitHub
   });
 }
 
-const UNKNOWN_CHATGPT: ChatGPTConnection = {
+const UNKNOWN_CODEX_LOGIN: CodexLoginConnection = {
   connection: "unknown",
   isConnected: false,
   maybeLogin: Option.none(),
 };
 
-function chatGPTLogin(login: Wire): ChatGPTConnection["maybeLogin"] {
+function codexLogin(login: Wire): CodexLoginConnection["maybeLogin"] {
   const attemptId = text(field(login, "attemptId"));
   const authorizeUrl = text(field(login, "authorizeUrl"));
 
@@ -214,9 +214,9 @@ function usageLimitText(limit: Wire): string {
     : "; usage limit reached";
 }
 
-export function chatGPTConnection(view: Wire): ChatGPTConnection {
+export function codexLoginConnection(view: Wire): CodexLoginConnection {
   const connection = field(view, "connection");
-  const maybeLogin = chatGPTLogin(field(view, "login"));
+  const maybeLogin = codexLogin(field(view, "login"));
 
   switch (text(field(connection, "state"))) {
     case "disconnected":
@@ -234,7 +234,7 @@ export function chatGPTConnection(view: Wire): ChatGPTConnection {
         maybeLogin,
       };
     default:
-      return UNKNOWN_CHATGPT;
+      return UNKNOWN_CODEX_LOGIN;
   }
 }
 
