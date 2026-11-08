@@ -39,7 +39,13 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
     const holder = this.env.SUPERVISOR.getByName(this.ctx.props.supervisor);
 
     const workersAi = workersAiTurn(
-      { run: (model, input, signal) => this.env.AI.run(model, input, { signal }) },
+      {
+        run: (model, input, signal) =>
+          this.env.AI.run(model, input, {
+            signal,
+            extraHeaders: { "x-session-affinity": this.ctx.props.supervisor },
+          }),
+      },
       validated,
     );
 
