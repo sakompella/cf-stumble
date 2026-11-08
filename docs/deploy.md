@@ -256,20 +256,21 @@ A wrong URL fails safely. The first build step tries to clone it, fails, and rep
 ## Run the workspace container on your own machine
 
 An x86_64 Linux machine you own can run the workspace container instead of Cloudflare
-(ADR-0050). The machine opens every connection itself, so it needs no inbound port. While no
-provider is connected, the instance uses the Cloudflare container.
+(ADR-0050). The machine opens every connection itself, so it needs no inbound port. Run the
+provider by hand while you develop, and stop it when you finish. It is not a service.
 
 The page's "Workspace container" control (`GET`/`POST /api/workspace/backend`) picks the backend.
-`provider` is the default: use a connected provider, else Cloudflare. `cloudflare` always uses the
-Cloudflare container, even while a provider is connected. A change stops a running container, so the
-next command starts on the chosen backend. It is refused while a run is active.
+Production stays on `cloudflare`, which always uses the Cloudflare container. `provider` uses a
+connected provider, else Cloudflare. A change stops a running container, so the next command starts on the
+chosen backend. It is refused while a run is active. Switch to `provider` after you start the
+provider, and back to `cloudflare` when you stop it.
 
-1. Make a random token and keep it in a file outside the repository, for example
-   `openssl rand -hex 32 > ~/.config/cf-stumble/orb-token`.
+1. Make a random token and keep it in a gitignored file inside the checkout, for example
+   `openssl rand -hex 32 > .audit/local/orb-provider-token`.
 2. Set it as the `ORB_PROVIDER_TOKEN` secret (see "Instance secrets"):
 
    ```sh
-   pnpm exec cf workers secrets update ORB_PROVIDER_TOKEN --worker cf-stumble --type secret_text < ~/.config/cf-stumble/orb-token
+   pnpm exec cf workers secrets update ORB_PROVIDER_TOKEN --worker cf-stumble --type secret_text < .audit/local/orb-provider-token
    ```
 
    `cf` reads the value from stdin, so the token stays out of the command line.
@@ -279,55 +280,41 @@ next command starts on the chosen backend. It is refused while a run is active.
    machine, do nothing to build the image: CI publishes it as `ghcr.io/sakompella/cf-stumble-workspace`
    (see "Container image"). The dispatch scripts default `STUMBLE_IMAGE` to the tag for the checkout's
    `infra/workspace-image/image-ref.sh` and pull it when it is missing; set `STUMBLE_IMAGE` to use another image.
-4. Run the provider from a checkout:
+4. Run the provider from the checkout:
 
    ```sh
    STUMBLE_ORB_URL=https://stumble.akompella.dev \
-   STUMBLE_ORB_TOKEN="$(cat ~/.config/cf-stumble/orb-token)" \
+   STUMBLE_ORB_TOKEN="$(cat .audit/local/orb-provider-token)" \
    pnpm stumble orb provider src/stumble-cli/orb/docker-dispatch.sh
    ```
 
 The provider reconnects by itself after a deploy. It stops its container on SIGINT or SIGTERM.
 
-### Rootless podman on Linux (hp)
+### Rootless podman on Linux
 
-hp runs the provider with `podman-dispatch.sh`. Rootless podman's host gateway is not the host's
+A Linux machine with rootless podman runs the provider with `podman-dispatch.sh`. Rootless podman's host gateway is not the host's
 loopback, so the script runs the container on `pasta` with `--map-host-loopback`, and
 `computer.internal` reaches the provider's `127.0.0.1` listener.
 
 1. Pull the image once so the first start does not wait: `podman pull --platform linux/amd64 "$(infra/workspace-image/image-ref.sh)"`. Never build it on hp.
-2. Keep the token in `~/.config/cf-stumble/orb-provider-token` (mode 0600), and a wrapper
-   `~/.config/cf-stumble/orb-provider.sh` that reads it, so the token never appears in the unit or
-   the journal:
+2. Keep the token in `.audit/local/orb-provider-token` (mode 0600) and a wrapper
+   `.audit/local/orb-provider.sh` that reads it, so the token never appears in a command line or
+   a log. Both stay untracked because `.audit/local/` is gitignored; put nothing in `~/.config`:
 
    ```sh
    #!/usr/bin/env bash
    set -euo pipefail
-   STUMBLE_ORB_TOKEN="$(cat "$HOME/.config/cf-stumble/orb-provider-token")"
-   export STUMBLE_ORB_TOKEN
-   cd /path/to/cf-stumble
+   cd "$(dirname "$0")/../.."
+   STUMBLE_ORB_URL=https://stumble.akompella.dev
+   STUMBLE_ORB_TOKEN="$(cat .audit/local/orb-provider-token)"
+   export STUMBLE_ORB_URL STUMBLE_ORB_TOKEN
    exec pnpm stumble orb provider src/stumble-cli/orb/podman-dispatch.sh
    ```
 
-3. Run it as a user service. Put this in `~/.config/systemd/user/stumble-orb.service`, run
-   `systemctl --user enable --now stumble-orb`, and check that `journalctl --user -u stumble-orb`
-   logs `connected to the Workspace Host`:
-
-   ```ini
-   [Service]
-   Environment="PATH=%h/.nix-profile/bin:/etc/profiles/per-user/%u/bin:/run/wrappers/bin:/run/current-system/sw/bin"
-   Environment="STUMBLE_ORB_URL=https://stumble.akompella.dev"
-   ExecStart=%h/.config/cf-stumble/orb-provider.sh
-   Restart=always
-   RestartSec=5s
-
-   [Install]
-   WantedBy=default.target
-   ```
-
-The user needs lingering (`loginctl show-user $USER -p Linger`) for the service to start at boot
-and outlive a logout. Stop it with `systemctl --user stop stumble-orb`; the instance then uses the
-Cloudflare container.
+3. Run `.audit/local/orb-provider.sh` in a terminal and check that it logs
+   `connected to the Workspace Host`. Switch the page's "Workspace container" control to
+   `provider`, or send `POST /api/workspace/backend` with `{"backend":"provider"}`.
+4. When you finish, switch back to `cloudflare` the same way, then stop the script with Ctrl-C.
 
 Without the secret, `/orb/provider` and `/orb/computerd` answer 401 to every request. No route
 mints or shows the token, and a workspace reset leaves it in place. To revoke a machine, set a new
