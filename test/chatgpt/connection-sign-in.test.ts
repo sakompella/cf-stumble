@@ -2,10 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  type CodexLoginConnection,
-  CodexLoginCredentialStore,
-} from "../../src/codex-login/index.js";
+import { type ChatGPTConnection, ChatGPTCredentialStore } from "../../src/chatgpt/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
   ACCESS_ONE,
@@ -29,7 +26,7 @@ test("a sign-in started here and finished with its address connects, and no view
   const logged = capturedEvents();
 
   await withConnection(
-    "codex-login-sign-in",
+    "chatgpt-sign-in",
     () => Promise.resolve(grant(ACCESS_ONE, REFRESH_ONE)),
     async ({ connection, calls, clock }) => {
       const started = await Effect.runPromise(connection.startLogin());
@@ -48,7 +45,7 @@ test("a sign-in started here and finished with its address connects, and no view
 
       expect(outcome).toEqual({
         ok: true,
-        codexLogin: {
+        chatgpt: {
           connection: { state: "connected", expiresAt: clock.now + HOUR },
           login: null,
           model: "gpt-test",
@@ -76,7 +73,7 @@ test("a sign-in started here and finished with its address connects, and no view
     },
   );
 
-  expect(named(logged(), "codex-login.login.complete").map((event) => event.outcome)).toEqual([
+  expect(named(logged(), "chatgpt.login.complete").map((event) => event.outcome)).toEqual([
     "connected",
     "no-sign-in",
   ]);
@@ -85,7 +82,7 @@ test("a sign-in started here and finished with its address connects, and no view
 
 test("an address from another sign-in is refused without using up this one, and an old one expires", async () => {
   await withConnection(
-    "codex-login-sign-in-refusals",
+    "chatgpt-sign-in-refusals",
     () => Promise.reject(new Error("no exchange may start")),
     async ({ connection, calls, clock }) => {
       const login = (await Effect.runPromise(connection.startLogin())).login;
@@ -119,17 +116,17 @@ test("an address from another sign-in is refused without using up this one, and 
 });
 
 test("the Supervisor reports no credential before the first connection, and a disconnect forgets one", async () => {
-  const supervisor = env.SUPERVISOR.getByName("codex-login-supervisor-rpc");
+  const supervisor = env.SUPERVISOR.getByName("chatgpt-supervisor-rpc");
 
-  await expect(supervisor.codexLoginAccess()).resolves.toEqual({ kind: "not-connected" });
-  await expect(supervisor.getCodexLoginConnection()).resolves.toEqual({
+  await expect(supervisor.chatgptAccess()).resolves.toEqual({ kind: "not-connected" });
+  await expect(supervisor.getChatGPTConnection()).resolves.toEqual({
     connection: { state: "disconnected" },
     login: null,
     model: env.CHATGPT_MODEL,
   });
 
   await runInDurableObject(supervisor, (_instance, state) => {
-    new CodexLoginCredentialStore(state.storage).connect(
+    new ChatGPTCredentialStore(state.storage).connect(
       {
         accessToken: ACCESS_ONE,
         refreshToken: REFRESH_ONE,
@@ -140,14 +137,14 @@ test("the Supervisor reports no credential before the first connection, and a di
     );
   });
 
-  await expect(supervisor.codexLoginAccess()).resolves.toEqual({
+  await expect(supervisor.chatgptAccess()).resolves.toEqual({
     kind: "ready",
     accessToken: ACCESS_ONE,
   });
-  await expect(supervisor.disconnectCodexLogin()).resolves.toMatchObject({
+  await expect(supervisor.disconnectChatGPT()).resolves.toMatchObject({
     connection: { state: "disconnected" },
   });
-  await expect(supervisor.codexLoginAccess()).resolves.toEqual({ kind: "not-connected" });
+  await expect(supervisor.chatgptAccess()).resolves.toEqual({ kind: "not-connected" });
 });
 
 function heldExchanges(count: number) {
@@ -166,7 +163,7 @@ async function requestsMade(harness: Harness, count: number): Promise<void> {
   });
 }
 
-async function startSignIn(connection: CodexLoginConnection) {
+async function startSignIn(connection: ChatGPTConnection) {
   const login = (await Effect.runPromise(connection.startLogin())).login;
 
   if (login === null) throw new Error("a started sign-in must be visible");
@@ -184,7 +181,7 @@ async function startSignIn(connection: CodexLoginConnection) {
 test("a Disconnect during the code exchange is not undone by its late grant", async () => {
   const exchanges = heldExchanges(1);
 
-  await withConnection("codex-login-exchange-disconnect", exchanges.reply, async (harness) => {
+  await withConnection("chatgpt-exchange-disconnect", exchanges.reply, async (harness) => {
     const finishing = (await startSignIn(harness.connection))();
     await requestsMade(harness, 1);
 
@@ -203,7 +200,7 @@ test("a Disconnect during the code exchange is not undone by its late grant", as
 test("a sign-in started during an exchange makes the older grant stale", async () => {
   const exchanges = heldExchanges(2);
 
-  await withConnection("codex-login-exchange-newer-sign-in", exchanges.reply, async (harness) => {
+  await withConnection("chatgpt-exchange-newer-sign-in", exchanges.reply, async (harness) => {
     const older = (await startSignIn(harness.connection))();
     await requestsMade(harness, 1);
     const finishNewer = await startSignIn(harness.connection);
@@ -225,7 +222,7 @@ test("a sign-in started during an exchange makes the older grant stale", async (
 test("an older exchange that finishes after a newer sign-in does not overwrite it", async () => {
   const exchanges = heldExchanges(2);
 
-  await withConnection("codex-login-exchange-later-first", exchanges.reply, async (harness) => {
+  await withConnection("chatgpt-exchange-later-first", exchanges.reply, async (harness) => {
     const older = (await startSignIn(harness.connection))();
     await requestsMade(harness, 1);
     const newer = (await startSignIn(harness.connection))();

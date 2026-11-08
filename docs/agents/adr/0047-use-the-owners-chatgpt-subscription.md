@@ -9,7 +9,7 @@ owner connects it, and from the fixed Workers AI model until then.
 ChatGPT" token sharing for open-source agents). The Supervisor registers a new dynamic client for
 each sign-in, keeps the PKCE verifier and state of the one pending sign-in, and redeems the code.
 It stores the access token, the refresh token, their expiry, and the client id in its SQLite
-(`src/codex-login/credential-store.ts`), where they survive a restart. The Supervisor refreshes the
+(`src/chatgpt/credential-store.ts`), where they survive a restart. The Supervisor refreshes the
 access token when it is within eight minutes of expiry or when OpenAI refuses it. Concurrent callers
 share one refresh, because OpenAI rotates the refresh token and a second redemption of the old one
 would revoke the grant.
@@ -45,7 +45,7 @@ until ChatGPT was disconnected. A
 call is treated as refused for a usage limit when the provider answers HTTP 429, or its error
 code or type is `subscription_sharing_usage_limit_exceeded`, `rate_limit_exceeded`,
 `rate_limit_error` or `insufficient_quota`, in the response body or in the stream
-(`src/codex-login/responses.ts`). If nothing of that call reached the caller yet, the route sends one
+(`src/chatgpt/responses.ts`). If nothing of that call reached the caller yet, the route sends one
 `provider-fallback` event and answers the call from Workers AI. Generation 0 keeps that event as a
 `provider-fallback` diagnostic on the assistant message it ends the call with, so the saved thread
 records which model answered. Once any text or tool call was sent, it never falls back: the call

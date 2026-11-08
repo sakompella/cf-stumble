@@ -8,7 +8,7 @@ import {
 import { Generations } from "./generations.js";
 import { FACET_COMPATIBILITY } from "../facet-compatibility.js";
 import type { GenerationOperations } from "../generation-requests.js";
-import { CodexLoginConnection, CodexLoginCredentialStore } from "../codex-login/index.js";
+import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, type MainFacetCapabilities } from "./artifacts/index.js";
 import { ServingConversations } from "./conversations/index.js";
 import { obtainProjectWorkspace, obtainScratchWorkspace } from "./obtain-workspace.js";
@@ -87,8 +87,8 @@ export function supervisorParts(
       generations: generationOperations,
       generationLabel: () => generations.active().generation?.label ?? null,
     }),
-    codexLogin: new CodexLoginConnection({
-      store: new CodexLoginCredentialStore(ctx.storage),
+    chatgpt: new ChatGPTConnection({
+      store: new ChatGPTCredentialStore(ctx.storage),
       fetcher: (url, init) => fetch(url, init),
       model: env.CHATGPT_MODEL,
       clock: () => Date.now(),

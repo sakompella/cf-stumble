@@ -5,7 +5,7 @@ import { Message } from "./message.js";
 import type { Model, Project } from "./model.js";
 import { conversationView } from "./view-conversation.js";
 import { backendPanel } from "./view-backend.js";
-import { codexLoginPanel } from "./view-codex-login.js";
+import { chatGPTPanel } from "./view-chatgpt.js";
 import { generationBarView } from "./view-generation.js";
 import { controlRow, valueRow } from "./view-parts.js";
 
@@ -127,7 +127,7 @@ function sidebarView(model: Model, h: HtmlBuilder<Message>): Html {
             model.projects.map((project) => projectButton(project, model, h)),
           ),
           gitHubPanel(model, h),
-          codexLoginPanel(model, h),
+          chatGPTPanel(model, h),
           backendPanel(model, h),
           connectPanel(model, h),
         ],

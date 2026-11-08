@@ -1,13 +1,13 @@
 import * as Option from "effect/Option";
 import type { Runtime } from "foldkit";
-import { FetchCodexLogin, FetchGitHub, FetchProjects, FetchStatus } from "./commands.js";
+import { FetchChatGPT, FetchGitHub, FetchProjects, FetchStatus } from "./commands.js";
 import { Message } from "./message.js";
 import { EMPTY_CONVERSATION } from "./conversation.js";
 import { ControlRequest, StatusRead, SubmitRequest, type Model } from "./model.js";
 import { controlHandlers, statusHandlers, submitHandlers } from "./update-generation.js";
 import {
   backendHandlers,
-  codexLoginHandlers,
+  chatGPTHandlers,
   connectHandlers,
   FetchBackend,
   gitHubHandlers,
@@ -27,9 +27,9 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     github: { state: "", detail: "", verificationUri: "", checked: "" },
     connectRepositoryInput: "",
     connectStatus: "",
-    codexLogin: { connection: "", isConnected: false, maybeLogin: Option.none() },
-    codexLoginCallbackInput: "",
-    codexLoginResult: "",
+    chatgpt: { connection: "", isConnected: false, maybeLogin: Option.none() },
+    chatgptCallbackInput: "",
+    chatgptResult: "",
     maybeBackend: Option.none(),
     backendResult: "",
     maybeProjectId: Option.none(),
@@ -52,7 +52,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     activate: EMPTY_PANEL,
     rollback: EMPTY_PANEL,
   },
-  commands: [FetchStatus(), FetchProjects(), FetchGitHub(), FetchCodexLogin(), FetchBackend()],
+  commands: [FetchStatus(), FetchProjects(), FetchGitHub(), FetchChatGPT(), FetchBackend()],
 });
 
 export function update(model: Model, message: Message): UpdateReturn {
@@ -60,7 +60,7 @@ export function update(model: Model, message: Message): UpdateReturn {
     ...projectHandlers(model),
     ...connectHandlers(model),
     ...gitHubHandlers(model),
-    ...codexLoginHandlers(model),
+    ...chatGPTHandlers(model),
     ...backendHandlers(model),
     ...composerHandlers(model),
     ...streamHandlers(model),

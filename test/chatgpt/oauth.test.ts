@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
-import { parseCallback, requestTokens } from "../../src/codex-login/oauth.js";
+import { parseCallback, requestTokens } from "../../src/chatgpt/oauth.js";
 import { ACCESS_ONE, grant, recordingFetch, REFRESH_ONE } from "./fixtures.js";
 
 const STATE = "state-FAKE-0123456789";

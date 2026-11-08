@@ -1,7 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { retryAt } from "../../src/codex-login/responses.js";
+import { retryAt } from "../../src/chatgpt/responses.js";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 

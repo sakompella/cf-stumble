@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import { codexLoginTurn, type CodexLoginCredential } from "../../src/codex-login/index.js";
+import { chatgptTurn, type ChatGPTCredential } from "../../src/chatgpt/index.js";
 import type { ModelRouteRequest, ModelStreamEvent } from "../../src/model-route.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
@@ -21,14 +21,14 @@ afterEach(() => {
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "Read a.txt" }] };
 
 async function outcomeOf(
-  credential: CodexLoginCredential,
+  credential: ChatGPTCredential,
   reply: (call: RecordedCall) => Promise<Response>,
 ) {
   const { fetcher, calls } = recordingFetch(reply);
   const emitted: ModelStreamEvent[] = [];
 
   const outcome = await Effect.runPromise(
-    codexLoginTurn(
+    chatgptTurn(
       { credential, fetcher, model: "gpt-test" },
       REQUEST,
     )((event) => {
@@ -36,10 +36,10 @@ async function outcomeOf(
     }).pipe(
       Effect.as({ kind: "answered" } as const),
       Effect.catchTags({
-        CodexLoginUsageLimited: ({ limitedUntil }) =>
+        ChatGPTUsageLimited: ({ limitedUntil }) =>
           Effect.succeed({ kind: "usage-limited", limitedUntil } as const),
         ModelTurnFailed: ({ code }) => Effect.succeed({ kind: "failed", code } as const),
-        CodexLoginNotConnected: () => Effect.succeed({ kind: "not-connected" } as const),
+        ChatGPTNotConnected: () => Effect.succeed({ kind: "not-connected" } as const),
       }),
     ),
   );
@@ -71,7 +71,7 @@ test("a usage limit in the stream before any output is the typed failure the rou
   expect(emitted).toEqual([]);
   expect(credential.limited).toEqual([[ACCESS_ONE, null]]);
   expect(credential.refused).toEqual([]);
-  expect(named(logged(), "codex-login.model-call")).toEqual([
+  expect(named(logged(), "chatgpt.model-call")).toEqual([
     expect.objectContaining({
       outcome: "stream-failed",
       status: 200,
@@ -81,7 +81,7 @@ test("a usage limit in the stream before any output is the typed failure the rou
     }),
   ]);
   expect(everythingLogged()).not.toContain("owner@example.com");
-  expect(everythingLogged()).not.toMatch(/codex-login-access-FAKE/u);
+  expect(everythingLogged()).not.toMatch(/chatgpt-access-FAKE/u);
 });
 
 test("a workspace member's own usage limit falls back like the subscription limit", async () => {
@@ -119,7 +119,7 @@ test("a usage limit after output errors the call as before, and the limit is sti
   expect(outcome).toEqual({ kind: "failed", code: "model-unavailable" });
   expect(emitted).toEqual([{ type: "text-delta", delta: "part" }]);
   expect(credential.limited).toEqual([[ACCESS_ONE, null]]);
-  expect(named(logged(), "codex-login.model-call")).toEqual([
+  expect(named(logged(), "chatgpt.model-call")).toEqual([
     expect.objectContaining({
       outcome: "stream-failed",
       code: "subscription_sharing_usage_limit_exceeded",
@@ -151,7 +151,7 @@ test("an HTTP 429 records when its Retry-After says the limit ends, and logs sta
 
   expect(outcome).toEqual({ kind: "usage-limited", limitedUntil: 1_800_000_120_000 });
   expect(credential.limited).toEqual([[ACCESS_ONE, 1_800_000_120_000]]);
-  expect(named(logged(), "codex-login.model-call")).toEqual([
+  expect(named(logged(), "chatgpt.model-call")).toEqual([
     expect.objectContaining({
       outcome: "http-error",
       status: 429,
@@ -219,7 +219,7 @@ test("a refusal that is not a limit logs its status, type and code and errors th
 
   expect(outcome).toEqual({ kind: "failed", code: "model-unavailable" });
   expect(credential.limited).toEqual([]);
-  const [logLine] = named(logged(), "codex-login.model-call");
+  const [logLine] = named(logged(), "chatgpt.model-call");
   expect(logLine).toMatchObject({
     outcome: "http-error",
     status: 403,

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
-import { CodexLoginCredentialStore } from "../../src/codex-login/index.js";
+import { ChatGPTCredentialStore } from "../../src/chatgpt/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
   ACCESS_ONE,
@@ -24,7 +24,7 @@ test("concurrent callers near expiry share one refresh, and the rotated pair is 
   const held = heldReply();
 
   await withConnection(
-    "codex-login-refresh-race",
+    "chatgpt-refresh-race",
     () => held.reply,
     async (harness) => {
       connected(harness, 5 * 60 * 1000);
@@ -61,8 +61,8 @@ test("concurrent callers near expiry share one refresh, and the rotated pair is 
   );
 
   const rotated = await runInDurableObject(
-    env.SUPERVISOR.getByName("codex-login-refresh-race"),
-    (_instance, state) => new CodexLoginCredentialStore(state.storage).connection(),
+    env.SUPERVISOR.getByName("chatgpt-refresh-race"),
+    (_instance, state) => new ChatGPTCredentialStore(state.storage).connection(),
   );
 
   expect(rotated).toMatchObject({ refreshToken: REFRESH_TWO });
@@ -70,7 +70,7 @@ test("concurrent callers near expiry share one refresh, and the rotated pair is 
 
 test("a token far from expiry is used as stored, and one the provider refused is refreshed", async () => {
   await withConnection(
-    "codex-login-refused-token",
+    "chatgpt-refused-token",
     () => Promise.resolve(grant(ACCESS_TWO, REFRESH_TWO)),
     async (harness) => {
       connected(harness);
@@ -98,7 +98,7 @@ test("a refused refresh needs a reconnect, and so does a token refused after one
   const logged = capturedEvents();
 
   await withConnection(
-    "codex-login-refresh-refused",
+    "chatgpt-refresh-refused",
     () => Promise.resolve(Response.json({ error: "invalid_grant" }, { status: 400 })),
     async (harness) => {
       connected(harness, 60_000);
@@ -119,7 +119,7 @@ test("a refused refresh needs a reconnect, and so does a token refused after one
     },
   );
 
-  expect(named(logged(), "codex-login.refresh")).toEqual([
+  expect(named(logged(), "chatgpt.refresh")).toEqual([
     expect.objectContaining({ level: "error", outcome: "rejected" }),
   ]);
   expect(everythingLogged()).not.toMatch(/FAKE/u);
@@ -127,7 +127,7 @@ test("a refused refresh needs a reconnect, and so does a token refused after one
 
 test("a busy token server keeps the stored pair and a still-valid token keeps working", async () => {
   await withConnection(
-    "codex-login-refresh-busy",
+    "chatgpt-refresh-busy",
     () => Promise.resolve(new Response("busy", { status: 503 })),
     async (harness) => {
       connected(harness, 60_000);
@@ -151,7 +151,7 @@ test("a sign-in that lands during a refresh wins over the refreshed pair", async
   const held = heldReply();
 
   await withConnection(
-    "codex-login-refresh-superseded",
+    "chatgpt-refresh-superseded",
     () => held.reply,
     async (harness) => {
       connected(harness, 60_000);
@@ -160,8 +160,8 @@ test("a sign-in that lands during a refresh wins over the refreshed pair", async
 
       harness.store.connect(
         {
-          accessToken: "codex-login-access-FAKE-new-sign-in",
-          refreshToken: "codex-login-refresh-FAKE-new-sign-in",
+          accessToken: "chatgpt-access-FAKE-new-sign-in",
+          refreshToken: "chatgpt-refresh-FAKE-new-sign-in",
           expiresAt: harness.clock.now + HOUR,
           clientId: CLIENT_ID,
         },
@@ -171,10 +171,10 @@ test("a sign-in that lands during a refresh wins over the refreshed pair", async
 
       await expect(refreshing).resolves.toEqual({
         kind: "ready",
-        accessToken: "codex-login-access-FAKE-new-sign-in",
+        accessToken: "chatgpt-access-FAKE-new-sign-in",
       });
       expect(harness.store.connection()).toMatchObject({
-        refreshToken: "codex-login-refresh-FAKE-new-sign-in",
+        refreshToken: "chatgpt-refresh-FAKE-new-sign-in",
       });
     },
   );
@@ -184,7 +184,7 @@ test("a Disconnect while the token server is busy leaves the caller not connecte
   const held = heldReply();
 
   await withConnection(
-    "codex-login-refresh-busy-disconnect",
+    "chatgpt-refresh-busy-disconnect",
     () => held.reply,
     async (harness) => {
       connected(harness, 60_000);
@@ -205,7 +205,7 @@ test("a token the provider refused while the token server was busy is not handed
   const held = heldReply();
 
   await withConnection(
-    "codex-login-refresh-busy-refused",
+    "chatgpt-refresh-busy-refused",
     () => held.reply,
     async (harness) => {
       connected(harness, 60_000);
@@ -226,7 +226,7 @@ test("an account that replaced the pair while the token server was busy is the o
   const held = heldReply();
 
   await withConnection(
-    "codex-login-refresh-busy-replaced",
+    "chatgpt-refresh-busy-replaced",
     () => held.reply,
     async (harness) => {
       connected(harness, 60_000);
