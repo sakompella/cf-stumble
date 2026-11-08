@@ -21,7 +21,7 @@ import {
   type SelectableCatalog,
   type SelectableProject,
 } from "./project-selection.js";
-import { ConversationRuns } from "./runs.js";
+import { ConversationRuns, type FacetReplacement, type Settlement } from "./runs.js";
 
 type ServingPorts = Readonly<{
   ctx: DurableObjectState;
@@ -30,7 +30,10 @@ type ServingPorts = Readonly<{
   resetting: () => boolean;
   obtainWorkspace: ObtainWorkspace;
   generations: Parameters<typeof servingHosts>[1];
-  generationLabel: () => number | null;
+  selection: Readonly<{
+    active: () => Readonly<{ generation: Readonly<{ label: number }> | undefined }>;
+    settled: (settlement: Settlement) => FacetReplacement | undefined;
+  }>;
 }>;
 
 const INSTANCE_KEY = "serving-instance";
@@ -66,10 +69,7 @@ export class ServingConversations {
     logEvent("info", "do.started", { class: "Supervisor", version });
   }
 
-  replaceFacet(
-    command: Readonly<{ kind: "activate" | "rollback"; label: number }>,
-    epoch: number,
-  ): void {
+  replaceFacet(command: FacetReplacement["command"], epoch: number): void {
     logEvent(
       "info",
       command.kind === "activate" ? "generation.activated" : "generation.rolled-back",
@@ -188,7 +188,7 @@ export class ServingConversations {
       const facet = yield* this.#facet();
 
       for (const conversationId of this.#runs.expired(now)) {
-        logEvent("warn", "run.deadline-aborted", { generation: this.#ports.generationLabel() });
+        logEvent("warn", "run.deadline-aborted", { generation: this.#generationLabel() });
         yield* this.#call(() => facet.abort(this.#runs.interrupted(conversationId)));
       }
     }).pipe(
@@ -203,6 +203,10 @@ export class ServingConversations {
 
   endWorkspaces(): void {
     this.#workspaces.endAll();
+  }
+
+  #generationLabel(): number | null {
+    return this.#ports.selection.active().generation?.label ?? null;
   }
 
   #instance(): number {
@@ -269,10 +273,10 @@ export class ServingConversations {
         log: (level, event, fields) => {
           logEvent(level, `facet.${event.slice(0, 60)}`, {
             ...fields,
-            generation: this.#ports.generationLabel(),
+            generation: this.#generationLabel(),
           });
         },
-        running: (report) => this.#running(report),
+        running: (report) => this.#running(report, instance),
         workspace: (conversationId) => this.#workspace(conversationId),
       },
       this.#ports.generations,
@@ -339,11 +343,17 @@ export class ServingConversations {
     return readable;
   }
 
-  async #running(report: RunReport): Promise<void> {
+  async #running(report: RunReport, instance: number): Promise<void> {
     const now = Date.now();
 
-    for (const conversationId of this.#runs.reconcile(report, now, this.#ports.generationLabel())) {
-      this.#workspaces.end(conversationId);
+    for (const settlement of this.#runs.reconcile(report, now, this.#generationLabel())) {
+      this.#workspaces.end(settlement.conversationId);
+
+      if (!this.serves(instance)) continue;
+
+      const rollback = this.#ports.selection.settled(settlement);
+
+      if (rollback !== undefined) this.replaceFacet(rollback.command, rollback.epoch);
     }
 
     await runAtEntryPoint(this.#runs.setAlarm(now));
