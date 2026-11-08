@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 
 export type DispatchJob = "start" | "stop" | "delete" | "wait";
 
@@ -41,23 +43,41 @@ function runScript(script: string, env: NodeJS.ProcessEnv): Promise<DispatchResu
   });
 }
 
-export async function dispatch(script: string, request: DispatchRequest): Promise<DispatchResult> {
-  const directory = await mkdtemp(join(tmpdir(), "stumble-orb-"));
-  const envFile = join(directory, "env");
+export class OrbFailure extends Data.TaggedError("OrbFailure")<{ message: string }> {}
 
-  try {
-    await writeFile(envFile, envFileText(request.env), { mode: 0o600 });
+export function attempt<A>(run: () => Promise<A>): Effect.Effect<A, OrbFailure> {
+  return Effect.tryPromise({
+    try: run,
+    catch: (cause) =>
+      new OrbFailure({ message: cause instanceof Error ? cause.message : String(cause) }),
+  });
+}
 
-    return await runScript(script, {
-      ...process.env,
-      STUMBLE_JOB: request.job,
-      STUMBLE_CONTAINER: request.container,
-      STUMBLE_ENV_FILE: envFile,
-      STUMBLE_EGRESS_PORT: String(request.egressPort),
-    });
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+export function dispatch(
+  script: string,
+  request: DispatchRequest,
+): Effect.Effect<DispatchResult, OrbFailure> {
+  return Effect.acquireUseRelease(
+    attempt(() => mkdtemp(join(tmpdir(), "stumble-orb-"))),
+    (directory) => {
+      const envFile = join(directory, "env");
+
+      return attempt(() => writeFile(envFile, envFileText(request.env), { mode: 0o600 })).pipe(
+        Effect.andThen(
+          attempt(() =>
+            runScript(script, {
+              ...process.env,
+              STUMBLE_JOB: request.job,
+              STUMBLE_CONTAINER: request.container,
+              STUMBLE_ENV_FILE: envFile,
+              STUMBLE_EGRESS_PORT: String(request.egressPort),
+            }),
+          ),
+        ),
+      );
+    },
+    (directory) => Effect.ignore(attempt(() => rm(directory, { recursive: true, force: true }))),
+  );
 }
 
 export function lastLine(text: string): string | undefined {

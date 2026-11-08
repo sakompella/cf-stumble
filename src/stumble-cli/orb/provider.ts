@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:net";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import {
   decodeBody,
   decodeHostFrame,
@@ -10,16 +12,25 @@ import {
   ORB_PING,
   ORB_PROVIDER_PATH,
   ORB_TOKEN_HEADER,
+  providerFrame,
   type HostFrame,
   type OrbJob,
   type ProviderFrame,
 } from "../../orb-protocol.js";
-import { dispatch, lastLine, type DispatchJob } from "./dispatch.js";
+import { attempt, dispatch, lastLine, OrbFailure, type DispatchJob } from "./dispatch.js";
 import { serveEgress, type WorkerTarget } from "./tunnel.js";
 
 const PING_INTERVAL_MS = 30_000;
 
 type Launch = Readonly<{ runtime: string; container: string; address: string }>;
+
+type FetchAnswer = Readonly<{
+  status: number;
+  headers: [string, string][];
+  body: string | null;
+}>;
+
+type Send = (frame: ProviderFrame) => void;
 
 export type ProviderOptions = WorkerTarget & Readonly<{ script: string; log(line: string): void }>;
 
@@ -45,166 +56,199 @@ export class OrbProvider {
   readonly #options: ProviderOptions;
   #egressPort = 0;
   #launch: Launch | undefined;
-  #jobs: Promise<unknown> = Promise.resolve();
+  readonly #jobs = Semaphore.makeUnsafe(1);
 
   constructor(options: ProviderOptions) {
     this.#options = options;
   }
 
-  async run(listenHost: string, signal: AbortSignal): Promise<string> {
-    const egress = serveEgress(this.#options);
-    this.#egressPort = await listening(egress, listenHost);
-    this.#options.log(`computer.internal listener on ${listenHost}:${this.#egressPort}`);
-
-    try {
-      return await this.#connected(signal);
-    } finally {
-      egress.close();
-      await this.#queue(() => this.#stopLaunch("stop"));
-    }
-  }
-
-  #connected(signal: AbortSignal): Promise<string> {
-    const socket = new WebSocket(providerUrl(this.#options.url), {
-      headers: { [ORB_TOKEN_HEADER]: this.#options.token },
-    });
-
-    const send = (frame: ProviderFrame | typeof ORB_PING): void => {
-      if (socket.readyState !== WebSocket.OPEN) return;
-
-      socket.send(frame === ORB_PING ? frame : encodeFrame(frame));
-    };
-
-    const ping = setInterval(() => {
-      send(ORB_PING);
-    }, PING_INTERVAL_MS);
-
-    return new Promise<string>((resolve) => {
-      const finish = (reason: string): void => {
-        clearInterval(ping);
-        resolve(reason);
-      };
-
-      const stop = (): void => {
-        socket.close(1000, "provider stopping");
-        finish("the provider is stopping");
-      };
-
-      signal.addEventListener("abort", stop, { once: true });
-      socket.addEventListener("open", () => {
-        this.#options.log("connected to the Workspace Host");
-        send({ _tag: "hello", egressPort: this.#egressPort });
-      });
-      socket.addEventListener("message", (event) => {
-        const frame = decodeHostFrame(event.data);
-
-        if (Option.isSome(frame)) void this.#handle(frame.value, send);
-      });
-      socket.addEventListener("close", (event) => {
-        signal.removeEventListener("abort", stop);
-        finish(`the Workspace Host connection closed (${event.code} ${event.reason})`);
-      });
-    });
-  }
-
-  async #handle(frame: HostFrame, send: (frame: ProviderFrame) => void): Promise<void> {
-    try {
-      if (frame._tag === "job") {
-        const runtime = await this.#queue(() => this.#job(frame.job, send));
-        send({ _tag: "job-done", id: frame.id, runtime });
-
-        return;
-      }
-
-      send({ _tag: "fetch-result", id: frame.id, ...(await this.#fetch(frame)) });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      send({ _tag: "failed", id: frame.id, message });
-    }
-  }
-
-  #queue<A>(work: () => Promise<A>): Promise<A> {
-    const next = this.#jobs.then(work);
-    this.#jobs = next.then(
-      () => null,
-      () => null,
+  run(listenHost: string, signal: AbortSignal): Effect.Effect<string, OrbFailure> {
+    return Effect.acquireUseRelease(
+      Effect.sync(() => serveEgress(this.#options)),
+      (egress) =>
+        attempt(() => listening(egress, listenHost)).pipe(
+          Effect.tap((port) =>
+            Effect.sync(() => {
+              this.#egressPort = port;
+              this.#options.log(`computer.internal listener on ${listenHost}:${port}`);
+            }),
+          ),
+          Effect.andThen(this.#connected(signal)),
+        ),
+      (egress) =>
+        Effect.sync(() => {
+          egress.close();
+        }).pipe(Effect.andThen(this.#jobs.withPermits(1)(this.#stopLaunch("stop"))), Effect.orDie),
     );
-
-    return next;
   }
 
-  async #script(job: DispatchJob, container: string, env: Record<string, string> = {}) {
-    const result = await dispatch(this.#options.script, {
+  #connected(signal: AbortSignal): Effect.Effect<string> {
+    return Effect.flatMap(Effect.context(), (services) => {
+      const runFork = Effect.runForkWith(services);
+
+      return Effect.callback<string>((resume) => {
+        const socket = new WebSocket(providerUrl(this.#options.url), {
+          headers: { [ORB_TOKEN_HEADER]: this.#options.token },
+        });
+
+        const send = (frame: ProviderFrame | typeof ORB_PING): void => {
+          if (socket.readyState !== WebSocket.OPEN) return;
+
+          socket.send(frame === ORB_PING ? frame : encodeFrame(frame));
+        };
+
+        const ping = setInterval(() => {
+          send(ORB_PING);
+        }, PING_INTERVAL_MS);
+
+        const finish = (reason: string): void => {
+          clearInterval(ping);
+          resume(Effect.succeed(reason));
+        };
+
+        const stop = (): void => {
+          socket.close(1000, "provider stopping");
+          finish("the provider is stopping");
+        };
+
+        signal.addEventListener("abort", stop, { once: true });
+        socket.addEventListener("open", () => {
+          this.#options.log("connected to the Workspace Host");
+          send(providerFrame.hello({ egressPort: this.#egressPort }));
+        });
+        socket.addEventListener("message", (event) => {
+          const frame = decodeHostFrame(event.data);
+
+          if (Option.isSome(frame)) runFork(this.#handle(frame.value, send));
+        });
+        socket.addEventListener("close", (event) => {
+          signal.removeEventListener("abort", stop);
+          finish(`the Workspace Host connection closed (${event.code} ${event.reason})`);
+        });
+      });
+    });
+  }
+
+  #handle(frame: HostFrame, send: Send): Effect.Effect<void> {
+    return this.#answer(frame, send).pipe(
+      Effect.catchTag("OrbFailure", ({ message }) =>
+        Effect.succeed(providerFrame.failed({ id: frame.id, message })),
+      ),
+      Effect.map(send),
+    );
+  }
+
+  #answer(frame: HostFrame, send: Send): Effect.Effect<ProviderFrame, OrbFailure> {
+    if (frame._tag === "fetch")
+      return Effect.map(this.#fetch(frame), (result) =>
+        providerFrame.fetchResult({ id: frame.id, ...result }),
+      );
+
+    return Effect.map(this.#jobs.withPermits(1)(this.#job(frame.job, send)), (runtime) =>
+      providerFrame.jobDone({ id: frame.id, runtime }),
+    );
+  }
+
+  #script(
+    job: DispatchJob,
+    container: string,
+    env: Record<string, string> = {},
+  ): Effect.Effect<string, OrbFailure> {
+    return dispatch(this.#options.script, {
       job,
       container,
       egressPort: this.#egressPort,
       env,
-    });
-
-    if (result.exitCode !== 0)
-      throw new Error(`dispatch ${job} exited ${result.exitCode}: ${result.stderr.trim()}`);
-
-    return result.stdout;
-  }
-
-  async #job(job: OrbJob, send: (frame: ProviderFrame) => void): Promise<string | null> {
-    this.#options.log(`job ${job._tag} ${job.container}`);
-
-    if (job._tag !== "start") {
-      this.#launch = undefined;
-      await this.#script(job._tag, job.container);
-
-      return null;
-    }
-
-    await this.#stopLaunch("delete");
-
-    const address = lastLine(await this.#script("start", job.container, job.env));
-
-    if (address === undefined) throw new Error("dispatch start printed no address");
-
-    const launch = { runtime: randomUUID(), container: job.container, address };
-    this.#launch = launch;
-    void this.#watch(launch, send);
-
-    return launch.runtime;
-  }
-
-  async #watch(launch: Launch, send: (frame: ProviderFrame) => void): Promise<void> {
-    const reason = await this.#script("wait", launch.container).then(
-      (output) => `exited ${lastLine(output) ?? ""}`.trim(),
-      String,
+    }).pipe(
+      Effect.filterOrFail(
+        (result) => result.exitCode === 0,
+        (result) =>
+          new OrbFailure({
+            message: `dispatch ${job} exited ${result.exitCode}: ${result.stderr.trim()}`,
+          }),
+      ),
+      Effect.map((result) => result.stdout),
     );
-
-    if (this.#launch?.runtime !== launch.runtime) return;
-
-    this.#launch = undefined;
-    this.#options.log(`container ${launch.container} ${reason}`);
-    send({ _tag: "exited", runtime: launch.runtime, reason });
   }
 
-  async #stopLaunch(job: "stop" | "delete"): Promise<void> {
-    const launch = this.#launch;
-    this.#launch = undefined;
+  #job(job: OrbJob, send: Send): Effect.Effect<string | null, OrbFailure> {
+    return Effect.suspend(() => {
+      this.#options.log(`job ${job._tag} ${job.container}`);
 
-    if (launch !== undefined) await this.#script(job, launch.container);
-  }
+      if (job._tag !== "start") {
+        this.#launch = undefined;
 
-  async #fetch(frame: Extract<HostFrame, { _tag: "fetch" }>) {
-    const launch = this.#launch;
+        return this.#script(job._tag, job.container).pipe(Effect.as(null));
+      }
 
-    if (launch === undefined) throw new Error("no container is running");
+      return this.#stopLaunch("delete").pipe(
+        Effect.andThen(this.#script("start", job.container, job.env)),
+        Effect.flatMap((output) => {
+          const address = lastLine(output);
 
-    const response = await fetch(`http://${launch.address}${frame.path}`, {
-      method: frame.method,
-      headers: frame.headers.map(([name, value]) => [name, value]),
-      body: frame.body === null ? null : decodeBody(frame.body),
+          return address === undefined
+            ? Effect.fail(new OrbFailure({ message: "dispatch start printed no address" }))
+            : Effect.succeed(address);
+        }),
+        Effect.flatMap((address) => {
+          const launch = { runtime: randomUUID(), container: job.container, address };
+          this.#launch = launch;
+
+          return Effect.forkDetach(this.#watch(launch, send)).pipe(Effect.as(launch.runtime));
+        }),
+      );
     });
+  }
 
-    return {
-      status: response.status,
-      headers: [...response.headers],
-      body: encodeBody(new Uint8Array(await response.arrayBuffer())),
-    };
+  #watch(launch: Launch, send: Send): Effect.Effect<void> {
+    return this.#script("wait", launch.container).pipe(
+      Effect.match({
+        onSuccess: (output) => `exited ${lastLine(output) ?? ""}`.trim(),
+        onFailure: ({ message }) => message,
+      }),
+      Effect.flatMap((reason) =>
+        Effect.sync(() => {
+          if (this.#launch?.runtime !== launch.runtime) return;
+
+          this.#launch = undefined;
+          this.#options.log(`container ${launch.container} ${reason}`);
+          send(providerFrame.exited({ runtime: launch.runtime, reason }));
+        }),
+      ),
+    );
+  }
+
+  #stopLaunch(job: "stop" | "delete"): Effect.Effect<void, OrbFailure> {
+    return Effect.suspend(() => {
+      const launch = this.#launch;
+      this.#launch = undefined;
+
+      return launch === undefined
+        ? Effect.void
+        : Effect.asVoid(this.#script(job, launch.container));
+    });
+  }
+
+  #fetch(frame: Extract<HostFrame, { _tag: "fetch" }>): Effect.Effect<FetchAnswer, OrbFailure> {
+    return Effect.suspend(() => {
+      const launch = this.#launch;
+
+      if (launch === undefined)
+        return Effect.fail(new OrbFailure({ message: "no container is running" }));
+
+      return attempt(async () => {
+        const response = await fetch(`http://${launch.address}${frame.path}`, {
+          method: frame.method,
+          headers: frame.headers.map(([name, value]) => [name, value]),
+          body: frame.body === null ? null : decodeBody(frame.body),
+        });
+
+        return {
+          status: response.status,
+          headers: [...response.headers],
+          body: encodeBody(new Uint8Array(await response.arrayBuffer())),
+        };
+      });
+    });
   }
 }
