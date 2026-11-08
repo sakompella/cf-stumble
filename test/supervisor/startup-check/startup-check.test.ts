@@ -109,15 +109,19 @@ test("a generation whose attach fails fails its startup check and leaves the act
   await expectFailedCandidate(control, label);
 });
 
-test("a generation in its startup check is attached without generation control", async () => {
+test("a generation in its startup check may read the generation status but not change it", async () => {
   const { result } = await checked(
-    "startup-check-no-generation-control",
+    "startup-check-status-only-generation-control",
     commits.noGenerationControl,
     servingFacetSource(
-      "no generation control",
+      "status-only generation control",
       FACET_COMPATIBILITY_METHOD,
       `async attach(host, generations) {
-    if (generations !== undefined) throw new Error("a startup check must not pass generation control");
+    await generations.generationStatus();
+    const activated = await generations
+      .controlGeneration({ kind: "activate", label: 0, observedEpoch: 0 })
+      .then(() => true, () => false);
+    if (activated) throw new Error("a startup check must not change the generation");
   }`,
     ),
   );

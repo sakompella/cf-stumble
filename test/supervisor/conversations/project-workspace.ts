@@ -1,5 +1,10 @@
 import { RpcStub } from "cloudflare:workers";
-import { STARTUP_CHECK_COMMAND, STARTUP_CHECK_OUTPUT } from "../../../src/startup-check-script.js";
+import {
+  STARTUP_CHECK_COMMAND,
+  STARTUP_CHECK_CONTAINER_COMMAND,
+  STARTUP_CHECK_ISOLATE_COMMAND,
+  STARTUP_CHECK_OUTPUT,
+} from "../../../src/startup-check-script.js";
 import type {
   BackendExecEvent,
   ExecBackendHandle,
@@ -14,16 +19,30 @@ import {
 } from "../../workspace/project/fakes.js";
 import { FakeTenantWorkspace } from "../projects/fake-tenant-workspace.js";
 
+const answered = (stdout: string): readonly BackendExecEvent[] => [
+  ...(stdout === "" ? [] : [{ name: "stdout", data: new TextEncoder().encode(stdout) } as const]),
+  { name: "exit", exitCode: 0 },
+];
+
 class StartupCheckAnsweringExecs extends FakeExecBackend {
-  startupCheckOutput: readonly BackendExecEvent[] = [
-    { name: "stdout", data: new TextEncoder().encode(`${STARTUP_CHECK_OUTPUT}\n`) },
-    { name: "exit", exitCode: 0 },
-  ];
+  startupCheckOutput: readonly BackendExecEvent[] = answered(`${STARTUP_CHECK_OUTPUT}\n`);
+
+  #answer(command: string): readonly BackendExecEvent[] | undefined {
+    if (command === STARTUP_CHECK_COMMAND) return this.startupCheckOutput;
+
+    if (command === STARTUP_CHECK_ISOLATE_COMMAND) return answered("startup-check-isolate\n");
+
+    if (command === STARTUP_CHECK_CONTAINER_COMMAND) return answered("v22.0.0\n");
+
+    return command.startsWith("rm -rf /workspace/.startup-check-") ? answered("") : undefined;
+  }
 
   override exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
-    if (input.command !== STARTUP_CHECK_COMMAND) return super.exec(input);
+    const events = this.#answer(input.command);
+
+    if (events === undefined) return super.exec(input);
     const handle = new ManualExecHandle();
-    handle.push(...this.startupCheckOutput);
+    handle.push(...events);
     handle.end();
 
     return Promise.resolve(handle);

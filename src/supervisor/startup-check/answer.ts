@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { AssistantMessage, type Conversation } from "../../page/index.js";
-import { STARTUP_CHECK_REPLY } from "../../startup-check-script.js";
+import { STARTUP_CHECK_REPLY, startupCheckStep } from "../../startup-check-script.js";
 
 const isAssistantMessage = Schema.is(AssistantMessage);
 
@@ -18,9 +18,7 @@ export function finalAnswer(
 ): AssistantMessage | undefined {
   if (conversation.isRunning) return undefined;
 
-  const messages = conversation.items.flatMap((item) =>
-    item.kind === "entry" ? (item.entry.model ?? []) : [],
-  );
+  const messages = conversationMessages(conversation);
 
   const final = messages.filter(
     (message) => isAssistantMessage(message) && message.stopReason !== "toolUse",
@@ -31,6 +29,33 @@ export function finalAnswer(
   return final.length >= answers && isAssistantMessage(last) && last.stopReason !== "toolUse"
     ? last
     : undefined;
+}
+
+export function turnStep(conversation: Conversation, steps: readonly string[]): string {
+  const messages = conversationMessages(conversation);
+  const turn = messages.slice(messages.findLastIndex((message) => message.role === "user") + 1);
+
+  const calls = turn
+    .flatMap((message) => (isAssistantMessage(message) ? message.content : []))
+    .flatMap((block) => ("id" in block ? [startupCheckStep(block.id)] : []));
+
+  const answered = turn.filter((message) => "toolCallId" in message).length;
+  const last = turn.at(-1);
+  const called = calls.at(-1);
+
+  if (called === undefined) return steps[0] ?? "first-reply";
+
+  const finished = isAssistantMessage(last) && last.stopReason !== "toolUse";
+
+  return answered < calls.length || finished
+    ? (calls[answered] ?? called)
+    : (steps[steps.indexOf(called) + 1] ?? called);
+}
+
+function conversationMessages(conversation: Conversation) {
+  return conversation.items.flatMap((item) =>
+    item.kind === "entry" ? (item.entry.model ?? []) : [],
+  );
 }
 
 function answerText(answer: AssistantMessage): string {
