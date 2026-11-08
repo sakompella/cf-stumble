@@ -2,12 +2,13 @@ import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { HARNESS_BUILD_CONFIGURATION, type HarnessBuildRequest } from "../../src/harness-build.js";
-import { type CommandOutput } from "../../src/workspace/index.js";
+import { executeHarnessBuildRequest } from "../../src/workspace/executor.js";
 import {
-  executeHarnessBuildRequest,
-  type WorkspaceOperations,
+  workspaceEffects,
+  type PromiseOperations,
+  type CommandOutput,
   type WorkspacePathKind,
-} from "../../src/workspace/executor.js";
+} from "./promise-operations.js";
 
 const commit = testHarnessCommit("5000000000000000000000000000000000000001");
 
@@ -15,7 +16,7 @@ const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
 
 const moduleMapPath = `${buildDirectory}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
 
-class FakeBuildOperations implements WorkspaceOperations {
+class FakeBuildOperations implements PromiseOperations {
   readonly calls: string[] = [];
   readonly files = new Map<string, string>([[moduleMapPath, "{}"]]);
   readonly symlinks = new Set<string>();
@@ -66,7 +67,7 @@ function build(operations: FakeBuildOperations, request: HarnessBuildRequest) {
   return Effect.runPromise(
     executeHarnessBuildRequest({
       configuration: HARNESS_BUILD_CONFIGURATION,
-      operations,
+      operations: workspaceEffects(operations),
       request,
     }),
   );

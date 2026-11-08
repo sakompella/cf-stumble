@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { executeProjectProvisionRequest } from "../../src/workspace/executor.js";
-import type { WorkspaceOperations } from "../../src/workspace/executor.js";
 import { sampleProjectOne } from "../project-fixtures.js";
+import { workspaceEffects, type PromiseOperations } from "./promise-operations.js";
 
 const project = sampleProjectOne;
 
@@ -19,7 +19,7 @@ function workspaceWith(cloned: boolean, clone: Clone) {
   const state = { cloned };
   const cloneProject = vi.fn(() => clone(state));
 
-  const operations: WorkspaceOperations = {
+  const operations: PromiseOperations = {
     cloneProject,
     lstat: (path) =>
       Promise.resolve(
@@ -39,7 +39,10 @@ function workspaceWith(cloned: boolean, clone: Clone) {
     operations,
     commands,
     cloneProject,
-    run: () => Effect.runPromise(executeProjectProvisionRequest({ operations, request })),
+    run: () =>
+      Effect.runPromise(
+        executeProjectProvisionRequest({ operations: workspaceEffects(operations), request }),
+      ),
   };
 }
 

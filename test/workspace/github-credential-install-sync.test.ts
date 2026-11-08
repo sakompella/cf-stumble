@@ -1,20 +1,21 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
-import type { CommandOutput } from "../../src/workspace/index.js";
 import {
   executeGitHubCredentialRequest,
   type GitHubCredentialRequest,
 } from "../../src/workspace/github-credential.js";
 import {
+  workspaceEffects,
+  type PromiseOperations,
+  type CommandOutput,
   WorkspaceSyncIncomplete,
-  type WorkspaceOperations,
   type WorkspacePathKind,
-} from "../../src/workspace/executor.js";
+} from "./promise-operations.js";
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
-class RecordingOperations implements WorkspaceOperations {
+class RecordingOperations implements PromiseOperations {
   readonly sources: string[] = [];
   failure: Error | undefined;
 
@@ -51,15 +52,15 @@ test("runs the install through operations that require a complete sync, and noth
 
   await Effect.runPromise(
     executeGitHubCredentialRequest({
-      operations: lenient,
-      installOperations: strict,
+      operations: workspaceEffects(lenient),
+      installOperations: workspaceEffects(strict),
       request: installRequest,
     }),
   );
   await Effect.runPromise(
     executeGitHubCredentialRequest({
-      operations: lenient,
-      installOperations: strict,
+      operations: workspaceEffects(lenient),
+      installOperations: workspaceEffects(strict),
       request: { kind: "github-credential", step: "status" },
     }),
   );
@@ -74,14 +75,14 @@ test("an install whose workspace copy is still pending logs the credential out a
   const events = capturedEvents();
   const lenient = new RecordingOperations();
   const strict = new RecordingOperations();
-  strict.failure = new WorkspaceSyncIncomplete(
-    `post-command sync pending (exit 0, skipped 0) ${FAKE_TOKEN}`,
-  );
+  strict.failure = new WorkspaceSyncIncomplete({
+    message: `post-command sync pending (exit 0, skipped 0) ${FAKE_TOKEN}`,
+  });
 
   const result = await Effect.runPromise(
     executeGitHubCredentialRequest({
-      operations: lenient,
-      installOperations: strict,
+      operations: workspaceEffects(lenient),
+      installOperations: workspaceEffects(strict),
       request: installRequest,
     }),
   );
@@ -98,12 +99,12 @@ async function outcomeWhenLogout(logoutFailure?: Error) {
   const lenient = new RecordingOperations();
   lenient.failure = logoutFailure;
   const strict = new RecordingOperations();
-  strict.failure = new WorkspaceSyncIncomplete("pending");
+  strict.failure = new WorkspaceSyncIncomplete({ message: "pending" });
 
   const result = await Effect.runPromise(
     executeGitHubCredentialRequest({
-      operations: lenient,
-      installOperations: strict,
+      operations: workspaceEffects(lenient),
+      installOperations: workspaceEffects(strict),
       request: installRequest,
     }),
   );

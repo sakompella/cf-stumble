@@ -5,18 +5,19 @@ import { projectCloneSource } from "../../src/project-provision.js";
 import type { Project } from "../../src/project-catalog.js";
 import { projectDirectory, projectGitDirectory } from "../../src/workspace-layout.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
-import { type CommandOutput } from "../../src/workspace/index.js";
-import {
-  executeProjectProvisionRequest,
-  WorkspaceSyncIncomplete,
-  type WorkspaceOperations,
-  type WorkspacePathKind,
-} from "../../src/workspace/executor.js";
+import { executeProjectProvisionRequest } from "../../src/workspace/executor.js";
 import {
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/project-provision.js";
+import {
+  workspaceEffects,
+  type PromiseOperations,
+  type CommandOutput,
+  WorkspaceSyncIncomplete,
+  type WorkspacePathKind,
+} from "./promise-operations.js";
 
 const projectOne = sampleProjectOne;
 
@@ -26,7 +27,7 @@ function provisionRequest(project: Project): ProjectProvisionRequest {
   return { kind: "provision-project", projectId: project.id, repositoryUrl: project.repositoryUrl };
 }
 
-class FakeProjectOperations implements WorkspaceOperations {
+class FakeProjectOperations implements PromiseOperations {
   readonly calls: string[] = [];
   readonly sources: string[] = [];
   exitCode = 0;
@@ -74,7 +75,9 @@ class FakeProjectOperations implements WorkspaceOperations {
 }
 
 function provision(operations: FakeProjectOperations, request: ProjectProvisionRequest) {
-  return Effect.runPromise(executeProjectProvisionRequest({ operations, request }));
+  return Effect.runPromise(
+    executeProjectProvisionRequest({ operations: workspaceEffects(operations), request }),
+  );
 }
 
 test("plans the clone from the resolved project the caller sent, and its directory from the id", () => {
@@ -136,7 +139,9 @@ test.each([
   [
     "Computer's post-command sync did not complete",
     (operations: FakeProjectOperations) => {
-      operations.commandFailure = new WorkspaceSyncIncomplete("post-command sync pending");
+      operations.commandFailure = new WorkspaceSyncIncomplete({
+        message: "post-command sync pending",
+      });
     },
   ],
   [

@@ -16,12 +16,10 @@ import { WORKSPACE_SHORT_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout
 import { runPlannedCommand } from "./executor.js";
 import {
   answerFailures,
-  workspaceEffects,
   WorkspaceSyncIncomplete,
   type CommandOutput,
   type WorkspaceEffects,
   type WorkspaceFault,
-  type WorkspaceOperations,
 } from "./operations.js";
 
 export type GitHubCredentialRequest =
@@ -189,8 +187,8 @@ function failureLabel(cause: unknown): string {
 }
 
 type CredentialSurfaceInput = Readonly<{
-  operations: WorkspaceOperations;
-  installOperations: WorkspaceOperations;
+  operations: WorkspaceEffects;
+  installOperations: WorkspaceEffects;
   request: GitHubCredentialRequest;
 }>;
 
@@ -201,16 +199,13 @@ function credentialWork(
   switch (parsed.step) {
     case "install":
       return installCredential(
-        {
-          lenient: workspaceEffects(input.operations),
-          durable: workspaceEffects(input.installOperations),
-        },
+        { lenient: input.operations, durable: input.installOperations },
         parsed.token,
       );
     case "status":
-      return credentialStatusResult(workspaceEffects(input.operations));
+      return credentialStatusResult(input.operations);
     case "verify-repository":
-      return repositoryAccess(workspaceEffects(input.operations), parsed.repositoryUrl);
+      return repositoryAccess(input.operations, parsed.repositoryUrl);
     default: {
       const exhaustive: never = parsed;
 

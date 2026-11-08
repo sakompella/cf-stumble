@@ -4,33 +4,24 @@ import type { Project } from "../project-catalog.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
 
-export type WorkspaceOperations = Readonly<{
-  cloneProject?(project: Project): Promise<void>;
-  lstat(path: string): Promise<WorkspacePathKind | undefined>;
-  readFile(path: string): Promise<string>;
-  writeFile(path: string, content: string): Promise<void>;
-  runCommand(
-    source: string,
-    cwd: string,
-    timeoutMs: number,
-    stdin?: string,
-  ): Promise<Readonly<CommandOutput>>;
-}>;
-
 export type CommandOutput = Readonly<{ stdout: string; stderr: string; exitCode: number }>;
 
-export class WorkspaceSyncIncomplete extends Error {
-  override readonly name = "WorkspaceSyncIncomplete";
-  readonly _tag = "WorkspaceSyncIncomplete";
-}
+export class WorkspaceSyncIncomplete extends Data.TaggedError("WorkspaceSyncIncomplete")<{
+  readonly message: string;
+}> {}
 
-class WorkspaceUnavailable extends Data.TaggedError("WorkspaceUnavailable")<{
+export class RepositoryNotEligible extends Data.TaggedError("RepositoryNotEligible")<{
+  readonly message: string;
+}> {}
+
+export class WorkspaceUnavailable extends Data.TaggedError("WorkspaceUnavailable")<{
   readonly cause: unknown;
 }> {}
 
-export type WorkspaceFault = WorkspaceUnavailable | WorkspaceSyncIncomplete;
+export type WorkspaceFault = WorkspaceUnavailable | WorkspaceSyncIncomplete | RepositoryNotEligible;
 
 export type WorkspaceEffects = Readonly<{
+  cloneProject?(project: Project): Effect.Effect<void, WorkspaceFault>;
   lstat(path: string): Effect.Effect<WorkspacePathKind | undefined, WorkspaceFault>;
   readFile(path: string): Effect.Effect<string, WorkspaceFault>;
   writeFile(path: string, content: string): Effect.Effect<void, WorkspaceFault>;
@@ -48,16 +39,6 @@ function workspaceFault(cause: unknown): WorkspaceFault {
 
 export function attemptWorkspace<A>(operation: () => Promise<A>): Effect.Effect<A, WorkspaceFault> {
   return Effect.tryPromise({ try: operation, catch: workspaceFault });
-}
-
-export function workspaceEffects(operations: WorkspaceOperations): WorkspaceEffects {
-  return {
-    lstat: (path) => attemptWorkspace(() => operations.lstat(path)),
-    readFile: (path) => attemptWorkspace(() => operations.readFile(path)),
-    writeFile: (path, content) => attemptWorkspace(() => operations.writeFile(path, content)),
-    runCommand: (source, cwd, timeoutMs, stdin) =>
-      attemptWorkspace(() => operations.runCommand(source, cwd, timeoutMs, stdin)),
-  };
 }
 
 export function answerFailures<A>(
