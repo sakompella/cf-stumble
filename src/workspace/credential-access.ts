@@ -60,13 +60,11 @@ function ask(
   return Effect.gen(function* () {
     if (signalAborted(input.signal)) return yield* unavailable();
 
-    const answered = yield* Effect.tryPromise({
-      try: () =>
-        boundedRpc(
-          () => input.namespace.getByName(input.workspaceName).credential(request),
-          WORKSPACE_SHORT_RPC_TIMEOUT_MS,
-        ),
-      catch: (cause) => {
+    const answered = yield* boundedRpc(
+      () => input.namespace.getByName(input.workspaceName).credential(request),
+      WORKSPACE_SHORT_RPC_TIMEOUT_MS,
+    ).pipe(
+      Effect.mapError((cause) => {
         logRedactedCause(
           `credential-access.${request.step}: ${isTimeoutFailure(cause) ? "timeout" : "credential-workspace-unavailable"}`,
           cause,
@@ -74,8 +72,8 @@ function ask(
         );
 
         return unavailable();
-      },
-    });
+      }),
+    );
 
     return signalAborted(input.signal) ? yield* unavailable() : answered;
   });

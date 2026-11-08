@@ -51,14 +51,13 @@ function hostStep<R>(
   return Effect.gen(function* () {
     if (signal !== undefined && signal.aborted) return yield* new ProvisionUnavailable();
 
-    const result = yield* Effect.tryPromise({
-      try: () => boundedRpc(call, WORKSPACE_RPC_TIMEOUT_MS),
-      catch: (cause) => {
+    const result = yield* boundedRpc(call, WORKSPACE_RPC_TIMEOUT_MS).pipe(
+      Effect.mapError((cause) => {
         logRedactedCause(`${context}: workspace-unavailable`, cause);
 
         return new ProvisionUnavailable();
-      },
-    });
+      }),
+    );
 
     if ((signal !== undefined && signal.aborted) || !result.ok)
       return yield* new ProvisionUnavailable();
