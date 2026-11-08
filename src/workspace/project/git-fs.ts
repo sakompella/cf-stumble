@@ -70,10 +70,18 @@ export function githubTokenFromHosts(hosts: string): string | undefined {
   return TOKEN_LINE.exec(hosts)?.[1];
 }
 
-async function githubAuth(provider: SQLiteWorkspaceProvider): Promise<GitAuth | undefined> {
-  const hosts = await provider.readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`).catch(() => "");
+async function readHosts(provider: SQLiteWorkspaceProvider): Promise<string> {
+  try {
+    const hosts = await provider.readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`);
 
-  const token = githubTokenFromHosts(hosts.toString());
+    return hosts.toString();
+  } catch {
+    return "";
+  }
+}
+
+async function githubAuth(provider: SQLiteWorkspaceProvider): Promise<GitAuth | undefined> {
+  const token = githubTokenFromHosts(await readHosts(provider));
 
   return token === undefined ? undefined : { username: "x-access-token", password: token };
 }
