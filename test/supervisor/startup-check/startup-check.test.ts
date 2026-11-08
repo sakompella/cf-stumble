@@ -12,7 +12,7 @@ import {
   generationLabel,
 } from "../helpers.js";
 import { expectFailedCandidate } from "../generation-reads.js";
-import { FACET_COMPATIBILITY } from "../../../src/facet-compatibility.js";
+import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 
 afterEach(async () => {
   await reset();

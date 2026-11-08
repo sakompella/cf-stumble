@@ -35,7 +35,7 @@ answered at about 146 ms p50. The adapter's one advantage was a session that cou
 Durable schema change across a rollback, and the compatibility key below already rules that rollback out.
 
 **Every runnable generation speaks the Supervisor's facet compatibility.** The compatibility key,
-`FACET_COMPATIBILITY` in `src/facet-compatibility.ts`, is `pi-durable@<version>/host-<N>`: the pinned Pi
+`FACET_COMPATIBILITY` in `src/facet/runtime-contract.ts`, is `pi-durable@<version>/host-<N>`: the pinned Pi
 Durable version, and the revision of the facet-to-Supervisor protocol (`host-2` added the `running`
 call). Bump `host-N` whenever that RPC contract changes in a way an older generation does not
 satisfy. The startup check asks the candidate's `compatibility()` and fails the candidate unless it
@@ -57,7 +57,8 @@ active.
 
 **The generation reaches nothing else.** Its model provider calls only the `MODEL` binding, and its
 `ExecutionEnv` runs file and command operations only through the project capability. The Worker
-Loader starts it with `enable_weak_ref`, which `chord` needs.
+Loader starts it with `enable_weak_ref`, which `chord` needs. `FACET_RUNTIME`, beside the key in
+`src/facet/runtime-contract.ts`, holds the loader's compatibility date and flags.
 
 The harness no longer shows the repository's diff after a turn; that was a generation-0 frame with no
 Pi Durable equivalent.

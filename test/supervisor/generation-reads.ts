@@ -1,4 +1,4 @@
-import { FACET_COMPATIBILITY } from "../../src/facet-compatibility.js";
+import { FACET_COMPATIBILITY } from "../../src/facet/runtime-contract.js";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";

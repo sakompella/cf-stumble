@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { MainFacetCapabilities } from "../../facet/index.js";
-import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
+import { FACET_COMPATIBILITY } from "../../facet/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
 import type { ProjectCapabilityStub } from "../projects/index.js";
 import type {

@@ -6,7 +6,7 @@ import {
   type GitHubConnectionEnvironment,
 } from "./projects/index.js";
 import { Generations } from "./generations.js";
-import { FACET_COMPATIBILITY } from "../facet-compatibility.js";
+import { FACET_COMPATIBILITY } from "../facet/index.js";
 import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, type MainFacetCapabilities } from "./artifacts/index.js";

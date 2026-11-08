@@ -55,7 +55,7 @@ cd node_modules/@earendil-works/pi-durable/dist && rg -n -g '*.js' -g '!storage/
 
 In 1.5.0 it finds only Pi's own Node environment calling itself (`env/node.js`), a doc comment in `harness/transcript.js`, and two unrelated `watch` methods in `harness/harness.js` (the host's views and the task graph).
 
-A generation must also speak the Supervisor's current facet-to-Supervisor protocol. `FACET_COMPATIBILITY` in `src/facet-compatibility.ts` is `pi-durable@<version>/host-<N>`, the facet reports it from `compatibility()`, and the startup check, activation and rollback compare it exactly. Bump `host-N` when the facet-to-Supervisor RPC contract changes: a host call the facet makes (`arm`, `running`, `workspace`) or a facet method the Supervisor calls. A Pi Durable bump changes the key by itself. An optional trailing argument, such as the `failed` map that `running` carries, leaves the key alone: an older facet omits it and an older Supervisor ignores it.
+A generation must also speak the Supervisor's current facet-to-Supervisor protocol. `FACET_COMPATIBILITY` in `src/facet/runtime-contract.ts` is `pi-durable@<version>/host-<N>`, the facet reports it from `compatibility()`, and the startup check, activation and rollback compare it exactly. Bump `host-N` when the facet-to-Supervisor RPC contract changes: a host call the facet makes (`arm`, `running`, `workspace`) or a facet method the Supervisor calls. A Pi Durable bump changes the key by itself. An optional trailing argument, such as the `failed` map that `running` carries, leaves the key alone: an older facet omits it and an older Supervisor ignores it.
 
 ## Harness execution
 
