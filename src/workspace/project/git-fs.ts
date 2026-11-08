@@ -8,7 +8,7 @@ import {
   type GitClientFactory,
 } from "@cloudflare/computer/git";
 import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
-import { gitStatusText } from "./git-status-text.js";
+import { gitCli } from "./git-cli.js";
 
 type ReadOptions = Parameters<SQLiteWorkspaceProvider["readFile"]>[1];
 
@@ -89,22 +89,29 @@ async function githubAuth(provider: SQLiteWorkspaceProvider): Promise<GitAuth | 
 export const workspaceGit: GitClientFactory = (options) => {
   const client = sqliteGit(options);
   const onAuth = () => githubAuth(options.ws.provider());
+  const clone = client.clone.bind(client);
   const fetch = client.fetch.bind(client);
   const push = client.push.bind(client);
   const pull = client.pull.bind(client);
   const cli = client.cli.bind(client);
 
   return Object.assign(client, {
+    clone: async (input: Parameters<typeof clone>[0]) => {
+      const auth = input.url.startsWith("https://github.com/") ? await onAuth() : undefined;
+
+      const basic =
+        auth === undefined ? undefined : `${auth.username ?? ""}:${auth.password ?? ""}`;
+
+      const headers =
+        basic === undefined
+          ? {}
+          : { Authorization: `Basic ${Buffer.from(basic).toString("base64")}` };
+
+      await clone({ headers, ...input });
+    },
     fetch: (input: Parameters<typeof fetch>[0]) => fetch({ onAuth, ...input }),
     push: (input: Parameters<typeof push>[0]) => push({ onAuth, ...input }),
     pull: (input: Parameters<typeof pull>[0]) => pull({ onAuth, ...input }),
-    cli: (input: GitCliInput): Promise<GitCliResult> => {
-      if (input.argv.length !== 1 || input.argv[0] !== "status") return cli(input);
-
-      return gitStatusText(client, input.cwd ?? "/").then(
-        (stdout) => ({ stdout, stderr: "", exitCode: 0 }),
-        () => cli(input),
-      );
-    },
+    cli: (input: GitCliInput): Promise<GitCliResult> => gitCli(client, cli, input),
   });
 };
