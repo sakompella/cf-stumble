@@ -1,58 +1,117 @@
-import type { GitClient, StatusEntry } from "@cloudflare/computer/git";
+import type { GitClient } from "@cloudflare/computer/git";
+import type { StatusLine } from "./git-status.js";
+import { branchTracking, type Tracking, trackingCounts, trackingLines } from "./git-tracking.js";
 
-const LABELS = {
-  A: "new file:   ",
-  M: "modified:   ",
-  D: "deleted:    ",
-} as const;
+const LABELS = new Map([
+  ["A", "new file:   "],
+  ["M", "modified:   "],
+  ["D", "deleted:    "],
+]);
 
-function section(title: string, hint: string, lines: readonly string[]): string[] {
-  return lines.length === 0 ? [] : [title, hint, ...lines.map((line) => `\t${line}`), ""];
+export interface HeadState {
+  readonly branch: string | undefined;
+  readonly oid: string | undefined;
+  readonly tracking: Tracking | undefined;
 }
 
-function longStatus(branch: string | undefined, entries: readonly StatusEntry[]): string {
-  const staged = entries.flatMap((entry) =>
-    entry.index === " " ? [] : [`${LABELS[entry.index]}${entry.path}`],
+export async function headState(client: GitClient, dir: string): Promise<HeadState> {
+  const [branch, oid] = await Promise.all([
+    client.currentBranch({ dir }),
+    client.revParse({ dir, ref: "HEAD" }).catch((): undefined => {}),
+  ]);
+
+  const tracking =
+    branch === undefined || oid === undefined
+      ? undefined
+      : await branchTracking(client, dir, branch);
+
+  return { branch, oid, tracking };
+}
+
+function section(title: string, hints: readonly string[], lines: readonly string[]): string[] {
+  return lines.length === 0 ? [] : [title, ...hints, ...lines.map((line) => `\t${line}`), ""];
+}
+
+function headLines(head: HeadState): string[] {
+  if (head.branch === undefined) return [`HEAD detached at ${(head.oid ?? "").slice(0, 7)}`];
+
+  if (head.oid === undefined) return [`On branch ${head.branch}`, "", "No commits yet", ""];
+
+  if (head.tracking === undefined) return [`On branch ${head.branch}`];
+
+  return [`On branch ${head.branch}`, ...trackingLines(head.tracking), ""];
+}
+
+function closingLine(
+  staged: number,
+  unstaged: number,
+  untracked: number,
+  unborn: boolean,
+): string[] {
+  if (staged > 0) return [];
+
+  if (unstaged > 0) return ['no changes added to commit (use "git add" and/or "git commit -a")'];
+
+  if (untracked > 0)
+    return ['nothing added to commit but untracked files present (use "git add" to track)'];
+
+  return [
+    unborn
+      ? 'nothing to commit (create/copy files and use "git add" to track)'
+      : "nothing to commit, working tree clean",
+  ];
+}
+
+export function longStatus(head: HeadState, lines: readonly StatusLine[]): string {
+  const unborn = head.oid === undefined;
+
+  const staged = lines.flatMap((line) =>
+    line.x === " " || line.x === "?" ? [] : [`${LABELS.get(line.x) ?? ""}${line.path}`],
   );
 
-  const unstaged = entries.flatMap((entry) =>
-    entry.worktree === " " || entry.worktree === "?"
-      ? []
-      : [`${LABELS[entry.worktree]}${entry.path}`],
-  );
+  const unstagedLines = lines.filter((line) => line.y !== " " && line.y !== "?");
+  const unstaged = unstagedLines.map((line) => `${LABELS.get(line.y) ?? ""}${line.path}`);
+  const untracked = lines.flatMap((line) => (line.x === "?" ? [line.path] : []));
+  const addHint = unstagedLines.some((line) => line.y === "D") ? "add/rm" : "add";
 
-  const untracked = entries.flatMap((entry) => (entry.worktree === "?" ? [entry.path] : []));
-
-  const lines = [
-    branch === undefined ? "HEAD detached" : `On branch ${branch}`,
+  const text = [
+    ...headLines(head),
     ...section(
       "Changes to be committed:",
-      '  (use "git restore --staged <file>..." to unstage)',
+      [
+        unborn
+          ? '  (use "git rm --cached <file>..." to unstage)'
+          : '  (use "git restore --staged <file>..." to unstage)',
+      ],
       staged,
     ),
     ...section(
       "Changes not staged for commit:",
-      '  (use "git add <file>..." to update what will be committed)',
+      [
+        `  (use "git ${addHint} <file>..." to update what will be committed)`,
+        '  (use "git restore <file>..." to discard changes in working directory)',
+      ],
       unstaged,
     ),
     ...section(
       "Untracked files:",
-      '  (use "git add <file>..." to include in what will be committed)',
+      ['  (use "git add <file>..." to include in what will be committed)'],
       untracked,
     ),
+    ...closingLine(staged.length, unstaged.length, untracked.length, unborn),
   ];
 
-  if (entries.length === 0) lines.push("nothing to commit, working tree clean");
-  else if (staged.length === 0) lines.push('no changes added to commit (use "git add")');
-
-  return `${lines.join("\n")}\n`;
+  return `${text.join("\n")}\n`;
 }
 
-export async function gitStatusText(client: GitClient, dir: string): Promise<string> {
-  const [branch, entries] = await Promise.all([
-    client.currentBranch({ dir }),
-    client.status({ dir }),
-  ]);
+export function branchHeader(head: HeadState): string {
+  if (head.branch === undefined) return "## HEAD (no branch)\n";
 
-  return longStatus(branch, entries);
+  if (head.oid === undefined) return `## No commits yet on ${head.branch}\n`;
+
+  if (head.tracking === undefined) return `## ${head.branch}\n`;
+
+  const counts = trackingCounts(head.tracking);
+
+  return `## ${head.branch}...${head.tracking.upstream}${counts === "" ? "" : ` [${counts}]`}\n`;
 }
