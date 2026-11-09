@@ -18,6 +18,20 @@ const IDENTITY_ENV = new Map([
   ["user.email", ["GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"]],
 ]);
 
+export interface GitScope {
+  readonly dir: string;
+  readonly prefix: string;
+}
+
+export async function gitScope(client: GitClient, cwd: string): Promise<GitScope> {
+  const dir = await client.repoRoot({ dir: cwd }).catch((): string => cwd);
+
+  return {
+    dir,
+    prefix: dir === cwd || !cwd.startsWith(`${dir}/`) ? "" : cwd.slice(dir.length + 1),
+  };
+}
+
 export type GlobalOptions = Readonly<{ input: GitCliInput }> | Readonly<{ failure: GitCliResult }>;
 
 export function resolveGlobalOptions(input: GitCliInput): GlobalOptions {
@@ -88,24 +102,29 @@ export async function gitCli(
 
   const input = resolved.input;
   const [command] = input.argv;
-  const dir = input.cwd ?? "/";
+  const scope = await gitScope(client, input.cwd ?? "/");
 
   switch (command ?? "") {
     case "status":
-      return statusCommand(client, cli, input);
+      return statusCommand(client, cli, input, scope);
     case "commit":
-      return commitWithSummary(client, cli, await withConfiguredIdentity(client, input, dir));
+      return commitWithSummary(
+        client,
+        cli,
+        await withConfiguredIdentity(client, input, scope.dir),
+        scope,
+      );
     case "checkout":
     case "switch":
-      return checkoutWithMessages(client, cli, input);
+      return checkoutWithMessages(client, cli, input, scope);
     case "branch":
-      return verboseBranches(client, cli, input);
+      return verboseBranches(client, cli, input, scope);
     case "add":
-      return reportingFailure(() => addCommand(client, cli, input));
+      return reportingFailure(() => addCommand(client, cli, input, scope));
     case "reset":
-      return reportingFailure(() => resetCommand(client, cli, input));
+      return reportingFailure(() => resetCommand(client, cli, input, scope));
     case "restore":
-      return reportingFailure(() => restoreCommand(client, input));
+      return reportingFailure(() => restoreCommand(client, input, scope));
     case "push":
       return cli(pushDelete(input));
     default:

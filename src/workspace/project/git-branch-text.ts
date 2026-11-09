@@ -1,5 +1,5 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
-import type { RunCli } from "./git-cli.js";
+import type { GitScope, RunCli } from "./git-cli.js";
 import { branchTracking, trackingCounts } from "./git-tracking.js";
 
 const VERBOSITY = new Map([
@@ -60,14 +60,15 @@ export function verboseBranches(
   client: GitClient,
   cli: RunCli,
   input: GitCliInput,
+  scope: GitScope,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
   const verbosity = args.reduce((total, arg) => total + (VERBOSITY.get(arg) ?? Number.NaN), 0);
 
-  if (args.length === 0 || Number.isNaN(verbosity)) return cli(input);
+  if (args.length === 0 || Number.isNaN(verbosity)) return cli({ ...input, cwd: scope.dir });
 
-  return listVerbose(client, input.cwd ?? "/", verbosity).then(
+  return listVerbose(client, scope.dir, verbosity).then(
     (stdout) => ({ stdout, stderr: "", exitCode: 0 }),
-    () => cli(input),
+    () => cli({ ...input, cwd: scope.dir }),
   );
 }

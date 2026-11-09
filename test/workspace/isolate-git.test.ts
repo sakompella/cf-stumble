@@ -92,7 +92,7 @@ test("git commit treats a flag-looking message value as the message", async () =
     `${SETUP} && echo x >> a.txt && git add a.txt && git commit -m -q && git log -1 --format=%s`,
   );
 
-  expect(stdout).toMatch(/\[main [0-9a-f]{7}\] -q\n/);
+  expect(stdout).toMatch(/\[main [0-9a-f]{7}\] -q\n/u);
 });
 
 test("git -c rejects a setting the adapter does not support", async () => {
@@ -113,6 +113,61 @@ test("git status --porcelain=v2 is refused instead of approximated", async () =>
 
   expect(stdout).toBe("");
   expect(stderr).toContain("error: --porcelain=v2 is not implemented");
+});
+
+test("git status from a subdirectory shows paths relative to it", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-status",
+    `${SETUP} && mkdir sub && echo x >> a.txt && cd sub && echo n > n.txt && git status -s`,
+  );
+
+  expect(stdout).toBe(" M ../a.txt\n?? ./\n");
+});
+
+test("git add . from a subdirectory stages only the subtree", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-add",
+    `${SETUP} && mkdir sub && echo x >> a.txt && cd sub && echo n > n.txt && git add . && cd .. && git status -s`,
+  );
+
+  expect(stdout).toBe(" M a.txt\nA  sub/n.txt\n");
+});
+
+test("git add -u from a subdirectory stages the whole tree", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-add-u",
+    `${SETUP} && mkdir sub && cd sub && echo x >> ../a.txt && git add -u && cd .. && git status -s`,
+  );
+
+  expect(stdout).toBe("M  a.txt\n");
+});
+
+test("git restore --staged from a subdirectory unstages the rooted path", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-restore",
+    `${SETUP} && mkdir sub && cd sub && echo x >> ../a.txt && git add ../a.txt && git status -s && git restore --staged ../a.txt && git status -s`,
+  );
+
+  expect(stdout).toBe("M  ../a.txt\n M ../a.txt\n");
+});
+
+test("git commit from a subdirectory commits the staged tree", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-commit",
+    `${SETUP} && mkdir sub && cd sub && echo n > n.txt && git add . && git commit -q -m from-sub && cd .. && git log -1 --format=%s`,
+  );
+
+  expect(stdout).toBe("from-sub\n");
+});
+
+test("git commit with a pathspec from a subdirectory is refused", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-sub-commit-pathspec",
+    `${SETUP} && mkdir sub && cd sub && git commit -q -m x ../a.txt && echo ok`,
+  );
+
+  expect(stdout).toBe("");
+  expect(stderr).toContain("fatal: pathspec arguments are not supported from a subdirectory");
 });
 
 test("git commit in the isolate prints the summary of real git", async () => {
