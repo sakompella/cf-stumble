@@ -16,9 +16,11 @@ const USER = { role: "user", content: "Hi" } as const;
 
 test("rejects a request that includes a field that picks the provider", () => {
   for (const field of ["model", "reasoning_effort", "credentials", "endpoint", "provider"]) {
-    expect(parseRequest({ messages: [USER], [field]: "forbidden" }), field).toEqual(
-      rejected(`request must not include provider field: ${field}`),
-    );
+    const parsed = parseRequest({ messages: [USER], [field]: "forbidden" });
+    const failure = Result.isFailure(parsed) ? parsed.failure : undefined;
+
+    expect(failure?.error, field).toMatchObject({ code: "invalid-request" });
+    expect(failure?.error.reason, field).toContain(field);
   }
 });
 

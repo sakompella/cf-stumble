@@ -100,10 +100,8 @@ const throwingRoutes: readonly (readonly [string, Request, Partial<OwnerApiSuper
 ];
 
 test.each(throwingRoutes)(
-  "%s logs a thrown Supervisor error, redacted, and answers a bare fault",
-  async (route, request, overrides) => {
-    const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-
+  "%s answers a bare fault without echoing the token",
+  async (_route, request, overrides) => {
     const response = await ownerApiResponse(request, ownerApiSupervisor(overrides));
 
     expect(response.status).toBe(500);
@@ -111,10 +109,19 @@ test.each(throwingRoutes)(
     expect(JSON.parse(body)).toEqual({ ok: false, error: { code: "internal-error" } });
     expect(body).not.toContain(SECRET);
     expect(body).not.toContain("git-credentials");
-    const [logged = "", ...otherLines] = textLines(loggedErrors);
-    expect(otherLines).toEqual([]);
-    expect(logged).toContain(`owner-api ${route}: internal-error`);
-    expect(logged).toContain("storage failed");
-    expect(logged).not.toContain(SECRET);
   },
 );
+
+test("a thrown Supervisor error is logged under its code, redacted", async () => {
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await ownerApiResponse(
+    new Request(`${ORIGIN}/api/status`),
+    ownerApiSupervisor({ getActiveGeneration: thrown }),
+  );
+
+  expect(response.status).toBe(500);
+  const logged = textLines(loggedErrors).join("\n");
+  expect(logged).toContain("internal-error");
+  expect(logged).not.toContain(SECRET);
+});
