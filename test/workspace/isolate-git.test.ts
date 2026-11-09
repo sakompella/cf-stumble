@@ -86,6 +86,25 @@ test("git status in the isolate prints the long format of real git", async () =>
   );
 });
 
+test("git commit treats a flag-looking message value as the message", async () => {
+  const { stdout } = await shell(
+    "isolate-git-commit-message-value",
+    `${SETUP} && echo x >> a.txt && git add a.txt && git commit -m -q && git log -1 --format=%s`,
+  );
+
+  expect(stdout).toMatch(/\[main [0-9a-f]{7}\] -q\n/);
+});
+
+test("git -c rejects a setting the adapter does not support", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-c-unsupported",
+    `${SETUP} && git -c core.fileMode=false status -s && echo ok`,
+  );
+
+  expect(stdout).toBe("");
+  expect(stderr).toContain("error: unsupported -c setting 'core.fileMode'");
+});
+
 test("git status --porcelain=v2 is refused instead of approximated", async () => {
   const { stdout, stderr } = await shell(
     "isolate-git-porcelain-v2",

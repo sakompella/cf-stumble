@@ -18,7 +18,9 @@ const IDENTITY_ENV = new Map([
   ["user.email", ["GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"]],
 ]);
 
-function withGlobalOptions(input: GitCliInput): GitCliInput {
+export type GlobalOptions = Readonly<{ input: GitCliInput }> | Readonly<{ failure: GitCliResult }>;
+
+export function resolveGlobalOptions(input: GitCliInput): GlobalOptions {
   const env = { ...input.env };
   let cwd = input.cwd ?? "/";
   let index = 0;
@@ -30,8 +32,18 @@ function withGlobalOptions(input: GitCliInput): GitCliInput {
     if (option === "--no-pager") index += 1;
     else if (option === "-c" && value !== undefined) {
       const [key = "", ...rest] = value.split("=");
+      const names = IDENTITY_ENV.get(key.toLowerCase());
 
-      for (const name of IDENTITY_ENV.get(key.toLowerCase()) ?? []) env[name] = rest.join("=");
+      if (names === undefined)
+        return {
+          failure: {
+            stdout: "",
+            stderr: `error: unsupported -c setting '${key}'\n`,
+            exitCode: 129,
+          },
+        };
+
+      for (const name of names) env[name] = rest.join("=");
       index += 2;
     } else if (option === "-C" && value !== undefined) {
       cwd = value.startsWith("/") ? value : `${cwd.replace(/\/$/u, "")}/${value}`;
@@ -39,7 +51,7 @@ function withGlobalOptions(input: GitCliInput): GitCliInput {
     } else break;
   }
 
-  return { ...input, argv: input.argv.slice(index), cwd, env };
+  return { input: { ...input, argv: input.argv.slice(index), cwd, env } };
 }
 
 async function withConfiguredIdentity(
@@ -70,7 +82,11 @@ export async function gitCli(
   cli: RunCli,
   original: GitCliInput,
 ): Promise<GitCliResult> {
-  const input = withGlobalOptions(original);
+  const resolved = resolveGlobalOptions(original);
+
+  if ("failure" in resolved) return resolved.failure;
+
+  const input = resolved.input;
   const [command] = input.argv;
   const dir = input.cwd ?? "/";
 
