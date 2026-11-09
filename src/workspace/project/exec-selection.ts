@@ -92,6 +92,43 @@ function segmentRunsInIsolate(words: readonly string[]): boolean {
   return !rest.some((word) => EXECUTING_FIND_FLAGS.has(word));
 }
 
+const OUTSIDE_WORKSPACE_PREFIXES = [
+  "/bin",
+  "/dev",
+  "/etc",
+  "/home",
+  "/lib",
+  "/lib64",
+  "/media",
+  "/mnt",
+  "/opt",
+  "/proc",
+  "/root",
+  "/run",
+  "/sbin",
+  "/srv",
+  "/sys",
+  "/tmp",
+  "/usr",
+  "/var",
+];
+
+function referencesOutsidePath(word: string): boolean {
+  if (!word.startsWith("/")) return false;
+
+  return OUTSIDE_WORKSPACE_PREFIXES.some(
+    (prefix) => word === prefix || word.startsWith(`${prefix}/`),
+  );
+}
+
+function touchesPathOutsideWorkspace(command: string): boolean {
+  const segments = firstWords(command);
+
+  if (segments === undefined) return false;
+
+  return segments.flat().some(referencesOutsidePath);
+}
+
 function isolateCanRun(command: string): boolean {
   const segments = firstWords(command);
 
@@ -103,6 +140,8 @@ export function routedBackend(
   requested: ExecBackendChoice | undefined,
 ): ExecBackendChoice {
   if (requested === "container") return "container";
+
+  if (touchesPathOutsideWorkspace(command)) return "container";
 
   return isolateCanRun(command) ? "isolate" : "container";
 }
