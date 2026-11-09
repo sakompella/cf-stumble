@@ -1,5 +1,5 @@
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
+import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
+import { ExecutionError, type ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { expect, test } from "vitest";
 import type { GenerationControl } from "../../../src/generation-requests.js";
 import { runStumble } from "../../../src/stumble-cli/index.js";
@@ -66,6 +66,25 @@ test("a plain stumble command runs in the facet instead of the workspace contain
   }
 
   expect(reached).toStrictEqual(["status", "status", "status"]);
+});
+
+test("an already-aborted context refuses a stumble command without touching generation control", async () => {
+  const { reached, generations } = recordingControl();
+
+  await withHostWorkspace(async (env) => {
+    const result = await env.exec(
+      "stumble gen activate 0 --epoch 4",
+      undefined,
+      withAbortSignal(AbortSignal.abort(), BACKGROUND_CONTEXT),
+    );
+
+    expect(result).toStrictEqual({
+      ok: false,
+      error: new ExecutionError("aborted", "aborted"),
+    });
+  }, generations);
+
+  expect(reached).toStrictEqual([]);
 });
 
 test("a command that only resembles stumble runs in the workspace exactly as it would without it", async () => {
