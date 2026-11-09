@@ -72,6 +72,66 @@ test("the token is stable across reads and differs between Hosts", async () => {
   expect(second).not.toBe(first[0]);
 });
 
+test("a forwarded git -C describes the repository the command changed", async () => {
+  const outcome = await runInDurableObject(
+    env.WORKSPACE_HOST.getByName("git-forward-nested"),
+    async (host, state) => {
+      await seedWorkspaceRoot(state);
+
+      const run = async (command: string) => {
+        const started = await host
+          .project({ remainingMs: 60_000 })
+          .startExec({ command, timeoutMs: 20_000, backend: "isolate" });
+
+        if (!started.ok) throw new Error(started.error.code);
+
+        return new Response(started.value.events).text();
+      };
+
+      await run(SETUP);
+      await run(
+        [
+          "mkdir inner",
+          "cd inner",
+          "git init",
+          "git config user.name T",
+          "git config user.email t@example.com",
+          "echo i > i.txt",
+          "git add i.txt",
+          "git commit -q -m inner-first",
+        ].join(" && "),
+      );
+      await run("cd inner && echo more >> i.txt");
+
+      const workspace = new Workspace({
+        storage: computerStorage(state.storage),
+        sessionId: state.id.toString(),
+        backends: [],
+        git: workspaceGit,
+      });
+
+      const response = await forwardGit(
+        workspace,
+        "container-shell",
+        JSON.stringify({
+          argv: ["-C", "/workspace/inner", "commit", "-q", "-am", "inner change"],
+          cwd: "/workspace",
+        }),
+      );
+
+      return {
+        response: Schema.decodeUnknownSync(Forwarded)(await response.json()),
+        log: await run("git -C inner log -1 --format=%s"),
+      };
+    },
+  );
+
+  expect(outcome.response.exitCode).toBe(0);
+  expect(outcome.response.gitDir).toBe("/workspace/inner/.git");
+  expect(outcome.response.state["HEAD"]).not.toBe("");
+  expect(outcome.log).toContain("inner change");
+});
+
 test("a forwarded commit is visible to an isolate read right away", async () => {
   const outcome = await runInDurableObject(
     env.WORKSPACE_HOST.getByName("git-forward-commit"),
