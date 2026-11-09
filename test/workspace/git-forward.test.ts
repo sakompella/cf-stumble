@@ -72,6 +72,41 @@ test("the token is stable across reads and differs between Hosts", async () => {
   expect(second).not.toBe(first[0]);
 });
 
+test("a git cli failure becomes a generic 500 without leaking the cause", async () => {
+  const outcome = await runInDurableObject(
+    env.WORKSPACE_HOST.getByName("git-forward-internal-error"),
+    async (_host, state) => {
+      await seedWorkspaceRoot(state);
+
+      const workspace = new Workspace({
+        storage: computerStorage(state.storage),
+        sessionId: state.id.toString(),
+        backends: [],
+        git: {
+          ...workspaceGit,
+          git: {
+            ...workspaceGit.git,
+            cli: async () => {
+              throw new Error("sentinel internal detail");
+            },
+          },
+        },
+      });
+
+      const response = await forwardGit(
+        workspace,
+        "container-shell",
+        JSON.stringify({ argv: ["status", "-s"], cwd: "/workspace" }),
+      );
+
+      return { status: response.status, body: await response.text() };
+    },
+  );
+
+  expect(outcome.status).toBe(500);
+  expect(outcome.body).toBe("git forward failed");
+});
+
 test("a forwarded git -C describes the repository the command changed", async () => {
   const outcome = await runInDurableObject(
     env.WORKSPACE_HOST.getByName("git-forward-nested"),

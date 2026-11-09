@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { SQLiteWorkspaceProvider, Workspace } from "@cloudflare/computer";
+import { logRedactedCause } from "../diagnostics.js";
 import { resolveGlobalOptions } from "./project/git-cli.js";
 
 const ForwardBody = Schema.Struct({ argv: Schema.Array(Schema.String), cwd: Schema.String });
@@ -107,8 +108,8 @@ export async function forwardGit(
 
     return Response.json(forwarded);
   } catch (cause) {
-    return new Response(cause instanceof Error ? cause.message : "git forward failed", {
-      status: 500,
-    });
+    logRedactedCause("git-forward: internal-error", cause);
+
+    return new Response("git forward failed", { status: 500 });
   }
 }
