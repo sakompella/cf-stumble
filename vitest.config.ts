@@ -117,6 +117,7 @@ export default defineConfig({
           ],
           environment: "node",
           pool: "forks",
+          server: { deps: { inline: ["@cloudflare/computer"] } },
         },
       },
     ],
