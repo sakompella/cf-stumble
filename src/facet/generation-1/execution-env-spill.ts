@@ -59,10 +59,6 @@ export class OutputSpill {
     return appended.ok ? { ok: true, value: this.#path } : appended;
   }
 
-  discard(): void {
-    this.#pending = "";
-  }
-
   async #append(path: string): Promise<Result<void, ExecutionError>> {
     const text = this.#pending;
     this.#pending = "";

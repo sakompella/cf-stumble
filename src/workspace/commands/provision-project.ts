@@ -19,12 +19,7 @@ import {
   REPOSITORY_SIZE_VERDICT_FUNCTION,
   repositorySizeVerdictSource,
 } from "../../github/index.js";
-import {
-  runPlannedCommand,
-  WorkspaceUnavailable,
-  type WorkspaceEffects,
-  type WorkspaceFault,
-} from "../operations.js";
+import { WorkspaceUnavailable, type WorkspaceEffects, type WorkspaceFault } from "../operations.js";
 import { CLONE_INTO_STAGING, reconcileClone } from "./clone-script.js";
 import {
   answerDurableFailures,
@@ -156,15 +151,11 @@ export function projectCloneSource(project: Project): string {
   ].join("\n");
 }
 
-function isolateCloned(
-  operations: WorkspaceEffects,
-  project: Project,
-  clone: (project: Project) => Effect.Effect<void, WorkspaceFault>,
-): Effect.Effect<boolean> {
+function isolateCloned(operations: WorkspaceEffects, project: Project): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     if (yield* cloneMarkersAreDurable(operations, project)) return true;
 
-    yield* clone(project);
+    yield* operations.cloneProject(project);
 
     const durable = yield* cloneMarkersAreDurable(operations, project);
 
@@ -204,21 +195,17 @@ export function executeProjectProvisionRequest(
 
   return Effect.gen(function* () {
     const { operations } = input;
-    const { cloneProject } = operations;
 
-    if (
-      cloneProject !== undefined &&
-      (yield* isolateCloned(operations, parsed, (project) =>
-        cloneProject.call(operations, project),
-      ))
-    ) {
+    if (yield* isolateCloned(operations, parsed)) {
       return {
         ok: true,
         result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
       } as const;
     }
 
-    const output = yield* runPlannedCommand(operations, planProjectProvisionRequest(parsed));
+    const plan = planProjectProvisionRequest(parsed);
+
+    const output = yield* operations.runCommand(plan.source, plan.cwd, plan.timeoutMs);
 
     if (output.exitCode === 0 && !(yield* cloneMarkersAreDurable(operations, parsed))) {
       return syncIncomplete();

@@ -48,7 +48,7 @@ test("a project capability leases the workspace until the end of its turn", asyn
 
   const result = await withHost("host-seam-lease", async (host, state) => {
     const before = Date.now();
-    host.project({ remainingMs: leaseMs });
+    await host.project({ remainingMs: leaseMs });
 
     return { alarm: await state.storage.getAlarm(), before };
   });
@@ -64,7 +64,7 @@ test("an ended project capability holds the workspace one idle limit from its en
   vi.spyOn(console, "log").mockImplementation(() => {});
 
   const result = await withHost("host-seam-lease-end", async (host, state, container) => {
-    const project = host.project({ remainingMs: 9 * 60_000 });
+    const project = await host.project({ remainingMs: 9 * 60_000 });
     const endedAt = Date.now();
     await project.endTurn();
     const alarm = (await state.storage.getAlarm()) ?? 0;
@@ -94,7 +94,7 @@ test("a past-due alarm closes the Workspace and destroys the container for being
 
 test("a backend change while a project lease is held is refused and leaves the container running", async () => {
   const result = await withHost("host-seam-backend-lease", async (host, _state, container) => {
-    host.project({ remainingMs: 60_000 });
+    await host.project({ remainingMs: 60_000 });
 
     return { change: await host.setBackend("cloudflare"), destroyed: container.destroyed };
   });
@@ -154,7 +154,7 @@ test("an exec started while the idle stop destroys the container waits for it", 
     vi.spyOn(Date, "now").mockReturnValue(Date.now() + WORKSPACE_IDLE_STOP_MS + 1_000);
     const alarm = host.alarm();
     await tick();
-    const project = host.project({ remainingMs: 60_000 });
+    const project = await host.project({ remainingMs: 60_000 });
     const started = await project.startExec({ command: "node -v", timeoutMs: 1_000 });
     await tick();
     const whileDestroying = container.starts;
@@ -221,9 +221,9 @@ test("a reset refuses while a file change or credential request is in flight and
   }
 });
 
-function capabilityAnswer(host: WorkspaceHost): "handed out" | "refused" {
+async function capabilityAnswer(host: WorkspaceHost): Promise<"handed out" | "refused"> {
   try {
-    host.project({ remainingMs: 60_000 });
+    await host.project({ remainingMs: 60_000 });
 
     return "handed out";
   } catch {
@@ -249,7 +249,7 @@ async function changesDuringReset(host: WorkspaceHost) {
       repositoryUrl: sampleProjectOne.repositoryUrl,
     }),
     reset: await host.reset(),
-    capability: capabilityAnswer(host),
+    capability: await capabilityAnswer(host),
   };
 }
 

@@ -67,7 +67,12 @@ function recordingWorkspace(backends: string[]): Parameters<typeof chosenExecBac
     return Promise.reject(new Error("stop"));
   };
 
-  return { runtime: { exec } };
+  return {
+    runtime: { exec },
+    pull: () => {
+      throw new Error("stop");
+    },
+  };
 }
 
 describe("chosenExecBackend routing", () => {

@@ -120,9 +120,9 @@ test("a forwarded git -C describes the repository the command changed", async ()
       await seedWorkspaceRoot(state);
 
       const run = async (command: string) => {
-        const started = await host
-          .project({ remainingMs: 60_000 })
-          .startExec({ command, timeoutMs: 20_000, backend: "isolate" });
+        const target = await host.project({ remainingMs: 60_000 });
+
+        const started = await target.startExec({ command, timeoutMs: 20_000, backend: "isolate" });
 
         if (!started.ok) throw new Error(started.error.code);
 
@@ -169,9 +169,13 @@ test("a forwarded commit is visible to an isolate read right away", async () => 
       await seedWorkspaceRoot(state);
 
       const run = async (command: string) => {
-        const started = await host
-          .project({ remainingMs: 60_000 })
-          .startExec({ command, timeoutMs: 20_000, backend: "isolate" });
+        const target = await host.project({ remainingMs: 60_000 });
+
+        const started = await target.startExec({
+          command,
+          timeoutMs: 20_000,
+          backend: "isolate",
+        });
 
         if (!started.ok) throw new Error(started.error.code);
 

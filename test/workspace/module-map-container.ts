@@ -1,9 +1,7 @@
 import { Workspace, type WorkspaceBackend } from "@cloudflare/computer";
+import * as Semaphore from "effect/Semaphore";
 import { WORKSPACE_OUTPUT_OPTIONS } from "../../infra/worker-settings.js";
-import {
-  ComputerWorkspaceOperations,
-  newHarnessPermit,
-} from "../../src/workspace/computer-operations.js";
+import { ComputerWorkspaceOperations } from "../../src/workspace/computer-operations.js";
 import { computerStorage } from "../../src/workspace/workspace-platform.js";
 import type { HarnessCommit } from "../../src/harness-commit.js";
 import {
@@ -140,5 +138,5 @@ export async function operationsOverPublishedModuleMap(
     output: WORKSPACE_OUTPUT_OPTIONS,
   });
 
-  return new ComputerWorkspaceOperations(workspace, "not-required", newHarnessPermit());
+  return new ComputerWorkspaceOperations(workspace, "not-required", Semaphore.makeUnsafe(1));
 }

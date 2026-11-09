@@ -16,6 +16,8 @@ export const BUILD_SCRATCH_ROOT = "/tmp/cf-stumble-builds";
 
 export const HARNESS_BUILD_OUTPUT_DIRECTORY = `${WORKSPACE_ROOT}/.cf-stumble-build-output`;
 
+export const WORKSPACE_SPILL_DIRECTORY = `${WORKSPACE_ROOT}/.cf-stumble/tmp`;
+
 export function harnessBuildOutputPath(harnessCommit: HarnessCommit): string {
   return `${HARNESS_BUILD_OUTPUT_DIRECTORY}/${harnessCommit}.json`;
 }

@@ -79,12 +79,25 @@ function hostRuntime() {
   return { runtime, root: () => child };
 }
 
+function completePull(): ExecWorkspace["pull"] {
+  return () => ({
+    [Symbol.asyncIterator]: () => ({
+      next: () => Promise.resolve({ done: false, value: { skipped: 0, complete: true } }),
+    }),
+  });
+}
+
 test("cancelling a running command kills the wrapper, its command and the command's child", async () => {
   const directory = mkdtempSync(join(tmpdir(), "cf-stumble-process-group-"));
   const pidFile = join(directory, "pids");
   const command = `printf '%s\\n' $$ > ${pidFile}; sleep 60 & printf '%s\\n' $! >> ${pidFile}; wait`;
   const { runtime, root } = hostRuntime();
-  const backend = computerExecBackend({ runtime }, CONTAINER_BACKEND_ID, null);
+
+  const backend = computerExecBackend(
+    { runtime, pull: completePull() },
+    CONTAINER_BACKEND_ID,
+    null,
+  );
 
   try {
     const handle = await backend.exec({ command, cwd: "/", timeoutMs: 30_000 });

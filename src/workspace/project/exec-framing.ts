@@ -31,35 +31,28 @@ function largestFrameEnd(
 ): number {
   let low = start + 1;
   let high = data.length;
-  let result = start;
+  let end = start;
 
   while (low <= high) {
-    let middle = Math.floor((low + high) / 2);
-
-    if (middle > start && isHighSurrogate(data.codePointAt(middle - 1) ?? 0)) middle -= 1;
-
-    if (middle <= start) {
-      low = start + 1;
-      continue;
-    }
+    const middle = Math.floor((low + high) / 2);
 
     const frame = encodeEvent({ kind, seq, data: data.slice(start, middle) });
 
     if (frame.byteLength <= MAX_EXEC_FRAME_BYTES) {
-      result = middle;
+      end = middle;
       low = middle + 1;
     } else {
       high = middle - 1;
     }
   }
 
-  if (result === start) throw new Error("exec frame limit cannot encode one character");
+  while (end > start && end < data.length && (data.codePointAt(end - 1) ?? 0) > 0xffff) {
+    end -= 1;
+  }
 
-  return result;
-}
+  if (end === start) throw new Error("exec frame limit cannot encode one character");
 
-function isHighSurrogate(code: number): boolean {
-  return code >= 0xd800 && code <= 0xdbff;
+  return end;
 }
 
 export function enqueueOutput(

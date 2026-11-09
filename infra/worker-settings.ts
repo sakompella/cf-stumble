@@ -26,7 +26,7 @@ export const SHELL_MODULES_FILE = "shell-modules.json";
 
 export const WORKSPACE_CONTAINER_INSTANCE = "standard-3";
 
-const WORKSPACE_OUTPUT_DIRECTORY = "/.cf-stumble/output";
+const WORKSPACE_OUTPUT_DIRECTORY = "/workspace/.cf-stumble/output";
 
 const WORKSPACE_OUTPUT_MAX_LINES = 2_000;
 

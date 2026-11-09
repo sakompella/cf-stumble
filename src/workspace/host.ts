@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import {
   readBackendSetting,
@@ -7,14 +8,19 @@ import {
   type BackendSetting,
   type WorkspaceBackendChange,
 } from "../backend-setting.js";
-import { afterIdleStop, trackedWork, WorkspaceIdleController } from "./idle-controller.js";
-import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
+import {
+  afterIdleStop,
+  trackedWork,
+  WorkspaceIdleController,
+  WORKSPACE_IDLE_STOP_MS,
+} from "./idle-controller.js";
 import {
   chosenExecBackend,
   computerFilesystemProvider,
   durableObjectTransactions,
   isolateShellBackend,
   ProjectRpcTarget,
+  pruneWorkspaceSpills,
   workspaceGit,
 } from "./project/index.js";
 import { WorkspacePlatform } from "./workspace-platform.js";
@@ -31,7 +37,6 @@ import {
   executeProjectProvisionRequest,
   executeProjectRemovalRequest,
   harnessBuildConfiguration,
-  newHarnessPermit,
   type GitHubCredentialRequest,
   type GitHubCredentialResult,
   type HarnessBuildRequest,
@@ -60,7 +65,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #platform: WorkspacePlatform;
   readonly #idle: WorkspaceIdleController;
   readonly #isolateToken = crypto.randomUUID();
-  readonly #harnessPermit = newHarnessPermit();
+  readonly #harnessPermit = Semaphore.makeUnsafe(1);
   #resetting = false;
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
@@ -201,11 +206,13 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
   }
 
-  project({ remainingMs }: Readonly<{ remainingMs: number }>): ProjectRpcTarget {
+  async project({ remainingMs }: Readonly<{ remainingMs: number }>): Promise<ProjectRpcTarget> {
     if (this.#resetting) throw new Error("workspace-busy: the workspace is resetting");
 
     const endLease = this.#idle.lease(Date.now() + remainingMs);
     const { workspace, lifecycle } = this.#platform;
+
+    await pruneWorkspaceSpills(workspace).catch(() => {});
 
     return new ProjectRpcTarget(
       computerFilesystemProvider(workspace),

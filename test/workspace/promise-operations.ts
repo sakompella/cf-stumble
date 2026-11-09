@@ -37,6 +37,12 @@ export function workspaceEffects(operations: PromiseOperations): WorkspaceEffect
   const { cloneProject, provisionHarness } = operations;
 
   const effects: Mutable = {
+    cloneProject: (project: Project) =>
+      attemptWorkspace(() =>
+        cloneProject === undefined
+          ? Promise.reject(new Error("this fake clones no project"))
+          : cloneProject.call(operations, project),
+      ),
     lstat: (path) => attemptWorkspace(() => operations.lstat(path)),
     readFile: (path) => attemptWorkspace(() => operations.readFile(path)),
     writeFile: (path, content) => attemptWorkspace(() => operations.writeFile(path, content)),
@@ -49,11 +55,6 @@ export function workspaceEffects(operations: PromiseOperations): WorkspaceEffect
           : provisionHarness.call(operations, configuration, commit),
       ),
   };
-
-  if (cloneProject !== undefined) {
-    effects.cloneProject = (project: Project) =>
-      attemptWorkspace(() => cloneProject.call(operations, project));
-  }
 
   return effects;
 }

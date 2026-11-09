@@ -17,3 +17,5 @@ export { IsolateWorkspaceGate } from "./isolate-gate.js";
 export { CONTAINER_BACKEND_ID, type ExecBackend } from "./exec-backend.js";
 
 export { ProjectRpcTarget } from "./target.js";
+
+export { pruneWorkspaceSpills } from "./spill-retention.js";

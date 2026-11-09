@@ -14,7 +14,7 @@ async function linesOf(stream: ReadableStream<Uint8Array>): Promise<string[]> {
 function runCurl(name: string, command: string, hosts = "") {
   return runInDurableObject(env.WORKSPACE_HOST.getByName(name), async (host, state) => {
     await seedWorkspaceRoot(state);
-    const project = host.project({ remainingMs: 60_000 });
+    const project = await host.project({ remainingMs: 60_000 });
 
     if (hosts !== "")
       await project.writeFile(HOSTS_YML, new TextEncoder().encode(hosts), "overwrite");

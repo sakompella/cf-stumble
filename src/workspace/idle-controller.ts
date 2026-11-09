@@ -13,6 +13,8 @@ import {
   type WorkspaceActivity,
 } from "./idle-stop.js";
 
+export { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
+
 export type ProjectActivity = Readonly<{
   begin(): () => void;
   touch(): void;

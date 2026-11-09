@@ -1,7 +1,28 @@
 import type { WorkspaceRuntimeEvent } from "@cloudflare/computer";
 import { expect, test } from "vitest";
-import { computerExecBackend } from "../../../src/workspace/project/computer-adapter.js";
+import {
+  computerExecBackend,
+  type ExecWorkspace,
+  processGroupCommand,
+} from "../../../src/workspace/project/computer-adapter.js";
 import { CONTAINER_BACKEND_ID } from "../../../src/workspace/project/exec-backend.js";
+
+function completePull(): ExecWorkspace["pull"] {
+  return () => ({
+    [Symbol.asyncIterator]: () => ({
+      next: () => Promise.resolve({ done: false, value: { skipped: 0, complete: true } }),
+    }),
+  });
+}
+
+test("wraps a command in a session leader that kills the whole process group", () => {
+  const wrapped = processGroupCommand("sleep 1 && printf '%s' \"done\"");
+
+  expect(wrapped).toContain("exec setsid /bin/sh -c");
+  expect(wrapped).toContain("& wait $!");
+  expect(wrapped).toContain("kill -s KILL 0");
+  expect(wrapped).toContain("sleep 1 && printf");
+});
 
 test("marks an in-flight read as container-restarted after the runtime generation changes", async () => {
   let resolveRead: ((value: { done: false; value: WorkspaceRuntimeEvent }) => void) | undefined;
@@ -21,7 +42,11 @@ test("marks an in-flight read as container-restarted after the runtime generatio
       }),
   };
 
-  const backend = computerExecBackend({ runtime }, CONTAINER_BACKEND_ID, state);
+  const backend = computerExecBackend(
+    { runtime, pull: completePull() },
+    CONTAINER_BACKEND_ID,
+    state,
+  );
 
   const handle = await backend.exec({ command: "sleep 1", cwd: "/workspace", timeoutMs: 100 });
   const read = handle.reader.read();
@@ -60,7 +85,11 @@ test("reports a container restart that happens while the exit waits for the post
       }),
   };
 
-  const backend = computerExecBackend({ runtime }, CONTAINER_BACKEND_ID, state);
+  const backend = computerExecBackend(
+    { runtime, pull: completePull() },
+    CONTAINER_BACKEND_ID,
+    state,
+  );
 
   const handle = await backend.exec({ command: "true", cwd: "/workspace", timeoutMs: 100 });
 

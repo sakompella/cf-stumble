@@ -4,7 +4,7 @@ import { parseProjectId, type ProjectId } from "../../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
 import { shellQuote } from "../../shell-quote.js";
 import { projectDirectory } from "../../workspace-layout.js";
-import { runPlannedCommand, type WorkspaceEffects, type WorkspaceFault } from "../operations.js";
+import { type WorkspaceEffects, type WorkspaceFault } from "../operations.js";
 import { holdProvisionLock } from "./clone-script.js";
 import { projectProvisionLockPath } from "./provision-project.js";
 import {
@@ -87,7 +87,7 @@ export function executeProjectRemovalRequest(
   return Effect.gen(function* () {
     const { operations } = input;
     const plan = planProjectRemovalRequest(parsed);
-    const output = yield* runPlannedCommand(operations, plan);
+    const output = yield* operations.runCommand(plan.source, plan.cwd, plan.timeoutMs);
 
     if (output.exitCode === 0 && !(yield* removalIsDurable(operations, parsed.projectId))) {
       return syncIncomplete();

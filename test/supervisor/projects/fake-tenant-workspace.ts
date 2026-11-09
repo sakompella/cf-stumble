@@ -81,6 +81,11 @@ export class FakeTenantWorkspace implements PromiseOperations {
 
   commandSync: "complete" | "incomplete" = "complete";
 
+  loseClone(): void {
+    this.durablePaths.clear();
+    this.durableFiles.clear();
+  }
+
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     return Promise.resolve(this.durablePaths.get(path));
   }
