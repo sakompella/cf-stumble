@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { MainFacetTarget } from "../../facet/index.js";
+import { logRedactedCause } from "../../diagnostics.js";
 import { readFirstView, type AssistantMessage } from "../../page/index.js";
 import { startupCheckSteps } from "../../startup-check-model.js";
 import { describe, finalAnswer, isReply, turnStep } from "./answer.js";
@@ -26,7 +27,9 @@ export function scriptedTurn(
   const failedAt = ({ step, reason }: StepFailure) =>
     `${turn.name} failed at step ${step}: ${reason}`;
 
-  return candidateCall(() => facet.submit(turn.conversationId, turn.message, turn.label)).pipe(
+  return candidateCall("the candidate did not submit the turn", () =>
+    facet.submit(turn.conversationId, turn.message, turn.label),
+  ).pipe(
     Effect.andThen(
       settledAnswer(facet, turn.conversationId, turn.answers, startupCheckSteps(turn.message)).pipe(
         Effect.mapError(failedAt),
@@ -38,11 +41,18 @@ export function scriptedTurn(
   );
 }
 
-export function candidateCall<T>(call: () => Promise<T>): Effect.Effect<T, string> {
-  return Effect.tryPromise({
-    try: call,
-    catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
-  });
+export function candidateCall<T>(
+  failure: string,
+  call: () => Promise<T>,
+): Effect.Effect<T, string> {
+  return Effect.tryPromise({ try: call, catch: candidateFailure(failure) });
+}
+
+export function candidateFailure(failure: string): (cause: unknown) => string {
+  return (cause) => {
+    logRedactedCause(`supervisor.startup-check: ${failure}`, cause);
+    return failure;
+  };
 }
 
 function settledAnswer(
@@ -82,7 +92,9 @@ function snapshotLine(
 ): Effect.Effect<string, string> {
   return Effect.scoped(
     Effect.gen(function* () {
-      const events = yield* candidateCall(() => candidate.events(conversationId));
+      const events = yield* candidateCall("the candidate did not provide the event stream", () =>
+        candidate.events(conversationId),
+      );
 
       const reader = yield* Effect.acquireRelease(
         Effect.sync(() => events.pipeThrough(new TextDecoderStream()).getReader()),
@@ -92,7 +104,9 @@ function snapshotLine(
       let read = "";
 
       while (!read.includes("\n")) {
-        const next = yield* candidateCall(() => reader.read());
+        const next = yield* candidateCall("the candidate did not provide the event stream", () =>
+          reader.read(),
+        );
 
         if (next.done) return read;
         read += next.value;

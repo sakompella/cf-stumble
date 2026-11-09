@@ -28,6 +28,8 @@ export const commits = {
   unsettled: "e123456789abcdef0123456789abcdef01234567",
   failingAttach: "f123456789abcdef0123456789abcdef01234567",
   failingResume: "8123456789abcdef0123456789abcdef01234567",
+  secretFailure: "a23456789abcdef0123456789abcdef012345679",
+  secretReply: "6123456789abcdef0123456789abcdef01234567",
 } as const;
 
 export { generationLabel, testHarnessCommit };
@@ -47,6 +49,34 @@ export function artifact(harnessCommit: string, source: string): MainHarnessArti
     entryModule: "main.js",
     modules: [{ name: "main.js", source }],
   };
+}
+
+export function facet(members: string): string {
+  return `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  ${members}
+}
+`;
+}
+
+export async function checked(
+  name: string,
+  harnessCommit: string,
+  source: string,
+  options?: Parameters<typeof prepareWithModuleMap>[3],
+) {
+  const control = await activeSupervisor(name);
+  const label = await labelCandidate(control, harnessCommit);
+
+  const result = await prepareWithModuleMap(
+    control,
+    label,
+    artifact(harnessCommit, source),
+    options,
+  );
+
+  return { control, label, result };
 }
 
 export function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {

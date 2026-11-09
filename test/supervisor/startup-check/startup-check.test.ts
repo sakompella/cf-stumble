@@ -4,7 +4,9 @@ import { afterEach, expect, test } from "vitest";
 import {
   activeSupervisor,
   artifact,
+  checked,
   commits,
+  facet,
   labelCandidate,
   prepareWithModuleMap,
   servingFacetSource,
@@ -19,34 +21,6 @@ import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 afterEach(async () => {
   await reset();
 });
-
-function facet(members: string): string {
-  return `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${members}
-}
-`;
-}
-
-async function checked(
-  name: string,
-  harnessCommit: string,
-  source: string,
-  options?: Parameters<typeof prepareWithModuleMap>[3],
-) {
-  const control = await activeSupervisor(name);
-  const label = await labelCandidate(control, harnessCommit);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(harnessCommit, source),
-    options,
-  );
-
-  return { control, label, result };
-}
 
 test("records a generation as ready when it reports the Supervisor's facet compatibility and answers its startup-check conversation", async () => {
   const { control, label, result } = await checked(
@@ -91,7 +65,7 @@ test("a generation that answers a fresh conversation but cannot resume it fails 
 
   expect(result).toMatchObject({
     ok: true,
-    report: { stage: "conversation-failed", reason: "storage error on resume" },
+    report: { stage: "conversation-failed", reason: "the candidate did not submit the turn" },
   });
   await expectFailedCandidate(control, label);
 });
