@@ -5,7 +5,7 @@ import type {
   WorkspaceRuntimeResult,
 } from "@cloudflare/computer";
 import type * as Effect from "effect/Effect";
-import * as Semaphore from "effect/Semaphore";
+import type * as Semaphore from "effect/Semaphore";
 import {
   attemptWorkspace,
   WorkspaceSyncIncomplete,
@@ -41,10 +41,6 @@ export function commandOutput(
   }
 
   return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
-}
-
-export function newHarnessPermit(): Semaphore.Semaphore {
-  return Semaphore.makeUnsafe(1);
 }
 
 export class ComputerWorkspaceOperations implements WorkspaceEffects {

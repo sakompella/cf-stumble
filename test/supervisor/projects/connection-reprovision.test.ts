@@ -15,6 +15,7 @@ test("refuses provisioning on use when the clone's sync does not complete", asyn
   const subject = tenant("use-sync-incomplete", { fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
   subject.workspace.commandSync = "incomplete";
+  subject.workspace.loseClone();
 
   const used = await subject.connections((connections) =>
     connections.ensureProvisioned(projectIdOf("sample-repo-1")),
@@ -49,6 +50,7 @@ test("keeps a project whose reprovision the clone size check refuses", async () 
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
   workspace.cloneExitCode = 122;
+  workspace.loseClone();
 
   const used = await subject.connections((connections) =>
     connections.ensureProvisioned(projectIdOf("sample-repo-1")),
@@ -74,6 +76,7 @@ test("a clone that fails after a reset succeeds once the configured credential i
     }),
   );
   workspace.credentialState = "missing";
+  workspace.loseClone();
 
   const used = await subject.connections((connections) =>
     connections.ensureProvisioned(projectIdOf("sample-repo-1")),

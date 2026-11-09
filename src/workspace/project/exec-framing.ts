@@ -46,15 +46,13 @@ function largestFrameEnd(
     }
   }
 
-  while (end > start && end < data.length && isHighSurrogate(data.charCodeAt(end - 1))) end -= 1;
+  while (end > start && end < data.length && (data.codePointAt(end - 1) ?? 0) > 0xffff) {
+    end -= 1;
+  }
 
   if (end === start) throw new Error("exec frame limit cannot encode one character");
 
   return end;
-}
-
-function isHighSurrogate(code: number): boolean {
-  return code >= 0xd800 && code <= 0xdbff;
 }
 
 export function enqueueOutput(

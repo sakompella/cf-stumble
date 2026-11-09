@@ -2,7 +2,6 @@ import * as Effect from "effect/Effect";
 import { isTimeoutFailure, logRedactedCause } from "../../diagnostics.js";
 import {
   answerFailures,
-  runPlannedCommand,
   WorkspaceSyncIncomplete,
   type CommandOutput,
   type WorkspaceEffects,
@@ -75,7 +74,9 @@ export function executePlan(
   operations: WorkspaceEffects,
   plan: WorkspacePlan,
 ): Effect.Effect<WorkspaceCommandResult, WorkspaceFault> {
-  return runPlannedCommand(operations, plan).pipe(Effect.map(commandResult));
+  return operations
+    .runCommand(plan.source, plan.cwd, plan.timeoutMs)
+    .pipe(Effect.map(commandResult));
 }
 
 export function timeoutOrUnavailable(cause: unknown): string {

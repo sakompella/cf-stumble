@@ -8,8 +8,17 @@ interface Frame {
   data: string;
 }
 
+function isFrame(value: unknown): value is Frame {
+  if (typeof value !== "object" || value === null) return false;
+
+  if (!("kind" in value) || !("data" in value)) return false;
+
+  return typeof value.data === "string" && (value.kind === "stdout" || value.kind === "stderr");
+}
+
 async function framesOf(kind: OutputKind, chunks: readonly string[]): Promise<Frame[]> {
   const state: FrameSequence = { seq: 0 };
+
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       for (const chunk of chunks) enqueueOutput(state, controller, kind, chunk);
@@ -28,7 +37,13 @@ async function framesOf(kind: OutputKind, chunks: readonly string[]): Promise<Fr
     if (next.done) break;
 
     for (const line of decoder.decode(next.value).split("\n")) {
-      if (line !== "") frames.push(JSON.parse(line) as Frame);
+      if (line === "") continue;
+
+      const parsed: unknown = JSON.parse(line);
+
+      if (!isFrame(parsed)) throw new Error(`not a frame: ${line}`);
+
+      frames.push(parsed);
     }
   }
 
@@ -40,9 +55,11 @@ function outputOf(frames: readonly Frame[]): string {
 }
 
 function endsWithUnpairedSurrogate(text: string): boolean {
-  const last = text.charCodeAt(text.length - 1);
+  if (text === "") return false;
 
-  return text.length > 0 && last >= 0xd800 && last <= 0xdbff;
+  const last = text.codePointAt(text.length - 1) ?? 0;
+
+  return last >= 0xd800 && last <= 0xdbff;
 }
 
 test("a frame boundary never splits a surrogate pair", async () => {

@@ -15,7 +15,6 @@ import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { WORKSPACE_SHORT_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import {
   answerFailures,
-  runPlannedCommand,
   WorkspaceSyncIncomplete,
   type CommandOutput,
   type WorkspaceEffects,
@@ -114,35 +113,29 @@ function runInstall(
   operations: Readonly<{ lenient: WorkspaceEffects; durable: WorkspaceEffects }>,
   token: string,
 ): Effect.Effect<CommandOutput, WorkspaceFault> {
-  return runPlannedCommand(
-    operations.durable,
-    { source: installCredentialSource(), cwd: "/", timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
-    `${token}\n`,
-  ).pipe(
-    Effect.catchTag("WorkspaceSyncIncomplete", (incomplete) =>
-      runPlannedCommand(operations.lenient, {
-        source: logoutCredentialSource(),
-        cwd: "/",
-        timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
-      }).pipe(
-        Effect.asVoid,
-        answerFailures((cause) => {
-          logRedactedCause(`github-credential.logout: ${failureLabel(cause)}`, cause, token);
-        }),
-        Effect.andThen(Effect.fail(incomplete)),
+  return operations.durable
+    .runCommand(installCredentialSource(), "/", WORKSPACE_SHORT_COMMAND_TIMEOUT_MS, `${token}\n`)
+    .pipe(
+      Effect.catchTag("WorkspaceSyncIncomplete", (incomplete) =>
+        operations.lenient
+          .runCommand(logoutCredentialSource(), "/", WORKSPACE_SHORT_COMMAND_TIMEOUT_MS)
+          .pipe(
+            Effect.asVoid,
+            answerFailures((cause) => {
+              logRedactedCause(`github-credential.logout: ${failureLabel(cause)}`, cause, token);
+            }),
+            Effect.andThen(Effect.fail(incomplete)),
+          ),
       ),
-    ),
-  );
+    );
 }
 
 function credentialStatus(
   operations: WorkspaceEffects,
 ): Effect.Effect<GitHubCredentialStatus, WorkspaceFault> {
-  return runPlannedCommand(operations, {
-    source: credentialStatusSource(),
-    cwd: "/",
-    timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
-  }).pipe(Effect.map((output) => parseCredentialStatus(output.stdout)));
+  return operations
+    .runCommand(credentialStatusSource(), "/", WORKSPACE_SHORT_COMMAND_TIMEOUT_MS)
+    .pipe(Effect.map((output) => parseCredentialStatus(output.stdout)));
 }
 
 function credentialStatusResult(
@@ -160,24 +153,22 @@ function repositoryAccess(
   operations: WorkspaceEffects,
   repositoryUrl: string,
 ): Effect.Effect<GitHubCredentialResult, WorkspaceFault> {
-  return runPlannedCommand(operations, {
-    source: repositoryAccessSource(repositoryUrl),
-    cwd: "/",
-    timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
-  }).pipe(
-    Effect.map((output): GitHubCredentialResult => {
-      const access = parseRepositoryAccess(output.stdout);
+  return operations
+    .runCommand(repositoryAccessSource(repositoryUrl), "/", WORKSPACE_SHORT_COMMAND_TIMEOUT_MS)
+    .pipe(
+      Effect.map((output): GitHubCredentialResult => {
+        const access = parseRepositoryAccess(output.stdout);
 
-      return {
-        ok: true,
-        result: {
-          kind: "repository-access",
-          granted: access.granted,
-          detail: access.granted ? "" : redactedExcerpt(access.detail),
-        },
-      };
-    }),
-  );
+        return {
+          ok: true,
+          result: {
+            kind: "repository-access",
+            granted: access.granted,
+            detail: access.granted ? "" : redactedExcerpt(access.detail),
+          },
+        };
+      }),
+    );
 }
 
 function failureLabel(cause: unknown): string {

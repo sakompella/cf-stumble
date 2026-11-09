@@ -23,7 +23,7 @@ export class WorkspaceUnavailable extends Data.TaggedError("WorkspaceUnavailable
 export type WorkspaceFault = WorkspaceUnavailable | WorkspaceSyncIncomplete | RepositoryNotEligible;
 
 export type WorkspaceEffects = Readonly<{
-  cloneProject?(project: Project): Effect.Effect<void, WorkspaceFault>;
+  cloneProject(project: Project): Effect.Effect<void, WorkspaceFault>;
   provisionHarness(
     configuration: HarnessBuildConfiguration,
     commit: HarnessCommit,
@@ -57,14 +57,4 @@ export function answerFailures<A>(
       ),
       Effect.catchDefect((defect) => Effect.sync(() => answer(defect))),
     );
-}
-
-type PlannedCommand = Readonly<{ source: string; cwd: string; timeoutMs: number }>;
-
-export function runPlannedCommand(
-  operations: WorkspaceEffects,
-  plan: PlannedCommand,
-  stdin?: string,
-): Effect.Effect<CommandOutput, WorkspaceFault> {
-  return operations.runCommand(plan.source, plan.cwd, plan.timeoutMs, stdin);
 }

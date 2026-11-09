@@ -27,9 +27,17 @@ class FakeProjectOperations implements PromiseOperations {
   readonly sources: string[] = [];
   exitCode = 0;
   commandFailure: Error | undefined;
+  cloneFailure: Error | undefined = new Error("the isolate clone is unavailable");
+  private cloned = false;
 
   durableGitConfig: string | undefined =
     `[core]\n\tbare = false\n[remote "origin"]\n\turl = ${projectOne.repositoryUrl}\n`;
+
+  cloneProject(_project: Project): Promise<void> {
+    this.calls.push("clone");
+
+    return this.cloneFailure === undefined ? Promise.resolve() : Promise.reject(this.cloneFailure);
+  }
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     this.calls.push(`lstat:${path}`);
@@ -38,6 +46,8 @@ class FakeProjectOperations implements PromiseOperations {
   }
 
   private kindOf(path: string): WorkspacePathKind | undefined {
+    if (!this.cloned) return undefined;
+
     if (path.startsWith(projectDirectory(projectOne.id)) && this.durableGitConfig === undefined) {
       return undefined;
     }
@@ -48,7 +58,7 @@ class FakeProjectOperations implements PromiseOperations {
   readFile(path: string): Promise<string> {
     this.calls.push(`read:${path}`);
 
-    return this.durableGitConfig !== undefined && path.endsWith("/.git/config")
+    return this.cloned && this.durableGitConfig !== undefined && path.endsWith("/.git/config")
       ? Promise.resolve(this.durableGitConfig)
       : Promise.reject(new Error(`no durable file at ${path}`));
   }
@@ -64,6 +74,8 @@ class FakeProjectOperations implements PromiseOperations {
     this.sources.push(source);
 
     if (this.commandFailure !== undefined) return Promise.reject(this.commandFailure);
+
+    if (this.exitCode === 0) this.cloned = true;
 
     return Promise.resolve({ stdout: "", stderr: "", exitCode: this.exitCode });
   }
@@ -86,6 +98,8 @@ test("runs the clone above the project root, then checks the clone is durable", 
   const gitDir = projectGitDirectory(projectOne.id);
 
   expect(operations.calls).toEqual([
+    `lstat:${projectDirectory(projectOne.id)}`,
+    "clone",
     "command:/",
     `lstat:${projectDirectory(projectOne.id)}`,
     `lstat:${gitDir}`,

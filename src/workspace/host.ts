@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import {
   readBackendSetting,
@@ -7,8 +8,12 @@ import {
   type BackendSetting,
   type WorkspaceBackendChange,
 } from "../backend-setting.js";
-import { afterIdleStop, trackedWork, WorkspaceIdleController } from "./idle-controller.js";
-import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
+import {
+  afterIdleStop,
+  trackedWork,
+  WorkspaceIdleController,
+  WORKSPACE_IDLE_STOP_MS,
+} from "./idle-controller.js";
 import {
   chosenExecBackend,
   computerFilesystemProvider,
@@ -32,7 +37,6 @@ import {
   executeProjectProvisionRequest,
   executeProjectRemovalRequest,
   harnessBuildConfiguration,
-  newHarnessPermit,
   type GitHubCredentialRequest,
   type GitHubCredentialResult,
   type HarnessBuildRequest,
@@ -61,7 +65,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #platform: WorkspacePlatform;
   readonly #idle: WorkspaceIdleController;
   readonly #isolateToken = crypto.randomUUID();
-  readonly #harnessPermit = newHarnessPermit();
+  readonly #harnessPermit = Semaphore.makeUnsafe(1);
   #resetting = false;
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
