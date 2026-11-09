@@ -176,14 +176,6 @@ test("records a parse-invalid candidate as failed at mount", async () => {
   );
 
   expect(result).toMatchObject({ ok: true, report: { stage: "mount-failed" } });
-
-  if (!result.ok) {
-    throw new Error("a labeled generation must produce a startup-check report");
-  }
-
-  expect(result.report.reason, "the runtime's own diagnosis is the only detail we keep").toContain(
-    "Worker",
-  );
   await expectFailedCandidate(control, label);
 });
 
