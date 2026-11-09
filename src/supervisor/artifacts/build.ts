@@ -63,6 +63,15 @@ function discardScratch(
   harnessCommit: HarnessCommit,
 ): Effect.Effect<void> {
   return command(workspace, { kind: "build-discard", harnessCommit }, "the scratch cleanup").pipe(
+    Effect.flatMap((output) =>
+      output.exitCode === 0
+        ? Effect.void
+        : Effect.fail(
+            new BuildWorkspaceRefused({
+              message: `the scratch cleanup exited ${output.exitCode}: ${lastUnits(redactLogText(output.stderr))}`,
+            }),
+          ),
+    ),
     Effect.mapError((error) => {
       logRedactedCause(`harness-build.discard ${harnessCommit}: scratch-left-behind`, error);
     }),

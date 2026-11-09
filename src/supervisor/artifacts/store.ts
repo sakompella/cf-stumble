@@ -45,10 +45,16 @@ export class ModuleMapStore {
   async write(
     artifact: MainHarnessArtifact,
   ): Promise<Result.Result<MainHarnessArtifact, StoredModuleMapProblem>> {
+    let stored: R2Object | null;
+
     try {
-      await this.bucket.put(moduleMapKey(artifact.harnessCommit), encodeModuleMap(artifact), {
-        onlyIf: { etagDoesNotMatch: "*" },
-      });
+      stored = await this.bucket.put(
+        moduleMapKey(artifact.harnessCommit),
+        encodeModuleMap(artifact),
+        {
+          onlyIf: { etagDoesNotMatch: "*" },
+        },
+      );
     } catch (cause) {
       logRedactedCause(
         `artifact-store.write ${artifact.harnessCommit}: artifact-write-failed`,
@@ -58,7 +64,19 @@ export class ModuleMapStore {
       return Result.fail({ code: "artifact-write-failed", harnessCommit: artifact.harnessCommit });
     }
 
-    return Result.succeed(artifact);
+    return stored === null ? this.existing(artifact.harnessCommit) : Result.succeed(artifact);
+  }
+
+  private async existing(
+    harnessCommit: HarnessCommit,
+  ): Promise<Result.Result<MainHarnessArtifact, StoredModuleMapProblem>> {
+    const read = await this.read(harnessCommit);
+
+    if (Result.isFailure(read)) return Result.fail(read.failure);
+
+    return read.success.kind === "stored"
+      ? Result.succeed(read.success.artifact)
+      : Result.fail({ code: "artifact-write-failed", harnessCommit });
   }
 }
 
