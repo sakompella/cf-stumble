@@ -1,7 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   githubTokenForIsolateEgress,
-  ISOLATE_EGRESS_ORIGINS,
   isolateEgressFetch,
 } from "../../../src/workspace/project/isolate-egress.js";
 
@@ -23,35 +22,48 @@ function upstream(response: (request: Request) => Response) {
 }
 
 describe("the isolate egress gateway forwarding", () => {
-  it("forwards an allowed host to the upstream", async () => {
-    const up = upstream(() => new Response("body"));
-
-    const response = await isolateEgressFetch(up.fetch)("https://github.com/owner/repo");
-
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("body");
-    expect(up.seen).toHaveLength(1);
-    expect(up.seen[0]?.request.url).toBe("https://github.com/owner/repo");
-  });
-
-  it("allows every origin it advertises", async () => {
+  it("forwards any host to the upstream", async () => {
     const up = upstream(() => new Response("body"));
     const gateway = isolateEgressFetch(up.fetch);
 
-    for (const origin of ISOLATE_EGRESS_ORIGINS) {
-      const response = await gateway(`${origin}/path`);
+    for (const url of [
+      "https://example.com/path",
+      "http://example.com/path",
+      "https://api.github.com/repos",
+    ]) {
+      const response = await gateway(url);
 
-      expect(response.status, origin).toBe(200);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("body");
     }
+
+    expect(up.seen.map((entry) => entry.request.url)).toEqual([
+      "https://example.com/path",
+      "http://example.com/path",
+      "https://api.github.com/repos",
+    ]);
   });
 
-  it("forwards no header from the request, so no token reaches the upstream", async () => {
+  it("forwards any method with its body", async () => {
+    const up = upstream(() => new Response("body"));
+
+    const response = await isolateEgressFetch(up.fetch)("https://example.com/api", {
+      method: "POST",
+      body: "payload",
+    });
+
+    expect(response.status).toBe(200);
+    expect(up.seen[0]?.request.method).toBe("POST");
+    expect(await up.seen[0]?.request.text()).toBe("payload");
+  });
+
+  it("passes the request's headers through", async () => {
     const up = upstream(() => new Response("body"));
 
     await isolateEgressFetch(up.fetch)(
-      new Request("https://api.github.com/repos/owner/repo", {
+      new Request("https://example.com/", {
         headers: {
-          authorization: "Bearer github-token",
+          authorization: "Bearer caller-token",
           cookie: "session=secret",
           "x-custom": "value",
         },
@@ -60,88 +72,51 @@ describe("the isolate egress gateway forwarding", () => {
 
     const forwarded = up.seen[0]?.request;
 
-    expect(forwarded?.headers.get("authorization")).toBeNull();
-    expect(forwarded?.headers.get("cookie")).toBeNull();
-    expect(forwarded?.headers.get("x-custom")).toBeNull();
-    expect(forwarded?.headers.get("user-agent")).toBe("cf-stumble-isolate");
-  });
-});
-
-describe("the isolate egress gateway refusals", () => {
-  it.each([
-    "https://example.com",
-    "https://evil.github.com.attacker.dev",
-    "http://github.com",
-    "ftp://github.com",
-    "not a url",
-  ])("refuses %s with a clear error", async (url) => {
-    const up = upstream(() => new Response("body"));
-
-    const response = await isolateEgressFetch(up.fetch)(url);
-
-    expect(response.status).toBeGreaterThanOrEqual(400);
-    expect(await response.text()).toContain("isolate egress");
-    expect(up.seen).toHaveLength(0);
-  });
-
-  it("refuses a method other than GET and HEAD", async () => {
-    const up = upstream(() => new Response("body"));
-
-    const response = await isolateEgressFetch(up.fetch)("https://github.com/", {
-      method: "POST",
-    });
-
-    expect(response.status).toBe(405);
-    expect(up.seen).toHaveLength(0);
-  });
-
-  it("logs a refusal with the host", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const up = upstream(() => new Response("body"));
-
-    try {
-      await isolateEgressFetch(up.fetch)("https://example.com/path");
-
-      expect(warn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          event: "workspace.isolate-egress.refused",
-          reason: "host-not-allowed",
-          host: "example.com",
-        }),
-      );
-    } finally {
-      warn.mockRestore();
-    }
+    expect(forwarded?.headers.get("authorization")).toBe("Bearer caller-token");
+    expect(forwarded?.headers.get("cookie")).toBe("session=secret");
+    expect(forwarded?.headers.get("x-custom")).toBe("value");
   });
 });
 
 describe("the isolate egress gateway redirects", () => {
-  it("follows a redirect to an allowed host", async () => {
+  it("follows a redirect to any host with the method and body", async () => {
     const redirected = upstream((request) =>
-      request.url.startsWith("https://raw.githubusercontent.com/")
+      request.url.startsWith("https://other.example/")
         ? new Response("content")
-        : new Response(null, {
-            status: 302,
-            headers: { location: "https://raw.githubusercontent.com/owner/repo/main/file.txt" },
-          }),
+        : new Response(null, { status: 302, headers: { location: "https://other.example/leak" } }),
     );
 
-    const followed = await isolateEgressFetch(redirected.fetch)(
-      "https://github.com/owner/repo/raw/main/file.txt",
-    );
+    const followed = await isolateEgressFetch(redirected.fetch)("https://example.com/", {
+      method: "POST",
+      body: "payload",
+    });
 
     expect(await followed.text()).toBe("content");
+    expect(redirected.seen[1]?.request.url).toBe("https://other.example/leak");
+    expect(redirected.seen[1]?.request.method).toBe("POST");
+    expect(await redirected.seen[1]?.request.text()).toBe("payload");
   });
 
-  it("refuses a redirect to any other host", async () => {
-    const escaped = upstream(
-      () => new Response(null, { status: 302, headers: { location: "https://example.dev/leak" } }),
+  it("returns a redirect it cannot resolve", async () => {
+    const up = upstream(
+      () => new Response(null, { status: 302, headers: { location: "http://[invalid" } }),
     );
 
-    const refused = await isolateEgressFetch(escaped.fetch)("https://github.com/");
+    const response = await isolateEgressFetch(up.fetch)("https://example.com/");
 
-    expect(refused.status).toBe(403);
-    expect(escaped.seen).toHaveLength(1);
+    expect(response.status).toBe(302);
+    expect(up.seen).toHaveLength(1);
+  });
+
+  it("stops after too many redirects", async () => {
+    const looped = upstream(
+      (request) => new Response(null, { status: 302, headers: { location: `${request.url}x` } }),
+    );
+
+    const response = await isolateEgressFetch(looped.fetch)("https://example.com/");
+
+    expect(response.status).toBe(508);
+    expect(looped.seen).toHaveLength(6);
   });
 });
 
@@ -152,11 +127,26 @@ describe("the isolate egress gateway GitHub token", () => {
 
     await gateway("https://api.github.com/repos/owner/repo");
     await gateway("https://github.com/owner/repo");
-    await gateway("https://raw.githubusercontent.com/owner/repo/main/file.txt");
+    await gateway("https://example.com/");
 
     expect(up.seen[0]?.request.headers.get("authorization")).toBe("Bearer github-token");
     expect(up.seen[1]?.request.headers.get("authorization")).toBeNull();
     expect(up.seen[2]?.request.headers.get("authorization")).toBeNull();
+  });
+
+  it("never overrides the request's own authorization header", async () => {
+    const up = upstream(() => new Response("body"));
+
+    await isolateEgressFetch(
+      up.fetch,
+      "github-token",
+    )(
+      new Request("https://api.github.com/repos/owner/repo", {
+        headers: { authorization: "Basic dXNlcjpwYXNz" },
+      }),
+    );
+
+    expect(up.seen[0]?.request.headers.get("authorization")).toBe("Basic dXNlcjpwYXNz");
   });
 
   it("goes out unauthenticated when there is no token", async () => {
@@ -166,7 +156,9 @@ describe("the isolate egress gateway GitHub token", () => {
 
     expect(up.seen[0]?.request.headers.get("authorization")).toBeNull();
   });
+});
 
+describe("the isolate egress gateway GitHub token across redirects", () => {
   it("drops the token on a redirect from api.github.com to another origin", async () => {
     const redirected = upstream((request) =>
       request.url.startsWith("https://github.com/")

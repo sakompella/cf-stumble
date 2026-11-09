@@ -1,27 +1,9 @@
 import type { Workspace } from "@cloudflare/computer";
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { logEvent } from "../../diagnostics.js";
 import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
 import { githubTokenFromHosts } from "./git-fs.js";
 
-export const ISOLATE_EGRESS_ORIGINS: readonly string[] = [
-  "https://github.com",
-  "https://api.github.com",
-  "https://raw.githubusercontent.com",
-  "https://objects.githubusercontent.com",
-  "https://registry.npmjs.org",
-  "https://pypi.org",
-  "https://files.pythonhosted.org",
-  "https://developers.cloudflare.com",
-];
-
-const ALLOWED_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
-
-const ALLOWED_ORIGINS: ReadonlySet<string> = new Set(ISOLATE_EGRESS_ORIGINS);
-
 const GITHUB_API_ORIGIN = "https://api.github.com";
-
-const USER_AGENT = "cf-stumble-isolate";
 
 const MAX_REDIRECTS = 5;
 
@@ -34,30 +16,11 @@ function refusal(status: number, message: string): Response {
   });
 }
 
-function refused(reason: string, host: string | null): Response {
-  logEvent("warn", "workspace.isolate-egress.refused", { reason, host: host ?? "unknown" });
-
-  if (reason === "method-not-allowed")
-    return refusal(405, "isolate egress: only GET and HEAD requests are allowed");
-
-  if (reason === "host-not-allowed")
-    return refusal(
-      403,
-      `isolate egress: ${host ?? "this host"} is not an allowed host; allowed: ${ISOLATE_EGRESS_ORIGINS.join(", ")}`,
-    );
-
-  return refusal(400, "isolate egress: only absolute https URLs are allowed");
-}
-
-function originOf(url: string): { origin: string; host: string } | null {
+function originOf(url: string): string {
   try {
-    const parsed = new URL(url);
-
-    if (parsed.protocol !== "https:") return null;
-
-    return { origin: parsed.origin, host: parsed.hostname };
+    return new URL(url).origin;
   } catch {
-    return null;
+    return "";
   }
 }
 
@@ -69,47 +32,44 @@ function resolveFrom(base: string, location: string): string | null {
   }
 }
 
-function forwardHeaders(origin: string, token: string | undefined): Headers {
-  const headers = new Headers({ "user-agent": USER_AGENT });
-
-  if (origin === GITHUB_API_ORIGIN && token !== undefined)
-    headers.set("authorization", `Bearer ${token}`);
-
-  return headers;
-}
-
 export function isolateEgressFetch(upstream: EgressFetch, githubToken?: string): EgressFetch {
-  const forward = (url: string, method: string): Promise<Response> => {
-    const { origin } = originOf(url) ?? { origin: "" };
-
-    return upstream(url, {
-      method,
-      headers: forwardHeaders(origin, githubToken),
-      redirect: "manual",
-    });
-  };
-
   return async (input, init): Promise<Response> => {
-    let url = input instanceof Request ? input.url : input.toString();
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
-    const target = originOf(url);
 
-    if (!ALLOWED_METHODS.has(method)) return refused("method-not-allowed", null);
+    const sourceHeaders = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
 
-    if (target === null || !ALLOWED_ORIGINS.has(target.origin))
-      return refused("host-not-allowed", target?.host ?? null);
+    const body = init?.body ?? (input instanceof Request ? input.body : undefined);
+
+    let url = input instanceof Request ? input.url : input.toString();
+
+    const forwardInit = (headers: Headers): RequestInit => {
+      const requestInit: RequestInit = { method, headers, redirect: "manual" };
+
+      if (body !== undefined) requestInit.body = body;
+
+      return requestInit;
+    };
 
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
-      const response = await forward(url, method);
+      const headers = new Headers(sourceHeaders);
+
+      if (
+        originOf(url) === GITHUB_API_ORIGIN &&
+        githubToken !== undefined &&
+        !sourceHeaders.has("authorization")
+      )
+        headers.set("authorization", `Bearer ${githubToken}`);
+
+      const response = await upstream(url, forwardInit(headers));
 
       if (response.status < 300 || response.status >= 400) return response;
 
       const location = response.headers.get("location");
       const next = location === null ? null : resolveFrom(url, location);
-      const nextOrigin = next === null ? null : originOf(next);
 
-      if (next === null || nextOrigin === null || !ALLOWED_ORIGINS.has(nextOrigin.origin))
-        return refused("host-not-allowed", nextOrigin?.host ?? null);
+      if (next === null) return response;
 
       url = next;
     }
