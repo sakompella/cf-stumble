@@ -36,10 +36,11 @@ afterEach(async () => {
 test.each([50, 500, 10_000])(
   "caps the requested timeout at the turn's remaining budget (%dms)",
   async (remainingMs) => {
+    vi.useFakeTimers();
     const { execBackend, target } = makeTarget({ remainingMs });
     await target.startExec({ command: "sleep 1", timeoutMs: remainingMs * 10 });
 
-    expect(execBackend.requests[0]?.timeoutMs).toBeLessThanOrEqual(remainingMs);
+    expect(execBackend.requests[0]?.timeoutMs).toBe(remainingMs);
   },
 );
 
