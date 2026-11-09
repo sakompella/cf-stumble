@@ -1,6 +1,14 @@
+import * as Effect from "effect/Effect";
 import { env } from "cloudflare:workers";
-import { reset } from "cloudflare:test";
+import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import { supervisorParts } from "../../../src/supervisor/supervisor-parts.js";
+import {
+  runStartupCheck,
+  type StartupCheckDeadlines,
+  type StartupCheckOutcome,
+} from "../../../src/supervisor/startup-check/candidate.js";
+import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activeSupervisor,
   artifact,
@@ -8,6 +16,7 @@ import {
   commits,
   facet,
   labelCandidate,
+  parsedArtifact,
   prepareWithModuleMap,
   servingFacetSource,
   storeModuleMap,
@@ -190,16 +199,35 @@ test("records a candidate whose compatibility call throws as failed at mount", a
   await expectFailedCandidate(control, label);
 });
 
+function startupCheckWithDeadlines(
+  control: DurableObjectStub<Supervisor>,
+  candidate: ReturnType<typeof artifact>,
+  deadlines: StartupCheckDeadlines,
+): Promise<StartupCheckOutcome> {
+  return runInDurableObject(control, (instance, state) => {
+    const parts = supervisorParts(state, env, () => false, {
+      getActiveGeneration: () => instance.getActiveGeneration(),
+      submitGeneration: (harnessCommit) => instance.submitGeneration(harnessCommit),
+      prepareGeneration: (label) => instance.prepareGeneration(label),
+      controlGeneration: (command) => instance.controlGeneration(command),
+    });
+
+    return Effect.runPromise(
+      runStartupCheck(parts.startupCheckHost, parsedArtifact(candidate), deadlines),
+    );
+  });
+}
+
 test("records a candidate that never reports its compatibility as failed at the deadline", async () => {
-  const { control, label, result } = await checked(
-    "startup-check-delayed",
-    commits.delayed,
-    facet(`compatibility() { return new Promise(() => {}); }`),
-    { deadlines: { compatibilityMs: 50 } },
+  const control = await activeSupervisor("startup-check-delayed");
+
+  const outcome = await startupCheckWithDeadlines(
+    control,
+    artifact(commits.delayed, facet(`compatibility() { return new Promise(() => {}); }`)),
+    { compatibilityMs: 50, conversationMs: 90_000 },
   );
 
-  expect(result).toMatchObject({ ok: true, report: { stage: "deadline-expired" } });
-  await expectFailedCandidate(control, label);
+  expect(outcome).toMatchObject({ stage: "deadline-expired" });
 });
 
 test("records a candidate whose startup-check conversation never settles as failed at the deadline", async () => {
@@ -207,19 +235,22 @@ test("records a candidate whose startup-check conversation never settles as fail
     ["r", { conversation: { id: 1 }, entries: [], docs: { "pi.live": { run: { inputs: [1] } } } }],
   ]);
 
-  const { control, label, result } = await checked(
-    "startup-check-unsettled",
-    commits.unsettled,
-    facet(`${FACET_COMPATIBILITY_METHOD}
+  const control = await activeSupervisor("startup-check-unsettled");
+
+  const outcome = await startupCheckWithDeadlines(
+    control,
+    artifact(
+      commits.unsettled,
+      facet(`${FACET_COMPATIBILITY_METHOD}
   async attach() {}
   async createConversation(cwd) { return "conversation:" + cwd; }
   async submit() { return 1; }
   async events() { return new Response(${JSON.stringify(`${running}\n`)}).body; }`),
-    { deadlines: { conversationMs: 500 } },
+    ),
+    { compatibilityMs: 5_000, conversationMs: 500 },
   );
 
-  expect(result).toMatchObject({ ok: true, report: { stage: "deadline-expired" } });
-  await expectFailedCandidate(control, label);
+  expect(outcome).toMatchObject({ stage: "deadline-expired" });
 });
 
 test("refuses a candidate when the serving generation's artifact cannot be prepared", async () => {

@@ -28,6 +28,7 @@ export function underScratch(source: string, root: string): string {
 }
 
 export const FLOCK_STAND_IN = `#!/bin/sh
+[ -z "$STUB_FLOCK_MARK" ] || : > "$STUB_FLOCK_MARK"
 exec perl -MFcntl=:flock -e 'open(my $held, ">&=", $ARGV[0]) or die "flock stand-in: $!\n"; flock($held, LOCK_EX) or die "flock stand-in: $!\n";' -- "$1"
 `;
 

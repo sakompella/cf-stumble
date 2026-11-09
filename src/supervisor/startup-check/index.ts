@@ -28,8 +28,6 @@ export type StartupCheckHost = Readonly<{
   ) => Effect.Effect<ProjectCapabilityStub | null, never, Scope.Scope>;
 }>;
 
-export type StartupCheckOptions = Readonly<{ deadlines?: Partial<StartupCheckDeadlines> }>;
-
 type StartupCheckReport = StartupCheckOutcome &
   Readonly<{ generation: Generation; effect: PreparationReply["effect"] }>;
 
@@ -44,9 +42,8 @@ export type StartupCheckResult =
 export function checkGenerationStartup(
   host: StartupCheckHost,
   label: GenerationLabel,
-  options: StartupCheckOptions = {},
 ): Effect.Effect<StartupCheckResult> {
-  return checkLabeledStartup(host, label, options).pipe(
+  return checkLabeledStartup(host, label).pipe(
     Effect.match({
       onSuccess: (report): StartupCheckResult => ({ ok: true, report }),
       onFailure: (problem): StartupCheckResult => ({ ok: false, problem }),
@@ -57,7 +54,6 @@ export function checkGenerationStartup(
 function checkLabeledStartup(
   host: StartupCheckHost,
   label: GenerationLabel,
-  options: StartupCheckOptions,
 ): Effect.Effect<StartupCheckReport, StartupCheckProblem> {
   return Effect.gen(function* () {
     const unknown: StartupCheckProblem = { code: "unknown-generation", label };
@@ -67,10 +63,7 @@ function checkLabeledStartup(
 
     const moduleMap = yield* host.artifacts.prepare(generation.harnessCommit);
 
-    const outcome = yield* runStartupCheck(host, moduleMap, {
-      ...STARTUP_CHECK_DEADLINES,
-      ...options.deadlines,
-    });
+    const outcome = yield* runStartupCheck(host, moduleMap, STARTUP_CHECK_DEADLINES);
 
     const recorded = host.generations.recordPreparation(
       label,

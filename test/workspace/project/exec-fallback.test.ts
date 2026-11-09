@@ -128,6 +128,50 @@ test.each([127, 129])("an isolate exit %i reruns the command in the container", 
   expect(handle.fellBackFrom).toBe("isolate");
 });
 
+test("an isolate that hits a just-bash limit reruns the command in the container", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const { text, containerRuns, handle } = await run(
+    [err("bash: seq: iteration limit exceeded (100000)\n"), exit(126)],
+    [out("1\n2\n3\n"), exit(0)],
+  );
+
+  expect(containerRuns).toEqual([
+    expect.objectContaining({
+      backend: "container",
+      command: "export CF_STUMBLE_GIT_FALLBACK=1; grep foo file",
+    }),
+  ]);
+  expect(text).toContain("1\\n2\\n3");
+  expect(text).not.toContain("iteration limit exceeded");
+  expect(handle.backend).toBe("container");
+  expect(handle.fellBackFrom).toBe("isolate");
+});
+
+test("an isolate that exceeds its execution deadline reruns the command in the container", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const { text, containerRuns, handle } = await run(
+    [err("bash: grep exceeded execution deadline (30000ms)\n"), exit(124)],
+    [out("found\n"), exit(0)],
+  );
+
+  expect(containerRuns).toHaveLength(1);
+  expect(text).toContain("found\\n");
+  expect(text).not.toContain("execution deadline");
+  expect(handle.fellBackFrom).toBe("isolate");
+});
+
+test("an isolate permission failure does not rerun in the container", async () => {
+  const { text, containerRuns } = await run(
+    [err("bash: ./script.sh: Permission denied\n"), exit(126)],
+    [out("never\n"), exit(0)],
+  );
+
+  expect(containerRuns).toEqual([]);
+  expect(text).toContain("Permission denied");
+});
+
 test("an isolate failure that ran something is returned as it is", async () => {
   const { text, containerRuns } = await run([exit(1)], [out("never\n"), exit(0)]);
 

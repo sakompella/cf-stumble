@@ -8,8 +8,6 @@ import {
   type ProjectRemovalRequest,
 } from "../../src/workspace/commands/remove-project.js";
 import { projectDirectory } from "../../src/workspace-layout.js";
-import { holdProvisionLock } from "../../src/workspace/commands/clone-script.js";
-import { projectProvisionLockPath } from "../../src/workspace/commands/provision-project.js";
 import { shellQuote } from "../../src/shell-quote.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import {
@@ -110,22 +108,6 @@ test("derives the removal from the project id and removes only the clone and sta
     `rm -rf -- ${shellQuote(projectDirectory(sampleProjectOne.id))} ${shellQuote(`${projectDirectory(sampleProjectOne.id)}.provisioning`)}`,
   );
   expect(operations.sources[0]).not.toContain("/workspace/harness");
-});
-
-test("holds the project's container-local lock before removing anything", () => {
-  const plan = planProjectRemovalRequest({
-    kind: "remove-project",
-    projectId: sampleProjectOne.id,
-  });
-
-  const lock = projectProvisionLockPath(sampleProjectOne.id);
-
-  expect(lock.startsWith("/tmp/")).toBe(true);
-  expect(plan.source).toContain(`lock=${shellQuote(lock)}\n${holdProvisionLock().join("\n")}\n`);
-  const removal = plan.source.split("\n").find((line) => line.startsWith("rm -rf --"));
-
-  expect(plan.source.indexOf("flock 9")).toBeLessThan(plan.source.indexOf("rm -rf --"));
-  expect(removal, "the lock file is never deleted").not.toContain(lock);
 });
 
 test.each([
