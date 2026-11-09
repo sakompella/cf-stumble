@@ -296,6 +296,21 @@ test("activation sends nothing until the page has rendered an epoch", () => {
   expect(sent.commands?.[0]?.args).toEqual({ kind: "activate", observedEpoch: 3, label: 2 });
 });
 
+test("a second click while an activation or a submission is running sends nothing", () => {
+  const page = after(readyPage(), [
+    Message.UpdatedControlLabelInput({ kind: "activate", value: "2" }),
+    Message.UpdatedCandidateCommitInput({ value: "abc" }),
+    Message.SucceededFetchStatus({
+      reading: { maybeActive: Option.none(), epoch: 3 },
+    }),
+    Message.ClickedControl({ kind: "activate" }),
+    Message.ClickedSubmitCandidate(),
+  ]);
+
+  expect(commandNames(page, Message.ClickedControl({ kind: "activate" }))).toEqual([]);
+  expect(commandNames(page, Message.ClickedSubmitCandidate())).toEqual([]);
+});
+
 test("a generation label names one whole generation or nothing", () => {
   expect(Option.getOrNull(controlLabel("2"))).toBe(2);
   expect(Option.getOrNull(controlLabel(" 3 "))).toBe(3);
