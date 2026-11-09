@@ -5,11 +5,7 @@ import type { ActivationCommand, GenerationControlResult, GenerationLabel } from
 import { WORKSPACE_BUSY, type WorkspaceHostNamespace } from "../workspace/index.js";
 import type { EntriesRequest } from "../entries-request.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
-import {
-  checkGenerationStartup,
-  type StartupCheckOptions,
-  type StartupCheckResult,
-} from "./startup-check/index.js";
+import { checkGenerationStartup, type StartupCheckResult } from "./startup-check/index.js";
 import { supervisorParts, type SupervisorParts } from "./supervisor-parts.js";
 import type {
   BackendSetting,
@@ -35,13 +31,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     this.#parts.serving.started(env.CF_VERSION_METADATA?.id ?? null);
   }
 
-  prepareGeneration(label: GenerationLabel, options?: StartupCheckOptions) {
+  prepareGeneration(label: GenerationLabel) {
     const pending = this.#preparations.get(label);
 
     if (pending !== undefined) return pending;
 
     const checking = runAtEntryPoint(
-      checkGenerationStartup(this.#parts.startupCheckHost, label, options),
+      checkGenerationStartup(this.#parts.startupCheckHost, label),
     ).finally(() => {
       this.#preparations.delete(label);
     });

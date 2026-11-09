@@ -59,21 +59,11 @@ export class MainFacet extends DurableObject {
 `;
 }
 
-export async function checked(
-  name: string,
-  harnessCommit: string,
-  source: string,
-  options?: Parameters<typeof prepareWithModuleMap>[3],
-) {
+export async function checked(name: string, harnessCommit: string, source: string) {
   const control = await activeSupervisor(name);
   const label = await labelCandidate(control, harnessCommit);
 
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(harnessCommit, source),
-    options,
-  );
+  const result = await prepareWithModuleMap(control, label, artifact(harnessCommit, source));
 
   return { control, label, result };
 }
@@ -173,11 +163,10 @@ export async function prepareWithModuleMap(
   control: DurableObjectStub<Supervisor>,
   label: number,
   moduleMap: MainHarnessArtifactInput,
-  options?: Parameters<Supervisor["prepareGeneration"]>[1],
 ) {
   await storeModuleMap(moduleMap);
 
-  return control.prepareGeneration(generationLabel(label), options);
+  return control.prepareGeneration(generationLabel(label));
 }
 
 export async function prepareGeneration(
