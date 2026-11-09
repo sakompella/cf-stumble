@@ -59,12 +59,17 @@ function githubReplying(): GitHubFetch {
 
 function storedText(storage: DurableObjectStorage): string {
   const tables = storage.sql
-    .exec<{ readonly name: string }>("SELECT name FROM sqlite_schema WHERE type = 'table'")
+    .exec<{ readonly name: string }>(
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'",
+    )
     .toArray();
 
-  return tables
-    .map((table) => JSON.stringify(storage.sql.exec(`SELECT * FROM "${table.name}"`).toArray()))
-    .join("\n");
+  return [
+    ...tables.map((table) =>
+      JSON.stringify(storage.sql.exec(`SELECT * FROM "${table.name}"`).toArray()),
+    ),
+    JSON.stringify([...storage.kv.list()]),
+  ].join("\n");
 }
 
 function expectTokenOnlyOnInstallStdin(workspace: FakeTenantWorkspace): void {
