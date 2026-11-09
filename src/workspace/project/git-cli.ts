@@ -23,7 +23,7 @@ export interface GitScope {
   readonly prefix: string;
 }
 
-export async function gitScope(client: GitClient, cwd: string): Promise<GitScope> {
+async function gitScope(client: GitClient, cwd: string): Promise<GitScope> {
   const dir = await client.repoRoot({ dir: cwd }).catch((): string => cwd);
 
   return {
