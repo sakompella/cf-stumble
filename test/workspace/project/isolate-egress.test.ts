@@ -120,6 +120,45 @@ describe("the isolate egress gateway redirects", () => {
   });
 });
 
+describe("the isolate egress gateway credentials on redirects", () => {
+  it("drops the caller's credentials on a cross-origin hop, and api.github.com still gets the token", async () => {
+    const redirected = upstream((request) => {
+      if (request.url === "https://example.com/") {
+        return new Response(null, { status: 302, headers: { location: "/same-origin" } });
+      }
+
+      if (request.url === "https://example.com/same-origin") {
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://api.github.com/repos/owner/repo" },
+        });
+      }
+
+      return new Response("content");
+    });
+
+    await isolateEgressFetch(
+      redirected.fetch,
+      "github-token",
+    )(
+      new Request("https://example.com/", {
+        headers: { authorization: "Bearer caller-token", cookie: "session=secret" },
+      }),
+    );
+
+    const hops = redirected.seen.map(({ request }) => [
+      request.headers.get("authorization"),
+      request.headers.get("cookie"),
+    ]);
+
+    expect(hops).toEqual([
+      ["Bearer caller-token", "session=secret"],
+      ["Bearer caller-token", "session=secret"],
+      ["Bearer github-token", null],
+    ]);
+  });
+});
+
 describe("the isolate egress gateway GitHub token", () => {
   it("sends the token only to api.github.com", async () => {
     const up = upstream(() => new Response("body"));

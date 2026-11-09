@@ -36,7 +36,7 @@ export function isolateEgressFetch(upstream: EgressFetch, githubToken?: string):
   return async (input, init): Promise<Response> => {
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
 
-    const sourceHeaders = new Headers(
+    const carried = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     );
 
@@ -53,12 +53,12 @@ export function isolateEgressFetch(upstream: EgressFetch, githubToken?: string):
     };
 
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
-      const headers = new Headers(sourceHeaders);
+      const headers = new Headers(carried);
 
       if (
         originOf(url) === GITHUB_API_ORIGIN &&
         githubToken !== undefined &&
-        !sourceHeaders.has("authorization")
+        !carried.has("authorization")
       )
         headers.set("authorization", `Bearer ${githubToken}`);
 
@@ -70,6 +70,11 @@ export function isolateEgressFetch(upstream: EgressFetch, githubToken?: string):
       const next = location === null ? null : resolveFrom(url, location);
 
       if (next === null) return response;
+
+      if (originOf(next) !== originOf(url)) {
+        carried.delete("authorization");
+        carried.delete("cookie");
+      }
 
       url = next;
     }
