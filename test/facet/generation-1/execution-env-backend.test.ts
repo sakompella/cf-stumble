@@ -116,3 +116,17 @@ test("the env reports no spill for output that fits and the runtime did not cut"
   expect(result.exitCode).toBe(0);
   expect(result.spillPath).toBeUndefined();
 });
+
+test("a command the container restart ended names container-restarted to the model", async () => {
+  const env = createComputerEnv({
+    cwd: "/workspace/project",
+    target: streamingTarget([
+      { kind: "terminal", seq: 0, outcome: "failed", error: { code: "container-restarted" } },
+    ]),
+  });
+
+  const result = await env.exec("make", {}, BACKGROUND_CONTEXT);
+
+  expect(result.ok).toBe(false);
+  expect(result.ok ? "" : result.error.message).toContain("container-restarted");
+});

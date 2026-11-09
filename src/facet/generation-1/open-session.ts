@@ -107,7 +107,10 @@ async function relayRunningConversations(
   const graph = await harness.watchTaskGraph(BACKGROUND_CONTEXT);
   let reported = await runningConversations(harness, graph.value);
 
-  await host.running(reported);
+  await host.running(reported).catch((cause: unknown) => {
+    abort("the Supervisor did not take the running conversations");
+    throw cause;
+  });
   void harness.closed.then((end) => {
     if (end.kind !== "failed" || reported.length === 0) return;
 

@@ -73,7 +73,18 @@ function isExecEvent(value: unknown): value is ExecEvent {
     return "exitCode" in value && typeof value.exitCode === "number" && isSavedPaths(saved);
   }
 
-  return value.outcome === "killed" || value.outcome === "timed-out" || value.outcome === "failed";
+  if (value.outcome === "failed") {
+    const error = "error" in value ? value.error : undefined;
+
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string"
+    );
+  }
+
+  return value.outcome === "killed" || value.outcome === "timed-out";
 }
 
 async function nextEvent(frames: NdjsonFrameReader): Promise<ExecEvent | ExecutionError> {
@@ -97,31 +108,55 @@ function fullOutputPath(terminal: Terminal): string | undefined {
   return absolute.length === 0 ? undefined : absolute.join(", ");
 }
 
+function exitedResult(
+  terminal: Extract<Terminal, { outcome: "exited" }>,
+  argv: boolean,
+  spillPath: string | undefined,
+): ExecResult {
+  if (argv && (terminal.exitCode === 126 || terminal.exitCode === 127)) {
+    return failure("spawn_error", `the program could not run (exit ${terminal.exitCode})`);
+  }
+
+  const value: ShellExecResult = { exitCode: terminal.exitCode };
+  const reported = fullOutputPath(terminal) ?? spillPath;
+
+  if (reported !== undefined) value.spillPath = reported;
+
+  return { ok: true, value };
+}
+
+function unexited(
+  terminal: Exclude<Terminal, { outcome: "exited" }>,
+  context: Context,
+): ExecutionError {
+  switch (terminal.outcome) {
+    case "timed-out":
+      return new ExecutionError("timeout", "the command timed out");
+    case "killed":
+      return isAborted(context)
+        ? new ExecutionError("aborted", "aborted")
+        : new ExecutionError("unknown", "the command ended without exiting: killed");
+    case "failed":
+      return isAborted(context)
+        ? new ExecutionError("aborted", "aborted")
+        : new ExecutionError("unknown", `the command failed: ${terminal.error.code}`);
+    default: {
+      const exhaustive: never = terminal;
+
+      return exhaustive;
+    }
+  }
+}
+
 function settledResult(
   terminal: Terminal,
   argv: boolean,
   spillPath: string | undefined,
   context: Context,
 ): ExecResult {
-  if (terminal.outcome === "exited") {
-    if (argv && (terminal.exitCode === 126 || terminal.exitCode === 127)) {
-      return failure("spawn_error", `the program could not run (exit ${terminal.exitCode})`);
-    }
+  if (terminal.outcome === "exited") return exitedResult(terminal, argv, spillPath);
 
-    const value: ShellExecResult = { exitCode: terminal.exitCode };
-    const reported = fullOutputPath(terminal) ?? spillPath;
-
-    if (reported !== undefined) value.spillPath = reported;
-
-    return { ok: true, value };
-  }
-
-  const error =
-    terminal.outcome === "timed-out"
-      ? new ExecutionError("timeout", "the command timed out")
-      : context.abortSignal?.aborted === true
-        ? new ExecutionError("aborted", "aborted")
-        : new ExecutionError("unknown", `the command ended without exiting: ${terminal.outcome}`);
+  const error = unexited(terminal, context);
 
   if (spillPath !== undefined) error.spillPath = spillPath;
 
