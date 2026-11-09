@@ -109,6 +109,28 @@ test("a Responses stream becomes text deltas, one assembled tool call, and the p
   ]);
 });
 
+test("a Responses event split across several data lines arrives as one event", async () => {
+  const { events } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
+    Promise.resolve(
+      sseResponse([
+        'data: {"type":"response.output_text.delta",\ndata: "delta":"hello"}\n\n',
+        'data: {"type":"response.output_text.delta","output_index":0,"delta":"!"}\n\n',
+        COMPLETED,
+      ]),
+    ),
+  );
+
+  expect(events).toEqual([
+    { type: "text-delta", delta: "hello" },
+    { type: "text-delta", delta: "!" },
+    {
+      type: "done",
+      message: { role: "assistant", content: "hello!", tool_calls: [] },
+      usage: { inputTokens: 12, outputTokens: 3, estimated: false },
+    },
+  ]);
+});
+
 test("the request carries the conversation as Responses input, with the token only in Authorization", async () => {
   const { calls } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
     Promise.resolve(sseResponse([COMPLETED])),

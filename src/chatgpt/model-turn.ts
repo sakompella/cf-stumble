@@ -229,7 +229,7 @@ export function chatgptTurn(
 
       const reader = new ResponsesStreamReader(accumulator);
 
-      yield* pumpSseStream(response.body, (line) => reader.handleLine(line));
+      yield* pumpSseStream(response.body, (data) => reader.handleEvent(data));
 
       if (reader.failure !== undefined) {
         return yield* refused(

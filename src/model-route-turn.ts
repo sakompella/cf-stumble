@@ -1,5 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { Sse } from "effect/encoding";
+import * as Predicate from "effect/Predicate";
 import { redactedExcerpt } from "./diagnostics.js";
 import type { AssistantMessage } from "./model-route-wire/request.js";
 import type {
@@ -12,13 +14,20 @@ import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";
 
 const MAX_STREAM_EVENT_BYTES = 8_388_608;
 
-async function readSseLines<Chunk extends Uint8Array>(
+async function readSseEvents<Chunk extends Uint8Array>(
   reader: ReadableStreamDefaultReader<Chunk>,
-  onLine: (line: string) => boolean,
+  onEvent: (data: string) => boolean,
 ): Promise<boolean> {
   const decoder = new TextDecoder();
-  let buffer = "";
   let totalBytes = 0;
+  let terminal = false;
+
+  const parser = Sse.makeParser(
+    (event) => {
+      if (Predicate.isTagged(event, "Event") && onEvent(event.data)) terminal = true;
+    },
+    { maxEventSize: MAX_STREAM_EVENT_BYTES },
+  );
 
   for (;;) {
     const next = await reader.read();
@@ -30,22 +39,16 @@ async function readSseLines<Chunk extends Uint8Array>(
       throw new Error("provider stream exceeded the event byte bound");
     }
 
-    buffer += decoder.decode(next.value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      if (onLine(line)) return true;
+    if (parser.feed(decoder.decode(next.value, { stream: true })) !== undefined) {
+      throw new Error("provider stream exceeded the event byte bound");
     }
+
+    if (terminal) return true;
   }
 
-  buffer += decoder.decode();
+  parser.feed(decoder.decode());
 
-  for (const line of buffer.split("\n")) {
-    if (onLine(line)) return true;
-  }
-
-  return false;
+  return terminal;
 }
 
 export class ModelTurnFailed extends Data.TaggedError("ModelTurnFailed")<{
@@ -63,7 +66,7 @@ export const modelUnavailableBecause = (detail: string): ModelTurnFailed =>
 
 export function pumpSseStream<Chunk extends Uint8Array>(
   providerStream: ReadableStream<Chunk>,
-  onLine: (line: string) => boolean,
+  onEvent: (data: string) => boolean,
 ): Effect.Effect<void, ModelTurnFailed> {
   return Effect.acquireUseRelease(
     Effect.try({
@@ -72,7 +75,7 @@ export function pumpSseStream<Chunk extends Uint8Array>(
     }),
     (reader) =>
       Effect.tryPromise({
-        try: () => readSseLines(reader, onLine),
+        try: () => readSseEvents(reader, onEvent),
         catch: modelUnavailable,
       }),
     (reader) => Effect.promise(() => reader.cancel().catch(() => {})),
