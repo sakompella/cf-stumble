@@ -19,11 +19,12 @@ const CONNECTION = `(
 )`;
 
 const GRANT = {
-  state: "connected",
+  _tag: "connected",
   accessToken: "access-KEPT",
   refreshToken: "refresh-KEPT",
   expiresAt: 5,
   clientId: "client-KEPT",
+  usageLimit: null,
 };
 
 test("a grant stored under the codex_login tables of the reverted rename is restored to the chatgpt tables", async () => {
@@ -43,7 +44,7 @@ test("a grant stored under the codex_login tables of the reverted rename is rest
 
     const store = new ChatGPTCredentialStore(state.storage);
 
-    expect(store.connection()).toEqual(GRANT);
+    expect(store.account()).toEqual(GRANT);
     expect(store.agentHostId()).toBe("host-KEPT");
     expect(
       sql.exec("SELECT name FROM sqlite_master WHERE name LIKE 'codex_login_%'").toArray(),
@@ -59,7 +60,7 @@ test("a database that never had codex_login tables is left as it is", async () =
       "INSERT INTO chatgpt_connection VALUES (1, 'connected', NULL, 'access-KEPT', 'refresh-KEPT', 5, 'client-KEPT', 1)",
     );
 
-    expect(new ChatGPTCredentialStore(state.storage).connection()).toEqual(GRANT);
+    expect(new ChatGPTCredentialStore(state.storage).account()).toEqual(GRANT);
     expect(
       sql.exec("SELECT name FROM sqlite_master WHERE name LIKE 'codex_login_%'").toArray(),
     ).toEqual([]);
