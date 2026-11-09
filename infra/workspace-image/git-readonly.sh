@@ -132,7 +132,12 @@ fi
 
 if [ "${CF_STUMBLE_GIT_FALLBACK:-}" = 1 ]; then
   printf 'git %s: the workspace git does not support this form. Use another form of the command.\n' "$sub" >&2
-else
-  printf 'git %s changes .git, so it only runs as its own command (no pipes, &&, or other programs), e.g. "git commit -m msg".\n' "$sub" >&2
+  exit 1
 fi
-exit 1
+
+if [ -z "${CF_STUMBLE_GIT_TOKEN:-}" ]; then
+  printf 'git %s changes .git, so it only runs through the workspace host, which this shell cannot reach.\n' "$sub" >&2
+  exit 1
+fi
+
+CF_STUMBLE_GIT_SUB="$sub" CF_STUMBLE_REAL_GIT="$real_git" exec node --no-warnings "${CF_STUMBLE_GIT_FORWARD:-/usr/local/lib/git-forward.mts}" "$@"
