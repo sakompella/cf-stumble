@@ -95,33 +95,6 @@ export type PreparationOutcome =
   | Readonly<{ status: "ready"; compatibility: string }>
   | Readonly<{ status: "failed" }>;
 
-const PROVEN_KEY = "generations.proven";
-
-const PROBATION_KEY = "generations.probation";
-
-function addProvenLabel(storage: DurableObjectStorage): void {
-  const { sql, kv } = storage;
-
-  const present = sql
-    .exec("SELECT 1 FROM pragma_table_info('generation_state') WHERE name = 'proven_label'")
-    .toArray();
-
-  if (present.length > 0) return;
-
-  sql.exec(`ALTER TABLE generation_state ADD COLUMN proven_label INTEGER
-    REFERENCES generations(label) CHECK (proven_label IS NULL OR active_label IS NOT NULL)`);
-
-  const proven = kv.get<GenerationLabel>(PROVEN_KEY);
-
-  const { active_label: active } = sql
-    .exec<SelectionRow>(`SELECT ${SELECTION_COLUMNS} FROM generation_state`)
-    .one();
-
-  if (proven !== undefined && (active === proven || kv.get(PROBATION_KEY) === active)) {
-    sql.exec("UPDATE generation_state SET proven_label = ? WHERE singleton = 1", proven);
-  }
-}
-
 export class Generations {
   readonly #storage: DurableObjectStorage;
   readonly #sql: SqlStorage;
@@ -149,13 +122,16 @@ export class Generations {
         CREATE TABLE IF NOT EXISTS generation_state (
           singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
           active_label INTEGER REFERENCES generations(label),
+          proven_label INTEGER REFERENCES generations(label)
+            CHECK (proven_label IS NULL OR active_label IS NOT NULL),
           epoch INTEGER NOT NULL CHECK (epoch >= 0)
         );
-        INSERT INTO generation_state (singleton, active_label, epoch)
-        VALUES (1, NULL, 0)
+        INSERT INTO generation_state (singleton, active_label, proven_label, epoch)
+        VALUES (1, NULL, NULL, 0)
         ON CONFLICT (singleton) DO NOTHING;
       `);
-      addProvenLabel(storage);
+      storage.kv.delete("generations.proven");
+      storage.kv.delete("generations.probation");
     });
   }
 

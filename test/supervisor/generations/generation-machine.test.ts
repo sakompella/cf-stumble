@@ -10,23 +10,6 @@ afterEach(async () => {
   await reset();
 });
 
-const LEGACY_SCHEMA = `
-  DROP TABLE generation_state;
-  DROP TABLE generations;
-  CREATE TABLE generations (
-    label INTEGER PRIMARY KEY CHECK (label >= 0),
-    harness_commit TEXT NOT NULL UNIQUE,
-    status TEXT NOT NULL CHECK (status IN ('candidate', 'ready', 'failed')),
-    was_active INTEGER NOT NULL DEFAULT 0 CHECK (was_active IN (0, 1)),
-    facet_compatibility TEXT
-  );
-  CREATE TABLE generation_state (
-    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    active_label INTEGER REFERENCES generations(label),
-    epoch INTEGER NOT NULL CHECK (epoch >= 0)
-  );
-`;
-
 const READY = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;
 
 function served(generations: Generations, digit: string) {
@@ -96,25 +79,4 @@ test("a failed re-check of the serving generation keeps it serving and a rollbac
   });
 
   expect(outcome).toMatchObject({ ok: true, outcome: { generation: { status: "ready" } } });
-});
-
-test("a Supervisor upgraded during probation still rolls back to the generation the old Worker proved", async () => {
-  const rollback = await inSupervisor("probation-upgrade", (storage) => {
-    storage.sql.exec(LEGACY_SCHEMA);
-    storage.sql.exec(
-      "INSERT INTO generations VALUES (0, ?, 'ready', 1, ?), (1, ?, 'ready', 1, ?)",
-      "a".repeat(40),
-      FACET_COMPATIBILITY,
-      "b".repeat(40),
-      FACET_COMPATIBILITY,
-    );
-    storage.sql.exec("INSERT INTO generation_state VALUES (1, 1, 4)");
-    storage.kv.put("generations.proven", 0);
-    storage.kv.put("generations.probation", 1);
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    return new Generations(storage, FACET_COMPATIBILITY).settled(run("failed"))?.command.label;
-  });
-
-  expect(rollback).toBe(0);
 });
