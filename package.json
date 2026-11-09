@@ -28,7 +28,7 @@
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
-    "@cloudflare/computer": "0.8.0",
+    "@cloudflare/computer": "0.10.0",
     "@earendil-works/chord": "1.5.0",
     "@earendil-works/pi-ai": "1.5.0",
     "@earendil-works/pi-durable": "1.5.0",

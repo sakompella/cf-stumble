@@ -3,9 +3,9 @@
 > **Review:** Agent-only
 
 The workspace image builds `computerd` from Computer source commit
-`9f0ade40196a4ef95ddde4f2b75e1555d9dfeeb1` (release 0.8.0) with one checked-in patch,
+`bb0a5db4b7e8c8a79625d63e0e272602f909640e` (release 0.10.0) with one checked-in patch,
 `infra/workspace-image/computerd-walk.patch`, instead of copying the binary out of
-`ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:de6f3727a12c8adb2f8ece853105ccc461fef02f90e368fac4e0578eacc461aa`.
+`ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:6ec793fa80f109acf8b3cd4e295284cfed97f61c03030b780a612ec22c49b294`.
 This changes the image half of the pins that ADR-0026 records; the source commit stays the same.
 
 A Cloudflare container cannot mount FUSE, so computerd keeps `/workspace` in step with its store
