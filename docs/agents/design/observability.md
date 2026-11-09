@@ -93,8 +93,11 @@ says the rate is a sample.
 **Sources.** For the window (`--since 90m|2h|1d`, ending now), it reads:
 
 - Workers Logs (`workers/observability/telemetry/query`): every fetch invocation of the Worker, with
-  its end time, `$workers.wallTimeMs`, and URL, from one idle limit before the window starts. Only
-  owner API routes that can reach the workspace count as work. `src/routes/route-pattern.ts` lists
+  its end time, `$workers.wallTimeMs`, and URL, from the first metrics bucket of the window back
+  through one run deadline plus the idle limit. Only owner API routes that can reach the workspace
+  count as work. The same query set also reads the `run.started` and `run.settled` events of
+  conversation runs, so a queued run counts from when it actually ran, not from when its message
+  was admitted; a failed or row-limited run query makes the whole check `unknown`. `src/routes/route-pattern.ts` lists
   each route as `record-only` (status, project list, GitHub and ChatGPT connection, the backend
   setting (a change stops the container and never keeps it awake), and a
   project's events, abort and fresh thread: the Supervisor and the facet answer without the
@@ -106,10 +109,11 @@ says the rate is a sample.
   running minutes. A bucket counts at most five minutes.
 
 **Rule `ran-past-idle`.** Each `workspace` request allows the container to run from its start until
-its end plus the idle limit (`WORKSPACE_IDLE_STOP_MS`). A messages request answers 202 when its run
-is admitted, so its allowance also covers the run's deadline (`PROJECT_RUN_DEADLINE_MS`) before the
-idle limit. A run of consecutive
-running buckets that exceeds that allowance by more than 10 minutes is a finding. Buckets newer
+its end plus the idle limit (`WORKSPACE_IDLE_STOP_MS`). A conversation run allows its own lifetime:
+a `run.settled` event covers from its settle time back by its `totalMs`, a `run.started` event
+without one covers the run deadline (`PROJECT_RUN_DEADLINE_MS`), and the idle limit follows each.
+A run of consecutive running buckets that exceeds that allowance by more than 10 minutes is a
+finding. Only whole five-minute buckets inside the requested window count, and buckets newer
 than 10 minutes are still filling and do not count. The check mark names the window up to the last
 complete bucket, not up to now, and a window with nothing complete prints `unknown`. The finding lists the routes and end times of
 the last three requests before the run ended, which shows what kept the container awake.

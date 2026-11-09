@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  activityWindow,
   BUCKET_MS,
   cacheHitLine,
   formatReport,
@@ -10,6 +11,7 @@ import {
   runChecks,
   type CheckInput,
   type Invocation,
+  type RunSettlement,
   type SessionFailure,
   type UsageBucket,
 } from "./check.mts";
@@ -42,6 +44,8 @@ function check(
   usage: readonly UsageBucket[],
   windowMinutes = 120,
   sessionFailures: readonly SessionFailure[] = [],
+  runStarts: readonly number[] = [],
+  runSettlements: readonly RunSettlement[] = [],
 ): CheckInput {
   const toMs = START + windowMinutes * MINUTE_MS;
 
@@ -50,7 +54,10 @@ function check(
     nowMs: toMs + 60 * MINUTE_MS,
     window: { fromMs: START, toMs },
     idleLimitMs: IDLE_LIMIT_MS,
-    activity: { status: "ok", data: { invocations, usage, sessionFailures } },
+    activity: {
+      status: "ok",
+      data: { invocations, usage, sessionFailures, runStarts, runSettlements },
+    },
   };
 }
 
@@ -114,19 +121,6 @@ describe("route classes", () => {
     assert.deepEqual(rules(check([stream], runningBetween(0, 120))), ["ran-past-idle"]);
   });
 
-  it("allows a message's run its eight-minute deadline before the idle limit starts", () => {
-    assert.deepEqual(rules(check([request(0, RUN_ROUTE)], runningBetween(0, 25))), []);
-    assert.deepEqual(rules(check([request(0, RUN_ROUTE)], runningBetween(0, 30))), [
-      "ran-past-idle",
-    ]);
-  });
-
-  it("allows back-to-back message runs to keep the container running between them", () => {
-    const messages = [request(0, RUN_ROUTE), request(17, RUN_ROUTE)];
-
-    assert.deepEqual(rules(check(messages, runningBetween(0, 35))), []);
-  });
-
   it("flags a container that runs with no request at all", () => {
     assert.deepEqual(rules(check([], runningBetween(0, 15))), ["ran-past-idle"]);
   });
@@ -135,6 +129,15 @@ describe("route classes", () => {
     const live = { ...check([request(0)], runningBetween(0, 25)), nowMs: START + 25 * MINUTE_MS };
 
     assert.deepEqual(rules(live), []);
+  });
+
+  it("queries activity back through the run deadline and idle limit from the first bucket", () => {
+    const window = { fromMs: START + 4 * MINUTE_MS, toMs: START + 120 * MINUTE_MS };
+
+    assert.deepEqual(activityWindow(window, IDLE_LIMIT_MS), {
+      fromMs: START - 18 * MINUTE_MS,
+      toMs: START + 120 * MINUTE_MS,
+    });
   });
 
   it("names the latest requests before the overrun, newest first", () => {
@@ -152,6 +155,53 @@ describe("route classes", () => {
       "/api/github/connection@00:02Z",
       "/api/projects@00:01Z",
     ]);
+  });
+});
+
+describe("conversation runs", () => {
+  it("allows a started run its eight-minute deadline before the idle limit starts", () => {
+    assert.deepEqual(
+      rules(check([request(0, RUN_ROUTE)], runningBetween(0, 25), 120, [], [START])),
+      [],
+    );
+    assert.deepEqual(
+      rules(check([request(0, RUN_ROUTE)], runningBetween(0, 30), 120, [], [START])),
+      ["ran-past-idle"],
+    );
+  });
+
+  it("allows queued runs their own lifetimes behind one-at-a-time admissions", () => {
+    const messages = [request(0, RUN_ROUTE), request(1, RUN_ROUTE), request(2, RUN_ROUTE)];
+
+    const runSettlements = [7, 14, 21].map((atMinutes) => ({
+      atMs: START + atMinutes * MINUTE_MS,
+      totalMs: 7 * MINUTE_MS,
+    }));
+
+    const usage = [
+      ...runningBetween(0, 30),
+      { startMs: START + 30 * MINUTE_MS, runningMinutes: 1 },
+    ];
+
+    assert.deepEqual(rules(check(messages, usage, 120, [], [], runSettlements)), []);
+  });
+
+  it("allows back-to-back message runs to keep the container running between them", () => {
+    const messages = [request(0, RUN_ROUTE), request(17, RUN_ROUTE)];
+    const runStarts = [START, START + 17 * MINUTE_MS];
+
+    assert.deepEqual(rules(check(messages, runningBetween(0, 35), 120, [], runStarts)), []);
+  });
+
+  it("judges only whole buckets inside a non-aligned window, with activity from before it", () => {
+    const runSettlements = [{ atMs: START + 1.8 * MINUTE_MS, totalMs: 7.9 * MINUTE_MS }];
+
+    const input = {
+      ...check([], runningBetween(0, 15), 120, [], [], runSettlements),
+      window: { fromMs: START + 4 * MINUTE_MS, toMs: START + 120 * MINUTE_MS },
+    };
+
+    assert.deepEqual(rules(input), []);
   });
 });
 
