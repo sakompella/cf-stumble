@@ -25,9 +25,13 @@ function envFileText(env: Readonly<Record<string, string>>): string {
     .concat("\n");
 }
 
-function runScript(script: string, env: NodeJS.ProcessEnv): Promise<DispatchResult> {
+function runScript(
+  script: string,
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal,
+): Promise<DispatchResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(script, [], { env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(script, [], { env, stdio: ["ignore", "pipe", "pipe"], signal });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -45,7 +49,7 @@ function runScript(script: string, env: NodeJS.ProcessEnv): Promise<DispatchResu
 
 export class OrbFailure extends Data.TaggedError("OrbFailure")<{ message: string }> {}
 
-export function attempt<A>(run: () => Promise<A>): Effect.Effect<A, OrbFailure> {
+export function attempt<A>(run: (signal: AbortSignal) => Promise<A>): Effect.Effect<A, OrbFailure> {
   return Effect.tryPromise({
     try: run,
     catch: (cause) =>
@@ -64,14 +68,18 @@ export function dispatch(
 
       return attempt(() => writeFile(envFile, envFileText(request.env), { mode: 0o600 })).pipe(
         Effect.andThen(
-          attempt(() =>
-            runScript(script, {
-              ...process.env,
-              STUMBLE_JOB: request.job,
-              STUMBLE_CONTAINER: request.container,
-              STUMBLE_ENV_FILE: envFile,
-              STUMBLE_EGRESS_PORT: String(request.egressPort),
-            }),
+          attempt((signal) =>
+            runScript(
+              script,
+              {
+                ...process.env,
+                STUMBLE_JOB: request.job,
+                STUMBLE_CONTAINER: request.container,
+                STUMBLE_ENV_FILE: envFile,
+                STUMBLE_EGRESS_PORT: String(request.egressPort),
+              },
+              signal,
+            ),
           ),
         ),
       );
