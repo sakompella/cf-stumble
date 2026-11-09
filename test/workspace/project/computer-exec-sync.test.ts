@@ -108,6 +108,87 @@ class ContainerThatCreatesAFile {
   }
 }
 
+class ContainerWhosePullFails {
+  readonly backend: WorkspaceBackend = {
+    id: CONTAINER_BACKEND_ID,
+    type: "fake-container",
+    connect: () => Promise.resolve(this.#connection()),
+  };
+
+  #connection(): Connection {
+    return {
+      runtimeId: "fake-runtime",
+      sync: "remote",
+      close: async () => {},
+      rpc: {
+        shell: {
+          exec: () =>
+            Promise.resolve({
+              id: "exec",
+              events: closed({ id: "exec", seq: 0, name: "exit" as const, code: 0 }),
+            }),
+          getExec: () => Promise.reject(new Error("unused")),
+          killExec: async () => {},
+          disposeExec: async () => {},
+        },
+        sync: {
+          push: ({ senderRev }) =>
+            Promise.resolve({ rev: senderRev, appliedPushCursor: { rev: senderRev, path: null } }),
+          fetchChanges: () => Promise.reject(new Error("the pull failed")),
+          watermarks: () =>
+            Promise.resolve({ currentRev: 5, pushRev: 0, fetchCursor: { rev: 0, path: null } }),
+          readEntry: () => Promise.resolve(null),
+          hasObjects: () => Promise.resolve([]),
+          fetchObjects: () => closed(),
+          pushObjects: async (objects) => {
+            for await (const _ of objects);
+          },
+        },
+      },
+    };
+  }
+}
+
+test("a command whose post-command pull stays pending is not reported as a success", async () => {
+  await runInDurableObject(
+    env.SUPERVISOR.getByName("exec-sync-pending-pull"),
+    async (_instance, state) => {
+      const container = new ContainerWhosePullFails();
+
+      const workspace = new Workspace({
+        storage: computerStorage(state.storage),
+        backends: [container.backend],
+      });
+
+      await workspace.fs.mkdir("/workspace", { recursive: true });
+
+      const target = new ProjectRpcTarget(
+        computerFilesystemProvider(workspace),
+        durableObjectTransactions(state.storage),
+        computerExecBackend(workspace, CONTAINER_BACKEND_ID, { generation: 0 }),
+      );
+
+      const started = await target.startExec({ command: "true" });
+
+      if (!started.ok) throw new Error(JSON.stringify(started));
+
+      const text = await new Response(started.value.events).text();
+
+      const terminal = text
+        .split("\n")
+        .filter((line) => line !== "")
+        .at(-1);
+
+      expect(terminal !== undefined && JSON.parse(terminal)).toEqual({
+        kind: "terminal",
+        seq: 0,
+        outcome: "failed",
+        error: { code: "backend-unavailable" },
+      });
+    },
+  );
+});
+
 test("a file a command creates is readable once the command has exited", async () => {
   await runInDurableObject(env.SUPERVISOR.getByName("exec-sync"), async (_instance, state) => {
     const container = new ContainerThatCreatesAFile();

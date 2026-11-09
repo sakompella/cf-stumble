@@ -37,10 +37,13 @@ type RuntimeExecOptions = Readonly<{
   encoding: undefined;
 }>;
 
+type PullProgress = Readonly<{ skipped: number; complete: boolean }>;
+
 export type ExecWorkspace = Readonly<{
   runtime: Readonly<{
     exec(command: string, options: RuntimeExecOptions): Promise<RuntimeExecHandle>;
   }>;
+  pull(backendId?: string): AsyncIterable<PullProgress>;
 }>;
 
 export function computerFilesystemProvider(workspace: Workspace): ProjectFilesystemProvider {
@@ -86,6 +89,8 @@ function replacementGuard(containerState: ContainerLifecycleState | null) {
 type ReplacementGuard = ReturnType<typeof replacementGuard>;
 
 function guardedReader(
+  workspace: ExecWorkspace,
+  backendId: string,
   reader: RuntimeReader,
   guard: ReplacementGuard,
 ): ExecBackendHandle["reader"] {
@@ -100,6 +105,10 @@ function guardedReader(
 
         if (next.value.name === "exit") {
           await waitForPostCommandSync(reader);
+
+          if (guard.replaced()) throw new ContainerRestartedError();
+
+          await durablePull(workspace, backendId);
 
           if (guard.replaced()) throw new ContainerRestartedError();
         }
@@ -117,6 +126,16 @@ function guardedReader(
 
 async function waitForPostCommandSync(reader: RuntimeReader): Promise<void> {
   while (!(await reader.read()).done);
+}
+
+async function durablePull(workspace: ExecWorkspace, backendId: string): Promise<void> {
+  for await (const block of workspace.pull(backendId)) {
+    if (block.skipped > 0) throw new Error(`post-command pull skipped ${block.skipped} entries`);
+
+    if (block.complete) return;
+  }
+
+  throw new Error("post-command pull ended incomplete");
 }
 
 export function computerExecBackend(
@@ -150,7 +169,7 @@ export function computerExecBackend(
       }
 
       return {
-        reader: guardedReader(handle.getReader(), guard),
+        reader: guardedReader(workspace, backendId, handle.getReader(), guard),
         kill: () => handle.kill(),
         backend: backendId === ISOLATE_BACKEND_ID ? "isolate" : "container",
       };
