@@ -13,10 +13,10 @@ type WorkspaceStorageReset = Readonly<{
 
 export function resetWorkspaceStorage(
   storage: WorkspaceStorageReset,
-  stopContainer: () => Promise<void>,
+  stopContainer: Effect.Effect<void>,
 ): Effect.Effect<WorkspaceResetResult> {
   return Effect.promise(() => storage.deleteAll()).pipe(
-    Effect.andThen(Effect.promise(() => stopContainer())),
+    Effect.andThen(stopContainer),
     Effect.andThen(
       Effect.sync(() => {
         logEvent("info", "workspace.reset");

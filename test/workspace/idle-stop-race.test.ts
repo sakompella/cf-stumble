@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { afterIdleStop, WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 import type { ExecBackend } from "../../src/workspace/project/exec-backend.js";
@@ -32,11 +33,10 @@ function gated(phase: "close" | "destroy") {
 
       if (phase === "close") await gate;
     },
-    stopContainer: async () => {
-      calls.push("destroy");
-
-      if (phase === "destroy") await gate;
-    },
+    stopContainer: () =>
+      Effect.sync(() => {
+        calls.push("destroy");
+      }).pipe(Effect.andThen(phase === "destroy" ? Effect.promise(() => gate) : Effect.void)),
   });
 
   return { idle, clock, calls, release };
@@ -119,7 +119,7 @@ test("a failed stop for a backend change rejects, and work waiting on the stop s
     setAlarm: () => Promise.resolve(),
     containerRunning: () => true,
     closeWorkspace: () => Promise.resolve(),
-    stopContainer: () => Promise.reject(new Error("provider stop failed")),
+    stopContainer: () => Effect.fail(new Error("provider stop failed")),
   });
 
   const backendChange = idle.stopForBackendChange();
