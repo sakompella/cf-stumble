@@ -17,14 +17,9 @@ export { StartupCheckModel } from "./startup-check-model.js";
 const SUPERVISOR_NAME = "owner";
 
 function noStore(response: Response): Response {
-  const headers = new Headers(response.headers);
-  headers.set("cache-control", "no-store");
+  response.headers.set("cache-control", "no-store");
 
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+  return response;
 }
 
 function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Response> {
