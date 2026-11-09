@@ -1,7 +1,7 @@
 import type { Workspace } from "@cloudflare/computer";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
-import { githubTokenFromHosts } from "./git-fs.js";
+import { githubTokenFromHosts } from "./github-remote.js";
 
 const GITHUB_API_ORIGIN = "https://api.github.com";
 

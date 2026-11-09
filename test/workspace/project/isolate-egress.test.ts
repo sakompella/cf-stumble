@@ -248,6 +248,17 @@ describe("githubTokenForIsolateEgress", () => {
     expect(token).toBe("ghp_fromHosts123");
   });
 
+  it("ignores a token that belongs to another host", async () => {
+    const token = await githubTokenForIsolateEgress({
+      readFile: () =>
+        Promise.resolve(
+          "git.example.com:\n    oauth_token: ghp_otherHost123\ngithub.com:\n    user: octocat\n",
+        ),
+    });
+
+    expect(token).toBeUndefined();
+  });
+
   it("falls back to the configured token when the hosts file has none", async () => {
     const token = await githubTokenForIsolateEgress(
       { readFile: missingHostsFile },

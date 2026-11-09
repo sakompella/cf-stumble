@@ -2,7 +2,9 @@ export { computerFilesystemProvider, durableObjectTransactions } from "./compute
 
 export { chosenExecBackend } from "./exec-selection.js";
 
-export { githubTokenFromHosts, workspaceGit } from "./git-fs.js";
+export { workspaceGit } from "./git-fs.js";
+
+export { githubCloneHeaders, githubTokenFromHosts } from "./github-remote.js";
 
 export { IsolateEgressGateway } from "./isolate-egress.js";
 

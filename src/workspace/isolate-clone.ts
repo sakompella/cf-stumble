@@ -1,10 +1,9 @@
 import type { Workspace } from "@cloudflare/computer";
-import { Buffer } from "node:buffer";
 import * as Effect from "effect/Effect";
 import type { Project } from "../project-catalog.js";
 import { attemptWorkspace, RepositoryNotEligible, type WorkspaceFault } from "./operations.js";
 import { GITHUB_CLI_CONFIG_DIRECTORY, projectDirectory } from "../workspace-layout.js";
-import { githubTokenFromHosts } from "./project/index.js";
+import { githubCloneHeaders, githubTokenFromHosts } from "./project/index.js";
 
 const ISOLATE_CLONE_DEPTH = 1;
 
@@ -74,12 +73,7 @@ export function cloneIntoPlace(
           url: clone.url,
           dir: staging,
           depth: clone.depth,
-          headers:
-            token === undefined
-              ? {}
-              : {
-                  Authorization: `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
-                },
+          headers: githubCloneHeaders(clone.url, token),
         });
         await workspace.git.configSet({ dir: staging, path: "core.fileMode", value: false });
         await workspace.fs.mkdir(root.slice(0, root.lastIndexOf("/")), { recursive: true });

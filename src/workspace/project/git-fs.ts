@@ -9,6 +9,7 @@ import {
 } from "@cloudflare/computer/git";
 import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
 import { gitCli } from "./git-cli.js";
+import { githubCloneHeaders, githubTokenFromHosts, isGitHubRemote } from "./github-remote.js";
 
 type ReadOptions = Parameters<SQLiteWorkspaceProvider["readFile"]>[1];
 
@@ -64,12 +65,6 @@ const sqliteGit = createGitClient({
     }),
 });
 
-const TOKEN_LINE = /^\s*oauth_token:\s*(\S+)\s*$/mu;
-
-export function githubTokenFromHosts(hosts: string): string | undefined {
-  return TOKEN_LINE.exec(hosts)?.[1];
-}
-
 async function readHosts(provider: SQLiteWorkspaceProvider): Promise<string> {
   try {
     const hosts = await provider.readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`);
@@ -80,15 +75,21 @@ async function readHosts(provider: SQLiteWorkspaceProvider): Promise<string> {
   }
 }
 
-async function githubAuth(provider: SQLiteWorkspaceProvider): Promise<GitAuth | undefined> {
-  const token = githubTokenFromHosts(await readHosts(provider));
-
-  return token === undefined ? undefined : { username: "x-access-token", password: token };
+async function githubToken(provider: SQLiteWorkspaceProvider): Promise<string | undefined> {
+  return githubTokenFromHosts(await readHosts(provider));
 }
 
 export const workspaceGit: GitClientFactory = (options) => {
   const client = sqliteGit(options);
-  const onAuth = () => githubAuth(options.ws.provider());
+
+  const onAuth = async (url: string): Promise<GitAuth | undefined> => {
+    if (!isGitHubRemote(url)) return undefined;
+
+    const token = await githubToken(options.ws.provider());
+
+    return token === undefined ? undefined : { username: "x-access-token", password: token };
+  };
+
   const clone = client.clone.bind(client);
   const fetch = client.fetch.bind(client);
   const push = client.push.bind(client);
@@ -97,17 +98,11 @@ export const workspaceGit: GitClientFactory = (options) => {
 
   return Object.assign(client, {
     clone: async (input: Parameters<typeof clone>[0]) => {
-      const auth = input.url.startsWith("https://github.com/") ? await onAuth() : undefined;
+      const token = isGitHubRemote(input.url)
+        ? await githubToken(options.ws.provider())
+        : undefined;
 
-      const basic =
-        auth === undefined ? undefined : `${auth.username ?? ""}:${auth.password ?? ""}`;
-
-      const headers =
-        basic === undefined
-          ? {}
-          : { Authorization: `Basic ${Buffer.from(basic).toString("base64")}` };
-
-      await clone({ headers, ...input });
+      await clone({ headers: githubCloneHeaders(input.url, token), ...input });
     },
     fetch: (input: Parameters<typeof fetch>[0]) => fetch({ onAuth, ...input }),
     push: (input: Parameters<typeof push>[0]) => push({ onAuth, ...input }),
