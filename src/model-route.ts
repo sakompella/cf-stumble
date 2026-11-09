@@ -30,6 +30,8 @@ type ModelRouteEnv = Readonly<{
 
 export type ModelRouteProps = Readonly<{ supervisor: string; instance: number }>;
 
+const SUPERVISOR_UNAVAILABLE = "the supervisor is unavailable";
+
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps> {
   runStream(request: RouteWire): Promise<ReadableStream<Uint8Array> | ValidationFailure> {
     const parsed = parseRequest(request);
@@ -71,11 +73,17 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
       );
 
     return runAtEntryPoint(
-      Effect.promise(() => holder.admitModelTurn(this.ctx.props.instance)).pipe(
+      Effect.tryPromise(() => holder.admitModelTurn(this.ctx.props.instance)).pipe(
         Effect.map((admitted): ReadableStream<Uint8Array> | ValidationFailure =>
           admitted
             ? modelEventStream(turn)
             : { ok: false, error: { code: "invalid-request", reason: GENERATION_REPLACED } },
+        ),
+        Effect.catch(() =>
+          Effect.succeed({
+            ok: false,
+            error: { code: "invalid-request", reason: SUPERVISOR_UNAVAILABLE },
+          } satisfies ValidationFailure),
         ),
       ),
     );

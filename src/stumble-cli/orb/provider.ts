@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import type { Server } from "node:net";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
@@ -84,48 +84,48 @@ export class OrbProvider {
   }
 
   #connected(): Effect.Effect<string> {
-    return Effect.flatMap(Effect.context(), (services) => {
-      const runFork = Effect.runForkWith(services);
+    return Effect.scoped(
+      Effect.flatMap(FiberSet.makeRuntime(), (runFork) =>
+        Effect.callback<string>((resume) => {
+          const socket = new WebSocket(providerUrl(this.#options.url), {
+            headers: { [ORB_TOKEN_HEADER]: this.#options.token },
+          });
 
-      return Effect.callback<string>((resume) => {
-        const socket = new WebSocket(providerUrl(this.#options.url), {
-          headers: { [ORB_TOKEN_HEADER]: this.#options.token },
-        });
+          const send = (frame: ProviderFrame | typeof ORB_PING): void => {
+            if (socket.readyState !== WebSocket.OPEN) return;
 
-        const send = (frame: ProviderFrame | typeof ORB_PING): void => {
-          if (socket.readyState !== WebSocket.OPEN) return;
+            socket.send(frame === ORB_PING ? frame : encodeFrame(frame));
+          };
 
-          socket.send(frame === ORB_PING ? frame : encodeFrame(frame));
-        };
+          const ping = setInterval(() => {
+            send(ORB_PING);
+          }, PING_INTERVAL_MS);
 
-        const ping = setInterval(() => {
-          send(ORB_PING);
-        }, PING_INTERVAL_MS);
+          const finish = (reason: string): void => {
+            clearInterval(ping);
+            resume(Effect.succeed(reason));
+          };
 
-        const finish = (reason: string): void => {
-          clearInterval(ping);
-          resume(Effect.succeed(reason));
-        };
+          socket.addEventListener("open", () => {
+            this.#options.log("connected to the Workspace Host");
+            send(providerFrame.hello({ egressPort: this.#egressPort }));
+          });
+          socket.addEventListener("message", (event) => {
+            const frame = decodeHostFrame(event.data);
 
-        socket.addEventListener("open", () => {
-          this.#options.log("connected to the Workspace Host");
-          send(providerFrame.hello({ egressPort: this.#egressPort }));
-        });
-        socket.addEventListener("message", (event) => {
-          const frame = decodeHostFrame(event.data);
+            if (Option.isSome(frame)) runFork(this.#handle(frame.value, send));
+          });
+          socket.addEventListener("close", (event) => {
+            finish(`the Workspace Host connection closed (${event.code} ${event.reason})`);
+          });
 
-          if (Option.isSome(frame)) runFork(this.#handle(frame.value, send));
-        });
-        socket.addEventListener("close", (event) => {
-          finish(`the Workspace Host connection closed (${event.code} ${event.reason})`);
-        });
-
-        return Effect.sync(() => {
-          clearInterval(ping);
-          socket.close(1000, "provider stopping");
-        });
-      });
-    });
+          return Effect.sync(() => {
+            clearInterval(ping);
+            socket.close(1000, "provider stopping");
+          });
+        }),
+      ),
+    );
   }
 
   #handle(frame: HostFrame, send: Send): Effect.Effect<void> {
@@ -194,7 +194,7 @@ export class OrbProvider {
           ),
         ),
         Effect.flatMap((address) => {
-          const launch = { runtime: randomUUID(), container: job.container, address };
+          const launch = { runtime: crypto.randomUUID(), container: job.container, address };
           this.#launch = launch;
 
           return Effect.forkDetach(this.#watch(launch, send)).pipe(Effect.as(launch.runtime));

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { createServer } from "node:http";
+import type { Duplex } from "node:stream";
 import * as Schema from "effect/Schema";
 import { encodeFrame, type HostFrame } from "../../../src/orb-protocol.js";
 
@@ -12,6 +13,7 @@ export type FakeHost = Readonly<{
   origin: string;
   attempts(): number;
   closedLinks(): number;
+  closeLink(): void;
   close(): void;
 }>;
 
@@ -30,9 +32,11 @@ export async function startFakeHost(greeting?: HostFrame): Promise<FakeHost> {
   const server = createServer();
   let attempts = 0;
   let closedLinks = 0;
+  let link: Duplex | undefined;
 
   server.on("upgrade", (request, socket) => {
     attempts += 1;
+    link = socket;
 
     if (greeting === undefined) {
       socket.destroy();
@@ -66,6 +70,9 @@ export async function startFakeHost(greeting?: HostFrame): Promise<FakeHost> {
     origin: `http://127.0.0.1:${port}`,
     attempts: () => attempts,
     closedLinks: () => closedLinks,
+    closeLink: () => {
+      link?.destroy();
+    },
     close: () => {
       server.closeAllConnections();
       server.close();

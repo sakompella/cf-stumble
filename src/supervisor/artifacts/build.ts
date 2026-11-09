@@ -2,7 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { isTimeoutFailure, logRedactedCause, redactLogText } from "../../diagnostics.js";
+import { logRedactedCause, redactLogText } from "../../diagnostics.js";
 import { MainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifactProblem } from "../../facet/index.js";
 import { HARNESS_BUILD_STEP_NAMES } from "../../harness-build.js";
@@ -87,7 +87,7 @@ function command(
   workspace: () => WorkspaceHostRpc<"build">,
   request: HarnessBuildRequest,
   label: string,
-): Effect.Effect<CommandOutput, unknown> {
+) {
   return boundedRpc(() => workspace().build(request), WORKSPACE_RPC_TIMEOUT_MS).pipe(
     Effect.flatMap((result) => {
       if (!result.ok) {
@@ -113,10 +113,7 @@ function command(
   );
 }
 
-function moduleMapText(
-  workspace: () => WorkspaceHostRpc<"build">,
-  harnessCommit: HarnessCommit,
-): Effect.Effect<string, unknown> {
+function moduleMapText(workspace: () => WorkspaceHostRpc<"build">, harnessCommit: HarnessCommit) {
   return boundedRpc(
     () => workspace().build({ kind: "build-output", harnessCommit }),
     WORKSPACE_RPC_TIMEOUT_MS,
@@ -151,11 +148,18 @@ function runStep(
     { kind: "build-step", harnessCommit, step },
     `the ${step} step`,
   ).pipe(
+    Effect.catchTag("TimeoutError", (error) =>
+      Effect.suspend(() => {
+        logRedactedCause(`harness-build.${step}: timeout`, error);
+
+        return Effect.fail<HarnessBuildProblem>({
+          code: "build-workspace-unavailable",
+          harnessCommit,
+        });
+      }),
+    ),
     Effect.mapError((error): HarnessBuildProblem => {
-      logRedactedCause(
-        `harness-build.${step}: ${isTimeoutFailure(error) ? "timeout" : "build-workspace-unavailable"}`,
-        error,
-      );
+      logRedactedCause(`harness-build.${step}: build-workspace-unavailable`, error);
 
       return { code: "build-workspace-unavailable", harnessCommit };
     }),

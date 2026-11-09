@@ -85,7 +85,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       setAlarm: (atMs) => ctx.storage.setAlarm(atMs),
       containerRunning: () => this.#platform.containerRunning(),
       closeWorkspace: () => this.#platform.workspace.close(),
-      stopContainer: (reason) => runAtEntryPoint(this.#platform.stopContainer(reason)),
+      stopContainer: (reason) =>
+        runAtEntryPoint(
+          this.#platform.stopContainer(reason).pipe(Effect.catch(({ cause }) => Effect.die(cause))),
+        ),
     });
   }
 
@@ -181,7 +184,11 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
     return this.#tracked(() =>
       resetWorkspaceStorage(this.ctx.storage, () =>
-        runAtEntryPoint(this.#platform.stopContainer("reset")),
+        runAtEntryPoint(
+          this.#platform
+            .stopContainer("reset")
+            .pipe(Effect.catch(({ cause }) => Effect.die(cause))),
+        ),
       ).pipe(
         Effect.ensuring(
           Effect.sync(() => {

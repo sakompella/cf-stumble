@@ -48,9 +48,10 @@ function accepted(
 
   if (computerd === undefined) return refused("no provider container", 404);
 
-  return Effect.promise(() =>
-    computerd.handleFetch(new Request("http://computer.internal/api", request)),
-  );
+  return Effect.tryPromise({
+    try: () => computerd.handleFetch(new Request("http://computer.internal/api", request)),
+    catch: (cause) => cause,
+  }).pipe(Effect.catch(() => refused("the provider container is unavailable", 502)));
 }
 
 function bearerOf(request: Request): string | null {
@@ -61,9 +62,9 @@ function forwardedGit(request: Request, routes: FetchRoutes): Effect.Effect<Resp
   return providerTokenMatches(routes.git.token, bearerOf(request)).pipe(
     Effect.flatMap((matches) =>
       matches
-        ? Effect.promise(async () =>
+        ? Effect.tryPromise(async () =>
             forwardGit(routes.git.workspace, routes.git.backendId, await request.text()),
-          )
+          ).pipe(Effect.catch(() => refused("the request body was unreadable", 400)))
         : refused("unauthorized", 401),
     ),
   );
@@ -76,7 +77,10 @@ export function routeFetch(request: Request, routes: FetchRoutes): Effect.Effect
     return forwardedGit(request, routes);
 
   if (pathname !== ORB_PROVIDER_PATH && pathname !== ORB_COMPUTERD_PATH)
-    return Effect.promise(() => routes.container.handleFetch(request));
+    return Effect.tryPromise({
+      try: () => routes.container.handleFetch(request),
+      catch: (cause) => cause,
+    }).pipe(Effect.catch(() => refused("the workspace container is unavailable", 502)));
 
   return providerTokenMatches(routes.token, request.headers.get(ORB_TOKEN_HEADER)).pipe(
     Effect.flatMap((matches) =>

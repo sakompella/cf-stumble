@@ -98,7 +98,10 @@ test("the reset exclusion ends when the Workspace Host call throws", async () =>
   replaceWorkspaceHost(env.WORKSPACE_HOST, fake.workspace);
 
   await runInDurableObject(control, async (supervisor) => {
-    await expect(supervisor.resetWorkspace()).rejects.toThrow("the Workspace Host went away");
+    await expect(supervisor.resetWorkspace()).resolves.toEqual({
+      ok: false,
+      problem: { code: "workspace-unavailable" },
+    });
     await expect(supervisor.resetWorkspace()).resolves.toEqual({ ok: true, reset: "workspace" });
   });
 });

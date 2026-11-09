@@ -7,6 +7,10 @@ type Connection = Data.TaggedEnum<{
 
 const Connection = Data.taggedEnum<Connection>();
 
+export class ContainerStopFailed extends Data.TaggedError("ContainerStopFailed")<{
+  readonly cause: unknown;
+}> {}
+
 export class ContainerLifecycle {
   generation = 0;
   #connection: Connection = Connection.Unconnected();

@@ -106,6 +106,49 @@ test("a start that prints no address removes the container it created", async ()
   await running.exitCode;
 });
 
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function dispatchPid(): Promise<number> {
+  return Number(await readFile(join(directory, "pid"), "utf8").catch(() => ""));
+}
+
+test("a closed connection interrupts the running handler", async () => {
+  host = await startFakeHost(hostFrame.job({ id: 1, job: orbJob.stop({ container: "c1" }) }));
+  const script = join(directory, "dispatch.sh");
+
+  await writeFile(
+    script,
+    `#!/usr/bin/env bash
+case "$STUMBLE_JOB" in
+  stop) echo $$ > "${directory}/pid"; exec sleep 30 ;;
+esac
+`,
+  );
+  await chmod(script, 0o755);
+
+  const running = provider(script);
+
+  await until(async () => (await dispatchPid()) > 0);
+  const pid = await dispatchPid();
+  expect(alive(pid)).toBe(true);
+
+  host.closeLink();
+
+  await until(() => !alive(pid));
+  expect(alive(pid)).toBe(false);
+
+  running.stop();
+  await running.exitCode;
+});
+
 test("a stop while connected stops the running container and closes the link", async () => {
   host = await startFakeHost(startC1);
   const running = provider(await dispatchScript('echo "127.0.0.1:9"'));

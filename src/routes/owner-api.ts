@@ -23,7 +23,7 @@ type WorkspaceResetResult =
   | Readonly<{ ok: true; reset: "workspace" }>
   | Readonly<{
       ok: false;
-      problem: Readonly<{ code: "run-active" | "workspace-busy" }>;
+      problem: Readonly<{ code: "run-active" | "workspace-busy" | "workspace-unavailable" }>;
     }>;
 
 export type OwnerApiSupervisor = ChatGPTApiSupervisor &

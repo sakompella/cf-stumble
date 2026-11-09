@@ -1,9 +1,13 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
+import { logRedactedCause } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
-import { boundedRpc, WORKSPACE_SHORT_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
+import {
+  boundedRpc,
+  isRpcTimeout,
+  WORKSPACE_SHORT_RPC_TIMEOUT_MS,
+} from "../workspace-command-timeout.js";
 import type { WorkspaceHostNamespace } from "./host-rpc.js";
 
 function signalAborted(signal: AbortSignal | undefined): boolean {
@@ -59,7 +63,7 @@ function ask(
     ).pipe(
       Effect.mapError((cause) => {
         logRedactedCause(
-          `credential-access.${request.step}: ${isTimeoutFailure(cause) ? "timeout" : "credential-workspace-unavailable"}`,
+          `credential-access.${request.step}: ${isRpcTimeout(cause) ? "timeout" : "credential-workspace-unavailable"}`,
           cause,
           request.step === "install" ? request.token : undefined,
         );
