@@ -1,9 +1,12 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { RunCli } from "./git-cli.js";
-import { shortStatus, type StatusLine, statusLines } from "./git-status.js";
+import { shortStatus, statusLines } from "./git-status.js";
 import { branchHeader, headState, longStatus } from "./git-status-text.js";
 
 type Format = "long" | "short" | "v2";
+
+const PORCELAIN_V2_UNSUPPORTED =
+  "error: --porcelain=v2 is not implemented by the workspace git\n";
 
 interface StatusOptions {
   readonly format: Format;
@@ -39,12 +42,6 @@ function parseOptions(args: readonly string[]): StatusOptions | undefined {
   return { format, branch };
 }
 
-function porcelainV2(lines: readonly StatusLine[]): string {
-  return lines
-    .map((line) => (line.x === "?" ? `? ${line.path}\n` : `1 ${line.x}${line.y} ${line.path}\n`))
-    .join("");
-}
-
 async function render(client: GitClient, dir: string, options: StatusOptions): Promise<string> {
   const needsHead = options.format === "long" || options.branch;
 
@@ -55,12 +52,10 @@ async function render(client: GitClient, dir: string, options: StatusOptions): P
 
   if (options.format === "long" && head !== undefined) return longStatus(head, lines);
 
-  if (options.format === "v2") return porcelainV2(lines);
-
   return `${head === undefined ? "" : branchHeader(head)}${shortStatus(lines)}`;
 }
 
-export function statusCommand(
+export async function statusCommand(
   client: GitClient,
   cli: RunCli,
   input: GitCliInput,
@@ -68,6 +63,9 @@ export function statusCommand(
   const options = parseOptions(input.argv.slice(1));
 
   if (options === undefined) return cli(input);
+
+  if (options.format === "v2")
+    return { stdout: "", stderr: PORCELAIN_V2_UNSUPPORTED, exitCode: 129 };
 
   return render(client, input.cwd ?? "/", options).then(
     (stdout) => ({ stdout, stderr: "", exitCode: 0 }),

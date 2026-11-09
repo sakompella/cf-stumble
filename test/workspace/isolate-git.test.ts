@@ -86,6 +86,16 @@ test("git status in the isolate prints the long format of real git", async () =>
   );
 });
 
+test("git status --porcelain=v2 is refused instead of approximated", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-porcelain-v2",
+    `${SETUP} && echo x >> a.txt && git status --porcelain=v2 && echo ok`,
+  );
+
+  expect(stdout).toBe("");
+  expect(stderr).toContain("error: --porcelain=v2 is not implemented");
+});
+
 test("git commit in the isolate prints the summary of real git", async () => {
   const { stdout } = await shell(
     "isolate-git-commit",
