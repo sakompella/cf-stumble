@@ -1,15 +1,33 @@
 import { logEvent } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
-import { decideActivation, decidePreparation } from "./generation-decisions.js";
+import type { Settlement } from "./conversations/index.js";
 import {
-  allRecords,
+  activation,
+  GenerationCommand,
+  preparation,
+  settlement,
+  submission,
+  type PreparationReply,
+  type RollbackReply,
+  type Step,
+} from "./generation-machine.js";
+import {
+  Serving,
+  wireGeneration,
+  wireRecord,
+  type LabeledGeneration,
+  type Selection,
+} from "./generation-state.js";
+import {
+  generationFromRow,
   GENERATION_COLUMNS,
-  recordFromRow,
+  rowFromGeneration,
+  rowFromSelection,
+  SELECTION_COLUMNS,
+  selectionFromRow,
   type GenerationRow,
   type SelectionRow,
 } from "./generation-rows.js";
-import type { RunOutcome } from "./conversations/index.js";
-import { GenerationProbation } from "./probation.js";
 import type { GenerationChange } from "./history/commits.js";
 
 export type GenerationStatus = "candidate" | "ready" | "failed";
@@ -41,11 +59,6 @@ export type ActiveGeneration = Readonly<{
   epoch: number;
 }>;
 
-export type Selection = Readonly<{
-  activeLabel: GenerationLabel | undefined;
-  epoch: number;
-}>;
-
 export type ActivationCommand = Readonly<{
   kind: "activate" | "rollback";
   label: GenerationLabel;
@@ -63,7 +76,8 @@ export type ControlProblemCode =
   | "not-ready"
   | "not-previously-active"
   | "facet-compatibility-mismatch"
-  | "stale-epoch";
+  | "stale-epoch"
+  | "run-active";
 
 export type GenerationControlResult =
   | Readonly<{
@@ -81,17 +95,37 @@ export type PreparationOutcome =
   | Readonly<{ status: "ready"; compatibility: string }>
   | Readonly<{ status: "failed" }>;
 
-export type PreparationRecord = Readonly<{
-  record: GenerationRecord;
-  epoch: number;
-  effect: "recorded" | "no-op";
-}>;
+const PROVEN_KEY = "generations.proven";
+
+const PROBATION_KEY = "generations.probation";
+
+function addProvenLabel(storage: DurableObjectStorage): void {
+  const { sql, kv } = storage;
+
+  const present = sql
+    .exec("SELECT 1 FROM pragma_table_info('generation_state') WHERE name = 'proven_label'")
+    .toArray();
+
+  if (present.length > 0) return;
+
+  sql.exec(`ALTER TABLE generation_state ADD COLUMN proven_label INTEGER
+    REFERENCES generations(label) CHECK (proven_label IS NULL OR active_label IS NOT NULL)`);
+
+  const proven = kv.get<GenerationLabel>(PROVEN_KEY);
+
+  const { active_label: active } = sql
+    .exec<SelectionRow>(`SELECT ${SELECTION_COLUMNS} FROM generation_state`)
+    .one();
+
+  if (proven !== undefined && (active === proven || kv.get(PROBATION_KEY) === active)) {
+    sql.exec("UPDATE generation_state SET proven_label = ? WHERE singleton = 1", proven);
+  }
+}
 
 export class Generations {
   readonly #storage: DurableObjectStorage;
   readonly #sql: SqlStorage;
   readonly #compatibility: string;
-  readonly #probation: GenerationProbation;
   readonly #onChange: ((change: GenerationChange) => void) | undefined;
 
   constructor(
@@ -103,226 +137,178 @@ export class Generations {
     this.#onChange = onChange;
     this.#sql = storage.sql;
     this.#compatibility = compatibility;
-    this.#probation = new GenerationProbation(storage.kv);
-    this.#sql.exec(`
-      CREATE TABLE IF NOT EXISTS generations (
-        label INTEGER PRIMARY KEY CHECK (label >= 0),
-        harness_commit TEXT NOT NULL UNIQUE,
-        status TEXT NOT NULL CHECK (status IN ('candidate', 'ready', 'failed')),
-        was_active INTEGER NOT NULL DEFAULT 0 CHECK (was_active IN (0, 1)),
-        facet_compatibility TEXT
-      );
-      CREATE TABLE IF NOT EXISTS generation_state (
-        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-        active_label INTEGER REFERENCES generations(label),
-        epoch INTEGER NOT NULL CHECK (epoch >= 0)
-      );
-      INSERT INTO generation_state (singleton, active_label, epoch)
-      VALUES (1, NULL, 0)
-      ON CONFLICT (singleton) DO NOTHING;
-    `);
+    storage.transactionSync(() => {
+      this.#sql.exec(`
+        CREATE TABLE IF NOT EXISTS generations (
+          label INTEGER PRIMARY KEY CHECK (label >= 0),
+          harness_commit TEXT NOT NULL UNIQUE,
+          status TEXT NOT NULL CHECK (status IN ('candidate', 'ready', 'failed')),
+          was_active INTEGER NOT NULL DEFAULT 0 CHECK (was_active IN (0, 1)),
+          facet_compatibility TEXT
+        );
+        CREATE TABLE IF NOT EXISTS generation_state (
+          singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+          active_label INTEGER REFERENCES generations(label),
+          epoch INTEGER NOT NULL CHECK (epoch >= 0)
+        );
+        INSERT INTO generation_state (singleton, active_label, epoch)
+        VALUES (1, NULL, 0)
+        ON CONFLICT (singleton) DO NOTHING;
+      `);
+      addProvenLabel(storage);
+    });
   }
 
   submit(harnessCommit: HarnessCommit): Submission {
-    const before = this.#selection().epoch;
-
-    const submission = this.#storage.transactionSync((): Submission => {
-      const { epoch } = this.#selection();
-
-      const existing = this.#sql
-        .exec<GenerationRow>(
-          `SELECT ${GENERATION_COLUMNS} FROM generations WHERE harness_commit = ?`,
-          harnessCommit,
-        )
-        .toArray()[0];
-
-      if (existing !== undefined) {
-        return {
-          kind: "candidate-submitted",
-          generation: recordFromRow(existing).generation,
-          epoch,
-        };
-      }
-
-      const inserted = this.#sql
-        .exec<GenerationRow>(
-          `INSERT INTO generations (label, harness_commit, status)
-           VALUES ((SELECT COALESCE(MAX(label), -1) + 1 FROM generations), ?, 'candidate')
-           RETURNING ${GENERATION_COLUMNS}`,
-          harnessCommit,
+    return this.#run(() => {
+      const next = this.#sql
+        .exec<{ label: GenerationLabel }>(
+          "SELECT COALESCE(MAX(label), -1) + 1 AS label FROM generations",
         )
         .one();
 
-      this.#writeEpoch(epoch + 1);
-
-      return {
-        kind: "candidate-submitted",
-        generation: recordFromRow(inserted).generation,
-        epoch: epoch + 1,
-      };
+      return submission(this.#selection(), this.#where("harness_commit", harnessCommit), {
+        label: next.label,
+        harnessCommit,
+      });
     });
-
-    if (submission.epoch !== before) {
-      this.#announce("submitted", submission.epoch, submission.generation.label);
-    }
-
-    return submission;
   }
 
   activate(command: ActivationCommand): GenerationControlResult {
-    const result = this.#storage.transactionSync(() => {
-      const decided = decideActivation(
-        command,
-        this.#record(command.label),
-        this.#selection(),
-        this.#compatibility,
-      );
-
-      if (decided.ok && decided.outcome.effect === "activated") {
-        this.#select(command.label, decided.outcome.epoch);
-        this.#probation.activated(command.label);
-      }
-
-      return decided;
-    });
-
-    if (result.ok && result.outcome.effect === "activated") {
-      this.#announce(
-        command.kind === "activate" ? "activated" : "rolled-back",
-        result.outcome.epoch,
-        command.label,
-      );
-    }
-
-    return result;
+    return this.#run(() =>
+      activation(this.#selection(), this.#generation(command.label), command, this.#compatibility),
+    );
   }
 
-  settled({
-    outcome,
-    errorCode,
-  }: Readonly<{ outcome: RunOutcome; errorCode: string | null }>):
-    | Readonly<{ command: ActivationCommand; epoch: number }>
-    | undefined {
-    const { activeLabel } = this.#selection();
+  settled(run: Settlement): RollbackReply {
+    return this.#run(() => {
+      const selection = this.#selection();
 
-    const fallback =
-      activeLabel === undefined ? undefined : this.#probation.settled(activeLabel, outcome);
+      const { serving } = selection;
 
-    if (fallback === undefined || activeLabel === undefined) return undefined;
+      const fallback = Serving.guards.Probation(serving)
+        ? this.#generation(serving.fallback)
+        : undefined;
 
-    this.#announce("probation-failed", this.#selection().epoch, activeLabel, outcome, errorCode);
+      const { outcome, errorCode } = run;
 
-    const command = {
-      kind: "rollback",
-      label: fallback,
-      observedEpoch: this.#selection().epoch,
-    } as const;
-
-    const result = this.activate(command);
-
-    logEvent("warn", "generation.probation-failed", {
-      label: activeLabel,
-      fallback,
-      outcome,
-      errorCode,
-      refused: result.ok ? null : result.problem.code,
+      return settlement(selection, fallback, { outcome, errorCode }, this.#compatibility);
     });
-
-    return result.ok && result.outcome.effect === "activated"
-      ? { command, epoch: result.outcome.epoch }
-      : undefined;
   }
 
   recordPreparation(
     label: GenerationLabel,
     outcome: PreparationOutcome,
-  ): PreparationRecord | undefined {
-    const recorded = this.#storage.transactionSync(() => {
-      const current = this.#record(label);
+  ): PreparationReply | undefined {
+    return this.#run(() => {
+      const current = this.#generation(label);
 
       return current === undefined
-        ? undefined
-        : this.#writePreparation(decidePreparation(current, outcome, this.#selection()));
+        ? { commands: [], reply: undefined }
+        : preparation(this.#selection(), current, outcome);
     });
-
-    if (recorded !== undefined && recorded.effect === "recorded") {
-      this.#announce("prepared", recorded.epoch, label, outcome.status);
-    }
-
-    return recorded;
-  }
-
-  #announce(
-    kind: GenerationChange["kind"],
-    epoch: number,
-    label: GenerationLabel,
-    outcome: string | null = null,
-    errorCode: string | null = null,
-  ): void {
-    const record = this.#record(label);
-
-    if (record !== undefined) {
-      this.#onChange?.({ kind, epoch, outcome, errorCode, record });
-    }
-  }
-
-  #writePreparation(recorded: PreparationRecord): PreparationRecord {
-    const { generation, compatibility } = recorded.record;
-
-    this.#sql.exec(
-      "UPDATE generations SET status = ?, facet_compatibility = ? WHERE label = ?",
-      generation.status,
-      compatibility ?? null,
-      generation.label,
-    );
-    this.#writeEpoch(recorded.epoch);
-
-    return recorded;
   }
 
   all(): readonly GenerationRecord[] {
-    return allRecords(this.#sql);
+    return this.#sql
+      .exec<GenerationRow>(`SELECT ${GENERATION_COLUMNS} FROM generations ORDER BY label ASC`)
+      .toArray()
+      .map((row) => wireRecord(generationFromRow(row)));
   }
 
   active(): ActiveGeneration {
-    const { activeLabel, epoch } = this.#selection();
+    const { serving, epoch } = this.#selection();
+    const current = serving.active === null ? undefined : this.#generation(serving.active);
 
-    return {
-      generation: activeLabel === undefined ? undefined : this.#record(activeLabel)?.generation,
-      epoch,
-    };
+    return { generation: current === undefined ? undefined : wireGeneration(current), epoch };
   }
 
   byLabel(label: GenerationLabel): Generation | undefined {
-    return this.#record(label)?.generation;
+    const found = this.#generation(label);
+
+    return found === undefined ? undefined : wireGeneration(found);
   }
 
-  #record(label: GenerationLabel): GenerationRecord | undefined {
+  #run<Reply>(decide: () => Step<Reply>): Reply {
+    const step = this.#storage.transactionSync(() => {
+      const decided = decide();
+
+      if (decided.generation !== undefined) this.#writeGeneration(decided.generation);
+
+      if (decided.selection !== undefined) this.#writeSelection(decided.selection);
+
+      return decided;
+    });
+
+    for (const command of step.commands) this.#perform(command);
+
+    return step.reply;
+  }
+
+  #perform(command: GenerationCommand): void {
+    GenerationCommand.$match(command, {
+      Changed: ({ kind, epoch, label, outcome, errorCode }) => {
+        const changed = this.#generation(label);
+
+        if (changed !== undefined) {
+          this.#onChange?.({ kind, epoch, outcome, errorCode, record: wireRecord(changed) });
+        }
+      },
+      ProbationFailed: ({ _tag, ...fields }) => {
+        logEvent("warn", "generation.probation-failed", fields);
+      },
+    });
+  }
+
+  #writeGeneration(generation: LabeledGeneration): void {
+    const row = rowFromGeneration(generation);
+
+    this.#sql.exec(
+      `INSERT INTO generations (${GENERATION_COLUMNS}) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (label) DO UPDATE SET status = excluded.status,
+         was_active = excluded.was_active, facet_compatibility = excluded.facet_compatibility`,
+      row.label,
+      row.harness_commit,
+      row.status,
+      row.was_active,
+      row.facet_compatibility,
+    );
+  }
+
+  #writeSelection(selection: Selection): void {
+    const row = rowFromSelection(selection);
+
+    this.#sql.exec(
+      "UPDATE generation_state SET active_label = ?, proven_label = ?, epoch = ? WHERE singleton = 1",
+      row.active_label,
+      row.proven_label,
+      row.epoch,
+    );
+  }
+
+  #generation(label: GenerationLabel): LabeledGeneration | undefined {
+    return this.#where("label", label);
+  }
+
+  #where(
+    column: "label" | "harness_commit",
+    value: GenerationLabel | HarnessCommit,
+  ): LabeledGeneration | undefined {
     const row = this.#sql
-      .exec<GenerationRow>(`SELECT ${GENERATION_COLUMNS} FROM generations WHERE label = ?`, label)
+      .exec<GenerationRow>(
+        `SELECT ${GENERATION_COLUMNS} FROM generations WHERE ${column} = ?`,
+        value,
+      )
       .toArray()[0];
 
-    return row === undefined ? undefined : recordFromRow(row);
+    return row === undefined ? undefined : generationFromRow(row);
   }
 
   #selection(): Selection {
-    const row = this.#sql
-      .exec<SelectionRow>("SELECT active_label, epoch FROM generation_state WHERE singleton = 1")
-      .one();
-
-    return { activeLabel: row.active_label ?? undefined, epoch: row.epoch };
-  }
-
-  #writeEpoch(epoch: number): void {
-    this.#sql.exec("UPDATE generation_state SET epoch = ? WHERE singleton = 1", epoch);
-  }
-
-  #select(label: GenerationLabel, epoch: number): void {
-    this.#sql.exec(
-      "UPDATE generation_state SET active_label = ?, epoch = ? WHERE singleton = 1",
-      label,
-      epoch,
+    return selectionFromRow(
+      this.#sql
+        .exec<SelectionRow>(`SELECT ${SELECTION_COLUMNS} FROM generation_state WHERE singleton = 1`)
+        .one(),
     );
-    this.#sql.exec("UPDATE generations SET was_active = 1 WHERE label = ?", label);
   }
 }

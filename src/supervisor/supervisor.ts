@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import type { HarnessCommit } from "../harness-commit.js";
-import type { ActivationCommand, GenerationLabel } from "./generations.js";
+import type { ActivationCommand, GenerationControlResult, GenerationLabel } from "./generations.js";
 import { WORKSPACE_BUSY, type WorkspaceHostNamespace } from "../workspace/index.js";
 import type { EntriesRequest } from "../entries-request.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
@@ -25,7 +25,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
-    this.#parts = supervisorParts(ctx, env, () => this.#resetInProgress, this);
+    this.#parts = supervisorParts(ctx, env, () => this.#resetInProgress, {
+      getActiveGeneration: () => this.getActiveGeneration(),
+      submitGeneration: (harnessCommit) => this.submitGeneration(harnessCommit),
+      prepareGeneration: (label) => this.prepareGeneration(label),
+      controlGeneration: (command) => this.#activate(command),
+    });
     void ctx.blockConcurrencyWhile(() => this.#parts.migrate());
     this.#parts.serving.started(env.CF_VERSION_METADATA?.id ?? null);
   }
@@ -54,7 +59,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.#parts.generations.submit(harnessCommit);
   }
 
-  controlGeneration(command: ActivationCommand) {
+  controlGeneration(command: ActivationCommand): GenerationControlResult {
+    if (this.#parts.serving.running()) return { ok: false, problem: { code: "run-active" } };
+
+    return this.#activate(command);
+  }
+
+  #activate(command: ActivationCommand): GenerationControlResult {
     const result = this.#parts.generations.activate(command);
 
     if (result.ok && result.outcome.effect === "activated") {

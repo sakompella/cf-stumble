@@ -5,6 +5,7 @@ import {
   activateGeneration,
   artifact,
   connectedSupervisor,
+  generationLabel,
   prepareWithModuleMap,
   submitCandidate,
   FACET_COMPATIBILITY_METHOD,
@@ -184,4 +185,19 @@ test("a run reported first without its number and then with it stays one run, so
   await send(control, "r3", "end");
 
   expect(await activeLabel(control)).toBe(working);
+});
+
+test("an owner activation is refused while a run is in flight", async () => {
+  const { control, working } = await provenThenActivated("probation-activation-busy", SOUND, null);
+  const { epoch } = await control.getActiveGeneration();
+
+  await send(control, "r2", "hold");
+
+  expect(
+    await control.controlGeneration({
+      kind: "rollback",
+      label: generationLabel(working),
+      observedEpoch: epoch,
+    }),
+  ).toEqual({ ok: false, problem: { code: "run-active" } });
 });

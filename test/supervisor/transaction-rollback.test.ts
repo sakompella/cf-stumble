@@ -43,7 +43,7 @@ test("a submission whose epoch write fails raises and labels nothing", async () 
   const outcome = await runInDurableObject(supervisor("submit-rolls-back"), (_instance, state) => {
     const generations = new Generations(state.storage, FACET_COMPATIBILITY);
 
-    refuseStatements(state.storage, "UPDATE generation_state SET epoch");
+    refuseStatements(state.storage, "UPDATE generation_state SET");
 
     const raised = raises(() => {
       generations.submit(testHarnessCommit(commit));
@@ -61,13 +61,13 @@ test("a submission whose epoch write fails raises and labels nothing", async () 
   expect(outcome).toEqual({ raised: true, labeled: 0, epoch: 0 });
 });
 
-test("a preparation check whose status write fails raises and changes nothing", async () => {
+test("a preparation check whose selection write fails raises and changes nothing", async () => {
   const outcome = await runInDurableObject(supervisor("check-rolls-back"), (_instance, state) => {
     const generations = new Generations(state.storage, FACET_COMPATIBILITY);
 
     const { label } = generations.submit(testHarnessCommit(commit)).generation;
 
-    refuseStatements(state.storage, "UPDATE generations SET status");
+    refuseStatements(state.storage, "UPDATE generation_state SET");
 
     const raised = raises(() => {
       generations.recordPreparation(label, {
