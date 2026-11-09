@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Wake } from "@earendil-works/pi-durable";
 import type { RunReport } from "./host-target.js";
@@ -34,6 +35,10 @@ export type FacetReplacement = Readonly<{
   command: Readonly<{ kind: "activate" | "rollback"; label: number }>;
   epoch: number;
 }>;
+
+export class AlarmWriteFailed extends Data.TaggedError("AlarmWriteFailed")<{
+  readonly cause: unknown;
+}> {}
 
 export type Settlement = Readonly<{
   conversationId: string;
@@ -147,7 +152,7 @@ export class ConversationRuns {
     );
   }
 
-  arm(wake: Wake, now: number): Effect.Effect<void> {
+  arm(wake: Wake, now: number): Effect.Effect<void, AlarmWriteFailed> {
     return Effect.suspend(() => {
       this.#storage.kv.put(WAKE_KEY, wake);
 
@@ -155,11 +160,11 @@ export class ConversationRuns {
     });
   }
 
-  setAlarm(now: number): Effect.Effect<void> {
+  setAlarm(now: number): Effect.Effect<void, AlarmWriteFailed> {
     return Effect.suspend(() => this.#writeAlarm(now));
   }
 
-  #writeAlarm(now: number): Effect.Effect<void> {
+  #writeAlarm(now: number): Effect.Effect<void, AlarmWriteFailed> {
     const wake = this.#storage.kv.get<Wake>(WAKE_KEY);
 
     const candidates = [
@@ -168,11 +173,13 @@ export class ConversationRuns {
       ...[...this.#runs().values()].flatMap((run) => (run.deadline > now ? [run.deadline] : [])),
     ].filter((at) => at !== undefined);
 
-    return Effect.promise(() =>
-      candidates.length === 0
-        ? this.#storage.deleteAlarm()
-        : this.#storage.setAlarm(Math.min(...candidates)),
-    );
+    return Effect.tryPromise({
+      try: () =>
+        candidates.length === 0
+          ? this.#storage.deleteAlarm()
+          : this.#storage.setAlarm(Math.min(...candidates)),
+      catch: (cause) => new AlarmWriteFailed({ cause }),
+    });
   }
 
   #write(conversationId: string, state: RunState): void {

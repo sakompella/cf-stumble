@@ -22,6 +22,7 @@
     "src/routes/generations.ts": ["types"],
     "src/selectable-projects.ts": ["exports"],
     "src/stumble-cli/orb/tunnel.ts": ["exports", "types"],
+    "src/supervisor/conversations/runs.ts": ["exports"],
     "src/supervisor/readiness/provisioning.ts": ["exports"],
     "src/workspace-command-timeout.ts": ["exports"],
     "src/workspace/commands/build-harness.ts": ["exports", "types"],
