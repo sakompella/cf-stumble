@@ -54,14 +54,10 @@ test("a tool with one field of the wrong type or missing is rejected at its inde
 
     tools.splice(index, 0, corrupted(drawTool(tc), fieldName, value));
 
-    const reason = Result.match(
-      parseRequest(decodeWire(JSON.stringify({ messages: [USER], tools }))),
-      {
-        onSuccess: () => "parsed",
-        onFailure: (failure) => failure.error.reason,
-      },
-    );
+    const parsed = parseRequest(decodeWire(JSON.stringify({ messages: [USER], tools })));
+    const failure = Result.isFailure(parsed) ? parsed.failure : undefined;
 
-    expect(reason).toMatch(new RegExp(`^tools\\[${index}\\] `, "u"));
+    expect(failure?.error, `tools[${index}]`).toMatchObject({ code: "invalid-request" });
+    expect(failure?.error.reason, `tools[${index}]`).toContain(`tools[${index}]`);
   });
 });
