@@ -3,6 +3,7 @@ import { defineTaggedUnion } from "foldkit/schema";
 import { BackendSetting } from "../../backend-setting.js";
 import { Conversation } from "./conversation.js";
 import { FreshThread } from "./fresh-thread.js";
+import { StreamPhase } from "./stream-phase.js";
 import { Outgoing } from "./outgoing.js";
 
 export const Project = Schema.Struct({
@@ -115,7 +116,7 @@ export const Model = Schema.Struct({
 
   maybeProjectId: Schema.Option(Schema.String),
   conversationProject: Schema.String,
-  conversationState: Schema.String,
+  streamPhase: StreamPhase,
   eventsStreamId: Schema.Number,
   conversation: Conversation,
   outgoing: Schema.Array(Outgoing),

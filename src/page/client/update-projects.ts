@@ -13,6 +13,7 @@ import {
 import type { GitHubReport, Model, Project } from "./model.js";
 import { EMPTY_CONVERSATION } from "./conversation.js";
 import { advanceFreshThread, FreshThreadEvent } from "./fresh-thread.js";
+import { StreamPhase } from "./stream-phase.js";
 import { withoutQueued } from "./outgoing.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
@@ -59,7 +60,7 @@ function selectProject(model: Model, project: Project): UpdateReturn {
       runNote: "",
       conversation: EMPTY_CONVERSATION,
       outgoing: withoutQueued(model.outgoing),
-      conversationState: "reading",
+      streamPhase: StreamPhase.Reading(),
     },
   };
 }
@@ -81,7 +82,7 @@ function listedProjects(model: Model, projects: readonly Project[]): UpdateRetur
   };
 
   return Option.match(Array.head(projects), {
-    onNone: () => ({ model: { ...listed, conversationState: "select a project first" } }),
+    onNone: () => ({ model: { ...listed, streamPhase: StreamPhase.NoProjects() } }),
     onSome: (first) =>
       Option.isNone(model.maybeProjectId) ? selectProject(listed, first) : { model: listed },
   });

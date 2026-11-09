@@ -7,11 +7,11 @@ import {
   gitHubReport,
   submitRejection,
 } from "../../../src/page/client/api.js";
-import { freshThreadWording } from "../../../src/page/client/fresh-thread.js";
 import { Message } from "../../../src/page/client/message.js";
 import { ControlRequest, type Model } from "../../../src/page/client/model.js";
 import { controlLabel } from "../../../src/page/client/update-generation.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { freshShown, streamShown } from "./shown.js";
 import { entryItem, received, running, viewing, whoShown, type Conversation } from "./views.js";
 
 const PROJECTS = [
@@ -55,7 +55,7 @@ test("the first listed project is selected and its events stream opened", () => 
   const listed = update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS }));
 
   expect(listed.model.projectListStatus).toBe("1 connected");
-  expect(listed.model.conversationState).toBe("reading");
+  expect(streamShown(listed.model)).toBe("reading");
   expect(Option.getOrNull(listed.model.maybeProjectId)).toBe("repo");
   expect(listed.model.eventsStreamId).toBe(init().model.eventsStreamId + 1);
   expect(listed.commands ?? []).toEqual([]);
@@ -150,7 +150,7 @@ test("a reconnect keeps only the sent messages its view still holds queued", () 
   ]);
 
   expect(page.outgoing.map((item) => item.requestId)).toEqual(["queued", "sending"]);
-  expect(page.conversationState).toBe("live");
+  expect(streamShown(page)).toBe("live");
 });
 
 test("a refused send takes the message out of the transcript, says why, and puts the text back in the prompt", () => {
@@ -225,7 +225,7 @@ test("a dropped stream says it is reconnecting and keeps the conversation it sho
     Message.DisconnectedEvents({ streamId: busy.eventsStreamId, detail: "the stream ended" }),
   ]);
 
-  expect(dropped.conversationState).toBe("reconnecting: the stream ended");
+  expect(streamShown(dropped)).toBe("reconnecting: the stream ended");
   expect(dropped.conversation).toEqual(busy.conversation);
 });
 
@@ -237,7 +237,7 @@ test("a fresh thread needs two clicks and no active run, then opens a new stream
   const busy = after(armed, [conversation(running())]);
 
   expect(commandNames(busy, Message.ClickedFreshThread())).toEqual([]);
-  expect(freshThreadWording(update(busy, Message.ClickedFreshThread()).model.freshThread)).toBe(
+  expect(freshShown(update(busy, Message.ClickedFreshThread()).model)).toBe(
     "a run is active; cancel it first",
   );
 
@@ -248,9 +248,7 @@ test("a fresh thread needs two clicks and no active run, then opens a new stream
 
   expect(fresh.eventsStreamId).toBe(armed.eventsStreamId + 1);
   expect(fresh.conversation.items).toEqual([]);
-  expect(freshThreadWording(fresh.freshThread)).toBe(
-    "fresh thread started; repository files are untouched",
-  );
+  expect(freshShown(fresh)).toBe("fresh thread started; repository files are untouched");
 });
 
 test("clicks while a fresh thread is starting send no second replace", () => {
@@ -273,7 +271,7 @@ test("sending a message while a fresh thread is starting keeps the page saying s
     Message.ClickedFreshThread(),
   ]);
 
-  expect(freshThreadWording(sent.freshThread)).toBe("starting a fresh thread");
+  expect(freshShown(sent)).toBe("starting a fresh thread");
 });
 
 test("activation sends nothing until the page has rendered an epoch", () => {

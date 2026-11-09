@@ -10,6 +10,7 @@ import {
   settledOutgoing,
   withoutQueued,
 } from "./outgoing.js";
+import { StreamPhase } from "./stream-phase.js";
 import { transcriptHandlers } from "./update-transcript.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
@@ -115,7 +116,7 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
     model: {
       ...model,
       conversation,
-      conversationState: "live",
+      streamPhase: StreamPhase.Live(),
       outgoing: Option.match(model.maybeProjectId, {
         onNone: () => model.outgoing,
         onSome: (projectId) => settledOutgoing(conversation, model.outgoing, projectId),
@@ -246,7 +247,7 @@ function replacedThread(model: Model): UpdateReturn {
       eventsStreamId: model.eventsStreamId + 1,
       conversation: EMPTY_CONVERSATION,
       outgoing: withoutQueued(model.outgoing),
-      conversationState: "reading",
+      streamPhase: StreamPhase.Reading(),
       runNote: "",
     },
     FreshThreadEvent.Succeeded(),
@@ -272,8 +273,8 @@ export function streamHandlers(
   const forStream = (streamId: number, next: () => UpdateReturn): UpdateReturn =>
     streamId === model.eventsStreamId ? next() : { model };
 
-  const showing = (conversationState: string): UpdateReturn => ({
-    model: { ...model, conversationState },
+  const showing = (streamPhase: StreamPhase): UpdateReturn => ({
+    model: { ...model, streamPhase },
   });
 
   return {
@@ -293,9 +294,10 @@ export function streamHandlers(
     ReceivedConversation: ({ streamId, conversation }) =>
       streamId === model.eventsStreamId ? receivedConversation(model, conversation) : { model },
     ReceivedUnreadableEvent: ({ streamId }) =>
-      forStream(streamId, () => showing("unreadable event from this Worker")),
-    RefusedEvents: ({ streamId, wording }) => forStream(streamId, () => showing(wording)),
+      forStream(streamId, () => showing(StreamPhase.Unreadable())),
+    RefusedEvents: ({ streamId, wording }) =>
+      forStream(streamId, () => showing(StreamPhase.Refused({ wording }))),
     DisconnectedEvents: ({ streamId, detail }) =>
-      forStream(streamId, () => showing(`reconnecting: ${detail}`)),
+      forStream(streamId, () => showing(StreamPhase.Reconnecting({ detail }))),
   };
 }

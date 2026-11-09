@@ -1,10 +1,10 @@
 import { createLazy, type Html, type HtmlBuilder } from "foldkit/html";
 import * as Option from "effect/Option";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
-import type { Conversation } from "./conversation.js";
 import { Message } from "./message.js";
 import { FreshThread, freshThreadWording } from "./fresh-thread.js";
 import type { Model } from "./model.js";
+import { streamWording } from "./stream-phase.js";
 import { statusText } from "./view-parts.js";
 import { transcriptOf } from "./transcript.js";
 import { transcriptView } from "./view-transcript.js";
@@ -12,7 +12,7 @@ import { transcriptView } from "./view-transcript.js";
 const lazyTranscript = createLazy();
 
 function conversationTranscript(
-  conversation: Conversation,
+  conversation: Model["conversation"],
   outgoing: Model["outgoing"],
   projectId: string,
   h: HtmlBuilder<Message>,
@@ -96,7 +96,7 @@ export function conversationView(model: Model, h: HtmlBuilder<Message>): Html {
         [h.Class("conversation-head")],
         [
           h.h2([h.Id(ID.conversationProject)], [model.conversationProject]),
-          h.span([h.Class("note"), h.Id(ID.conversationState)], [model.conversationState]),
+          h.span([h.Class("note"), h.Id(ID.conversationState)], [streamWording(model.streamPhase)]),
         ],
       ),
       lazyTranscript(conversationTranscript, [
