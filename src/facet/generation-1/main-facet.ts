@@ -27,11 +27,19 @@ const KEEPALIVE_LINE = encoder.encode("\n");
 
 const KEEPALIVE_MS = 2_000;
 
+type SessionSlot =
+  | Readonly<{ kind: "closed" }>
+  | Readonly<{ kind: "opening"; opening: Promise<Session> }>
+  | Readonly<{ kind: "open"; session: Session }>;
+
+const CLOSED: SessionSlot = { kind: "closed" };
+
 export class MainFacet
   extends DurableObject<Readonly<{ MODEL: ModelCapability }>>
   implements ConversationFacet
 {
-  #session: Promise<Session> | undefined;
+  #slot: SessionSlot = CLOSED;
+  #activeWork = 0;
 
   compatibility(): string {
     return FACET_COMPATIBILITY;
@@ -41,8 +49,8 @@ export class MainFacet
     host: Received<ConversationHost>,
     generations?: Received<GenerationControl>,
   ): Promise<void> {
-    if (this.#session === undefined) {
-      const opening = openSession({
+    const session = await this.#openedOr(() =>
+      openSession({
         storage: this.ctx.storage,
         host: host.dup(),
         generations: generations?.dup(),
@@ -50,22 +58,10 @@ export class MainFacet
         abort: (reason) => {
           this.ctx.abort(reason);
         },
-      });
+      }),
+    );
 
-      this.#session = opening;
-      void opening.then(
-        ({ harness }) =>
-          harness.closed.then(() => {
-            if (this.#session === opening) this.#session = undefined;
-          }),
-        () => {
-          this.#session = undefined;
-        },
-      );
-    }
-
-    const session = await this.#session;
-    await session.host.arm(session.harness.wake());
+    await this.#arm(session);
     session.harness.resume();
   }
 
@@ -89,12 +85,15 @@ export class MainFacet
 
   async submit(conversationId: string, content: string, requestId: string): Promise<number> {
     const conversation = await this.#conversation(conversationId);
+    const endWork = await this.#beginWork();
 
-    const submission = await this.#startingWork(() =>
-      conversation.submit({ type: "input", content, requestId }, context),
-    );
+    try {
+      const submission = await conversation.submit({ type: "input", content, requestId }, context);
 
-    return submission.id;
+      return submission.id;
+    } finally {
+      endWork();
+    }
   }
 
   async events(conversationId: string, from?: number): Promise<ReadableStream<Uint8Array>> {
@@ -152,27 +151,71 @@ export class MainFacet
 
   async abort(conversationId: string): Promise<void> {
     const conversation = await this.#conversation(conversationId);
-    const { harness, host } = await this.#opened();
+    const endWork = await this.#beginWork();
 
-    await host.arm({ ...harness.wake(), active: true });
     void conversation
       .abort(context)
-      .then(() => host.arm(harness.wake()))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(endWork);
   }
 
   #opened(): Promise<Session> {
-    return this.#session ?? Promise.reject(new Error("attach first"));
+    const slot = this.#slot;
+
+    switch (slot.kind) {
+      case "closed":
+        return Promise.reject(new Error("attach first"));
+      case "opening":
+        return slot.opening;
+      case "open":
+        return Promise.resolve(slot.session);
+      default: {
+        const exhaustive: never = slot;
+
+        return exhaustive;
+      }
+    }
   }
 
-  async #startingWork<T>(call: () => Promise<T>): Promise<T> {
-    const { harness, host } = await this.#opened();
+  #openedOr(open: () => Promise<Session>): Promise<Session> {
+    if (this.#slot.kind !== "closed") return this.#opened();
 
-    await host.arm({ ...harness.wake(), active: true });
-    const result = await call();
-    await host.arm(harness.wake());
+    const opening = open();
+    this.#slot = { kind: "opening", opening };
+    void opening.then(
+      (session) => {
+        this.#slot = { kind: "open", session };
+        void session.harness.closed.then(() => {
+          if (this.#slot.kind === "open" && this.#slot.session === session) this.#slot = CLOSED;
+        });
+      },
+      () => {
+        this.#slot = CLOSED;
+      },
+    );
 
-    return result;
+    return opening;
+  }
+
+  async #arm({ harness, host }: Session): Promise<void> {
+    await host.arm(this.#activeWork > 0 ? { ...harness.wake(), active: true } : harness.wake());
+  }
+
+  async #beginWork(): Promise<() => void> {
+    const session = await this.#opened();
+    this.#activeWork += 1;
+
+    try {
+      await this.#arm(session);
+    } catch (cause) {
+      this.#activeWork -= 1;
+      throw cause;
+    }
+
+    return () => {
+      this.#activeWork -= 1;
+      void this.#arm(session).catch(() => {});
+    };
   }
 
   async #conversation(conversationId: string): Promise<Conversation> {

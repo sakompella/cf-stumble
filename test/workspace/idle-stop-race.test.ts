@@ -91,3 +91,40 @@ test.each(["close", "destroy"] as const)(
     expect(calls).toEqual(phase === "close" ? ["close"] : ["close", "destroy"]);
   },
 );
+
+test("a backend change during an idle stop that work keeps alive still stops the container", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const { idle, clock, calls, release } = gated("close");
+  idle.begin()();
+  clock.now = 11_000;
+  const alarm = idle.onAlarm();
+  await tick();
+  const end = idle.begin();
+  const backendChange = idle.stopForBackendChange();
+  release.open();
+
+  await alarm;
+  await backendChange;
+  end();
+
+  expect(calls).toEqual(["close", "destroy"]);
+});
+
+test("a failed stop for a backend change rejects, and work waiting on the stop still runs", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const idle = new WorkspaceIdleController({
+    nowMs: () => 1_000,
+    idleLimitMs: LIMIT,
+    setAlarm: () => Promise.resolve(),
+    containerRunning: () => true,
+    closeWorkspace: () => Promise.resolve(),
+    stopContainer: () => Promise.reject(new Error("provider stop failed")),
+  });
+
+  const backendChange = idle.stopForBackendChange();
+  const waiting = idle.settled();
+
+  await expect(backendChange).rejects.toThrow("provider stop failed");
+  await expect(waiting).resolves.toBeUndefined();
+});

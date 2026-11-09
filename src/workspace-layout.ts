@@ -1,3 +1,4 @@
+import type { HarnessCommit } from "./harness-commit.js";
 import type { ProjectId } from "./project-catalog.js";
 import type { SelectableProject } from "./selectable-projects.js";
 
@@ -15,7 +16,9 @@ export const BUILD_SCRATCH_ROOT = "/tmp/cf-stumble-builds";
 
 export const HARNESS_BUILD_OUTPUT_DIRECTORY = `${WORKSPACE_ROOT}/.cf-stumble-build-output`;
 
-export const HARNESS_BUILD_OUTPUT_PATH = `${HARNESS_BUILD_OUTPUT_DIRECTORY}/module-map.json`;
+export function harnessBuildOutputPath(harnessCommit: HarnessCommit): string {
+  return `${HARNESS_BUILD_OUTPUT_DIRECTORY}/${harnessCommit}.json`;
+}
 
 export const MANAGED_AGENT_INSTRUCTIONS_PATH = `${WORKSPACE_ROOT}/AGENTS.md`;
 

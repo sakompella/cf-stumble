@@ -135,8 +135,8 @@ export class ProviderLink {
     }
   }
 
-  async job(job: OrbJob): Promise<string | null> {
-    const reply = await this.#request((id) => hostFrame.job({ id, job }));
+  async job(job: OrbJob, deadlineMs?: number): Promise<string | null> {
+    const reply = await this.#request((id) => hostFrame.job({ id, job }), null, deadlineMs);
 
     if (!Predicate.isTagged(reply, "job-done")) throw unexpected(reply);
 
@@ -180,7 +180,11 @@ export class ProviderLink {
     else pending.resolve(reply);
   }
 
-  #request(frame: (id: number) => HostFrame, signal?: AbortSignal | null): Promise<ProviderReply> {
+  #request(
+    frame: (id: number) => HostFrame,
+    signal?: AbortSignal | null,
+    deadlineMs?: number,
+  ): Promise<ProviderReply> {
     const socket = this.#socket();
 
     if (socket === undefined)
@@ -196,7 +200,17 @@ export class ProviderLink {
 
       signal?.addEventListener("abort", abandon, { once: true });
 
-      const settled = (): void => signal?.removeEventListener("abort", abandon);
+      const overdue =
+        deadlineMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              this.closed(socket);
+            }, deadlineMs);
+
+      const settled = (): void => {
+        clearTimeout(overdue);
+        signal?.removeEventListener("abort", abandon);
+      };
 
       this.#pending.set(id, {
         socket,

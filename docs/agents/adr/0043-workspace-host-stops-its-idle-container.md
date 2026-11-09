@@ -45,3 +45,12 @@ in progress before it starts. A stop that sees work in flight after the close ke
 and checks again one limit later. The check and the destroy follow each other with no wait between
 them, and an exec that begins after the destroy has started waits for it to finish and then
 launches a fresh container.
+
+**One stop at a time.** The stop is one phase machine (`src/workspace/idle-stop.ts`): idle, closing
+or destroying for an idle stop, and closing or destroying for a backend change. A pure transition
+returns the next phase and the commands to run, and the controller runs them. A backend change
+that arrives during an idle stop is queued in that stop: when the idle stop ends with the container
+still running (work began during the close, or the destroy failed), the container is destroyed for
+the backend change. `stopForBackendChange` rejects with the destroy's own error when that destroy
+fails, and work waiting on the stop goes on either way. A provider `stop` or `delete` job that gets
+no answer in 30 s drops the provider's socket (ADR-0050), so a stop never waits forever.

@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import { Harness } from "@earendil-works/pi-durable";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ConversationHost } from "../../../src/facet/index.js";
 import { MainFacet } from "../../../src/facet/generation-1/main-facet.js";
@@ -172,6 +173,79 @@ test("a turn whose model fails is reported to the host as failed with the reason
       await vi.waitFor(() => {
         expect(reports).toContainEqual({ [id]: "model_error" });
       });
+    },
+  );
+});
+
+function hostWith(overrides: Partial<ConversationHost>) {
+  const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
+    arm: () => Promise.resolve(),
+    log: () => Promise.resolve(),
+    running: () => Promise.resolve(),
+    workspace: () => Promise.reject(new Error("no workspace")),
+    ...overrides,
+    dup: () => host,
+  };
+
+  return host;
+}
+
+test("a host that refuses the first running report aborts the facet", async () => {
+  const host = hostWith({ running: () => Promise.reject(new Error("supervisor gone")) });
+
+  await runInDurableObject(
+    env.SUPERVISOR.getByName("main-facet-first-report"),
+    async (_instance, state) => {
+      const aborted = vi.spyOn(state, "abort").mockImplementation(() => {});
+      const facet = new MainFacet(state, { MODEL: noModelRun });
+
+      await expect(facet.attach(host)).rejects.toThrow("supervisor gone");
+      expect(aborted).toHaveBeenCalledTimes(1);
+    },
+  );
+});
+
+test("a submit that fails re-arms the plain wake", async () => {
+  const arms: unknown[] = [];
+
+  const host = hostWith({
+    arm: (wake) => {
+      arms.push(wake);
+
+      return Promise.resolve();
+    },
+  });
+
+  const open = Harness.open.bind(Harness);
+
+  vi.spyOn(Harness, "open").mockImplementation(async (...args) => {
+    const harness = await open(...args);
+    const conversation = harness.conversation.bind(harness);
+
+    vi.spyOn(harness, "conversation").mockImplementation(async (...lookup) => {
+      const found = await conversation(...lookup);
+
+      if (found !== undefined) vi.spyOn(found, "submit").mockRejectedValue(new Error("busy"));
+
+      return found;
+    });
+
+    return harness;
+  });
+
+  await runInDurableObject(
+    env.SUPERVISOR.getByName("main-facet-failed-submit"),
+    async (_instance, state) => {
+      const facet = new MainFacet(state, { MODEL: noModelRun });
+
+      await facet.attach(host);
+      const id = await facet.createConversation("/workspace");
+
+      await expect(facet.submit(id, "hello", "r1")).rejects.toThrow("busy");
+      await vi.waitFor(() => {
+        expect(arms.at(-1)).not.toMatchObject({ active: true });
+      });
+      expect(arms).toContainEqual(expect.objectContaining({ active: true }));
     },
   );
 });

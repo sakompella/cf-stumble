@@ -2,12 +2,10 @@ import { computerExecBackend, type ExecWorkspace } from "./computer-adapter.js";
 import {
   CONTAINER_BACKEND_ID,
   ISOLATE_BACKEND_ID,
-  type BackendExecEvent,
   type ContainerLifecycleState,
   type ExecBackend,
-  type ExecBackendHandle,
-  type ExecBackendInput,
 } from "./exec-backend.js";
+import { isolateWithContainerFallback } from "./exec-fallback.js";
 import { ISOLATE_PROGRAMS } from "./isolate-programs.js";
 import type { ExecBackendChoice } from "./protocol.js";
 
@@ -148,74 +146,6 @@ export function routedBackend(
   if (touchesPathOutsideWorkspace(command)) return "container";
 
   return isolateCanRun(command) ? "isolate" : "container";
-}
-
-const GIT_FALLBACK_VARIABLE = "CF_STUMBLE_GIT_FALLBACK";
-
-function fallbackInput(input: ExecBackendInput): ExecBackendInput {
-  return {
-    ...input,
-    command: `export ${GIT_FALLBACK_VARIABLE}=1; ${input.command}`,
-    backend: "container",
-  };
-}
-
-const NOTHING_RAN_EXIT_CODES: ReadonlySet<number> = new Set([127, 129]);
-
-export function isolateWithContainerFallback(
-  isolate: ExecBackend,
-  container: ExecBackend,
-): ExecBackend {
-  return {
-    async exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
-      let current = await isolate.exec(input);
-      let held: BackendExecEvent[] = [];
-      let ready: BackendExecEvent[] = [];
-      let holding = true;
-      let fellBack = false;
-
-      const read: ExecBackendHandle["reader"]["read"] = async () => {
-        for (;;) {
-          const next = ready.shift();
-
-          if (next !== undefined) return { done: false, value: next };
-
-          if (!holding) return current.reader.read();
-
-          const result = await current.reader.read();
-
-          if (result.done) {
-            holding = false;
-          } else if (result.value.name === "stderr") {
-            held.push(result.value);
-          } else if (
-            result.value.name === "exit" &&
-            NOTHING_RAN_EXIT_CODES.has(result.value.exitCode)
-          ) {
-            holding = false;
-            held = [];
-            fellBack = true;
-            current = await container.exec(fallbackInput(input));
-          } else {
-            holding = false;
-            ready = [...held, result.value];
-            held = [];
-          }
-        }
-      };
-
-      return {
-        reader: { read, cancel: () => current.reader.cancel() },
-        kill: () => current.kill(),
-        get backend() {
-          return current.backend;
-        },
-        get fellBackFrom() {
-          return fellBack ? "isolate" : undefined;
-        },
-      };
-    },
-  };
 }
 
 export function chosenExecBackend(

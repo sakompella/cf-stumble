@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { HARNESS_BUILD_CONFIGURATION, type HarnessBuildRequest } from "../../src/harness-build.js";
 import { executeHarnessBuildRequest } from "../../src/workspace/commands/build-harness.js";
-import { HARNESS_BUILD_OUTPUT_PATH } from "../../src/workspace-layout.js";
+import { harnessBuildOutputPath } from "../../src/workspace-layout.js";
 import {
   workspaceEffects,
   type PromiseOperations,
@@ -56,11 +56,31 @@ class FakeBuildOperations implements PromiseOperations {
 
     if (this.commandFailure !== undefined) return Promise.reject(this.commandFailure);
 
+    this.#applyFileChanges(source);
+
     return Promise.resolve({
       stdout: this.exitCode === 0 ? (this.stdout ?? `${source} output`) : "",
       stderr: "",
       exitCode: this.exitCode,
     });
+  }
+
+  #applyFileChanges(source: string): void {
+    const assigned = (name: string) => new RegExp(`^${name}='([^']*)'$`, "mu").exec(source)?.[1];
+    const from = assigned("path");
+    const to = assigned("output");
+
+    if (source.includes('cp -- "$path" "$output"') && from !== undefined && to !== undefined) {
+      this.files.set(to, this.files.get(from) ?? "");
+    }
+
+    const removed = /^rm -rf -- (.*)$/mu.exec(source)?.[1] ?? "";
+
+    for (const [, path = ""] of removed.matchAll(/'([^']*)'/gu)) {
+      for (const file of this.files.keys()) {
+        if (file === path || file.startsWith(`${path}/`)) this.files.delete(file);
+      }
+    }
   }
 }
 
@@ -110,7 +130,7 @@ test("a build step that cannot run is one workspace-unavailable failure", async 
 
 test("publishes the module map the build wrote and returns its text through the workspace filesystem", async () => {
   const operations = new FakeBuildOperations();
-  operations.files.set(HARNESS_BUILD_OUTPUT_PATH, '{"entryModule":"main.js","modules":[]}');
+  operations.files.set(moduleMapPath, '{"entryModule":"main.js","modules":[]}');
 
   const result = await build(operations, { kind: "build-output", harnessCommit: commit });
 
@@ -127,7 +147,7 @@ test("publishes the module map the build wrote and returns its text through the 
   );
   expect(publish, "the publish step writes no module map text to its stdout").not.toContain("cat");
   expect(operations.calls, "the text comes from the workspace filesystem, not from stdout").toEqual(
-    expect.arrayContaining([`read:${HARNESS_BUILD_OUTPUT_PATH}`]),
+    expect.arrayContaining([`read:${harnessBuildOutputPath(commit)}`]),
   );
 });
 
@@ -156,4 +176,33 @@ test("rejects a commit that is not a harness commit, so no path can escape the b
   }
 
   expect(operations.calls).toEqual([]);
+});
+
+test("two commits published at once each read their own module map", async () => {
+  const other = testHarnessCommit("5000000000000000000000000000000000000002");
+  const otherMap = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${other}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
+  const operations = new FakeBuildOperations();
+  operations.files.set(moduleMapPath, '{"entryModule":"a.js","modules":[]}');
+  operations.files.set(otherMap, '{"entryModule":"b.js","modules":[]}');
+  const read = operations.readFile.bind(operations);
+  let interleaved = false;
+  operations.readFile = async (path) => {
+    if (!interleaved) {
+      interleaved = true;
+      await build(operations, { kind: "build-output", harnessCommit: other });
+    }
+
+    return read(path);
+  };
+
+  const published = await build(operations, { kind: "build-output", harnessCommit: commit });
+  await build(operations, { kind: "build-discard", harnessCommit: other });
+
+  expect(published).toEqual({
+    ok: true,
+    result: { kind: "module-map", text: '{"entryModule":"a.js","modules":[]}' },
+  });
+  expect(operations.files.get(harnessBuildOutputPath(commit))).toBe(
+    '{"entryModule":"a.js","modules":[]}',
+  );
 });

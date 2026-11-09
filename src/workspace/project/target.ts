@@ -1,6 +1,6 @@
 import { RpcTarget } from "cloudflare:workers";
 import type { ExecBackend } from "./exec-backend.js";
-import { startExecOperation, type ExecOperation } from "./exec-operation.js";
+import { startExecOperation, type ExecOperation, type TerminalEvent } from "./exec-operation.js";
 import type { ProjectActivity } from "../idle-controller.js";
 import { lstatProjectPath, readProjectFile, writeProjectFile } from "./file-operations.js";
 import {
@@ -44,6 +44,10 @@ function capAtBudget(requestedMs: number, remainingMs: number | undefined) {
     timeoutMs: Math.min(requestedMs, remainingMs),
     timeoutEndsTurn: requestedMs >= remainingMs,
   };
+}
+
+function reportsRestart(terminal: TerminalEvent): boolean {
+  return terminal.outcome === "failed" && terminal.error.code === "container-restarted";
 }
 
 function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
@@ -126,7 +130,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
   #startExec(input: ParsedStartExecInput): ProjectResult<StartedExec> {
     if (this.#containerWasReplaced()) {
-      this.#containerGeneration = this.#containerState?.generation;
+      this.#acknowledgeRestart();
 
       return fail("container-restarted");
     }
@@ -191,8 +195,10 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       return startExecOperation(
         this.#execBackend,
         { command: input.command, cwd, timeoutMs, backend: input.backend },
-        () => {
+        (terminal) => {
           this.#operations.delete(operationId);
+
+          if (reportsRestart(terminal)) this.#acknowledgeRestart();
           endActivity?.();
         },
         timeoutEndsTurn,
@@ -259,6 +265,10 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       this.#turnTimer = undefined;
       this.#armTurnTimer();
     }, delay);
+  }
+
+  #acknowledgeRestart(): void {
+    this.#containerGeneration = this.#containerState?.generation;
   }
 
   #containerWasReplaced(): boolean {

@@ -1,6 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
+import { ContainerRestartedError } from "../../../src/workspace/project/exec-backend.js";
 import { withDecodedEvents } from "./decoded-events.js";
+import { deferredExec } from "./deferred-exec.js";
 import { encode } from "./target-helpers.js";
 import {
   FakeExecBackend,
@@ -63,6 +65,29 @@ test("a replacement preserves filesystem access and reports one restart before e
     ok: true,
   });
   expect(execBackend.requests).toHaveLength(1);
+});
+
+test("a restart detected during an exec is reported once, by that exec", async () => {
+  const state = { generation: 0 };
+  const { execBackend, target } = makeTarget({ containerState: state });
+  const restarting = deferredExec();
+  execBackend.deferNextExec(restarting);
+
+  const first = await target.startExec({ command: "connects-to-a-new-container" });
+
+  if (!first.ok) throw new Error("expected exec to start");
+
+  state.generation = 1;
+  restarting.reject(new ContainerRestartedError());
+  await expect(first.value.events.getReader().read()).resolves.toMatchObject({
+    value: { kind: "terminal", outcome: "failed", error: { code: "container-restarted" } },
+  });
+
+  await expect(target.startExec({ command: "next" })).resolves.toMatchObject({ ok: true });
+  expect(execBackend.requests.map((request) => request.command)).toEqual([
+    "connects-to-a-new-container",
+    "next",
+  ]);
 });
 
 test("endTurn kills every live exec, is idempotent, and refuses later starts", async () => {

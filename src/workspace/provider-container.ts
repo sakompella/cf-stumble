@@ -14,6 +14,8 @@ type PortFetcher = ReturnType<IWorkspaceContainerAPI["port"]>;
 
 const SECRET_BYTES = 16;
 
+const STOP_DEADLINE_MS = 30_000;
+
 function clientSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(SECRET_BYTES));
 
@@ -46,12 +48,12 @@ export class ProviderContainerAPI implements IWorkspaceContainerAPI {
   }
 
   async stop(): Promise<void> {
-    await this.#link.job(orbJob.stop({ container: this.#container }));
+    await this.#link.job(orbJob.stop({ container: this.#container }), STOP_DEADLINE_MS);
     this.#link.update(providerEvent.stopped());
   }
 
   async remove(): Promise<void> {
-    await this.#link.job(orbJob.delete({ container: this.#container }));
+    await this.#link.job(orbJob.delete({ container: this.#container }), STOP_DEADLINE_MS);
     this.#link.update(providerEvent.stopped());
   }
 
