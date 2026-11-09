@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -269,6 +269,53 @@ test("a commit-msg hook can reject or rewrite the message", async () => {
 
   expect((await wrapped(["commit", "-m", "t"])).stderr).toContain("commit-msg hook failed");
   expect(seen).toEqual([]);
+});
+
+test("a commit from a message file goes to the host without reading the file", async () => {
+  hook("commit-msg", "exit 1");
+
+  const ran = await wrapped(["commit", "-F", join(root, "missing")]);
+
+  expect(ran.code).toBe(0);
+  expect(seen[0]?.body.argv).toEqual(["-C", repository, "commit", "-F", join(root, "missing")]);
+});
+
+test("a rejected commit-msg hook leaves no scratch directory behind", async () => {
+  hook("commit-msg", "exit 1");
+
+  const scratch = mkdtempSync(join(tmpdir(), "cf-stumble-git-forward-tmp-"));
+
+  try {
+    const ran = await wrapped(["commit", "-m", "t"], { TMPDIR: scratch });
+
+    expect(ran.code).toBe(1);
+    expect(ran.stderr).toContain("commit-msg hook failed");
+    expect(readdirSync(scratch)).toEqual([]);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test.each([["-am", "t"], ["-mt"], ["-amt"]])(
+  "a rejecting commit-msg hook stops git commit %s",
+  async (...flags) => {
+    hook("commit-msg", "exit 1");
+
+    const ran = await wrapped(["commit", ...flags]);
+
+    expect(ran.code).toBe(1);
+    expect(ran.stderr).toContain("commit-msg hook failed");
+    expect(seen).toEqual([]);
+  },
+);
+
+test("a commit-msg hook rewrites a message given as -am and keeps -a", async () => {
+  hook("commit-msg", 'echo "$(cat "$1") [checked]" > "$1"');
+
+  const ran = await wrapped(["commit", "-am", "t"]);
+
+  expect(ran.code).toBe(0);
+  expect(seen[0]?.body.argv).toEqual(["-C", repository, "commit", "-a", "-m", "t [checked]"]);
 });
 
 test("hooks do not run for a write that is not a commit", async () => {

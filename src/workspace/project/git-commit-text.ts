@@ -5,13 +5,15 @@ import type {
   GitClient,
   GitDiffOptions,
 } from "@cloudflare/computer/git";
-import type { RunCli } from "./git-cli.js";
+import type { GitScope, RunCli } from "./git-cli.js";
 import { statusLines, type StatusLine } from "./git-status.js";
 import { headState, longStatus } from "./git-status-text.js";
 
 const IGNORED = new Set(["--no-verify", "-n"]);
 
 const QUIET = new Set(["-q", "--quiet"]);
+
+const CLUSTER = /^-[aqnm]+$/u;
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
@@ -75,22 +77,150 @@ async function stageTracked(client: GitClient, dir: string, lines: readonly Stat
   if (deleted.length > 0) await client.rm({ dir, paths: deleted });
 }
 
-function withoutAll(arg: string): string[] {
-  if (arg === "-a" || arg === "--all") return [];
+interface CommitFlags {
+  readonly quiet: boolean;
+  readonly amend: boolean;
+  readonly all: boolean;
+  readonly pathspecs: readonly string[];
+}
 
-  return /^-a+m$/u.test(arg) ? ["-m"] : [arg];
+interface ClusterFlags {
+  readonly quiet: boolean;
+  readonly all: boolean;
+  readonly value: boolean;
+}
+
+function scanCluster(cluster: string): ClusterFlags {
+  const at = cluster.indexOf("m");
+
+  if (at === -1) return { quiet: cluster.includes("q"), all: cluster.includes("a"), value: false };
+
+  return {
+    quiet: cluster.slice(0, at).includes("q"),
+    all: cluster.slice(0, at).includes("a"),
+    value: at === cluster.length - 1,
+  };
+}
+
+function scanCommit(args: readonly string[]): CommitFlags {
+  let quiet = false;
+  let amend = false;
+  let all = false;
+  const pathspecs: string[] = [];
+  let index = 0;
+
+  while (index < args.length) {
+    const arg = args[index++] ?? "";
+
+    if (arg === "--") {
+      pathspecs.push(...args.slice(index));
+      break;
+    }
+
+    if (arg === "-m" || arg === "--message") {
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--message=")) continue;
+
+    if (arg === "--quiet" || arg === "-q") {
+      quiet = true;
+
+      continue;
+    }
+
+    if (arg === "--amend") {
+      amend = true;
+
+      continue;
+    }
+
+    if (arg === "--all" || arg === "-a") {
+      all = true;
+
+      continue;
+    }
+
+    if (IGNORED.has(arg)) continue;
+
+    if (CLUSTER.test(arg)) {
+      const flags = scanCluster(arg.slice(1));
+
+      quiet = quiet || flags.quiet;
+      all = all || flags.all;
+
+      if (flags.value) index += 1;
+
+      continue;
+    }
+
+    pathspecs.push(arg);
+  }
+
+  return { quiet, amend, all, pathspecs };
+}
+
+function forwardedArgv(args: readonly string[]): string[] {
+  const forwarded: string[] = [];
+  let index = 0;
+
+  while (index < args.length) {
+    const arg = args[index++] ?? "";
+
+    if (arg === "--") {
+      forwarded.push(...args.slice(index - 1));
+
+      return forwarded;
+    }
+
+    if (arg === "-m" || arg === "--message") {
+      forwarded.push(arg, args[index++] ?? "");
+      continue;
+    }
+
+    if (arg.startsWith("--message=")) {
+      forwarded.push(arg);
+      continue;
+    }
+
+    if (QUIET.has(arg) || IGNORED.has(arg) || arg === "--all" || arg === "-a") continue;
+
+    if (CLUSTER.test(arg)) {
+      const cluster = arg.slice(1);
+      const message = cluster.indexOf("m");
+      const head = (message === -1 ? cluster : cluster.slice(0, message)).replaceAll(/[aqn]/gu, "");
+      const kept = `${head}${message === -1 ? "" : cluster.slice(message)}`;
+
+      if (kept.length > 0) forwarded.push(`-${kept}`);
+      continue;
+    }
+
+    forwarded.push(arg);
+  }
+
+  return forwarded;
 }
 
 export async function commitWithSummary(
   client: GitClient,
   cli: RunCli,
   input: GitCliInput,
+  scope: GitScope,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
-  const quiet = args.some((arg) => QUIET.has(arg));
-  const dir = input.cwd ?? "/";
-  const amend = args.includes("--amend");
-  const all = args.some((arg) => withoutAll(arg).length === 0 || /^-a+m$/u.test(arg));
+  const flags = scanCommit(args);
+  const dir = scope.dir;
+  const amend = flags.amend;
+  const all = flags.all;
+
+  if (scope.prefix !== "" && flags.pathspecs.length > 0)
+    return {
+      stdout: "",
+      stderr: "fatal: pathspec arguments are not supported from a subdirectory\n",
+      exitCode: 128,
+    };
+
   const lines = await statusLines(client, dir);
   const paths = committedPaths(lines, all);
 
@@ -99,17 +229,11 @@ export async function commitWithSummary(
 
   if (all) await stageTracked(client, dir, lines);
 
-  const result = await cli({
-    ...input,
-    argv: [
-      "commit",
-      ...args.filter((arg) => !IGNORED.has(arg) && !QUIET.has(arg)).flatMap(withoutAll),
-    ],
-  });
+  const result = await cli({ ...input, cwd: dir, argv: ["commit", ...forwardedArgv(args)] });
 
   if (result.exitCode !== 0) return result;
 
-  if (quiet) return { ...result, stdout: "" };
+  if (flags.quiet) return { ...result, stdout: "" };
 
   return summary(client, dir, amend ? undefined : paths).then(
     (stdout) => ({ ...result, stdout }),

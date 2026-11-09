@@ -6,6 +6,8 @@ export { workspaceGit } from "./git-fs.js";
 
 export { githubCloneHeaders, githubTokenFromHosts } from "./github-remote.js";
 
+export { resolveGlobalOptions } from "./git-cli.js";
+
 export { IsolateEgressGateway } from "./isolate-egress.js";
 
 export { isolateShellBackend } from "./isolate-shell.js";

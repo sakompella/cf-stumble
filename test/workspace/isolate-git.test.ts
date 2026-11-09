@@ -86,6 +86,90 @@ test("git status in the isolate prints the long format of real git", async () =>
   );
 });
 
+test("git commit treats a flag-looking message value as the message", async () => {
+  const { stdout } = await shell(
+    "isolate-git-commit-message-value",
+    `${SETUP} && echo x >> a.txt && git add a.txt && git commit -m -q && git log -1 --format=%s`,
+  );
+
+  expect(stdout).toMatch(/\[main [0-9a-f]{7}\] -q\n/u);
+});
+
+test("git -c rejects a setting the adapter does not support", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-c-unsupported",
+    `${SETUP} && git -c core.fileMode=false status -s && echo ok`,
+  );
+
+  expect(stdout).toBe("");
+  expect(stderr).toContain("error: unsupported -c setting 'core.fileMode'");
+});
+
+test("git status --porcelain=v2 is refused instead of approximated", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-porcelain-v2",
+    `${SETUP} && echo x >> a.txt && git status --porcelain=v2 && echo ok`,
+  );
+
+  expect(stdout).toBe("");
+  expect(stderr).toContain("error: --porcelain=v2 is not implemented");
+});
+
+test("git status from a subdirectory shows paths relative to it", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-status",
+    `${SETUP} && mkdir sub && echo x >> a.txt && cd sub && echo n > n.txt && git status -s`,
+  );
+
+  expect(stdout).toBe(" M ../a.txt\n?? ./\n");
+});
+
+test("git add . from a subdirectory stages only the subtree", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-add",
+    `${SETUP} && mkdir sub && echo x >> a.txt && cd sub && echo n > n.txt && git add . && cd .. && git status -s`,
+  );
+
+  expect(stdout).toBe(" M a.txt\nA  sub/n.txt\n");
+});
+
+test("git add -u from a subdirectory stages the whole tree", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-add-u",
+    `${SETUP} && mkdir sub && cd sub && echo x >> ../a.txt && git add -u && cd .. && git status -s`,
+  );
+
+  expect(stdout).toBe("M  a.txt\n");
+});
+
+test("git restore --staged from a subdirectory unstages the rooted path", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-restore",
+    `${SETUP} && mkdir sub && cd sub && echo x >> ../a.txt && git add ../a.txt && git status -s && git restore --staged ../a.txt && git status -s`,
+  );
+
+  expect(stdout).toBe("M  ../a.txt\n M ../a.txt\n");
+});
+
+test("git commit from a subdirectory commits the staged tree", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-commit",
+    `${SETUP} && mkdir sub && cd sub && echo n > n.txt && git add . && git commit -q -m from-sub && cd .. && git log -1 --format=%s`,
+  );
+
+  expect(stdout).toBe("from-sub\n");
+});
+
+test("git commit with a pathspec from a subdirectory is refused", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-sub-commit-pathspec",
+    `${SETUP} && mkdir sub && cd sub && git commit -q -m x ../a.txt && echo ok`,
+  );
+
+  expect(stdout).toBe("");
+  expect(stderr).toContain("fatal: pathspec arguments are not supported from a subdirectory");
+});
+
 test("git commit in the isolate prints the summary of real git", async () => {
   const { stdout } = await shell(
     "isolate-git-commit",
@@ -169,6 +253,24 @@ test("git add -u stages changes and deletions of tracked files only", async () =
   expect(stdout).toBe("M  a.txt\nD  b.txt\n?? c.txt\n");
 });
 
+test("git add -u stages a file modified again after staging", async () => {
+  const { stdout } = await shell(
+    "isolate-git-add-u-restage",
+    `${SETUP} && echo x >> a.txt && git add a.txt && echo y >> a.txt && git add -u && git status -s`,
+  );
+
+  expect(stdout).toBe("M  a.txt\n");
+});
+
+test("git add -u stages a staged new file modified again", async () => {
+  const { stdout } = await shell(
+    "isolate-git-add-u-staged-new",
+    `${SETUP} && echo x > n.txt && git add n.txt && echo y >> n.txt && git add -u && git status -s`,
+  );
+
+  expect(stdout).toBe("A  n.txt\n");
+});
+
 test("git add . stages new files", async () => {
   const { stdout } = await shell(
     "isolate-git-add-dot",
@@ -211,11 +313,21 @@ test("git reset to an unknown revision fails with a message", async () => {
   expect(stderr).toContain("unknown revision");
 });
 
-test("git push origin :branch deletes the remote branch", async () => {
-  const { stderr } = await shell(
-    "isolate-git-push-delete",
-    `${SETUP} && git remote add origin file:///remote.git && git push origin :topic`,
+test("git restore without --staged refuses instead of unstaging", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-restore-worktree",
+    `${SETUP} && echo x >> a.txt && git add a.txt && echo y >> a.txt && git restore a.txt; git status -s`,
   );
 
-  expect(stderr).toBe("git push: git push failed: Could not find topic.\n");
+  expect(stderr).toContain("usage: git restore --staged");
+  expect(stdout).toBe("MM a.txt\n");
+});
+
+test("git restore --staged --source resets the index to the source revision", async () => {
+  const { stdout } = await shell(
+    "isolate-git-restore-source",
+    `${SETUP} && echo x >> a.txt && git commit -q -am second && echo y >> a.txt && git add a.txt && git restore --staged --source HEAD~1 a.txt && git status -s`,
+  );
+
+  expect(stdout).toBe("MM a.txt\n");
 });

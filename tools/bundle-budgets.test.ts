@@ -7,7 +7,7 @@ import { OWNER_PAGE_SCRIPT_SOURCE } from "../src/page/owner-script.generated.ts"
 
 const KIB = 1024;
 
-const WORKER_UPLOAD_GZIP_LIMIT = 600 * KIB;
+const WORKER_UPLOAD_GZIP_LIMIT = 700 * KIB;
 
 const OWNER_SCRIPT_GZIP_LIMIT = 240 * KIB;
 

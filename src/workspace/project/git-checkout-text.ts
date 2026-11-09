@@ -1,5 +1,6 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
-import type { RunCli } from "./git-cli.js";
+import { rooted } from "./git-index-commands.js";
+import type { GitScope, RunCli } from "./git-cli.js";
 import { statusLines } from "./git-status.js";
 import { branchTracking, trackingLines } from "./git-tracking.js";
 
@@ -11,21 +12,37 @@ function underPaths(path: string, paths: readonly string[]): boolean {
   );
 }
 
+const OUTSIDE = "fatal: pathspec is outside repository\n";
+
 async function restorePaths(
   client: GitClient,
   cli: RunCli,
   input: GitCliInput,
+  scope: GitScope,
   paths: readonly string[],
 ): Promise<GitCliResult> {
-  const dir = input.cwd ?? "/";
+  const specs: string[] = [];
 
-  const touched = (await statusLines(client, dir)).filter(
-    (line) => line.x !== "?" && underPaths(line.path, paths),
+  for (const path of paths) {
+    const at = rooted(path, scope.prefix);
+
+    if (at === undefined) return { stdout: "", stderr: OUTSIDE, exitCode: 128 };
+
+    specs.push(at);
+  }
+
+  const touched = (await statusLines(client, scope.dir)).filter(
+    (line) => line.x !== "?" && underPaths(line.path, specs),
   );
 
   if (touched.some((line) => line.x !== " ")) return cli(input);
 
-  const result = await cli({ ...input, argv: ["checkout", "HEAD", "--", ...paths] });
+  const result = await cli({
+    ...input,
+    cwd: scope.dir,
+    argv: ["checkout", "HEAD", "--", ...specs],
+  });
+
   const count = touched.length;
 
   return result.exitCode === 0
@@ -85,16 +102,17 @@ export async function checkoutWithMessages(
   client: GitClient,
   cli: RunCli,
   input: GitCliInput,
+  scope: GitScope,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
   const separator = args.indexOf("--");
 
   if (input.argv[0] === "checkout" && separator === 0)
-    return restorePaths(client, cli, input, args.slice(1));
+    return restorePaths(client, cli, input, scope, args.slice(1));
 
   if (separator !== -1) return cli(input);
 
-  const dir = input.cwd ?? "/";
+  const dir = scope.dir;
   const created = args.some((arg) => CREATE.has(arg));
   const target = args.find((arg) => !arg.startsWith("-"));
   const before = await client.currentBranch({ dir }).catch((): undefined => {});
@@ -102,7 +120,7 @@ export async function checkoutWithMessages(
   const result =
     created && args.length === 2 && target !== undefined
       ? await createBranch(client, dir, target)
-      : await cli(input);
+      : await cli({ ...input, cwd: dir });
 
   if (result.exitCode !== 0 || target === undefined) return result;
 

@@ -2,6 +2,8 @@ import { Buffer } from "node:buffer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { SQLiteWorkspaceProvider, Workspace } from "@cloudflare/computer";
+import { logRedactedCause } from "../diagnostics.js";
+import { resolveGlobalOptions } from "./project/index.js";
 
 const ForwardBody = Schema.Struct({ argv: Schema.Array(Schema.String), cwd: Schema.String });
 
@@ -86,10 +88,14 @@ export async function forwardGit(
 
   if (Option.isNone(input)) return new Response("expected {argv, cwd}", { status: 400 });
 
+  const resolved = resolveGlobalOptions({ argv: [...input.value.argv], cwd: input.value.cwd });
+
+  if ("failure" in resolved) return Response.json({ ...resolved.failure, gitDir: null, state: {} });
+
   try {
     await drain(workspace.pull(backendId));
 
-    const result = await workspace.git.cli({ argv: [...input.value.argv], cwd: input.value.cwd });
+    const result = await workspace.git.cli(resolved.input);
 
     await drain(workspace.push(backendId));
 
@@ -97,13 +103,13 @@ export async function forwardGit(
       stdout: result.stdout,
       stderr: result.stderr,
       exitCode: result.exitCode,
-      ...(await gitState(workspace.provider(), input.value.cwd)),
+      ...(await gitState(workspace.provider(), resolved.input.cwd ?? "/")),
     };
 
     return Response.json(forwarded);
   } catch (cause) {
-    return new Response(cause instanceof Error ? cause.message : "git forward failed", {
-      status: 500,
-    });
+    logRedactedCause("git-forward: internal-error", cause);
+
+    return new Response("git forward failed", { status: 500 });
   }
 }

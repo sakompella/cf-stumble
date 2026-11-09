@@ -48,6 +48,7 @@ test.each([
   ["config", "--get", "core.bare"],
   ["config", "core.bare"],
   ["branch"],
+  ["branch", "-v"],
   ["branch", "--list", "ma*"],
   ["tag", "-l"],
   ["remote", "-v"],
@@ -62,6 +63,8 @@ test.each([
 test.each([
   ["commit", "--allow-empty", "-m", "second"],
   ["branch", "feature"],
+  ["branch", "-v", "created"],
+  ["branch", "-vv", "created"],
   ["branch", "-D", "main"],
   ["tag", "v1"],
   ["config", "user.name", "someone"],

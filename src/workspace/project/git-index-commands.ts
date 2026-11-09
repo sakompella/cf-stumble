@@ -1,5 +1,6 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
-import type { RunCli } from "./git-cli.js";
+import type { GitScope, RunCli } from "./git-cli.js";
+import { statusLines } from "./git-status.js";
 
 const OK: GitCliResult = { stdout: "", stderr: "", exitCode: 0 };
 
@@ -11,27 +12,89 @@ function without(argv: readonly string[], flags: readonly string[]): string[] {
   return argv.filter((arg) => !flags.includes(arg));
 }
 
-function root(input: GitCliInput): string {
-  return input.cwd ?? "/";
+export function rooted(path: string, prefix: string): string | undefined {
+  if (prefix === "") return path;
+
+  const parts = prefix.split("/").filter((part) => part !== "");
+  let rest = path.startsWith("./") ? path.slice(2) : path;
+
+  if (rest === ".") rest = "";
+
+  for (const part of rest.split("/")) {
+    if (part === "" || part === ".") continue;
+
+    if (part === "..") {
+      if (parts.pop() === undefined) return undefined;
+
+      continue;
+    }
+
+    parts.push(part);
+  }
+
+  return parts.length === 0 ? "." : parts.join("/");
+}
+
+function under(path: string, spec: string): boolean {
+  const bare = spec.replace(/\/$/u, "");
+
+  return path === bare || path.startsWith(`${bare}/`) || path === `${bare}/`;
+}
+
+async function stage(
+  client: GitClient,
+  dir: string,
+  lines: readonly { readonly path: string; readonly y: string }[],
+): Promise<void> {
+  const changed = lines.flatMap((line) => (line.y === "D" ? [] : [line.path.replace(/\/$/u, "")]));
+  const deleted = lines.flatMap((line) => (line.y === "D" ? [line.path] : []));
+
+  if (changed.length > 0) await client.add({ dir, paths: changed });
+
+  if (deleted.length > 0) await client.rm({ dir, paths: deleted });
 }
 
 export async function addCommand(
   client: GitClient,
   cli: RunCli,
   input: GitCliInput,
+  scope: GitScope,
 ): Promise<GitCliResult> {
-  const rest = without(input.argv.slice(1), ["-u", "--update"]);
+  const args = input.argv.slice(1);
+  const rest = without(args, ["-u", "--update"]);
 
-  if (rest.length === input.argv.length - 1 || rest.some((arg) => arg !== ".")) return cli(input);
+  if (rest.length === args.length || rest.some((arg) => arg !== ".")) {
+    if (scope.prefix === "" || args.some((arg) => arg.startsWith("-"))) return cli(input);
 
-  const dir = root(input);
-  const entries = await client.status({ dir });
-  const changed = entries.filter((entry) => entry.worktree === "M").map((entry) => entry.path);
-  const deleted = entries.filter((entry) => entry.worktree === "D").map((entry) => entry.path);
+    const specs: string[] = [];
 
-  if (changed.length > 0) await client.add({ dir, paths: changed });
+    for (const path of rest) {
+      const at = rooted(path, scope.prefix);
 
-  if (deleted.length > 0) await client.rm({ dir, paths: deleted });
+      if (at === undefined) return failure(`fatal: '${path}' is outside repository\n`);
+
+      specs.push(at);
+    }
+
+    const lines = await statusLines(client, scope.dir);
+    const matched = lines.filter((line) => specs.some((spec) => under(line.path, spec)));
+
+    if (matched.length < specs.length) {
+      const missed = specs.filter((spec) => !matched.some((line) => under(line.path, spec)));
+
+      return failure(`fatal: pathspec '${missed[0]}' did not match any files\n`);
+    }
+
+    await stage(client, scope.dir, matched);
+
+    return OK;
+  }
+
+  const tracked = (await statusLines(client, scope.dir)).filter(
+    (line) => line.x !== "?" && line.y !== " ",
+  );
+
+  await stage(client, scope.dir, tracked);
 
   return OK;
 }
@@ -59,12 +122,13 @@ export async function resetCommand(
   client: GitClient,
   cli: RunCli,
   input: GitCliInput,
+  scope: GitScope,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
   const soft = args.includes("--soft");
   const mixed = args.includes("--mixed");
   const rest = without(args, ["--soft", "--mixed"]);
-  const dir = root(input);
+  const dir = scope.dir;
 
   if (args.includes("--hard") || rest.includes("--"))
     return cli({ ...input, argv: ["reset", ...rest] });
@@ -87,19 +151,92 @@ export async function resetCommand(
   return OK;
 }
 
+const RESTORE_UNSUPPORTED =
+  "error: restoring the working tree is not supported by this git; only --staged is\nusage: git restore --staged [--source <tree-ish>] [--] <pathspec>...\n";
+
+interface RestoreRequest {
+  readonly staged: boolean;
+  readonly source: string | undefined;
+  readonly paths: readonly string[];
+  readonly supported: boolean;
+}
+
+function restoreRequest(args: readonly string[]): RestoreRequest {
+  let staged = false;
+  let source: string | undefined;
+  let supported = true;
+  const paths: string[] = [];
+  let index = 0;
+
+  while (index < args.length) {
+    const arg = args[index++] ?? "";
+
+    if (arg === "--") {
+      paths.push(...args.slice(index));
+
+      return { staged, source, paths, supported };
+    }
+
+    if (arg === "--staged" || arg === "-S") staged = true;
+    else if (arg === "--source" || arg === "-s") source = args[index++];
+    else if (arg.startsWith("--source=")) source = arg.slice("--source=".length);
+    else if (arg.startsWith("-")) supported = false;
+    else paths.push(arg);
+  }
+
+  return { staged, source, paths, supported };
+}
+
 export async function restoreCommand(
   client: GitClient,
-  cli: RunCli,
   input: GitCliInput,
+  scope: GitScope,
 ): Promise<GitCliResult> {
-  const [, ...args] = input.argv;
-  const flags = args.filter((arg) => arg.startsWith("-") && arg !== "--");
-  const paths = without(args, ["--staged", "-S", "--"]);
+  const request = restoreRequest(input.argv.slice(1));
+  const dir = scope.dir;
 
-  if (flags.some((arg) => arg !== "--staged" && arg !== "-S") || paths.length === 0)
-    return cli(input);
+  if (!request.supported || !request.staged || request.paths.length === 0)
+    return { stdout: "", stderr: RESTORE_UNSUPPORTED, exitCode: 129 };
 
-  await client.reset(paths.includes(".") ? { dir: root(input) } : { dir: root(input), paths });
+  const oid =
+    request.source === undefined ? undefined : await resolves(client, dir, request.source);
+
+  if (request.source !== undefined && oid === undefined)
+    return failure(`fatal: ambiguous argument '${request.source}': unknown revision or path\n`);
+
+  const target = oid === undefined ? {} : { ref: oid };
+
+  if (scope.prefix === "") {
+    await client.reset(
+      request.paths.includes(".")
+        ? { dir, ...target }
+        : { dir, paths: [...request.paths], ...target },
+    );
+
+    return OK;
+  }
+
+  const specs: string[] = [];
+
+  for (const path of request.paths) {
+    const at = rooted(path, scope.prefix);
+
+    if (at === undefined) return failure(`fatal: '${path}' is outside repository\n`);
+
+    specs.push(at);
+  }
+
+  const staged = (await statusLines(client, dir)).filter(
+    (line) => line.x !== " " && line.x !== "?",
+  );
+
+  const paths = staged
+    .filter((line) => specs.some((spec) => under(line.path, spec)))
+    .map((line) => line.path);
+
+  if (paths.length === 0) return OK;
+
+  await client.reset({ dir, paths, ...target });
 
   return OK;
 }
