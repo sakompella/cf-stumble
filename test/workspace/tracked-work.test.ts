@@ -10,7 +10,7 @@ function controller() {
     setAlarm: () => Promise.resolve(),
     containerRunning: () => true,
     closeWorkspace: () => Promise.resolve(),
-    stopContainer: () => Promise.resolve(),
+    stopContainer: () => Effect.void,
   });
 }
 

@@ -1,10 +1,12 @@
 import * as Effect from "effect/Effect";
 import type { MainFacetTarget } from "../../facet/index.js";
 import type { GenerationControl } from "../../generation-requests.js";
-import { runAtEntryPoint } from "../../run-entry-point.js";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
-import { ConversationHostTarget, endWorkspaceTurn } from "../conversations/index.js";
-import type { ProjectCapabilityStub } from "../../workspace/index.js";
+import {
+  ConversationHostTarget,
+  heldWorkspace,
+  type ScopedWorkspace,
+} from "../conversations/index.js";
 import {
   STARTUP_CHECK_MESSAGE,
   STARTUP_CHECK_RESUMED_MESSAGE,
@@ -35,38 +37,27 @@ const resumedTurn = (conversationId: string): ScriptedTurn => ({
   name: "the resumed startup-check conversation",
 });
 
-type ObtainWorkspace = (signal: AbortSignal) => Effect.Effect<ProjectCapabilityStub | null>;
-
 export type ResumeCandidate = () => Effect.Effect<Fetcher<MainFacetTarget>, string>;
 
 export function checkConversation(
   writer: Fetcher<MainFacetTarget>,
   resumeCandidate: ResumeCandidate,
-  obtainWorkspace: ObtainWorkspace,
+  obtainWorkspace: ScopedWorkspace,
   generations: GenerationControl,
 ): Effect.Effect<StartupCheckOutcome> {
-  const released = new AbortController();
-  let held: Promise<ProjectCapabilityStub | null> | undefined;
+  const held = heldWorkspace(obtainWorkspace);
 
   const host = new ConversationHostTarget({
     arm: () => Promise.resolve(),
     log: () => {},
     running: () => Promise.resolve(),
     workspace: async () => {
-      held ??= runAtEntryPoint(obtainWorkspace(released.signal));
-      const workspace = await held;
+      const workspace = await held.capability();
 
       if (workspace === null) throw new Error("the workspace is unavailable");
 
       return workspace.dup();
     },
-  });
-
-  const release = Effect.sync(() => {
-    released.abort();
-    void held?.then((workspace) => {
-      if (workspace !== null) endWorkspaceTurn(workspace);
-    });
   });
 
   return Effect.gen(function* () {
@@ -85,6 +76,6 @@ export function checkConversation(
     return PASSED;
   }).pipe(
     Effect.catch((reason) => Effect.succeed(failed(reason))),
-    Effect.ensuring(release),
+    Effect.ensuring(held.release),
   );
 }

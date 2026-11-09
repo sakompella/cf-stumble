@@ -1,4 +1,4 @@
-import * as Data from "effect/Data";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
@@ -24,19 +24,15 @@ type IdleControllerPorts = Readonly<{
   setAlarm(atMs: number): Promise<void>;
   containerRunning(): boolean;
   closeWorkspace(): Promise<void>;
-  stopContainer(reason: "idle" | "backend"): Promise<void>;
+  stopContainer(reason: "idle" | "backend"): Effect.Effect<void, unknown>;
 }>;
 
-class IdlePortFailed extends Data.TaggedError("IdlePortFailed")<{ cause: unknown }> {}
-
-function attempt<A>(call: () => Promise<A>): Effect.Effect<A, IdlePortFailed> {
-  return Effect.tryPromise({ try: call, catch: (cause) => new IdlePortFailed({ cause }) });
+function attempt(call: () => Promise<void>): Effect.Effect<void, unknown> {
+  return Effect.tryPromise({ try: call, catch: (cause) => cause });
 }
 
-function atEntryPoint(program: Effect.Effect<void, IdlePortFailed>): Promise<void> {
-  return runAtEntryPoint(
-    program.pipe(Effect.catchTag("IdlePortFailed", ({ cause }) => Effect.die(cause))),
-  );
+function atEntryPoint(program: Effect.Effect<void, unknown>): Promise<void> {
+  return runAtEntryPoint(Effect.orDie(program));
 }
 
 export class WorkspaceIdleController implements ProjectActivity {
@@ -109,13 +105,13 @@ export class WorkspaceIdleController implements ProjectActivity {
     void runAtEntryPoint(this.#arm(dueAtMs).pipe(Effect.ignore));
   }
 
-  #arm(atMs: number): Effect.Effect<void, IdlePortFailed> {
+  #arm(atMs: number): Effect.Effect<void, unknown> {
     return Effect.suspend(() => {
       this.#alarmAtMs = atMs;
 
       return attempt(() => this.#ports.setAlarm(atMs));
     }).pipe(
-      Effect.tapError(({ cause }) =>
+      Effect.tapError((cause) =>
         Effect.sync(() => {
           this.#alarmAtMs = null;
           logRedactedCause("workspace.idle-alarm: not armed", cause);
@@ -155,14 +151,14 @@ export class WorkspaceIdleController implements ProjectActivity {
     return decideIdleStop(this.snapshot(), this.#ports.nowMs(), this.#ports.idleLimitMs);
   }
 
-  #feed(event: StopEvent): Effect.Effect<void, IdlePortFailed> {
+  #feed(event: StopEvent): Effect.Effect<void, unknown> {
     const { phase, commands } = nextStopStep(this.#phase, event);
     this.#phase = phase;
 
     return Effect.forEach(commands, (command) => this.#execute(command), { discard: true });
   }
 
-  #execute(command: StopCommand): Effect.Effect<void, IdlePortFailed> {
+  #execute(command: StopCommand): Effect.Effect<void, unknown> {
     return StopCommand.$match(command, {
       Arm: ({ atMs }) => this.#arm(atMs),
       Close: () => this.#close(),
@@ -181,9 +177,9 @@ export class WorkspaceIdleController implements ProjectActivity {
     });
   }
 
-  #close(): Effect.Effect<void, IdlePortFailed> {
+  #close(): Effect.Effect<void, unknown> {
     return attempt(() => this.#ports.closeWorkspace()).pipe(
-      Effect.catchTag("IdlePortFailed", ({ cause }) =>
+      Effect.catch((cause) =>
         Effect.sync(() => {
           logRedactedCause("workspace.idle-stop: workspace close failed", cause);
         }),
@@ -202,11 +198,12 @@ export class WorkspaceIdleController implements ProjectActivity {
     );
   }
 
-  #destroy(reason: "idle" | "backend"): Effect.Effect<void, IdlePortFailed> {
-    return attempt(() => this.#ports.stopContainer(reason)).pipe(
+  #destroy(reason: "idle" | "backend"): Effect.Effect<void, unknown> {
+    return this.#ports.stopContainer(reason).pipe(
       Effect.as(null),
-      Effect.catchTag("IdlePortFailed", ({ cause }) =>
+      Effect.catchCause((failed) =>
         Effect.sync(() => {
+          const cause = Cause.squash(failed);
           logRedactedCause("workspace.idle-stop: container not stopped", cause);
 
           return { cause };

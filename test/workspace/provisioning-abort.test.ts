@@ -1,85 +1,53 @@
-import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
-import type {
-  InstructionsWriteResult,
-  WorkspaceCommandResult,
-} from "../../src/workspace/commands/command-result.js";
-import { runToResult } from "./workspace-results.js";
-import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
+import { delayedProvisionHost, NeverSettlingProvisionHost } from "./provisioning-fakes.js";
+import { runInterruptible } from "./workspace-results.js";
 
-class AbortAwareHost implements WorkspaceHostRpc<"provision" | "ensureManagedInstructions"> {
-  readonly steps: string[] = [];
-  controller: AbortController | undefined;
+test("an interrupted provision finishes its running step and starts no next step", async () => {
+  const delayed = delayedProvisionHost();
 
-  provision(): Promise<WorkspaceCommandResult> {
-    this.steps.push("clone");
-    this.controller?.abort();
-
-    return Promise.resolve({
-      ok: true,
-      result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-    });
-  }
-
-  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
-    this.steps.push("instructions");
-
-    return Promise.resolve({ ok: true, result: { kind: "written" } });
-  }
-}
-
-test("does not start the next provisioning step after the turn aborts", async () => {
-  const host = new AbortAwareHost();
-  const controller = new AbortController();
-  host.controller = controller;
-
-  const result = await runToResult(
+  const provisioning = runInterruptible(
     provisionProjectWorkspace({
-      workspaceName: tenantWorkspaceName("provisioning-abort-at-boundary"),
+      workspaceName: tenantWorkspaceName("provisioning-interrupted-at-boundary"),
       project: sampleProjectOne,
-      namespace: namespaceFor(host),
-      signal: controller.signal,
+      namespace: namespaceFor(delayed.host),
     }),
   );
 
-  expect(Result.isFailure(result)).toBe(true);
-  expect(host.steps).toEqual(["clone"]);
+  await delayed.started;
+  provisioning.interrupt();
+  delayed.release();
+
+  await expect(provisioning.interrupted).resolves.toBe(true);
+  expect(delayed.host.steps).toEqual(["clone"]);
 });
 
-test("bounds a running provisioning RPC after the turn aborts", async () => {
+test("an interrupted provision waits for a lost RPC no longer than the RPC timeout", async () => {
   vi.useFakeTimers();
 
-  const host: WorkspaceHostRpc<"provision" | "ensureManagedInstructions"> = {
-    provision: (request) => {
-      return new Promise<WorkspaceCommandResult>(() => {
-        void request;
-      });
-    },
-    ensureManagedInstructions: () => Promise.resolve({ ok: true, result: { kind: "written" } }),
-  };
-
-  const controller = new AbortController();
-
-  const provisioning = runToResult(
+  const provisioning = runInterruptible(
     provisionProjectWorkspace({
-      workspaceName: tenantWorkspaceName("provisioning-abort-bounded"),
+      workspaceName: tenantWorkspaceName("provisioning-interrupt-bounded"),
       project: sampleProjectOne,
-      namespace: namespaceFor(host),
-      signal: controller.signal,
+      namespace: namespaceFor(new NeverSettlingProvisionHost()),
     }),
   );
 
-  await Promise.resolve();
-  controller.abort();
-  vi.advanceTimersByTime(WORKSPACE_RPC_TIMEOUT_MS);
-  await vi.runAllTimersAsync();
+  let settled = false;
 
-  const result = await provisioning;
-  expect(Result.isFailure(result)).toBe(true);
+  void provisioning.interrupted.then(() => {
+    settled = true;
+  });
+  provisioning.interrupt();
+
+  await vi.advanceTimersByTimeAsync(WORKSPACE_RPC_TIMEOUT_MS / 2);
+  expect(settled, "the fence stays held while the clone RPC can still answer").toBe(false);
+
+  await vi.advanceTimersByTimeAsync(WORKSPACE_RPC_TIMEOUT_MS);
+  expect(settled).toBe(true);
   vi.useRealTimers();
 });

@@ -75,7 +75,7 @@ function checkCandidate(
     return yield* checkConversation(
       writer.success,
       () => Effect.fromResult(remount(host, artifact, name)),
-      (signal) => host.workspace(deadlines.conversationMs, signal),
+      host.workspace(deadlines.conversationMs),
       statusOnlyGenerations(host),
     ).pipe(
       withinDeadline(

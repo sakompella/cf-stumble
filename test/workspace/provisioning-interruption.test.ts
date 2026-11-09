@@ -47,8 +47,8 @@ test("an interrupted plan keeps the exclusion until its RPC settles", async () =
 
   const turn = Effect.runPromise(
     waitForWorkspaceProvision(workspaceName, sampleProjectOne.id),
-  ).then((admit) => {
-    admitted = admit;
+  ).then(() => {
+    admitted = true;
   });
 
   await tick();

@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 
@@ -55,14 +56,15 @@ function controller(options: Behavior = {}) {
         ? Promise.reject(new Error("close failed"))
         : Promise.resolve();
     },
-    stopContainer: () => {
-      calls.push("destroy");
-      state.running = false;
+    stopContainer: () =>
+      Effect.suspend(() => {
+        calls.push("destroy");
+        state.running = false;
 
-      return options.destroyFails === true
-        ? Promise.reject(new Error("destroy failed"))
-        : Promise.resolve();
-    },
+        return options.destroyFails === true
+          ? Effect.die(new Error("destroy failed"))
+          : Effect.void;
+      }),
   });
 
   return { idle, clock, state, alarms, calls };

@@ -14,7 +14,6 @@ export async function seedGitHubConnection(control: DurableObjectStub<Supervisor
         installedBy: "configured-token",
         now: 0,
       }),
-      true,
     );
   });
 }

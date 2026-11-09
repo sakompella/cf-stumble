@@ -9,22 +9,28 @@ import { HeldWorkspaces } from "../../../src/supervisor/conversations/held-works
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
 
 function trackedWorkspaces() {
-  const signals: AbortSignal[] = [];
+  const released: boolean[] = [];
 
-  const held = new HeldWorkspaces((_project, _remaining, signal) => {
-    signals.push(signal);
+  const held = new HeldWorkspaces(() => {
+    const index = released.push(false) - 1;
 
-    return Effect.succeed(null);
+    return Effect.never.pipe(
+      Effect.onInterrupt(() =>
+        Effect.sync(() => {
+          released[index] = true;
+        }),
+      ),
+    );
   });
 
-  return { held, aborted: () => signals.map((signal) => signal.aborted) };
+  return { held, aborted: () => [...released] };
 }
 
 function hold(held: HeldWorkspaces, conversationId: string) {
   held.capability(conversationId, HARNESS_PROJECT, 1000).catch(() => {});
 }
 
-test("a retirement ends the leases held when it began, not ones taken before it runs", () => {
+test("a retirement ends the leases held when it began, not ones taken before it runs", async () => {
   vi.useFakeTimers();
 
   const { held, aborted } = trackedWorkspaces();
@@ -33,7 +39,7 @@ test("a retirement ends the leases held when it began, not ones taken before it 
   hold(held, "old");
   held.retire(abortFacet);
   hold(held, "new");
-  vi.runAllTimers();
+  await vi.runAllTimersAsync();
 
   expect(abortFacet).toHaveBeenCalledTimes(1);
   expect(aborted()).toEqual([true, false]);

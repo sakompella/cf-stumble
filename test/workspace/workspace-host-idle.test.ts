@@ -1,7 +1,6 @@
-import { env } from "cloudflare:workers";
-import { runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
-import { WorkspaceHost } from "../../src/workspace/host.js";
+import type { WorkspaceHost } from "../../src/workspace/host.js";
+import { withHost } from "./idle-host.js";
 import {
   REFUSED_BUILD,
   REFUSED_CREDENTIAL,
@@ -18,45 +17,6 @@ afterEach(() => {
   vi.restoreAllMocks();
   restoreWorkspaceMembers();
 });
-
-class FakeContainer {
-  running = true;
-  readonly images = { app: "workspace-image" };
-  readonly destroyed: unknown[] = [];
-  starts = 0;
-  destroyGate: Promise<void> | undefined;
-
-  start(): void {
-    this.starts += 1;
-
-    throw new Error("the fake container does not launch");
-  }
-
-  destroy(reason?: string): Promise<void> {
-    this.destroyed.push(reason);
-
-    if (reason !== undefined) this.running = false;
-
-    return this.destroyGate ?? Promise.resolve();
-  }
-}
-
-function withHost<T>(
-  name: string,
-  run: (host: WorkspaceHost, state: DurableObjectState, container: FakeContainer) => Promise<T>,
-): Promise<T> {
-  return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) => {
-    const container = new FakeContainer();
-
-    Object.defineProperty(state, "container", { value: container, configurable: true });
-
-    return run(
-      new WorkspaceHost(state, { LOADER: env.LOADER, ASSETS: env.ASSETS }),
-      state,
-      container,
-    );
-  });
-}
 
 test("each tracked RPC arms the idle alarm one limit after it ends", async () => {
   const requests = {

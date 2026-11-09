@@ -13,11 +13,9 @@ test("wipes workspace storage before stopping the container", async () => {
     },
   };
 
-  const stopContainer = () => {
+  const stopContainer = Effect.sync(() => {
     events.push("stop");
-
-    return Promise.resolve();
-  };
+  });
 
   await expect(Effect.runPromise(resetWorkspaceStorage(storage, stopContainer))).resolves.toEqual({
     ok: true,

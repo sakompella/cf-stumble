@@ -1,5 +1,6 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
+import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 
@@ -91,11 +92,12 @@ function makeIdleController(world: World, failures: FailureSwitch): WorkspaceIdl
     },
     containerRunning: () => world.running,
     closeWorkspace: () => exclusively(world, failures.current.close, "close failed"),
-    stopContainer: async () => {
-      recordDestroyViolations(world);
-      await exclusively(world, failures.current.destroy, "destroy failed");
-      world.running = false;
-    },
+    stopContainer: () =>
+      Effect.promise(async () => {
+        recordDestroyViolations(world);
+        await exclusively(world, failures.current.destroy, "destroy failed");
+        world.running = false;
+      }),
   });
 }
 

@@ -22,33 +22,26 @@ type ProvisionProblem = ProvisionFailed | ProvisionUnavailable;
 
 function hostStep<R>(
   context: string,
-  signal: AbortSignal | undefined,
   call: () => Promise<Readonly<{ ok: true; result: R }> | WorkspaceFailure>,
 ): Effect.Effect<R, ProvisionUnavailable> {
-  return Effect.gen(function* () {
-    if (signal !== undefined && signal.aborted) return yield* new ProvisionUnavailable();
+  return boundedRpc(call, WORKSPACE_RPC_TIMEOUT_MS).pipe(
+    Effect.mapError((cause) => {
+      logRedactedCause(`${context}: workspace-unavailable`, cause);
 
-    const result = yield* boundedRpc(call, WORKSPACE_RPC_TIMEOUT_MS).pipe(
-      Effect.mapError((cause) => {
-        logRedactedCause(`${context}: workspace-unavailable`, cause);
-
-        return new ProvisionUnavailable();
-      }),
-    );
-
-    if ((signal !== undefined && signal.aborted) || !result.ok)
-      return yield* new ProvisionUnavailable();
-
-    return result.result;
-  });
+      return new ProvisionUnavailable();
+    }),
+    Effect.flatMap((result) =>
+      result.ok ? Effect.succeed(result.result) : Effect.fail(new ProvisionUnavailable()),
+    ),
+    Effect.uninterruptible,
+  );
 }
 
 function commandStep(
   context: string,
-  signal: AbortSignal | undefined,
   call: () => Promise<WorkspaceCommandResult>,
 ): Effect.Effect<void, ProvisionProblem> {
-  return hostStep(context, signal, call).pipe(
+  return hostStep(context, call).pipe(
     Effect.flatMap((result): Effect.Effect<void, ProvisionProblem> => {
       if (result.kind !== "command") return Effect.fail(new ProvisionUnavailable());
 
@@ -62,9 +55,8 @@ function commandStep(
 function instructionsStep(
   context: string,
   host: WorkspaceHostRpc<"ensureManagedInstructions">,
-  signal: AbortSignal | undefined,
 ): Effect.Effect<void, ProvisionUnavailable> {
-  return Effect.asVoid(hostStep(context, signal, () => host.ensureManagedInstructions()));
+  return Effect.asVoid(hostStep(context, () => host.ensureManagedInstructions()));
 }
 
 export function provisionProjectWorkspace(
@@ -72,20 +64,17 @@ export function provisionProjectWorkspace(
     workspaceName: string;
     project: Project;
     namespace: WorkspaceHostNamespace<"provision" | "ensureManagedInstructions">;
-    signal?: AbortSignal | undefined;
   }>,
 ): Effect.Effect<void, ProvisionProblem> {
-  const { project, signal } = input;
+  const { project } = input;
 
   return provisionInWorkspace({
     workspaceName: input.workspaceName,
     projectId: project.id,
-    signal,
-    aborted: new ProvisionUnavailable(),
     run: Effect.gen(function* () {
       const host = input.namespace.getByName(input.workspaceName);
 
-      yield* commandStep(`project-provision.clone (${project.id})`, signal, () =>
+      yield* commandStep(`project-provision.clone (${project.id})`, () =>
         host.provision({
           kind: "provision-project",
           projectId: project.id,
@@ -93,7 +82,7 @@ export function provisionProjectWorkspace(
         }),
       );
 
-      yield* instructionsStep(`project-provision.instructions (${project.id})`, host, signal);
+      yield* instructionsStep(`project-provision.instructions (${project.id})`, host);
     }),
   });
 }
@@ -104,24 +93,21 @@ export function provisionHarnessWorkspace(
     projectId: ProjectId;
     harnessCommit: HarnessCommit;
     namespace: WorkspaceHostNamespace<"build" | "ensureManagedInstructions">;
-    signal?: AbortSignal | undefined;
   }>,
 ): Effect.Effect<void, ProvisionProblem> {
-  const { harnessCommit, signal } = input;
+  const { harnessCommit } = input;
 
   return provisionInWorkspace({
     workspaceName: input.workspaceName,
     projectId: input.projectId,
-    signal,
-    aborted: new ProvisionUnavailable(),
     run: Effect.gen(function* () {
       const host = input.namespace.getByName(input.workspaceName);
 
-      yield* commandStep("harness-provision.provision", signal, () =>
+      yield* commandStep("harness-provision.provision", () =>
         host.build({ kind: "build-step", harnessCommit, step: "provision" }),
       );
 
-      yield* instructionsStep("harness-provision.instructions", host, signal);
+      yield* instructionsStep("harness-provision.instructions", host);
     }),
   });
 }

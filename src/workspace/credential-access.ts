@@ -10,10 +10,6 @@ import {
 } from "../workspace-command-timeout.js";
 import type { WorkspaceHostNamespace } from "./host-rpc.js";
 
-function signalAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
-}
-
 export class CredentialWorkspaceUnavailable extends Data.TaggedError(
   "CredentialWorkspaceUnavailable",
 )<{ readonly detail: string }> {
@@ -35,7 +31,6 @@ type CredentialInstallation = "installed" | "tooling-missing";
 export interface WorkspaceCredentialInput {
   readonly workspaceName: string;
   readonly namespace: WorkspaceHostNamespace<"credential">;
-  readonly signal?: AbortSignal | undefined;
 }
 
 interface InstallWorkspaceCredentialInput extends WorkspaceCredentialInput {
@@ -54,26 +49,20 @@ function ask(
   input: WorkspaceCredentialInput,
   request: GitHubCredentialRequest,
 ): Effect.Effect<GitHubCredentialResult, CredentialWorkspaceUnavailable> {
-  return Effect.gen(function* () {
-    if (signalAborted(input.signal)) return yield* unavailable();
+  return boundedRpc(
+    () => input.namespace.getByName(input.workspaceName).credential(request),
+    WORKSPACE_SHORT_RPC_TIMEOUT_MS,
+  ).pipe(
+    Effect.mapError((cause) => {
+      logRedactedCause(
+        `credential-access.${request.step}: ${isRpcTimeout(cause) ? "timeout" : "credential-workspace-unavailable"}`,
+        cause,
+        request.step === "install" ? request.token : undefined,
+      );
 
-    const answered = yield* boundedRpc(
-      () => input.namespace.getByName(input.workspaceName).credential(request),
-      WORKSPACE_SHORT_RPC_TIMEOUT_MS,
-    ).pipe(
-      Effect.mapError((cause) => {
-        logRedactedCause(
-          `credential-access.${request.step}: ${isRpcTimeout(cause) ? "timeout" : "credential-workspace-unavailable"}`,
-          cause,
-          request.step === "install" ? request.token : undefined,
-        );
-
-        return unavailable();
-      }),
-    );
-
-    return signalAborted(input.signal) ? yield* unavailable() : answered;
-  });
+      return unavailable();
+    }),
+  );
 }
 
 export function installWorkspaceCredential(

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
+import { KeyedLock } from "../../keyed-lock.js";
 import type { ConversationProblem } from "./conversation-result.js";
-import { ProjectLifecycleQueue } from "../projects/index.js";
 import { ProjectConversations } from "./project-conversations.js";
 import type { SelectableProject } from "./project-selection.js";
 
@@ -8,7 +8,7 @@ type ResolveProject = (projectId: string) => Effect.Effect<SelectableProject, Co
 
 export class ProjectThreads {
   readonly #pointers: ProjectConversations;
-  readonly #queue = new ProjectLifecycleQueue();
+  readonly #queue = new KeyedLock<SelectableProject["id"]>();
   readonly #resolve: ResolveProject;
 
   constructor(storage: DurableObjectStorage, resolve: ResolveProject) {
@@ -32,7 +32,7 @@ export class ProjectThreads {
     project: SelectableProject,
     use: (current: SelectableProject) => Effect.Effect<A, ConversationProblem>,
   ): Effect.Effect<A, ConversationProblem> {
-    return this.#queue.exclusive(project.id, this.#resolve(project.id).pipe(Effect.flatMap(use)));
+    return this.#queue.withLock(project.id, this.#resolve(project.id).pipe(Effect.flatMap(use)));
   }
 
   pointed<A>(
@@ -86,7 +86,7 @@ export class ProjectThreads {
     running: () => boolean,
     mark: () => Marked,
   ): Effect.Effect<Readonly<{ marked: Marked }> | null> {
-    return this.#queue.exclusive(
+    return this.#queue.withLock(
       projectId,
       Effect.sync(() => {
         if (running()) return null;

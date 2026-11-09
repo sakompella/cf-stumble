@@ -41,7 +41,6 @@ function failedStepExitCode<A, E>(result: Result.Result<A, E>): number | undefin
 export function provisionOnUse(
   sources: ProvisionSources,
   projectId: ProjectId,
-  signal?: AbortSignal,
 ): Effect.Effect<ProjectUseResult> {
   const { workspaceName, namespace, github } = sources;
 
@@ -56,7 +55,6 @@ export function provisionOnUse(
       workspaceName,
       project: resolved.project,
       namespace,
-      signal,
     });
 
     let provisioned = yield* Effect.result(provision);
@@ -70,9 +68,9 @@ export function provisionOnUse(
       firstExitCode !== undefined &&
       firstExitCode !== PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE
     ) {
-      const status = yield* github.ensureCredential(Date.now(), signal);
+      const status = yield* github.ensureCredential(Date.now());
 
-      if (status.state === "connected" && signal?.aborted !== true) {
+      if (status.state === "connected") {
         provisioned = yield* Effect.result(provision);
       }
     }
