@@ -24,7 +24,19 @@ function setupOriginWithTopic(): RemoteLayout {
   const workspace = join(root, "workspace");
 
   execFileSync("git", ["init", "-q", "-b", "main", origin]);
-  execFileSync("git", ["-C", origin, "commit", "--allow-empty", "-q", "-m", "first"]);
+  execFileSync("git", [
+    "-C",
+    origin,
+    "-c",
+    "user.name=T",
+    "-c",
+    "user.email=t@e",
+    "commit",
+    "--allow-empty",
+    "-q",
+    "-m",
+    "first",
+  ]);
   execFileSync("git", ["clone", "-q", `file://${origin}`, workspace]);
   execFileSync("git", ["-C", workspace, "push", "-q", "origin", "main:refs/heads/topic"]);
 

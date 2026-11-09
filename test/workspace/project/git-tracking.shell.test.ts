@@ -20,7 +20,9 @@ interface MergedHistory {
 
 function mergedHistory(dir: string): MergedHistory {
   const git = (...args: string[]): string =>
-    execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
+    execFileSync("git", ["-C", dir, "-c", "user.name=T", "-c", "user.email=t@e", ...args], {
+      encoding: "utf8",
+    }).trim();
 
   const commit = (name: string, seconds: number, file = "history"): void => {
     writeFileSync(join(dir, file), name);
