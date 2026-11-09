@@ -22,8 +22,6 @@ concurrency:
 
 jobs:
   image:
-    # A pull request from a fork whose branch is named main also completes a
-    # Verify run with head_branch main, so deploy only after a push here.
     if: >-
       github.event_name == 'workflow_dispatch' &&
         (github.ref == 'refs/heads/main' || inputs.stage != 'prod') ||
@@ -68,8 +66,6 @@ jobs:
             pnpm-lock.yaml
             infra/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # --yes approves the plan without a terminal. It also lets Alchemy create
-      # or upgrade the state store, which it refuses in CI without it.
       - run: pnpm run deploy "$STAGE" --yes
         env:
           STAGE: ${{ inputs.stage || 'prod' }}
