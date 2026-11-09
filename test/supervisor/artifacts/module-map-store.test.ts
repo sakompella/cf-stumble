@@ -29,6 +29,7 @@ const commits = {
   unbuildable: "7100000000000000000000000000000000000006",
   immutable: "7100000000000000000000000000000000000007",
   migrated: "7100000000000000000000000000000000000008",
+  raced: "7100000000000000000000000000000000000009",
 } as const;
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
@@ -94,6 +95,21 @@ test("never overwrites a stored module map", async () => {
       ? read.success.artifact.modules[0].source
       : "",
   ).toBe("export const first = 1;\n");
+});
+
+test("a write that loses to a stored module map returns the stored artifact, not its own bytes", async () => {
+  const store = new ModuleMapStore(env.MODULE_MAPS);
+  const first = parsedArtifact(artifact(commits.raced, "export const first = 1;\n"));
+  const second = parsedArtifact(artifact(commits.raced, "export const second = 2;\n"));
+  await store.write(first);
+
+  const written = await store.write(second);
+
+  if (Result.isFailure(written)) {
+    throw new Error(`a losing write must return the stored artifact: ${written.failure.code}`);
+  }
+
+  expect(encodeModuleMap(written.success)).toBe(encodeModuleMap(first));
 });
 
 test("a refused write reports a problem and stores nothing", async () => {
