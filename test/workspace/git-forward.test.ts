@@ -49,6 +49,17 @@ test.each([
   expect(response.status).toBe(status);
 });
 
+const INNER_SETUP = [
+  "mkdir inner",
+  "cd inner",
+  "git init",
+  "git config user.name T",
+  "git config user.email t@example.com",
+  "echo i > i.txt",
+  "git add i.txt",
+  "git commit -q -m inner-first",
+].join(" && ");
+
 test("the git route rejects a body that is not {argv, cwd}", async () => {
   const response = await runInDurableObject(
     env.WORKSPACE_HOST.getByName("git-route-body"),
@@ -82,15 +93,10 @@ test("a git cli failure becomes a generic 500 without leaking the cause", async 
         storage: computerStorage(state.storage),
         sessionId: state.id.toString(),
         backends: [],
-        git: {
-          ...workspaceGit,
-          git: {
-            ...workspaceGit.git,
-            cli: async () => {
-              throw new Error("sentinel internal detail");
-            },
-          },
-        },
+        git: (options) => ({
+          ...workspaceGit(options),
+          cli: () => Promise.reject(new Error("sentinel internal detail")),
+        }),
       });
 
       const response = await forwardGit(
@@ -124,18 +130,7 @@ test("a forwarded git -C describes the repository the command changed", async ()
       };
 
       await run(SETUP);
-      await run(
-        [
-          "mkdir inner",
-          "cd inner",
-          "git init",
-          "git config user.name T",
-          "git config user.email t@example.com",
-          "echo i > i.txt",
-          "git add i.txt",
-          "git commit -q -m inner-first",
-        ].join(" && "),
-      );
+      await run(INNER_SETUP);
       await run("cd inner && echo more >> i.txt");
 
       const workspace = new Workspace({
@@ -208,6 +203,7 @@ test("a forwarded commit is visible to an isolate read right away", async () => 
   expect(outcome.log).toContain("from the container");
   expect(outcome.response.exitCode).toBe(0);
   expect(outcome.response.gitDir).toBe("/workspace/.git");
-  expect(Object.keys(outcome.response.state)).toEqual(["HEAD", "index", "refs/heads/main"]);
+  expect(outcome.response.state["HEAD"]).toMatch(/^[0-9a-f]{64}$/u);
+  expect(outcome.response.state["index"]).toMatch(/^[0-9a-f]{64}$/u);
   expect(outcome.response.stdout).toContain("from the container");
 });

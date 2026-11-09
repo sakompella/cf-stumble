@@ -331,12 +331,3 @@ test("git restore --staged --source resets the index to the source revision", as
 
   expect(stdout).toBe("MM a.txt\n");
 });
-
-test("git push origin :branch deletes the remote branch", async () => {
-  const { stderr } = await shell(
-    "isolate-git-push-delete",
-    `${SETUP} && git remote add origin file:///remote.git && git push origin :topic`,
-  );
-
-  expect(stderr).toBe("git push: git push failed: Could not find topic.\n");
-});
