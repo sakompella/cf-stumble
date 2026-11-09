@@ -12,7 +12,7 @@ import {
 } from "../../infra/worker-settings.js";
 import { logEvent } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore, type HostedBackend } from "./backend-sync-ignore.js";
-import { ContainerLifecycle } from "./container-lifecycle.js";
+import { ContainerLifecycle, ContainerStopFailed } from "./container-lifecycle.js";
 import { ProviderContainerAPI } from "./provider-container.js";
 import { ProviderLink } from "./provider-link.js";
 import { gitForwardToken, routeFetch } from "./route-fetch.js";
@@ -100,11 +100,16 @@ export class WorkspacePlatform {
     return (this.#platformContainer?.running ?? false) || this.#providerContainer.running();
   }
 
-  stopContainer(reason: "idle" | "reset" | "backend"): Effect.Effect<void> {
+  stopContainer(reason: "idle" | "reset" | "backend"): Effect.Effect<void, ContainerStopFailed> {
     const container = this.#platformContainer;
 
     const destroy =
-      container?.running === true ? Effect.promise(() => container.destroy(reason)) : Effect.void;
+      container?.running === true
+        ? Effect.tryPromise({
+            try: () => container.destroy(reason),
+            catch: (cause) => new ContainerStopFailed({ cause }),
+          })
+        : Effect.void;
 
     return destroy.pipe(
       Effect.andThen(Effect.suspend(() => this.#stopProvider(reason))),
@@ -116,12 +121,18 @@ export class WorkspacePlatform {
     );
   }
 
-  #stopProvider(reason: "idle" | "reset" | "backend"): Effect.Effect<void> {
+  #stopProvider(reason: "idle" | "reset" | "backend"): Effect.Effect<void, ContainerStopFailed> {
     if (reason === "reset" && this.provider.egressPort() !== undefined)
-      return Effect.promise(() => this.#providerContainer.remove());
+      return Effect.tryPromise({
+        try: () => this.#providerContainer.remove(),
+        catch: (cause) => new ContainerStopFailed({ cause }),
+      });
 
     return this.#providerContainer.running()
-      ? Effect.promise(() => this.#providerContainer.stop())
+      ? Effect.tryPromise({
+          try: () => this.#providerContainer.stop(),
+          catch: (cause) => new ContainerStopFailed({ cause }),
+        })
       : Effect.void;
   }
 

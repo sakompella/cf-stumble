@@ -104,8 +104,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
         const namespace: WorkspaceHostNamespace<"reset"> = this.env.WORKSPACE_HOST;
 
-        const result = yield* Effect.promise(() =>
+        const result = yield* Effect.tryPromise(() =>
           namespace.getByName(this.#parts.workspaceName).reset(),
+        ).pipe(
+          Effect.catch(() =>
+            Effect.succeed({
+              ok: false,
+              problem: { code: "workspace-unavailable" },
+            } as const),
+          ),
         );
 
         if (result.ok) {

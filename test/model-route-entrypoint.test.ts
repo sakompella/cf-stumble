@@ -88,6 +88,31 @@ test("a Supervisor's route refuses a facet whose serving instance was replaced, 
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
+test("a Supervisor admission that rejects answers a validation failure instead of throwing", async () => {
+  const binding = bindingStreaming([DONE_LINE]);
+  const context = createExecutionContext();
+  Object.defineProperty(context, "props", { value: { supervisor: "owner", instance: 0 } });
+
+  const route = new ModelRoute(context, {
+    AI: binding.ai,
+    SUPERVISOR: {
+      getByName: () => ({
+        admitModelTurn: () => Promise.reject(new Error("the supervisor went away")),
+        chatgptAccess: () => Promise.reject(new Error("unreachable")),
+        markChatGPTRefused: () => Promise.reject(new Error("unreachable")),
+        markChatGPTUsageLimited: () => Promise.reject(new Error("unreachable")),
+      }),
+    },
+    CHATGPT_MODEL: "gpt-test",
+  });
+
+  await expect(route.runStream(REQUEST)).resolves.toEqual({
+    ok: false,
+    error: { code: "invalid-request", reason: "the supervisor is unavailable" },
+  });
+  expect(binding.calls).toEqual([]);
+});
+
 test("a request that names its own model is refused as a plain value and never reaches the binding", async () => {
   const binding = bindingStreaming([DONE_LINE]);
 

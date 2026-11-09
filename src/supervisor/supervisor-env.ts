@@ -4,7 +4,8 @@ import { tenantWorkspaceName } from "../workspace-names.js";
 
 export type SupervisorWorkspaceReset =
   | WorkspaceResetResult
-  | Readonly<{ ok: false; problem: Readonly<{ code: "run-active" }> }>;
+  | Readonly<{ ok: false; problem: Readonly<{ code: "run-active" }> }>
+  | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-unavailable" }> }>;
 
 export type { BackendSetting, WorkspaceBackendChange };
 
