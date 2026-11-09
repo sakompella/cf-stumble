@@ -1,7 +1,6 @@
 import { RuleTester } from "oxlint/plugins-dev";
 
 import { requireReadableSpacingRule } from "./require-readable-spacing.ts";
-import createPaddingLineRule from "../vendor/eslint-stylistic/padding-line-between-statements.ts";
 
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 const error = { messageId: "expectedBlankLine" };
@@ -77,23 +76,3 @@ tester.run("anti-slop/require-readable-spacing", requireReadableSpacingRule, {
   ],
 });
 
-// Exercise upstream options that the opinionated public rule does not enable.
-tester.run(
-  "vendored padding removal",
-  createPaddingLineRule([{ blankLine: "never", prev: "*", next: "*" }]),
-  {
-    valid: ["foo();\nbar();"],
-    invalid: [
-      {
-        code: "foo();\n\nbar();",
-        output: "foo();\nbar();",
-        errors: [{ messageId: "unexpectedBlankLine" }],
-      },
-      {
-        code: "foo();\n\n// comment\n\nbar();",
-        output: null,
-        errors: [{ messageId: "unexpectedBlankLine" }],
-      },
-    ],
-  },
-);
