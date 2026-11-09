@@ -1,5 +1,6 @@
 import { RpcStub } from "cloudflare:workers";
 import {
+  STARTUP_CHECK_CLEANUP_OUTPUT,
   STARTUP_CHECK_COMMAND,
   STARTUP_CHECK_CONTAINER_COMMAND,
   STARTUP_CHECK_ISOLATE_COMMAND,
@@ -26,6 +27,7 @@ const answered = (stdout: string): readonly BackendExecEvent[] => [
 
 class StartupCheckAnsweringExecs extends FakeExecBackend {
   startupCheckOutput: readonly BackendExecEvent[] = answered(`${STARTUP_CHECK_OUTPUT}\n`);
+  cleanupOutput: readonly BackendExecEvent[] = answered(`${STARTUP_CHECK_CLEANUP_OUTPUT}\n`);
 
   #answer(command: string): readonly BackendExecEvent[] | undefined {
     if (command === STARTUP_CHECK_COMMAND) return this.startupCheckOutput;
@@ -34,7 +36,7 @@ class StartupCheckAnsweringExecs extends FakeExecBackend {
 
     if (command === STARTUP_CHECK_CONTAINER_COMMAND) return answered("v22.0.0\n");
 
-    return command.startsWith("rm -rf /workspace/.startup-check-") ? answered("") : undefined;
+    return command.startsWith("rm -rf /workspace/.startup-check-") ? this.cleanupOutput : undefined;
   }
 
   override exec(input: ExecBackendInput): Promise<ExecBackendHandle> {

@@ -12,6 +12,7 @@ import {
 } from "./model-route-wire/request.js";
 import { modelEventStream } from "./model-route-turn.js";
 import {
+  STARTUP_CHECK_CLEANUP_OUTPUT,
   STARTUP_CHECK_COMMAND,
   STARTUP_CHECK_CONTAINER_COMMAND,
   STARTUP_CHECK_ISOLATE_COMMAND,
@@ -82,8 +83,12 @@ const FULL_SCRIPT: readonly Step[] = [
   },
   {
     name: "cleanup",
-    calls: (path) => [bash({ command: `rm -rf ${path.slice(0, path.lastIndexOf("/"))}` })],
-    expected: [() => true],
+    calls: (path) => [
+      bash({
+        command: `rm -rf ${path.slice(0, path.lastIndexOf("/"))} && printf '${STARTUP_CHECK_CLEANUP_OUTPUT}\\n'`,
+      }),
+    ],
+    expected: [(output) => output.includes(STARTUP_CHECK_CLEANUP_OUTPUT)],
   },
 ];
 

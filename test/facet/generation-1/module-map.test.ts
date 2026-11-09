@@ -49,6 +49,19 @@ test("the built generation passes the Supervisor's startup check", async () => {
   });
 });
 
+test("the built generation fails its startup check when cleanup fails after a successful scratch write and read", async () => {
+  const workspace = new ProjectWorkspace();
+  workspace.execs.cleanupOutput = [{ name: "exit", exitCode: 1 }];
+
+  const { label, checked } = await checkedWith("generation-1-module-map-no-cleanup", workspace);
+
+  expect(checked).toMatchObject({
+    ok: true,
+    report: { stage: "conversation-failed", generation: { label, status: "failed" } },
+  });
+  expect(checked.ok && checked.report.reason).toContain("step cleanup");
+});
+
 test("the built generation fails its startup check when the workspace command does not run", async () => {
   const workspace = new ProjectWorkspace();
   workspace.execs.startupCheckOutput = [{ name: "exit", exitCode: 127 }];
