@@ -69,13 +69,16 @@ function prepare(): Run {
   };
 }
 
-function start(run: Run, source: string, holdRemoval = false): ChildProcess {
+type StartOptions = Readonly<{ holdRemoval?: boolean; flockMark?: string }>;
+
+function start(run: Run, source: string, options: StartOptions = {}): ChildProcess {
   return spawn(devShellTool("sh"), ["-c", underScratch(source, run.root)], {
     env: {
       PATH: `${run.bin}:${systemTools}`,
       STUB_DIR: run.root,
       STUB_REMOTE: sampleProjectOne.repositoryUrl,
-      STUB_HOLD_RM: holdRemoval ? "1" : "",
+      STUB_HOLD_RM: options.holdRemoval === true ? "1" : "",
+      STUB_FLOCK_MARK: options.flockMark ?? "",
     },
     stdio: "ignore",
   });
@@ -110,70 +113,111 @@ test("a removal waits while another process holds the project's lock", async () 
   const run = prepare();
   const held = join(run.root, "held");
   const released = join(run.root, "holder-release");
+  const exits: Promise<number | null>[] = [];
 
-  const holder = start(
-    run,
-    [
-      `lock='${run.lock}'`,
-      'exec 9>"$lock"',
-      "flock 9",
-      `: > '${held}'`,
-      `while [ ! -e '${released}' ]; do sleep 0.05; done`,
-    ].join("\n"),
-  );
+  try {
+    const holder = start(
+      run,
+      [
+        `lock='${run.lock}'`,
+        'exec 9>"$lock"',
+        "flock 9",
+        `: > '${held}'`,
+        `while [ ! -e '${released}' ]; do sleep 0.05; done`,
+      ].join("\n"),
+    );
 
-  await untilExists(held);
-  const removed = exited(start(run, removalSource()));
-  await pause(500);
+    const holderExit = exited(holder);
+    exits.push(holderExit);
+    await untilExists(held);
 
-  expect(existsSync(join(run.project, "uncommitted.txt")), "the clone is still there").toBe(true);
+    const reachedLock = join(run.root, "removal-reached-lock");
+    const removed = exited(start(run, removalSource(), { flockMark: reachedLock }));
+    exits.push(removed);
+    await untilExists(reachedLock);
 
-  writeFileSync(released, "");
+    expect(existsSync(join(run.project, "uncommitted.txt")), "the clone is still there").toBe(true);
 
-  await expect(exited(holder)).resolves.toBe(0);
-  await expect(removed).resolves.toBe(0);
-  expect(existsSync(run.project)).toBe(false);
+    writeFileSync(released, "");
+
+    await expect(holderExit).resolves.toBe(0);
+    await expect(removed).resolves.toBe(0);
+    expect(existsSync(run.project)).toBe(false);
+  } finally {
+    writeFileSync(released, "");
+    await Promise.allSettled(exits);
+  }
 }, 20_000);
 
 test("a clone that starts during a removal waits and survives it", async () => {
   const run = prepare();
-  const removed = exited(start(run, removalSource(), true));
-  await untilExists(join(run.root, "rm-started"));
+  const rmRelease = join(run.root, "rm-release");
+  const exits: Promise<number | null>[] = [];
 
-  const cloned = exited(start(run, projectCloneSource(sampleProjectOne)));
-  await pause(500);
+  try {
+    const removed = exited(start(run, removalSource(), { holdRemoval: true }));
+    exits.push(removed);
+    await untilExists(join(run.root, "rm-started"));
 
-  expect(existsSync(join(run.root, "git.log")), "no clone starts while the removal runs").toBe(
-    false,
-  );
+    const reachedLock = join(run.root, "clone-reached-lock");
 
-  writeFileSync(join(run.root, "rm-release"), "");
+    const cloned = exited(
+      start(run, projectCloneSource(sampleProjectOne), { flockMark: reachedLock }),
+    );
 
-  await expect(removed).resolves.toBe(0);
-  await expect(cloned).resolves.toBe(0);
-  expect(existsSync(join(run.project, ".git")), "the new clone is not removed").toBe(true);
+    exits.push(cloned);
+    await untilExists(reachedLock);
+
+    expect(existsSync(join(run.root, "git.log")), "no clone starts while the removal runs").toBe(
+      false,
+    );
+
+    writeFileSync(rmRelease, "");
+
+    await expect(removed).resolves.toBe(0);
+    await expect(cloned).resolves.toBe(0);
+    expect(existsSync(join(run.project, ".git")), "the new clone is not removed").toBe(true);
+  } finally {
+    writeFileSync(rmRelease, "");
+    await Promise.allSettled(exits);
+  }
 }, 20_000);
 
 test("a clone waits for a removal whose shell was killed while its rm still runs", async () => {
   const run = prepare();
-  const removal = start(run, removalSource(), true);
-  const removalExited = exited(removal);
-  await untilExists(join(run.root, "rm-started"));
+  const rmRelease = join(run.root, "rm-release");
+  const exits: Promise<number | null>[] = [];
 
-  removal.kill("SIGKILL");
-  await removalExited;
+  try {
+    const removal = start(run, removalSource(), { holdRemoval: true });
+    const removalExit = exited(removal);
+    exits.push(removalExit);
+    await untilExists(join(run.root, "rm-started"));
 
-  const cloned = exited(start(run, projectCloneSource(sampleProjectOne)));
-  await pause(500);
+    removal.kill("SIGKILL");
+    await removalExit;
 
-  expect(
-    existsSync(join(run.root, "git.log")),
-    "the surviving rm still holds the lock, so no clone starts",
-  ).toBe(false);
+    const reachedLock = join(run.root, "clone-reached-lock");
 
-  writeFileSync(join(run.root, "rm-release"), "");
+    const cloned = exited(
+      start(run, projectCloneSource(sampleProjectOne), { flockMark: reachedLock }),
+    );
 
-  await expect(cloned).resolves.toBe(0);
-  expect(existsSync(join(run.project, ".git")), "the new clone is not removed").toBe(true);
-  expect(existsSync(join(run.project, "uncommitted.txt"))).toBe(false);
+    exits.push(cloned);
+    await untilExists(reachedLock);
+
+    expect(
+      existsSync(join(run.root, "git.log")),
+      "the surviving rm still holds the lock, so no clone starts",
+    ).toBe(false);
+
+    writeFileSync(rmRelease, "");
+
+    await expect(cloned).resolves.toBe(0);
+    expect(existsSync(join(run.project, ".git")), "the new clone is not removed").toBe(true);
+    expect(existsSync(join(run.project, "uncommitted.txt"))).toBe(false);
+  } finally {
+    writeFileSync(rmRelease, "");
+    await Promise.allSettled(exits);
+  }
 }, 20_000);
