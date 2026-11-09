@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { accessSync, constants, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
+import { parseArgs } from "node:util";
 
 type Forwarded = {
   stdout: string;
@@ -55,28 +56,54 @@ function query(...args: string[]): string {
   return ran.status === 0 ? ran.stdout.trim() : "";
 }
 
+function commitOptions(args: string[]) {
+  const { tokens } = parseArgs({
+    args,
+    options: { message: { type: "string", short: "m", multiple: true } },
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+  });
+
+  return tokens.flatMap((token) => (token.kind === "option" ? [token] : []));
+}
+
+function skipsHooks(args: string[]): boolean {
+  return commitOptions(args).some((option) => option.name === "no-verify" || option.name === "n");
+}
+
 function messageOf(args: string[]): string | undefined {
-  const parts: string[] = [];
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index] ?? "";
-
-    if (arg === "-m" || arg === "--message") parts.push(args[(index += 1)] ?? "");
-    else if (arg.startsWith("--message=")) parts.push(arg.slice("--message=".length));
-  }
+  const parts = commitOptions(args)
+    .filter((option) => option.name === "message")
+    .map((option) => option.value ?? "");
 
   return parts.length === 0 ? undefined : parts.join("\n\n");
 }
 
 function withMessage(args: string[], message: string): string[] {
-  const kept: string[] = [];
+  const options = commitOptions(args).filter((option) => option.name === "message");
 
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index] ?? "";
+  const values = new Set(
+    options.filter((option) => option.inlineValue === false).map((option) => option.index + 1),
+  );
 
-    if (arg === "-m" || arg === "--message") index += 1;
-    else if (!arg.startsWith("--message=")) kept.push(arg);
-  }
+  const flags = new Map(
+    options.map((option) => {
+      const arg = args[option.index] ?? "";
+
+      return [option.index, option.rawName.startsWith("--") ? "" : arg.slice(1, arg.indexOf("m"))];
+    }),
+  );
+
+  const kept = args.flatMap((arg, index) => {
+    const remaining = flags.get(index);
+
+    if (values.has(index)) return [];
+
+    if (remaining === undefined) return [arg];
+
+    return remaining === "" ? [] : [`-${remaining}`];
+  });
 
   return [...kept, "-m", message];
 }
@@ -96,13 +123,12 @@ function runHook(directory: string, name: string, cwd: string, hookArgs: string[
 }
 
 function commitArguments(): string[] {
-  if (
-    subcommand !== "commit" ||
-    argv.some((arg) => arg === "--no-verify" || /^-[a-z]*n[a-z]*$/u.test(arg))
-  )
-    return argv;
+  const at = argv.indexOf(subcommand);
+  const options = argv.slice(at + 1);
 
-  const leading = argv.slice(0, argv.indexOf(subcommand));
+  if (subcommand !== "commit" || skipsHooks(options)) return argv;
+
+  const leading = argv.slice(0, at);
   const top = query(...leading, "rev-parse", "--show-toplevel");
   const hooks = query(...leading, "-C", top, "rev-parse", "--git-path", "hooks");
 
@@ -112,7 +138,7 @@ function commitArguments(): string[] {
 
   runHook(directory, "pre-commit", top, []);
 
-  const message = messageOf(argv);
+  const message = messageOf(options);
 
   if (message === undefined) return argv;
 
@@ -126,7 +152,7 @@ function commitArguments(): string[] {
 
   rmSync(scratch, { recursive: true, force: true });
 
-  return edited === message ? argv : withMessage(argv, edited);
+  return edited === message ? argv : [...leading, subcommand, ...withMessage(options, edited)];
 }
 
 function digest(path: string): string {

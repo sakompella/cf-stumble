@@ -280,6 +280,28 @@ test("a commit from a message file goes to the host without reading the file", a
   expect(seen[0]?.body.argv).toEqual(["-C", repository, "commit", "-F", join(root, "missing")]);
 });
 
+test.each([["-am", "t"], ["-mt"], ["-amt"]])(
+  "a rejecting commit-msg hook stops git commit %s",
+  async (...flags) => {
+    hook("commit-msg", "exit 1");
+
+    const ran = await wrapped(["commit", ...flags]);
+
+    expect(ran.code).toBe(1);
+    expect(ran.stderr).toContain("commit-msg hook failed");
+    expect(seen).toEqual([]);
+  },
+);
+
+test("a commit-msg hook rewrites a message given as -am and keeps -a", async () => {
+  hook("commit-msg", 'echo "$(cat "$1") [checked]" > "$1"');
+
+  const ran = await wrapped(["commit", "-am", "t"]);
+
+  expect(ran.code).toBe(0);
+  expect(seen[0]?.body.argv).toEqual(["-C", repository, "commit", "-a", "-m", "t [checked]"]);
+});
+
 test("hooks do not run for a write that is not a commit", async () => {
   hook("pre-commit", "exit 1");
 
