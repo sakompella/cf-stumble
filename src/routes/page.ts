@@ -47,10 +47,7 @@ function isOwnerPageScriptRequest(request: Request): boolean {
   return request.method === "GET" && new URL(request.url).pathname === OWNER_PAGE_SCRIPT_FILE.path;
 }
 
-export function ownerPageResponse(
-  request: Request,
-  nonce = crypto.randomUUID(),
-): Response | undefined {
+export function ownerPageResponse(request: Request): Response | undefined {
   if (isOwnerPageScriptRequest(request)) {
     return ownerPageScript();
   }
@@ -61,7 +58,7 @@ export function ownerPageResponse(
 
   switch (new URL(request.url).pathname) {
     case "/":
-      return ownerPage(nonce);
+      return ownerPage(crypto.randomUUID());
     case OWNER_PAGE_FAVICON.path:
       return ownerPageFavicon();
     default:
