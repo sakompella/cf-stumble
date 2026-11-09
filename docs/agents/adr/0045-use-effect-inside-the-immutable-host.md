@@ -22,7 +22,9 @@ Object RPC method, or an alarm, runs its program once with `runAtEntryPoint` in
 `src/run-entry-point.ts`. Its error channel is `never`, so the program must already have turned
 every expected failure into the plain value the entry point returns. A defect rejects the Promise
 with the thrown value, as an `async` function would. No request-scoped value, such as the owner's
-identity or a request's Durable Object stub, lives in a global layer.
+identity or a request's Durable Object stub, lives in a global layer. An entry point that is handed
+an `AbortSignal`, such as the orb provider's command, passes it to `runPromiseExit`'s `signal`
+option. The code below it is interrupted and never reads the signal.
 
 **What stays outside Effect.**
 

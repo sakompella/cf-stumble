@@ -1,5 +1,7 @@
 import { resolve } from "node:path";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { printed, refused, type CommandNode, type CommandOutput } from "../tree.js";
 import type { OrbFailure } from "./dispatch.js";
 import { OrbProvider } from "./provider.js";
@@ -51,31 +53,23 @@ function provide(script: string, ports: OrbPorts): Effect.Effect<CommandOutput, 
 
     for (;;) {
       const connectedAt = Date.now();
-      const ended = yield* provider.run(listenHost, ports.signal);
-
-      if (ports.signal.aborted) return printed(`stopped: ${ended}`);
+      const ended = yield* provider.run(listenHost);
 
       if (Date.now() - connectedAt > STEADY_CONNECTION_MS) retryMs = FIRST_RETRY_MS;
 
       ports.log(`${ended}; connecting again in ${retryMs / 1_000}s`);
-      yield* Effect.sleep(retryMs).pipe(Effect.raceFirst(aborted(ports.signal)));
+      yield* Effect.sleep(retryMs);
       retryMs = Math.min(retryMs * 2, LAST_RETRY_MS);
     }
   });
 }
 
-function aborted(signal: AbortSignal): Effect.Effect<void> {
-  return Effect.callback<void>((resume) => {
-    const onAbort = (): void => {
-      resume(Effect.void);
-    };
+function finished(exit: Exit.Exit<CommandOutput, OrbFailure>): CommandOutput {
+  if (Exit.isSuccess(exit)) return exit.value;
 
-    signal.addEventListener("abort", onAbort, { once: true });
-
-    return Effect.sync(() => {
-      signal.removeEventListener("abort", onAbort);
-    });
-  });
+  return Cause.hasInterruptsOnly(exit.cause)
+    ? printed("stopped")
+    : refused(`orb provider: ${Cause.pretty(exit.cause)}`);
 }
 
 export const orbCommands: CommandNode<OrbPorts> = {
@@ -89,7 +83,7 @@ export const orbCommands: CommandNode<OrbPorts> = {
       run: ([script, ...extra], ports) =>
         script === undefined || extra.length > 0
           ? undefined
-          : Effect.runPromise(provide(script, ports)),
+          : Effect.runPromiseExit(provide(script, ports), { signal: ports.signal }).then(finished),
     },
   ],
 };
