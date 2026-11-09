@@ -56,6 +56,8 @@ The Supervisor uses GitHub's OAuth device flow. It asks GitHub for a device code
 
 ## Reading the connection status
 
+The Supervisor models the connection as two closed unions in `src/supervisor/projects/github-connection-machine.ts`. The credential is `unchecked`, `disconnected`, `toolingMissing`, `connected`, or `reconnectRequired`, and each variant carries only its own fields. The authorization is `idle` or `pending`. A pending authorization is shown on top of the credential in the status the page reads, but the repair that `ensureCredential` runs reads the credential alone, so a sign-in in progress never hides a missing credential. `GitHubConnectionStore` writes both through one pure transition per event inside a `transactionSync`. The tables are unchanged, so an older Worker still reads them after a rollback.
+
 `GET /api/github/connection` answers from the Supervisor's storage and never reaches the Workspace Host. It returns `{ ok, github, checkedAt }`: what the last credential check found and when it ran. A pending authorization shows as `awaiting-authorization`. Both fields are `null` before the first check and after a workspace reset.
 
 `POST /api/github/connection/refresh` runs a check in the workspace (`gh auth status` and `gh api user`), stores the result, and answers in the same shape. A connect, a credential install, and the provisioning before a turn store their results too. A check that a cancelled turn stopped is not stored. Neither is a check that a workspace reset overtook: each check captures the reset revision when it starts and stores its result only if the revision is unchanged. `GET /api/projects` lists the catalog and carries no connection status.
