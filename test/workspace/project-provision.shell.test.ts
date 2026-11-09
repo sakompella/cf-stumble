@@ -91,6 +91,7 @@ describe("provisioning a project clone", () => {
     const ran = provision();
 
     expect(ran.status).toBe(1);
+    expect(ran.stderr).toContain("origin");
     expect(git(checkout(), "rev-parse", "HEAD")).toBe(local);
   });
 
