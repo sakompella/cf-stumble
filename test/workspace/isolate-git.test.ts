@@ -313,14 +313,24 @@ test("git reset to an unknown revision fails with a message", async () => {
   expect(stderr).toContain("unknown revision");
 });
 
-test("git restore without --staged refuses instead of unstaging", async () => {
+test("git restore of a staged path refuses instead of unstaging", async () => {
   const { stdout, stderr } = await shell(
     "isolate-git-restore-worktree",
     `${SETUP} && echo x >> a.txt && git add a.txt && echo y >> a.txt && git restore a.txt; git status -s`,
   );
 
-  expect(stderr).toContain("usage: git restore --staged");
+  expect(stderr).toContain("has staged changes");
   expect(stdout).toBe("MM a.txt\n");
+});
+
+test("git restore discards working-tree changes of tracked files", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-restore-discard",
+    `${SETUP} && echo x >> a.txt && rm b.txt && git restore . && git status -s && cat a.txt && cat b.txt`,
+  );
+
+  expect(stderr).toBe("");
+  expect(stdout).toBe("one\ntwo\n");
 });
 
 test("git restore --staged --source resets the index to the source revision", async () => {
