@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { ConversationProblem } from "./conversation-result.js";
-import { ProjectLifecycleQueue } from "../projects/project-lifecycle-queue.js";
+import { ProjectLifecycleQueue } from "../projects/index.js";
 import { ProjectConversations } from "./project-conversations.js";
 import type { SelectableProject } from "./project-selection.js";
 

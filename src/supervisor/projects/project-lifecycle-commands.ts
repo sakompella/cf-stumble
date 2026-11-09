@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { ProjectId } from "../../project-catalog.js";
-import type { ProjectUseResult } from "../readiness/provision-on-use.js";
+import type { ProjectUseResult } from "../readiness/index.js";
 import type { ConnectedProjects } from "./connected-projects.js";
 import { LifecycleCommand, LifecycleEvent } from "./project-lifecycle-machine.js";
 
