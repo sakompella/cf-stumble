@@ -1,26 +1,15 @@
-import type { GitHubConnectionStatus } from "./github-connection-status.js";
-
-type PendingAuthorization = Readonly<{
-  deviceCode: string;
-  userCode: string;
-  verificationUri: string;
-  expiresAt: number;
-  intervalSeconds: number;
-}>;
-
-export type CredentialSource = "device-authorization" | "configured-token";
-
-export type CheckedStatus = Exclude<GitHubConnectionStatus, { state: "awaiting-authorization" }>;
-
-type ReconnectReason = Extract<CheckedStatus, { state: "reconnect-required" }>["reason"];
-
-export type LastCheck = Readonly<{ status: CheckedStatus; checkedAt: number }>;
-
-export type RecordedConnection = Readonly<{
-  login: string;
-  source: CredentialSource;
-  connectedAt: number;
-}>;
+import * as Schema from "effect/Schema";
+import {
+  authorizationTransition,
+  CredentialSource,
+  ReconnectReason,
+  credentialTransition,
+  GitHubAuthorization,
+  GitHubCredential,
+  recordedOf,
+  AuthorizationEvent,
+  type CredentialEvent,
+} from "./github-connection-machine.js";
 
 type PendingRow = {
   readonly device_code: string;
@@ -37,41 +26,58 @@ type ConnectionRow = {
 };
 
 type CheckRow = {
-  readonly state: CheckedStatus["state"];
+  readonly state: string;
   readonly reconnect_reason: string | null;
   readonly login: string | null;
   readonly credential_source: string | null;
   readonly checked_at: number;
 };
 
-function credentialSource(value: string | null): CredentialSource {
-  return value === "configured-token" ? "configured-token" : "device-authorization";
-}
+type AuthorizationChange = Readonly<{ before: GitHubAuthorization; after: GitHubAuthorization }>;
 
-function reconnectReason(value: string | null): ReconnectReason {
-  return value === "credential-missing" || value === "credential-rejected"
-    ? value
-    : "workspace-unavailable";
-}
+const decodeSource = Schema.decodeUnknownSync(CredentialSource);
 
-function checkedStatus(row: CheckRow): CheckedStatus {
-  switch (row.state) {
-    case "connected":
-      return {
-        state: "connected",
-        login: row.login ?? "",
-        source: credentialSource(row.credential_source),
+const decodeReason = Schema.decodeUnknownSync(ReconnectReason);
+
+const sameAuthorization = Schema.toEquivalence(GitHubAuthorization);
+
+function recordedFromRow(connection: ConnectionRow | undefined) {
+  return connection === undefined
+    ? null
+    : {
+        login: connection.login,
+        source: decodeSource(connection.credential_source),
+        connectedAt: connection.connected_at,
       };
-    case "reconnect-required":
-      return { state: "reconnect-required", reason: reconnectReason(row.reconnect_reason) };
-    case "disconnected":
-    case "tooling-missing":
-      return { state: row.state };
-    default: {
-      const exhaustive: never = row.state;
+}
 
-      return exhaustive;
-    }
+function decodeRows(
+  check: CheckRow | undefined,
+  connection: ConnectionRow | undefined,
+): GitHubCredential {
+  if (check === undefined) return GitHubCredential.cases.unchecked.make({});
+
+  const checkedAt = check.checked_at;
+  const recorded = recordedFromRow(connection);
+
+  switch (check.state) {
+    case "connected":
+      return GitHubCredential.cases.connected.make({
+        checkedAt,
+        login: check.login ?? "",
+        source: decodeSource(check.credential_source),
+        connectedAt: connection?.connected_at ?? checkedAt,
+      });
+    case "tooling-missing":
+      return GitHubCredential.cases.toolingMissing.make({ checkedAt, recorded });
+    case "reconnect-required":
+      return GitHubCredential.cases.reconnectRequired.make({
+        checkedAt,
+        reason: decodeReason(check.reconnect_reason),
+        recorded,
+      });
+    default:
+      return GitHubCredential.cases.disconnected.make({ checkedAt });
   }
 }
 
@@ -119,97 +125,46 @@ export class GitHubConnectionStore {
     `);
   }
 
-  startAuthorization(pending: PendingAuthorization): void {
-    this.sql.exec(
-      `INSERT INTO github_authorization
-         (id, device_code, user_code, verification_uri, expires_at, interval_seconds)
-       VALUES (1, ?, ?, ?, ?, ?)
-       ON CONFLICT (id) DO UPDATE SET
-         device_code = excluded.device_code,
-         user_code = excluded.user_code,
-         verification_uri = excluded.verification_uri,
-         expires_at = excluded.expires_at,
-         interval_seconds = excluded.interval_seconds`,
-      pending.deviceCode,
-      pending.userCode,
-      pending.verificationUri,
-      pending.expiresAt,
-      pending.intervalSeconds,
-    );
-  }
-
-  pendingAuthorization(now: number): PendingAuthorization | undefined {
-    const row = this.sql
-      .exec<PendingRow>(
-        `SELECT device_code, user_code, verification_uri, expires_at, interval_seconds
-         FROM github_authorization WHERE id = 1`,
+  credential(): GitHubCredential {
+    const check = this.sql
+      .exec<CheckRow>(
+        `SELECT state, reconnect_reason, login, credential_source, checked_at
+         FROM github_connection_check WHERE id = 1`,
       )
       .toArray()[0];
 
-    if (row === undefined) {
-      return undefined;
-    }
-
-    if (row.expires_at <= now) {
-      this.consumeAuthorization(row.device_code);
-
-      return undefined;
-    }
-
-    return {
-      deviceCode: row.device_code,
-      userCode: row.user_code,
-      verificationUri: row.verification_uri,
-      expiresAt: row.expires_at,
-      intervalSeconds: row.interval_seconds,
-    };
-  }
-
-  consumeAuthorization(deviceCode: string): boolean {
-    const consumed = this.sql
-      .exec(
-        `DELETE FROM github_authorization WHERE id = 1 AND device_code = ? RETURNING id`,
-        deviceCode,
-      )
-      .toArray();
-
-    return consumed.length > 0;
-  }
-
-  recordConnection(connection: RecordedConnection): void {
-    this.sql.exec(
-      `INSERT INTO github_connection (id, login, credential_source, connected_at)
-       VALUES (1, ?, ?, ?)
-       ON CONFLICT (id) DO UPDATE SET
-         login = excluded.login,
-         credential_source = excluded.credential_source,
-         connected_at = excluded.connected_at`,
-      connection.login,
-      connection.source,
-      connection.connectedAt,
-    );
-  }
-
-  private clearConnection(): void {
-    this.sql.exec(`DELETE FROM github_connection WHERE id = 1`);
-  }
-
-  connection(): RecordedConnection | undefined {
-    const row = this.sql
+    const connection = this.sql
       .exec<ConnectionRow>(
         `SELECT login, credential_source, connected_at FROM github_connection WHERE id = 1`,
       )
       .toArray()[0];
 
-    if (row === undefined) {
-      return undefined;
-    }
+    return decodeRows(check, connection);
+  }
 
-    return {
-      login: row.login,
-      source: credentialSource(row.credential_source),
-      connectedAt: row.connected_at,
-    };
+  authorization(now: number): GitHubAuthorization {
+    return this.applyAuthorization(AuthorizationEvent.Elapsed({ now })).after;
+  }
+
+  applyCredential(revision: number, event: CredentialEvent, persist: boolean): GitHubCredential {
+    return this.storage.transactionSync(() => {
+      const next = credentialTransition(this.credential(), event);
+
+      if (persist && this.revision() === revision) this.writeCredential(next);
+
+      return next;
+    });
+  }
+
+  applyAuthorization(event: AuthorizationEvent): AuthorizationChange {
+    return this.storage.transactionSync(() => {
+      const before = this.readAuthorization();
+      const after = authorizationTransition(before, event);
+
+      if (!sameAuthorization(before, after)) this.writeAuthorization(after);
+
+      return { before, after };
+    });
   }
 
   revision(): number {
@@ -222,52 +177,115 @@ export class GitHubConnectionStore {
     return row?.revision ?? 0;
   }
 
-  recordCheck(
-    revision: number,
-    check: LastCheck,
-    connection: RecordedConnection | undefined,
-  ): void {
-    this.storage.transactionSync(() => {
-      if (this.revision() !== revision) return;
-
-      if (connection === undefined) this.clearConnection();
-      else this.recordConnection(connection);
-
-      const { status } = check;
-      this.sql.exec(
-        `INSERT OR REPLACE INTO github_connection_check
-           (id, state, reconnect_reason, login, credential_source, checked_at)
-         VALUES (1, ?, ?, ?, ?, ?)`,
-        status.state,
-        status.state === "reconnect-required" ? status.reason : null,
-        status.state === "connected" ? status.login : null,
-        status.state === "connected" ? status.source : null,
-        check.checkedAt,
-      );
-    });
-  }
-
-  lastCheck(): LastCheck | undefined {
-    const row = this.sql
-      .exec<CheckRow>(
-        `SELECT state, reconnect_reason, login, credential_source, checked_at
-         FROM github_connection_check WHERE id = 1`,
-      )
-      .toArray()[0];
-
-    return row === undefined
-      ? undefined
-      : { status: checkedStatus(row), checkedAt: row.checked_at };
-  }
-
   clear(): void {
     this.storage.transactionSync(() => {
-      this.clearConnection();
-      this.sql.exec(`DELETE FROM github_connection_check WHERE id = 1`);
+      this.writeCredential(GitHubCredential.cases.unchecked.make({}));
       this.sql.exec(
         `INSERT INTO github_connection_revision (id, revision) VALUES (1, 1)
          ON CONFLICT (id) DO UPDATE SET revision = revision + 1`,
       );
     });
+  }
+
+  private readAuthorization(): GitHubAuthorization {
+    const row = this.sql
+      .exec<PendingRow>(
+        `SELECT device_code, user_code, verification_uri, expires_at, interval_seconds
+         FROM github_authorization WHERE id = 1`,
+      )
+      .toArray()[0];
+
+    return row === undefined
+      ? GitHubAuthorization.cases.idle.make({})
+      : GitHubAuthorization.cases.pending.make({
+          deviceCode: row.device_code,
+          userCode: row.user_code,
+          verificationUri: row.verification_uri,
+          expiresAt: row.expires_at,
+          intervalSeconds: row.interval_seconds,
+        });
+  }
+
+  private writeAuthorization(authorization: GitHubAuthorization): void {
+    GitHubAuthorization.match(authorization, {
+      idle: () => {
+        this.sql.exec(`DELETE FROM github_authorization WHERE id = 1`);
+      },
+      pending: (pending) => {
+        this.sql.exec(
+          `INSERT INTO github_authorization
+             (id, device_code, user_code, verification_uri, expires_at, interval_seconds)
+           VALUES (1, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET
+             device_code = excluded.device_code,
+             user_code = excluded.user_code,
+             verification_uri = excluded.verification_uri,
+             expires_at = excluded.expires_at,
+             interval_seconds = excluded.interval_seconds`,
+          pending.deviceCode,
+          pending.userCode,
+          pending.verificationUri,
+          pending.expiresAt,
+          pending.intervalSeconds,
+        );
+      },
+    });
+  }
+
+  private writeCredential(credential: GitHubCredential): void {
+    const recorded = recordedOf(credential);
+
+    if (recorded === null) {
+      this.sql.exec(`DELETE FROM github_connection WHERE id = 1`);
+    } else {
+      this.sql.exec(
+        `INSERT INTO github_connection (id, login, credential_source, connected_at)
+         VALUES (1, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET
+           login = excluded.login,
+           credential_source = excluded.credential_source,
+           connected_at = excluded.connected_at`,
+        recorded.login,
+        recorded.source,
+        recorded.connectedAt,
+      );
+    }
+
+    GitHubCredential.match(credential, {
+      unchecked: () => {
+        this.sql.exec(`DELETE FROM github_connection_check WHERE id = 1`);
+      },
+      disconnected: ({ checkedAt }) => {
+        this.writeCheck("disconnected", checkedAt, null, null, null);
+      },
+      toolingMissing: ({ checkedAt }) => {
+        this.writeCheck("tooling-missing", checkedAt, null, null, null);
+      },
+      connected: ({ checkedAt, login, source }) => {
+        this.writeCheck("connected", checkedAt, null, login, source);
+      },
+      reconnectRequired: ({ checkedAt, reason }) => {
+        this.writeCheck("reconnect-required", checkedAt, reason, null, null);
+      },
+    });
+  }
+
+  private writeCheck(
+    state: string,
+    checkedAt: number,
+    reason: string | null,
+    login: string | null,
+    source: string | null,
+  ): void {
+    this.sql.exec(
+      `INSERT OR REPLACE INTO github_connection_check
+         (id, state, reconnect_reason, login, credential_source, checked_at)
+       VALUES (1, ?, ?, ?, ?, ?)`,
+      state,
+      reason,
+      login,
+      source,
+      checkedAt,
+    );
   }
 }

@@ -13,6 +13,7 @@ import {
   REFRESH_ONE,
   type RecordedCall,
 } from "./fixtures.js";
+import { AccountEvent, type Grant } from "../../src/chatgpt/account.js";
 
 export const HOUR = 3_600_000;
 
@@ -48,14 +49,20 @@ export function access(connection: ChatGPTConnection, rejected?: string): Promis
   return Effect.runPromise(connection.access(rejected));
 }
 
+export function storeGrant(storage: DurableObjectStorage, grant: Grant, now = Date.now()): void {
+  new ChatGPTCredentialStore(storage).update(AccountEvent.LoggedIn({ grant }), now);
+}
+
 export function connected(harness: Harness, expiresIn = HOUR): void {
-  harness.store.connect(
-    {
-      accessToken: ACCESS_ONE,
-      refreshToken: REFRESH_ONE,
-      expiresAt: harness.clock.now + expiresIn,
-      clientId: CLIENT_ID,
-    },
+  harness.store.update(
+    AccountEvent.LoggedIn({
+      grant: {
+        accessToken: ACCESS_ONE,
+        refreshToken: REFRESH_ONE,
+        expiresAt: harness.clock.now + expiresIn,
+        clientId: CLIENT_ID,
+      },
+    }),
     harness.clock.now,
   );
 }

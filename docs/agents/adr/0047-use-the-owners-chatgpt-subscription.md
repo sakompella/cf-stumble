@@ -12,7 +12,19 @@ It stores the access token, the refresh token, their expiry, and the client id i
 (`src/chatgpt/credential-store.ts`), where they survive a restart. The Supervisor refreshes the
 access token when it is within eight minutes of expiry or when OpenAI refuses it. Concurrent callers
 share one refresh, because OpenAI rotates the refresh token and a second redemption of the old one
-would revoke the grant.
+would revoke the grant. A caller that joins a refresh because OpenAI refused its token never gets
+that token back: if the refresh fails and the old token is still the stored one, it gets
+`model-unavailable`, as the caller that started the refresh with that token does.
+
+`src/chatgpt/account.ts` models the account as one of three states: disconnected, connected (with
+the tokens and the usage limit, if any), or needs a reconnect (with the reason only). One pure
+function decides each change, and an event that names a token that is no longer stored changes
+nothing. `src/chatgpt/sign-in.ts` does the same for the sign-in (none, pending, or exchanging the
+code; the exchanging state lives only in memory). The credential store reads the rows, applies the
+change and writes the rows in one `transactionSync`. It keeps the table layout that older Workers
+read (`chatgpt_connection`, `chatgpt_login`, `chatgpt_usage_limit`), so a rolled-back Worker still
+reads a valid credential. A needs-reconnect row keeps empty strings in the token columns, and the
+store reads `chatgpt_usage_limit` only beside a connected row and deletes it on every other write.
 
 **The token never leaves the immutable host.** The Supervisor creates the model route with
 `props.supervisor` set to its own name. Only the route reads those props; a facet holds the route
@@ -56,7 +68,8 @@ the limit after a Disconnect, a new sign-in, or a refresh replaced its token rec
 old account's limit never pauses a new one. A `retry-after` header gives the time it ends, capped
 at a week; until then the route skips ChatGPT and falls back without asking. OpenAI names no end for a limit that arrives in the stream, and its
 documentation says not to infer one, so the next call asks ChatGPT again and records the limit again
-if it still holds. The owner's ChatGPT view shows the limit, with its end when known. Other
+if it still holds. A report without an end does not replace an end that is already known and not
+yet reached, so a second call that meets the same limit in the stream keeps the known end. The owner's ChatGPT view shows the limit, with its end when known. Other
 refusals, such as `subscription_sharing_user_not_eligible` or
 `subscription_sharing_usage_unavailable`, still fail the call.
 

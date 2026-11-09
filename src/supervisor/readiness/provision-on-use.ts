@@ -61,7 +61,7 @@ export function provisionOnUse(
 
     let provisioned = yield* Effect.result(provision);
 
-    const credentialWasWorking = github.lastKnown(Date.now()).github?.state === "connected";
+    const credentialWasWorking = github.credentialWorking();
 
     const firstExitCode = failedStepExitCode(provisioned);
 

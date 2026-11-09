@@ -66,7 +66,12 @@ function tenant(name: string, replies: readonly Reply[], configured = true): Ten
   return tenantOf(name, githubReplying(replies), configured);
 }
 
-function tenantOf(name: string, fetcher: GitHubFetch, configured = true): Tenant {
+function tenantOf(
+  name: string,
+  fetcher: GitHubFetch,
+  configured = true,
+  fallbackToken?: string,
+): Tenant {
   const clientId = configured ? CLIENT_ID : undefined;
   const workspace = new FakeTenantWorkspace();
 
@@ -80,7 +85,7 @@ function tenantOf(name: string, fetcher: GitHubFetch, configured = true): Tenant
               store: new GitHubConnectionStore(state.storage),
               workspaceName: tenantWorkspaceName(name),
               namespace: workspace.namespace,
-              environment: { clientId, fallbackToken: undefined, fetcher },
+              environment: { clientId, fallbackToken, fetcher },
             }),
           ),
         ),
@@ -237,4 +242,23 @@ test("refuses to start without a configured GitHub OAuth client", async () => {
   const started = await subject.github((github) => github.startAuthorization(NOW));
 
   expect(started).toEqual({ ok: false, problem: "not-configured" });
+});
+
+test("a pending authorization does not hide the workspace credential from the repair", async () => {
+  const subject = tenantOf(
+    "authorization-overlay",
+    githubReplying([deviceReply]),
+    true,
+    FAKE_TOKEN,
+  );
+
+  subject.workspace.credentialState = "missing";
+  await subject.github((github) => github.startAuthorization(NOW));
+
+  const repaired = await subject.github((github) => github.ensureCredential(NOW + 1));
+  const afterwards = await subject.github((github) => github.status(NOW + 2));
+
+  expect(repaired).toMatchObject({ state: "connected", source: "configured-token" });
+  expect(afterwards).toMatchObject({ state: "awaiting-authorization" });
+  expect(subject.workspace.credentialState).toBe("connected");
 });

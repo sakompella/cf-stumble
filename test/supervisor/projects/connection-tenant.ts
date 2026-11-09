@@ -7,7 +7,11 @@ import type {
 } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { tenantConnections, type TenantConnections } from "./tenant-connections.js";
+import type { ProjectId } from "../../../src/project-catalog.js";
 import type { GitHubFetch } from "../../../src/github/index.js";
+
+export const noRunActive = <Marked>(_projectId: ProjectId, mark: () => Marked) =>
+  Effect.sync(() => ({ marked: mark() }));
 
 export const NOW = 1_700_000_000_000;
 

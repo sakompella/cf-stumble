@@ -5,6 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import type { ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { tenantConnections } from "./tenant-connections.js";
+import { noRunActive } from "./connection-tenant.js";
 import { projectIdOf } from "../../project-fixtures.js";
 
 const NOW = 1_700_000_000_000;
@@ -18,8 +19,6 @@ const PROJECT_ID = projectIdOf("sample-repo-1");
 const REMOVAL = "rm -rf --";
 
 const CLONE = "git clone";
-
-const noRunActive = () => true;
 
 function withConnections<T>(
   name: string,
@@ -153,7 +152,7 @@ test("a disconnect waits for the run check until an earlier connection has settl
       connections.disconnect(PROJECT_ID, () => {
         runChecked = true;
 
-        return false;
+        return Effect.succeed(null);
       }),
     );
 
@@ -193,5 +192,44 @@ test("provisioning on use waits for a failing connection and then finds no proje
     expect(workspace.commands.filter((command) => command.includes(CLONE))).toHaveLength(
       clonesDuringConnection,
     );
+  });
+});
+
+test("a clone that fails is removed from the workspace, not only from the catalog", async () => {
+  const workspace = new FakeTenantWorkspace();
+
+  await withConnections("failed-clone-cleanup", workspace, async (connections) => {
+    const clone = workspace.holdNext(CLONE);
+    const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    await clone.reached;
+    clone.release(128);
+
+    await expect(connecting).resolves.toMatchObject({ ok: false });
+    expect(indexOfLast(workspace.commands, REMOVAL)).toBeGreaterThan(
+      indexOfLast(workspace.commands, CLONE),
+    );
+    expect(isConnected(connections)).toBe(false);
+  });
+});
+
+test("a removal that failed is finished when another project connects", async () => {
+  const workspace = new FakeTenantWorkspace();
+
+  await withConnections("failed-removal-retry", workspace, async (connections) => {
+    await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    workspace.commandSync = "incomplete";
+
+    await expect(
+      Effect.runPromise(connections.disconnect(PROJECT_ID, noRunActive)),
+    ).resolves.toMatchObject({ ok: true, workspace: "failed" });
+    expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBe("directory");
+
+    workspace.commandSync = "complete";
+    await Effect.runPromise(
+      connections.connect("https://github.com/sample/repo-2", undefined, NOW),
+    );
+
+    expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBeUndefined();
+    expect(isConnected(connections)).toBe(false);
   });
 });

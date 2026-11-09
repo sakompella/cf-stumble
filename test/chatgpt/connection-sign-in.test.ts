@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import { type ChatGPTConnection, ChatGPTCredentialStore } from "../../src/chatgpt/index.js";
+import type { ChatGPTConnection } from "../../src/chatgpt/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
   ACCESS_ONE,
@@ -15,7 +15,7 @@ import {
   REFRESH_ONE,
   REFRESH_TWO,
 } from "./fixtures.js";
-import { type Harness, HOUR, withConnection } from "./connection-harness.js";
+import { type Harness, HOUR, storeGrant, withConnection } from "./connection-harness.js";
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -126,15 +126,12 @@ test("the Supervisor reports no credential before the first connection, and a di
   });
 
   await runInDurableObject(supervisor, (_instance, state) => {
-    new ChatGPTCredentialStore(state.storage).connect(
-      {
-        accessToken: ACCESS_ONE,
-        refreshToken: REFRESH_ONE,
-        expiresAt: Date.now() + HOUR,
-        clientId: CLIENT_ID,
-      },
-      Date.now(),
-    );
+    storeGrant(state.storage, {
+      accessToken: ACCESS_ONE,
+      refreshToken: REFRESH_ONE,
+      expiresAt: Date.now() + HOUR,
+      clientId: CLIENT_ID,
+    });
   });
 
   await expect(supervisor.chatgptAccess()).resolves.toEqual({
@@ -189,7 +186,7 @@ test("a Disconnect during the code exchange is not undone by its late grant", as
     exchanges.held[0]?.release(grant(ACCESS_ONE, REFRESH_ONE));
 
     await expect(finishing).resolves.toMatchObject({ ok: false, problem: { code: "no-sign-in" } });
-    expect(harness.store.connection()).toBeUndefined();
+    expect(harness.store.account()).toEqual({ _tag: "disconnected" });
     expect(harness.connection.view()).toMatchObject({
       connection: { state: "disconnected" },
       login: null,
@@ -208,14 +205,14 @@ test("a sign-in started during an exchange makes the older grant stale", async (
     exchanges.held[0]?.release(grant(ACCESS_ONE, REFRESH_ONE));
 
     await expect(older).resolves.toMatchObject({ ok: false, problem: { code: "no-sign-in" } });
-    expect(harness.store.connection()).toBeUndefined();
+    expect(harness.store.account()).toEqual({ _tag: "disconnected" });
 
     const newer = finishNewer();
     await requestsMade(harness, 2);
     exchanges.held[1]?.release(grant(ACCESS_TWO, REFRESH_TWO));
 
     await expect(newer).resolves.toMatchObject({ ok: true });
-    expect(harness.store.connection()).toMatchObject({ accessToken: ACCESS_TWO });
+    expect(harness.store.account()).toMatchObject({ accessToken: ACCESS_TWO });
   });
 });
 
@@ -233,7 +230,7 @@ test("an older exchange that finishes after a newer sign-in does not overwrite i
 
     exchanges.held[0]?.release(grant(ACCESS_ONE, REFRESH_ONE));
     await expect(older).resolves.toMatchObject({ ok: false, problem: { code: "no-sign-in" } });
-    expect(harness.store.connection()).toMatchObject({
+    expect(harness.store.account()).toMatchObject({
       accessToken: ACCESS_TWO,
       refreshToken: REFRESH_TWO,
     });

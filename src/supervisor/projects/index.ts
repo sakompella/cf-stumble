@@ -13,3 +13,5 @@ export {
   type ConnectRepositoryResult,
   type DisconnectRepositoryResult,
 } from "./project-connections.js";
+
+export { ProjectLifecycleQueue } from "./project-lifecycle-queue.js";

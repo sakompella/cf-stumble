@@ -1,7 +1,7 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { ChatGPTCredentialStore } from "../src/chatgpt/credential-store.js";
+import { storeGrant } from "./chatgpt/connection-harness.js";
 import { loadMainFacet } from "../src/facet/index.js";
 import { parsedArtifact } from "./facet/fixture.js";
 
@@ -44,15 +44,12 @@ test("a generation holding the model route cannot reach its credential helper or
   const supervisor = "rpc-surface-credential-holder";
 
   await runInDurableObject(env.SUPERVISOR.getByName(supervisor), (_instance, state) => {
-    new ChatGPTCredentialStore(state.storage).connect(
-      {
-        accessToken: ACCESS_TOKEN,
-        refreshToken: REFRESH_TOKEN,
-        expiresAt: Date.now() + 3_600_000,
-        clientId: "synthetic-client",
-      },
-      Date.now(),
-    );
+    storeGrant(state.storage, {
+      accessToken: ACCESS_TOKEN,
+      refreshToken: REFRESH_TOKEN,
+      expiresAt: Date.now() + 3_600_000,
+      clientId: "synthetic-client",
+    });
   });
 
   const loaded = loadMainFacet(

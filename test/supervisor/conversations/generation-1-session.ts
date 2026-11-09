@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { ChatGPTCredentialStore } from "../../../src/chatgpt/index.js";
+import { storeGrant } from "../../chatgpt/connection-harness.js";
 import type { Entry } from "../../../src/page/client/pi-message.js";
 import { builtGeneration } from "../../facet/generation-1/built-module-map.js";
 import { replaceWorkspaceHost } from "../../workspace-host-spy.js";
@@ -34,15 +34,12 @@ export async function servingGeneration1(
   const control = await connectedSupervisor(name);
 
   await runInDurableObject(control, (_instance, state) => {
-    new ChatGPTCredentialStore(state.storage).connect(
-      {
-        accessToken: "chatgpt-access-FAKE-generation-1",
-        refreshToken: "chatgpt-refresh-FAKE-generation-1",
-        expiresAt: Date.now() + 3_600_000,
-        clientId: "oaiapp_FAKEclient",
-      },
-      Date.now(),
-    );
+    storeGrant(state.storage, {
+      accessToken: "chatgpt-access-FAKE-generation-1",
+      refreshToken: "chatgpt-refresh-FAKE-generation-1",
+      expiresAt: Date.now() + 3_600_000,
+      clientId: "oaiapp_FAKEclient",
+    });
   });
 
   const commit = await commitNamed(name);

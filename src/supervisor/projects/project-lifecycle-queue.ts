@@ -4,6 +4,10 @@ import type { ProjectId } from "../../project-catalog.js";
 export class ProjectLifecycleQueue {
   private readonly tails = new Map<ProjectId, Promise<void>>();
 
+  busy(projectId: ProjectId): boolean {
+    return this.tails.has(projectId);
+  }
+
   exclusive<A, E>(projectId: ProjectId, operation: Effect.Effect<A, E>): Effect.Effect<A, E> {
     return Effect.suspend(() => {
       const previous = this.tails.get(projectId) ?? Promise.resolve();

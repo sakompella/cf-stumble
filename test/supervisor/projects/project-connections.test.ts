@@ -5,7 +5,7 @@ import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
-import { FAKE_TOKEN, NOW, REPOSITORY, tenant } from "./connection-tenant.js";
+import { FAKE_TOKEN, noRunActive, NOW, REPOSITORY, tenant } from "./connection-tenant.js";
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -118,7 +118,7 @@ test("disconnecting a project removes its clone and leaves the harness checkout"
   expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBe("directory");
 
   const disconnected = await subject.connections((connections) =>
-    connections.disconnect("sample-repo-1", () => true),
+    connections.disconnect("sample-repo-1", noRunActive),
   );
 
   const listed = await subject.connections((connections) =>
@@ -159,7 +159,7 @@ test.each([
   row.arrange(subject.workspace);
 
   const disconnected = await subject.connections((connections) =>
-    connections.disconnect("sample-repo-1", () => true),
+    connections.disconnect("sample-repo-1", noRunActive),
   );
 
   const listed = await subject.connections((connections) =>

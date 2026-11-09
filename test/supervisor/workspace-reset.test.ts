@@ -1,11 +1,11 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
-import { GitHubConnectionStore } from "../../src/supervisor/projects/github-connection-store.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import { sampleProjectTwo } from "../project-fixtures.js";
 import { connectSampleProjects, submitCandidate } from "./helpers.js";
+import { seedGitHubConnection } from "./github-seed.js";
 import { readGenerations } from "./generation-reads.js";
 import { fakeWorkspace, heldWorkspace } from "./workspace-reset-fakes.js";
 
@@ -23,13 +23,7 @@ test("resets the named workspace while preserving the projects and generations",
 
   const projectsBeforeReset = await control.listProjects();
   const generationsBeforeReset = await readGenerations(control);
-  await runInDurableObject(control, (_instance, state) => {
-    new GitHubConnectionStore(state.storage).recordConnection({
-      login: "reset-user",
-      source: "configured-token",
-      connectedAt: 0,
-    });
-  });
+  await seedGitHubConnection(control);
 
   const resetResult = { ok: true, reset: "workspace" } as const satisfies WorkspaceResetResult;
   const fake = fakeWorkspace(resetResult);
@@ -51,13 +45,7 @@ test("resets the named workspace while preserving the projects and generations",
 
 test("a reset the Workspace Host refuses keeps the GitHub connection record", async () => {
   const control = env.SUPERVISOR.getByName("workspace-reset-host-busy");
-  await runInDurableObject(control, (_instance, state) => {
-    new GitHubConnectionStore(state.storage).recordConnection({
-      login: "reset-user",
-      source: "configured-token",
-      connectedAt: 0,
-    });
-  });
+  await seedGitHubConnection(control);
 
   const busy = { ok: false, problem: { code: "workspace-busy" } } as const;
   const fake = fakeWorkspace(busy);

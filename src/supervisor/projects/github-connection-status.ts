@@ -1,25 +1,8 @@
-import type { DeviceRedemption, GitHubCredentialStatus } from "../../github/index.js";
+import type { DeviceRedemption } from "../../github/index.js";
 import { logEvent, type LogLevel } from "../../diagnostics.js";
-import type {
-  CheckedStatus,
-  CredentialSource,
-  RecordedConnection,
-} from "./github-connection-store.js";
+import type { CredentialSource, GitHubConnectionStatus } from "./github-connection-machine.js";
 
-export type GitHubConnectionStatus =
-  | Readonly<{ state: "disconnected" }>
-  | Readonly<{ state: "tooling-missing" }>
-  | Readonly<{
-      state: "awaiting-authorization";
-      verificationUri: string;
-      userCode: string;
-      expiresAt: number;
-    }>
-  | Readonly<{ state: "connected"; login: string; source: CredentialSource }>
-  | Readonly<{
-      state: "reconnect-required";
-      reason: "credential-missing" | "credential-rejected" | "workspace-unavailable";
-    }>;
+export type { CredentialSource, GitHubConnectionStatus } from "./github-connection-machine.js";
 
 export type GitHubAuthorizationProblem =
   | "not-configured"
@@ -36,12 +19,6 @@ export type GitHubConnectionRecord = Readonly<{
 export type GitHubAuthorizationOutcome =
   | Readonly<{ ok: true; status: GitHubConnectionStatus; checkedAt: number | null }>
   | Readonly<{ ok: false; problem: GitHubAuthorizationProblem }>;
-
-export function reconnect(
-  reason: "credential-missing" | "credential-rejected" | "workspace-unavailable",
-): CheckedStatus {
-  return { state: "reconnect-required", reason };
-}
 
 function outcome(status: GitHubConnectionStatus): string {
   return status.state === "reconnect-required" ? status.reason : status.state;
@@ -89,53 +66,6 @@ export function unredeemedOutcome(
       return "provider-unavailable";
     default: {
       const exhaustive: never = kind;
-
-      return exhaustive;
-    }
-  }
-}
-
-export type Learned = Readonly<{
-  status: CheckedStatus;
-  connection: RecordedConnection | undefined;
-}>;
-
-export function statusOnly(
-  status: CheckedStatus,
-): (previous: RecordedConnection | undefined) => Learned {
-  return (previous) => ({ status, connection: previous });
-}
-
-export function learned(
-  answer: GitHubCredentialStatus,
-  installedBy: CredentialSource | undefined,
-  previous: RecordedConnection | undefined,
-  now: number,
-): Learned {
-  switch (answer.state) {
-    case "connected": {
-      const login = answer.login ?? previous?.login ?? "";
-      const source = installedBy ?? previous?.source ?? "device-authorization";
-      const connectedAt = installedBy === undefined ? (previous?.connectedAt ?? 0) : now;
-
-      return {
-        status: { state: "connected", login, source },
-        connection: { login, source, connectedAt },
-      };
-    }
-
-    case "tooling-missing":
-      return { status: { state: "tooling-missing" }, connection: previous };
-    case "missing":
-      return {
-        status:
-          previous === undefined ? { state: "disconnected" } : reconnect("credential-missing"),
-        connection: undefined,
-      };
-    case "unusable":
-      return { status: reconnect("credential-rejected"), connection: undefined };
-    default: {
-      const exhaustive: never = answer.state;
 
       return exhaustive;
     }

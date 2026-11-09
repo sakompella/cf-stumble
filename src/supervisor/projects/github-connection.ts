@@ -14,23 +14,28 @@ import {
   type WorkspaceCredentialInput,
   type WorkspaceHostNamespace,
 } from "../../workspace/index.js";
-import type {
-  CheckedStatus,
-  CredentialSource,
-  GitHubConnectionStore,
-  RecordedConnection,
-} from "./github-connection-store.js";
 import {
-  learned,
+  AuthorizationEvent,
+  awaitingStatus,
+  checkedAtOf,
+  checkedStatus,
+  CredentialEvent,
+  ensureCommand,
+  GitHubAuthorization,
+  isWorking,
+  knownStatus,
+  type CredentialSource,
+  type GitHubConnectionStatus,
+  type GitHubCredential,
+  EnsureCommand,
+} from "./github-connection-machine.js";
+import type { GitHubConnectionStore } from "./github-connection-store.js";
+import {
   logCredentialEnsure,
   logCredentialInstall,
-  reconnect,
-  statusOnly,
   unredeemedOutcome,
   type GitHubAuthorizationOutcome,
   type GitHubConnectionRecord,
-  type GitHubConnectionStatus,
-  type Learned,
 } from "./github-connection-status.js";
 
 export type { GitHubConnectionStatus } from "./github-connection-status.js";
@@ -69,64 +74,61 @@ export class GitHubConnection {
 
   status(now: number, options: StatusReadOptions = {}): Effect.Effect<GitHubConnectionStatus> {
     return Effect.suspend(() => {
-      const pending = this.pendingStatus(now);
+      const awaiting = awaitingStatus(this.store.authorization(now));
 
-      return pending === undefined
-        ? this.observed(this.store.revision(), now, undefined, options)
-        : Effect.succeed(pending);
+      return awaiting === null
+        ? this.observed(this.store.revision(), now, undefined, options).pipe(
+            Effect.map(checkedStatus),
+          )
+        : Effect.succeed(awaiting);
     });
   }
 
   lastKnown(now: number): GitHubConnectionRecord {
-    const lastCheck = this.store.lastCheck();
+    const credential = this.store.credential();
 
     return {
-      github: this.pendingStatus(now) ?? lastCheck?.status ?? null,
-      checkedAt: this.checkedAt(),
+      github: knownStatus(credential, this.store.authorization(now)),
+      checkedAt: checkedAtOf(credential),
     };
   }
 
   checkedAt(): number | null {
-    return this.store.lastCheck()?.checkedAt ?? null;
+    return checkedAtOf(this.store.credential());
   }
 
-  private answered(status: GitHubConnectionStatus): GitHubAuthorizationOutcome {
-    return { ok: true, status, checkedAt: this.checkedAt() };
-  }
-
-  private pendingStatus(now: number): GitHubConnectionStatus | undefined {
-    const pending = this.store.pendingAuthorization(now);
-
-    return pending === undefined
-      ? undefined
-      : {
-          state: "awaiting-authorization",
-          verificationUri: pending.verificationUri,
-          userCode: pending.userCode,
-          expiresAt: pending.expiresAt,
-        };
+  credentialWorking(): boolean {
+    return isWorking(this.store.credential());
   }
 
   ensureCredential(now: number, signal?: AbortSignal): Effect.Effect<GitHubConnectionStatus> {
     return Effect.gen({ self: this }, function* () {
-      const current = yield* this.status(now, { signal });
+      const credential = yield* this.observed(this.store.revision(), now, undefined, { signal });
+      const current = checkedStatus(credential);
 
-      if (
-        signal?.aborted === true ||
-        current.state === "connected" ||
-        current.state === "tooling-missing"
-      ) {
-        return current;
-      }
+      if (signal?.aborted === true) return current;
 
-      const token = parseGitHubToken(this.environment.fallbackToken);
+      const fallback = parseGitHubToken(this.environment.fallbackToken);
 
-      const repaired =
-        token === undefined ? current : yield* this.install(token, "configured-token", now, signal);
+      return yield* EnsureCommand.$match(ensureCommand(credential, fallback), {
+        Usable: ({ credential: usable }) => Effect.succeed(checkedStatus(usable)),
+        Unrepairable: ({ credential: unrepairable }) =>
+          Effect.sync(() => {
+            const status = checkedStatus(unrepairable);
 
-      logCredentialEnsure(current, token !== undefined, repaired);
+            logCredentialEnsure(status, false, status);
 
-      return repaired;
+            return status;
+          }),
+        InstallConfigured: ({ token }) =>
+          this.install(token, "configured-token", now, signal).pipe(
+            Effect.tap((repaired) =>
+              Effect.sync(() => {
+                logCredentialEnsure(current, true, repaired);
+              }),
+            ),
+          ),
+      });
     });
   }
 
@@ -147,13 +149,18 @@ export class GitHubConnection {
       }
 
       const authorization = started.success;
-      this.store.startAuthorization({
-        deviceCode: authorization.deviceCode,
-        userCode: authorization.userCode,
-        verificationUri: authorization.verificationUri,
-        expiresAt: now + authorization.expiresInSeconds * 1_000,
-        intervalSeconds: authorization.intervalSeconds,
-      });
+
+      this.store.applyAuthorization(
+        AuthorizationEvent.Started({
+          pending: GitHubAuthorization.cases.pending.make({
+            deviceCode: authorization.deviceCode,
+            userCode: authorization.userCode,
+            verificationUri: authorization.verificationUri,
+            expiresAt: now + authorization.expiresInSeconds * 1_000,
+            intervalSeconds: authorization.intervalSeconds,
+          }),
+        }),
+      );
 
       return this.answered(yield* this.status(now));
     });
@@ -162,25 +169,25 @@ export class GitHubConnection {
   completeAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
       const clientId = this.environment.clientId;
-      const pending = this.store.pendingAuthorization(now);
+      const authorization = this.store.authorization(now);
 
       if (clientId === undefined) {
         return { ok: false, problem: "not-configured" } as const;
       }
 
-      if (pending === undefined) {
+      if (GitHubAuthorization.guards.idle(authorization)) {
         return { ok: false, problem: "no-pending-authorization" } as const;
       }
 
       const redeemed = yield* redeemDeviceAuthorization(
-        { clientId, deviceCode: pending.deviceCode },
+        { clientId, deviceCode: authorization.deviceCode },
         this.environment.fetcher,
       );
 
       const settled =
         redeemed.kind === "authorized" || redeemed.kind === "expired" || redeemed.kind === "denied";
 
-      if (settled && !this.store.consumeAuthorization(pending.deviceCode)) {
+      if (settled && !this.consumed(authorization.deviceCode)) {
         return this.answered(yield* this.status(now));
       }
 
@@ -196,6 +203,18 @@ export class GitHubConnection {
 
       return { ok: false, problem: unredeemed } as const;
     });
+  }
+
+  private consumed(deviceCode: string): boolean {
+    const { before, after } = this.store.applyAuthorization(
+      AuthorizationEvent.Settled({ deviceCode }),
+    );
+
+    return GitHubAuthorization.guards.pending(before) && GitHubAuthorization.guards.idle(after);
+  }
+
+  private answered(status: GitHubConnectionStatus): GitHubAuthorizationOutcome {
+    return { ok: true, status, checkedAt: this.checkedAt() };
   }
 
   private install(
@@ -216,22 +235,31 @@ export class GitHubConnection {
         }),
       );
 
-      if (Result.isFailure(installed)) {
-        const refused = reconnect(
-          installed.failure instanceof CredentialInstallFailed
-            ? "credential-rejected"
-            : "workspace-unavailable",
-        );
-
-        logCredentialInstall(source, refused);
-
-        return this.record(revision, now, signal, statusOnly(refused));
-      }
-
-      const status: CheckedStatus =
-        installed.success === "tooling-missing"
-          ? this.record(revision, now, signal, statusOnly({ state: "tooling-missing" }))
+      const credential = Result.isFailure(installed)
+        ? this.record(
+            revision,
+            signal,
+            CredentialEvent.InstallRefused({
+              reason:
+                installed.failure instanceof CredentialInstallFailed
+                  ? "credential-rejected"
+                  : "workspace-unavailable",
+              now,
+            }),
+          )
+        : installed.success === "tooling-missing"
+          ? this.record(
+              revision,
+              signal,
+              CredentialEvent.Observed({
+                answer: { state: "tooling-missing", login: undefined },
+                installedBy: undefined,
+                now,
+              }),
+            )
           : yield* this.observed(revision, now, source, { signal });
+
+      const status = checkedStatus(credential);
 
       logCredentialInstall(source, status);
 
@@ -244,7 +272,7 @@ export class GitHubConnection {
     now: number,
     installedBy?: CredentialSource,
     options: StatusReadOptions = {},
-  ): Effect.Effect<CheckedStatus> {
+  ): Effect.Effect<GitHubCredential> {
     return readWorkspaceCredentialStatus({
       workspaceName: this.workspaceName,
       namespace: this.namespace,
@@ -252,15 +280,12 @@ export class GitHubConnection {
     }).pipe(
       Effect.match({
         onFailure: () =>
+          this.record(revision, options.signal, CredentialEvent.WorkspaceUnreachable({ now })),
+        onSuccess: (answer) =>
           this.record(
             revision,
-            now,
             options.signal,
-            statusOnly(reconnect("workspace-unavailable")),
-          ),
-        onSuccess: (answer) =>
-          this.record(revision, now, options.signal, (previous) =>
-            learned(answer, installedBy, previous, now),
+            CredentialEvent.Observed({ answer, installedBy, now }),
           ),
       }),
     );
@@ -268,16 +293,9 @@ export class GitHubConnection {
 
   private record(
     revision: number,
-    now: number,
     signal: AbortSignal | undefined,
-    learn: (previous: RecordedConnection | undefined) => Learned,
-  ): CheckedStatus {
-    const found = learn(this.store.connection());
-
-    if (signal?.aborted !== true) {
-      this.store.recordCheck(revision, { status: found.status, checkedAt: now }, found.connection);
-    }
-
-    return found.status;
+    event: CredentialEvent,
+  ): GitHubCredential {
+    return this.store.applyCredential(revision, event, signal?.aborted !== true);
   }
 }
