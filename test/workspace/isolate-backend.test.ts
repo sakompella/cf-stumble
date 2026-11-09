@@ -49,6 +49,15 @@ test("git runs in the isolate and prints status the way real git does", async ()
   expect(lines.join("\n")).toContain("Untracked files:");
 });
 
+test("a command that writes to /dev/null runs in the isolate and discards the output", async () => {
+  const lines = await runIn("isolate-dev-null", undefined, "echo hi > /dev/null && echo done");
+
+  expect(lines).toEqual([
+    JSON.stringify({ kind: "stdout", seq: 0, data: "done\n" }),
+    JSON.stringify({ kind: "terminal", seq: 1, outcome: "exited", exitCode: 0 }),
+  ]);
+});
+
 test("a holder of the WORKSPACE_HOST binding cannot get the workspace without the isolate's token", async () => {
   const outcome = await runInDurableObject(env.WORKSPACE_HOST.getByName("isolate-gate"), (host) =>
     host.openIsolateWorkspace("guess").then(() => "opened", String),

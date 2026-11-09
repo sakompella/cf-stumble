@@ -113,8 +113,12 @@ const OUTSIDE_WORKSPACE_PREFIXES = [
   "/var",
 ];
 
+const ISOLATE_VIRTUAL_DEV_PATHS = new Set(["/dev/null"]);
+
 function referencesOutsidePath(word: string): boolean {
   if (!word.startsWith("/")) return false;
+
+  if (ISOLATE_VIRTUAL_DEV_PATHS.has(word)) return false;
 
   return OUTSIDE_WORKSPACE_PREFIXES.some(
     (prefix) => word === prefix || word.startsWith(`${prefix}/`),

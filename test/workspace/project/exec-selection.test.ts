@@ -55,6 +55,13 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
   ["cat /workspace/notes.txt", undefined, "isolate"],
   ["cat /workspace/../workspace/x", undefined, "isolate"],
   ["echo hi > out.txt", undefined, "isolate"],
+  ["echo hi > /dev/null", undefined, "isolate"],
+  ["cat /dev/null", undefined, "isolate"],
+  ["curl -s -o /dev/null -w '%{http_code}' https://github.com/owner/repo", undefined, "isolate"],
+  ["echo hi > /dev/stdout", undefined, "container"],
+  ["echo hi > /dev/stderr", undefined, "container"],
+  ["cat /dev/zero", undefined, "container"],
+  ["ls /dev", undefined, "container"],
 ];
 
 describe("routedBackend", () => {

@@ -3,6 +3,7 @@ import type { ShellWorker } from "@cloudflare/computer/backends/worker-shell";
 import * as Schema from "effect/Schema";
 import { SHELL_MODULES_FILE } from "../../../infra/worker-settings.js";
 import { ISOLATE_BACKEND_ID } from "./exec-backend.js";
+import type { IsolateEgressGatewayProps } from "./isolate-egress.js";
 import type { IsolateGateProps } from "./isolate-gate.js";
 
 type ShellModuleSet = Readonly<{
@@ -21,7 +22,7 @@ export interface ShellHost {
   readonly isolateToken: string;
   readonly exports: {
     IsolateWorkspaceGate(options: { props: IsolateGateProps }): Fetcher;
-    IsolateEgressGateway(options: { props: Readonly<Record<string, never>> }): Fetcher;
+    IsolateEgressGateway(options: { props: IsolateEgressGatewayProps }): Fetcher;
   };
 }
 
@@ -112,7 +113,9 @@ export function isolateShellBackend(
             HOST: host.exports.IsolateWorkspaceGate({
               props: { id: host.id.toString(), token: host.isolateToken },
             }),
-            EGRESS: host.exports.IsolateEgressGateway({ props: {} }),
+            EGRESS: host.exports.IsolateEgressGateway({
+              props: { id: host.id.toString(), token: host.isolateToken },
+            }),
           },
           globalOutbound: null,
         };

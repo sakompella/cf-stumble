@@ -20,7 +20,7 @@ export const testWorker = {
     workerLoaders: { LOADER: {} },
     outboundService: (request: Request) =>
       new Response(
-        `tests have no outbound network: ${request.headers.get("user-agent") ?? "none"}`,
+        `tests have no outbound network: ${request.headers.get("user-agent") ?? "none"} ${request.headers.get("authorization") ?? "anonymous"}`,
         {
           status: 503,
         },

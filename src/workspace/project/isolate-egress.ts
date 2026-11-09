@@ -1,5 +1,8 @@
+import type { Workspace } from "@cloudflare/computer";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { logEvent } from "../../diagnostics.js";
+import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
+import { githubTokenFromHosts } from "./git-fs.js";
 
 export const ISOLATE_EGRESS_ORIGINS: readonly string[] = [
   "https://github.com",
@@ -15,6 +18,8 @@ export const ISOLATE_EGRESS_ORIGINS: readonly string[] = [
 const ALLOWED_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
 
 const ALLOWED_ORIGINS: ReadonlySet<string> = new Set(ISOLATE_EGRESS_ORIGINS);
+
+const GITHUB_API_ORIGIN = "https://api.github.com";
 
 const USER_AGENT = "cf-stumble-isolate";
 
@@ -64,9 +69,25 @@ function resolveFrom(base: string, location: string): string | null {
   }
 }
 
-export function isolateEgressFetch(upstream: EgressFetch): EgressFetch {
-  const forward = (url: string, method: string): Promise<Response> =>
-    upstream(url, { method, headers: { "user-agent": USER_AGENT }, redirect: "manual" });
+function forwardHeaders(origin: string, token: string | undefined): Headers {
+  const headers = new Headers({ "user-agent": USER_AGENT });
+
+  if (origin === GITHUB_API_ORIGIN && token !== undefined)
+    headers.set("authorization", `Bearer ${token}`);
+
+  return headers;
+}
+
+export function isolateEgressFetch(upstream: EgressFetch, githubToken?: string): EgressFetch {
+  const forward = (url: string, method: string): Promise<Response> => {
+    const { origin } = originOf(url) ?? { origin: "" };
+
+    return upstream(url, {
+      method,
+      headers: forwardHeaders(origin, githubToken),
+      redirect: "manual",
+    });
+  };
 
   return async (input, init): Promise<Response> => {
     let url = input instanceof Request ? input.url : input.toString();
@@ -97,8 +118,54 @@ export function isolateEgressFetch(upstream: EgressFetch): EgressFetch {
   };
 }
 
-export class IsolateEgressGateway extends WorkerEntrypoint {
-  override fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    return isolateEgressFetch((request, requestInit) => fetch(request, requestInit))(input, init);
+interface GitHubHostsFile {
+  readFile(path: string, encoding: "utf8"): Promise<string>;
+}
+
+export async function githubTokenForIsolateEgress(
+  fs: GitHubHostsFile,
+  fallbackToken?: string,
+): Promise<string | undefined> {
+  let hosts = "";
+
+  try {
+    hosts = await fs.readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`, "utf8");
+  } catch {
+    hosts = "";
+  }
+
+  return githubTokenFromHosts(hosts) ?? fallbackToken;
+}
+
+interface GateHost {
+  openIsolateWorkspace(token: string): Promise<ReturnType<Workspace["stub"]>>;
+}
+
+export interface IsolateEgressGatewayProps {
+  readonly id: string;
+  readonly token: string;
+}
+
+interface EgressEnv {
+  readonly WORKSPACE_HOST: Readonly<{ idFromString(id: string): DurableObjectId }> & {
+    get(id: DurableObjectId): GateHost;
+  };
+  readonly GH_TOKEN?: string;
+}
+
+export class IsolateEgressGateway extends WorkerEntrypoint<EgressEnv, IsolateEgressGatewayProps> {
+  override async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const { id, token } = this.ctx.props;
+
+    const workspace = await this.env.WORKSPACE_HOST.get(
+      this.env.WORKSPACE_HOST.idFromString(id),
+    ).openIsolateWorkspace(token);
+
+    const githubToken = await githubTokenForIsolateEgress(workspace.fs, this.env.GH_TOKEN);
+
+    return isolateEgressFetch((request, requestInit) => fetch(request, requestInit), githubToken)(
+      input,
+      init,
+    );
   }
 }
