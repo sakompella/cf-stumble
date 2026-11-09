@@ -16,9 +16,9 @@ it("counts commits on every side of a merged history", async () => {
   directories.push(dir);
   const git = (...args: string[]): string =>
     execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
-  const commit = (name: string, seconds: number): string => {
-    writeFileSync(join(dir, "history"), name);
-    git("add", "history");
+  const commit = (name: string, seconds: number, file = "history"): string => {
+    writeFileSync(join(dir, file), name);
+    git("add", file);
     const date = `2020-01-01T00:00:${String(seconds).padStart(2, "0")}Z`;
     return execFileSync(
       "git",
@@ -35,7 +35,7 @@ it("counts commits on every side of a merged history", async () => {
   commit("L", 2);
   git("branch", "side", a);
   git("checkout", "side");
-  commit("C", 3);
+  commit("C", 3, "side");
   const c = git("rev-parse", "HEAD");
   git("checkout", "main");
   git("merge", "--no-ff", "side", "-m", "M");
