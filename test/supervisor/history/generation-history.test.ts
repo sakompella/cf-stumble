@@ -154,6 +154,7 @@ test("existing generations import as the first commit once", async () => {
   const { commits, history, settled } = recorder(0);
 
   await runInDurableObject(env.SUPERVISOR.getByName("history-import"), async (_instance, state) => {
+    state.storage.kv.delete("generations.history-imported");
     const generations = new Generations(state.storage, FACET_COMPATIBILITY);
     generations.submit(testHarnessCommit(firstCommit));
     generations.submit(testHarnessCommit(secondCommit));

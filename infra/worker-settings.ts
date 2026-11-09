@@ -18,8 +18,6 @@ export const durableObjectClasses = {
 
 export const MODULE_MAPS_BINDING = "MODULE_MAPS";
 
-export const HISTORY_BINDING = "ARTIFACTS";
-
 export const plainTextBindings = { CHATGPT_MODEL: "gpt-6.1-sol" } as const;
 
 export const shellModulesAssetDirectory = "build/shell-assets";

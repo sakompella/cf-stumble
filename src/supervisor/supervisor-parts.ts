@@ -59,11 +59,11 @@ export function supervisorParts(
   resetting: () => boolean,
   generationOperations: GenerationOperations,
 ) {
-  const history = generationHistory(ctx, env.ARTIFACTS);
+  const history = generationHistory(ctx, env.MODULE_MAPS);
 
-  const generations = new Generations(ctx.storage, FACET_COMPATIBILITY, (change) =>
-    history?.record(change),
-  );
+  const generations = new Generations(ctx.storage, FACET_COMPATIBILITY, (change) => {
+    history.record(change);
+  });
 
   const { name, workspaceName } = supervisorNames(ctx);
 
