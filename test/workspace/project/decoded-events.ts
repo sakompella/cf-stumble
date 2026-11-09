@@ -2,6 +2,8 @@ import * as Schema from "effect/Schema";
 import type { ExecEvent, ProjectFailure } from "../../../src/workspace/project/protocol.js";
 import type { ProjectRpcTarget } from "../../../src/workspace/project/target.js";
 
+export type { ExecEvent };
+
 const ExecFrame = Schema.Union([
   Schema.Struct({
     kind: Schema.Literals(["stdout", "stderr"]),
@@ -13,6 +15,7 @@ const ExecFrame = Schema.Union([
     seq: Schema.Number,
     outcome: Schema.Literal("exited"),
     exitCode: Schema.Number,
+    fullOutputPaths: Schema.optional(Schema.Array(Schema.String)),
   }),
   Schema.Struct({
     kind: Schema.Literal("terminal"),

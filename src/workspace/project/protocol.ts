@@ -44,7 +44,13 @@ export type WriteMode = "overwrite" | "append" | "create-exclusive";
 export type ExecEvent =
   | { kind: "stdout"; seq: number; data: string }
   | { kind: "stderr"; seq: number; data: string }
-  | { kind: "terminal"; seq: number; outcome: "exited"; exitCode: number }
+  | {
+      kind: "terminal";
+      seq: number;
+      outcome: "exited";
+      exitCode: number;
+      fullOutputPaths?: readonly string[] | undefined;
+    }
   | { kind: "terminal"; seq: number; outcome: "killed" | "timed-out" }
   | {
       kind: "terminal";
