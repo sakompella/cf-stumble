@@ -1,5 +1,6 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { RunCli } from "./git-cli.js";
+import { statusLines } from "./git-status.js";
 
 const OK: GitCliResult = { stdout: "", stderr: "", exitCode: 0 };
 
@@ -25,9 +26,11 @@ export async function addCommand(
   if (rest.length === input.argv.length - 1 || rest.some((arg) => arg !== ".")) return cli(input);
 
   const dir = root(input);
-  const entries = await client.status({ dir });
-  const changed = entries.filter((entry) => entry.worktree === "M").map((entry) => entry.path);
-  const deleted = entries.filter((entry) => entry.worktree === "D").map((entry) => entry.path);
+  const tracked = (await statusLines(client, dir)).filter(
+    (line) => line.x !== "?" && line.y !== " ",
+  );
+  const changed = tracked.flatMap((line) => (line.y === "D" ? [] : [line.path]));
+  const deleted = tracked.flatMap((line) => (line.y === "D" ? [line.path] : []));
 
   if (changed.length > 0) await client.add({ dir, paths: changed });
 

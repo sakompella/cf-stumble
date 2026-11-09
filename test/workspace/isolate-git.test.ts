@@ -169,6 +169,24 @@ test("git add -u stages changes and deletions of tracked files only", async () =
   expect(stdout).toBe("M  a.txt\nD  b.txt\n?? c.txt\n");
 });
 
+test("git add -u stages a file modified again after staging", async () => {
+  const { stdout } = await shell(
+    "isolate-git-add-u-restage",
+    `${SETUP} && echo x >> a.txt && git add a.txt && echo y >> a.txt && git add -u && git status -s`,
+  );
+
+  expect(stdout).toBe("M  a.txt\n");
+});
+
+test("git add -u stages a staged new file modified again", async () => {
+  const { stdout } = await shell(
+    "isolate-git-add-u-staged-new",
+    `${SETUP} && echo x > n.txt && git add n.txt && echo y >> n.txt && git add -u && git status -s`,
+  );
+
+  expect(stdout).toBe("A  n.txt\n");
+});
+
 test("git add . stages new files", async () => {
   const { stdout } = await shell(
     "isolate-git-add-dot",
