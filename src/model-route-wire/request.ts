@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
@@ -13,38 +14,59 @@ const FORBIDDEN_FIELDS: readonly string[] = [
   "provider",
 ];
 
-type SystemMessage = Readonly<{ role: "system"; content: string }>;
+const FieldsSchema = Schema.Record(Schema.String, Schema.Unknown);
 
-type UserMessage = Readonly<{ role: "user"; content: string }>;
+type Fields = typeof FieldsSchema.Type;
 
-type ToolCall = Readonly<{
-  id: string;
-  function: Readonly<{ name: string; arguments: string }>;
-}>;
+const isFields = Schema.is(FieldsSchema);
 
-export type AssistantMessage = Readonly<{
-  role: "assistant";
-  content: string | null;
-  tool_calls: ReadonlyArray<ToolCall>;
-}>;
+const EntriesSchema = Schema.Array(Schema.Unknown);
 
-type ToolResultMessage = Readonly<{
-  role: "tool";
-  tool_call_id: string;
-  content: string;
-}>;
+const isEntries = Schema.is(EntriesSchema);
 
-export type RouteMessage = SystemMessage | UserMessage | AssistantMessage | ToolResultMessage;
+const ToolCallSchema = Schema.Struct({
+  id: Schema.NonEmptyString,
+  function: Schema.Struct({ name: Schema.NonEmptyString, arguments: Schema.String }),
+});
 
-export type ToolDefinition = Readonly<{
-  type: "function";
-  function: Readonly<{ name: string; description: string; parameters: object }>;
-}>;
+const AssistantMessageSchema = Schema.Struct({
+  role: Schema.Literal("assistant"),
+  content: Schema.NullOr(Schema.String),
+  tool_calls: Schema.Array(ToolCallSchema).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+});
 
-export type ModelRouteRequest = Readonly<{
-  messages: ReadonlyArray<RouteMessage>;
-  tools?: ReadonlyArray<ToolDefinition>;
-}>;
+const RouteMessageSchema = Schema.Union([
+  Schema.Struct({ role: Schema.Literal("system"), content: Schema.String }),
+  Schema.Struct({ role: Schema.Literal("user"), content: Schema.String }),
+  AssistantMessageSchema,
+  Schema.Struct({
+    role: Schema.Literal("tool"),
+    tool_call_id: Schema.NonEmptyString,
+    content: Schema.String,
+  }),
+]);
+
+const ToolDefinitionSchema = Schema.Struct({
+  type: Schema.Literal("function"),
+  function: Schema.Struct({
+    name: Schema.NonEmptyString,
+    description: Schema.String,
+    parameters: Schema.declare<object>(isFields),
+  }),
+});
+
+const RequestSchema = Schema.Struct({
+  messages: Schema.Array(RouteMessageSchema),
+  tools: Schema.optionalKey(Schema.Array(ToolDefinitionSchema)),
+});
+
+export type AssistantMessage = typeof AssistantMessageSchema.Type;
+
+export type RouteMessage = typeof RouteMessageSchema.Type;
+
+export type ToolDefinition = typeof ToolDefinitionSchema.Type;
+
+export type ModelRouteRequest = typeof RequestSchema.Type;
 
 export type ValidationFailure = Readonly<{
   ok: false;
@@ -55,133 +77,18 @@ export type RouteWire = ModelRouteRequest | Schema.Json;
 
 type Parsed<T> = Result.Result<T, string>;
 
-const FieldsSchema = Schema.Record(Schema.String, Schema.Unknown);
+const decodeRequest = Schema.decodeUnknownResult(RequestSchema);
 
-type Fields = typeof FieldsSchema.Type;
+const AT_PATH = /\n  at (.+)$/u;
 
-const isFields = Schema.is(FieldsSchema);
+const QUOTED_KEY = /\["([^"]+)"\]/gu;
 
-const EntriesSchema = Schema.Array(Schema.Unknown);
-
-type Entries = typeof EntriesSchema.Type;
-
-const isEntries = Schema.is(EntriesSchema);
-
-const isString = Schema.is(Schema.String);
-
-const isNonEmptyString = Schema.is(Schema.NonEmptyString);
-
-function parseEach<T>(
-  entries: Entries,
-  label: (index: number) => string,
-  parse: (entry: Fields, at: string) => Parsed<T>,
-): Parsed<readonly T[]> {
-  const parsed: T[] = [];
-
-  for (const [index, entry] of entries.entries()) {
-    if (!isFields(entry)) return Result.fail(`${label(index)} is not an object`);
-    const result = parse(entry, label(index));
-
-    if (Result.isFailure(result)) return Result.fail(result.failure);
-    parsed.push(result.success);
-  }
-
-  return Result.succeed(parsed);
+function wirePath(at: string): string {
+  return at.replaceAll(QUOTED_KEY, ".$1").replace(/^\./u, "");
 }
 
-function parseToolCall(call: Fields, at: string): Parsed<ToolCall> {
-  const id = call.id;
-
-  if (!isNonEmptyString(id)) return Result.fail(`${at} missing non-empty id`);
-  const fn = call.function;
-
-  if (!isFields(fn)) return Result.fail(`${at} missing function`);
-  const name = fn.name;
-
-  if (!isNonEmptyString(name)) return Result.fail(`${at} missing function.name`);
-  const args = fn.arguments;
-
-  if (!isString(args)) return Result.fail(`${at} missing function.arguments`);
-
-  return Result.succeed({ id, function: { name, arguments: args } });
-}
-
-function parseAssistant(msg: Fields, at: string): Parsed<AssistantMessage> {
-  const content = msg.content;
-
-  if (content !== null && !isString(content)) {
-    return Result.fail(`assistant message at ${at} content must be string or null`);
-  }
-
-  if (!Object.hasOwn(msg, "tool_calls"))
-    return Result.succeed({ role: "assistant", content, tool_calls: [] });
-  const calls = msg.tool_calls;
-
-  if (!isEntries(calls)) {
-    return Result.fail(`assistant message at ${at} tool_calls must be an array`);
-  }
-
-  return Result.gen(function* () {
-    const toolCalls = yield* parseEach(
-      calls,
-      (index) => `tool_calls[${index}] at ${at}`,
-      parseToolCall,
-    );
-
-    const message: AssistantMessage = { role: "assistant", content, tool_calls: toolCalls };
-
-    return message;
-  });
-}
-
-function parseToolResult(msg: Fields, at: string): Parsed<ToolResultMessage> {
-  const toolCallId = msg.tool_call_id;
-
-  if (!isNonEmptyString(toolCallId)) {
-    return Result.fail(`tool message at ${at} missing non-empty tool_call_id`);
-  }
-
-  const content = msg.content;
-
-  if (!isString(content)) return Result.fail(`tool message at ${at} content must be a string`);
-
-  return Result.succeed({ role: "tool", tool_call_id: toolCallId, content });
-}
-
-function parseMessage(msg: Fields, at: string): Parsed<RouteMessage> {
-  const role = msg.role;
-
-  if (role === "system" || role === "user") {
-    const content = msg.content;
-
-    if (!isString(content)) return Result.fail(`${role} message at ${at} content must be a string`);
-
-    return Result.succeed({ role, content });
-  }
-
-  if (role === "assistant") return parseAssistant(msg, at);
-
-  if (role === "tool") return parseToolResult(msg, at);
-
-  return Result.fail(`unknown role ${JSON.stringify(role)} at ${at}`);
-}
-
-function parseTool(tool: Fields, at: string): Parsed<ToolDefinition> {
-  if (tool.type !== "function") return Result.fail(`${at} type must be "function"`);
-  const fn = tool.function;
-
-  if (!isFields(fn)) return Result.fail(`${at} missing function`);
-  const name = fn.name;
-
-  if (!isNonEmptyString(name)) return Result.fail(`${at} missing function.name`);
-  const description = fn.description;
-
-  if (!isString(description)) return Result.fail(`${at} function.description must be a string`);
-  const parameters = fn.parameters;
-
-  if (!isFields(parameters)) return Result.fail(`${at} function.parameters must be an object`);
-
-  return Result.succeed({ type: "function", function: { name, description, parameters } });
+function decodeReason(failure: Schema.SchemaError): string {
+  return failure.message.replace(AT_PATH, (_all, at: string) => ` at ${wirePath(at)}`);
 }
 
 function wireBytes(raw: Fields): Result.Result<number, string> {
@@ -195,8 +102,10 @@ function wireBytes(raw: Fields): Result.Result<number, string> {
 function parseFields(raw: RouteWire): Parsed<ModelRouteRequest> {
   if (!isFields(raw)) return Result.fail("request must be an object");
 
-  for (const f of FORBIDDEN_FIELDS) {
-    if (Object.hasOwn(raw, f)) return Result.fail(`request must not include provider field: ${f}`);
+  for (const field of FORBIDDEN_FIELDS) {
+    if (Object.hasOwn(raw, field)) {
+      return Result.fail(`request must not include provider field: ${field}`);
+    }
   }
 
   const msgs = raw.messages;
@@ -210,14 +119,7 @@ function parseFields(raw: RouteWire): Parsed<ModelRouteRequest> {
 
     if (bytes > MAX_REQUEST_BYTES) return yield* Result.fail("request exceeds 1 MiB size limit");
 
-    const messages = yield* parseEach(msgs, (index) => `messages[${index}]`, parseMessage);
-    const tools = raw.tools;
-
-    if (tools === undefined) return { messages };
-
-    if (!isEntries(tools)) return yield* Result.fail("tools must be an array");
-
-    return { messages, tools: yield* parseEach(tools, (index) => `tools[${index}]`, parseTool) };
+    return yield* Result.mapError(decodeRequest(raw), decodeReason);
   });
 }
 
