@@ -9,8 +9,10 @@ import type { ExecBackendChoice } from "./protocol.js";
 
 type BackendRead = Awaited<ReturnType<ExecBackendHandle["reader"]["read"]>>;
 
+type StderrEvent = Extract<BackendExecEvent, { name: "stderr" }>;
+
 type Phase = Data.TaggedEnum<{
-  Holding: { readonly isolate: ExecBackendHandle; readonly held: readonly BackendExecEvent[] };
+  Holding: { readonly isolate: ExecBackendHandle; readonly held: readonly StderrEvent[] };
   StartingContainer: object;
   Passing: { readonly handle: ExecBackendHandle; readonly fellBack: boolean };
   Abandoned: { readonly backend: ExecBackendChoice; readonly fellBack: boolean };
@@ -42,9 +44,34 @@ function step(phase: Phase, ...commands: readonly FallbackCommand[]): Step {
 
 const NOTHING_RAN_EXIT_CODES: ReadonlySet<number> = new Set([127, 129]);
 
+const DECODER = new TextDecoder();
+
+const ISOLATE_LIMIT_EXIT_CODE = 126;
+
+const ISOLATE_DEADLINE_EXIT_CODE = 124;
+
+const ISOLATE_LIMIT_MARKERS: readonly RegExp[] = [
+  /limit exceeded/u,
+  /maximum recursion depth/u,
+  /too many commands executed/u,
+  /total output size exceeded/u,
+];
+
+const ISOLATE_DEADLINE_MARKER = /exceeded (?:its )?execution deadline/u;
+
+function isolateLimitExceeded(held: readonly StderrEvent[], exitCode: number): boolean {
+  const stderr = held.map((event) => DECODER.decode(event.data)).join("");
+
+  if (exitCode === ISOLATE_LIMIT_EXIT_CODE) {
+    return ISOLATE_LIMIT_MARKERS.some((marker) => marker.test(stderr));
+  }
+
+  return exitCode === ISOLATE_DEADLINE_EXIT_CODE && ISOLATE_DEADLINE_MARKER.test(stderr);
+}
+
 function holdingRead(
   isolate: ExecBackendHandle,
-  held: readonly BackendExecEvent[],
+  held: readonly StderrEvent[],
   read: BackendRead,
 ): Step {
   const passing = (events: readonly BackendExecEvent[]) =>
@@ -57,6 +84,10 @@ function holdingRead(
   if (event.name === "stderr") return step(Phase.Holding({ isolate, held: [...held, event] }));
 
   if (event.name === "exit" && NOTHING_RAN_EXIT_CODES.has(event.exitCode)) {
+    return step(Phase.StartingContainer(), FallbackCommand.StartContainer());
+  }
+
+  if (event.name === "exit" && isolateLimitExceeded(held, event.exitCode)) {
     return step(Phase.StartingContainer(), FallbackCommand.StartContainer());
   }
 
