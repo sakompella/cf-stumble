@@ -83,7 +83,7 @@ verdict() {
       ;;
     branch)
       listing '-d -D -m -M -c -C -f --delete --move --copy --force --set-upstream-to* -u --unset-upstream --edit-description' \
-        '-l --list -a -r --all --remotes --show-current --contains --no-contains --merged --no-merged --points-at -v -vv' "$@"
+        '-l --list -a -r --all --remotes --show-current --contains --no-contains --merged --no-merged --points-at' "$@"
       ;;
     tag)
       listing '-d -a -s -u -m -F -f --delete --annotate --sign --local-user* --message* --file* --force' \
