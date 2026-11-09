@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { redactedExcerpt } from "../../diagnostics.js";
 import { AssistantMessage, type Conversation } from "../../page/index.js";
 import { STARTUP_CHECK_REPLY, startupCheckStep } from "../../startup-check-script.js";
 
@@ -9,7 +10,7 @@ export function isReply(answer: AssistantMessage): boolean {
 }
 
 export function describe(answer: AssistantMessage): string {
-  return `${answer.stopReason}: ${answerText(answer)}`;
+  return `${answer.stopReason}: ${redactedExcerpt(answerText(answer))}`;
 }
 
 export function finalAnswer(

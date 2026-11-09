@@ -9,7 +9,7 @@ import {
   STARTUP_CHECK_MESSAGE,
   STARTUP_CHECK_RESUMED_MESSAGE,
 } from "../../startup-check-script.js";
-import { candidateCall, scriptedTurn } from "./turn.js";
+import { candidateCall, scriptedTurn, type ScriptedTurn } from "./turn.js";
 import type { StartupCheckOutcome } from "./candidate.js";
 
 const PASSED: StartupCheckOutcome = {
@@ -18,6 +18,22 @@ const PASSED: StartupCheckOutcome = {
 };
 
 const failed = (reason: string): StartupCheckOutcome => ({ stage: "conversation-failed", reason });
+
+const freshTurn = (conversationId: string): ScriptedTurn => ({
+  conversationId,
+  message: STARTUP_CHECK_MESSAGE,
+  label: "startup-check",
+  answers: 1,
+  name: "the startup-check conversation",
+});
+
+const resumedTurn = (conversationId: string): ScriptedTurn => ({
+  conversationId,
+  message: STARTUP_CHECK_RESUMED_MESSAGE,
+  label: "startup-check-resumed",
+  answers: 2,
+  name: "the resumed startup-check conversation",
+});
 
 type ObtainWorkspace = (signal: AbortSignal) => Effect.Effect<ProjectCapabilityStub | null>;
 
@@ -54,26 +70,17 @@ export function checkConversation(
   });
 
   return Effect.gen(function* () {
-    yield* candidateCall(() => writer.attach(host, generations));
-    const conversationId = yield* candidateCall(() => writer.createConversation(WORKSPACE_ROOT));
+    yield* candidateCall("the candidate did not attach", () => writer.attach(host, generations));
 
-    yield* scriptedTurn(writer, {
-      conversationId,
-      message: STARTUP_CHECK_MESSAGE,
-      label: "startup-check",
-      answers: 1,
-      name: "the startup-check conversation",
-    });
+    const conversationId = yield* candidateCall("the candidate did not open a conversation", () =>
+      writer.createConversation(WORKSPACE_ROOT),
+    );
+
+    yield* scriptedTurn(writer, freshTurn(conversationId));
     const candidate = yield* resumeCandidate();
 
-    yield* candidateCall(() => candidate.attach(host, generations));
-    yield* scriptedTurn(candidate, {
-      conversationId,
-      message: STARTUP_CHECK_RESUMED_MESSAGE,
-      label: "startup-check-resumed",
-      answers: 2,
-      name: "the resumed startup-check conversation",
-    });
+    yield* candidateCall("the candidate did not attach", () => candidate.attach(host, generations));
+    yield* scriptedTurn(candidate, resumedTurn(conversationId));
 
     return PASSED;
   }).pipe(

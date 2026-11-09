@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import { logRedactedCause, redactedExcerpt } from "../../diagnostics.js";
 import { FACET_COMPATIBILITY, loadMainFacet } from "../../facet/index.js";
 import type { MainFacetTarget, MainHarnessArtifact } from "../../facet/index.js";
 import { candidateFacetName } from "../artifacts/index.js";
@@ -135,19 +136,23 @@ function compatibilityProblem(
 ): Effect.Effect<StartupCheckOutcome | undefined> {
   return Effect.tryPromise({
     try: () => candidate.compatibility(),
-    catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
+    catch: (cause) => {
+      logRedactedCause(
+        "supervisor.startup-check: the candidate did not answer compatibility",
+        cause,
+      );
+
+      return "the candidate did not answer compatibility";
+    },
   }).pipe(
     Effect.match({
-      onFailure: (reason): StartupCheckOutcome => ({
-        stage: "mount-failed",
-        reason: `the candidate did not answer compatibility: ${reason}`,
-      }),
+      onFailure: (reason): StartupCheckOutcome => ({ stage: "mount-failed", reason }),
       onSuccess: (reported): StartupCheckOutcome | undefined =>
         reported === FACET_COMPATIBILITY
           ? undefined
           : {
               stage: "compatibility-mismatch",
-              reason: `the generation reports ${reported}; this Supervisor requires ${FACET_COMPATIBILITY}`,
+              reason: `the generation reports ${redactedExcerpt(reported)}; this Supervisor requires ${FACET_COMPATIBILITY}`,
             },
     }),
   );
