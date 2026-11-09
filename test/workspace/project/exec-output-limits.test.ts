@@ -112,15 +112,13 @@ function runEcho(stdout: readonly string[]): Promise<Run> {
 
       await workspace.fs.mkdir("/workspace", { recursive: true });
 
-      const target = withDecodedEvents(
-        new ProjectRpcTarget(
-          computerFilesystemProvider(workspace),
-          durableObjectTransactions(state.storage),
-          computerExecBackend(workspace, CONTAINER_BACKEND_ID, { generation: 0 }),
-        ),
+      const target = new ProjectRpcTarget(
+        computerFilesystemProvider(workspace),
+        durableObjectTransactions(state.storage),
+        computerExecBackend(workspace, CONTAINER_BACKEND_ID, { generation: 0 }),
       );
 
-      const started = await target.startExec({ command: "echo" });
+      const started = await withDecodedEvents(target).startExec({ command: "echo" });
 
       if (!started.ok) throw new Error(JSON.stringify(started));
 
@@ -135,7 +133,8 @@ function runEcho(stdout: readonly string[]): Promise<Run> {
           ? terminal.fullOutputPaths?.[0]
           : undefined;
 
-      const saved = path === undefined ? undefined : await workspace.fs.readFile(path, "utf8");
+      const read = path === undefined ? undefined : await target.readFile(path);
+      const saved = read?.ok === true ? new TextDecoder().decode(read.value) : undefined;
 
       return { events, workspace, saved };
     },

@@ -24,9 +24,9 @@ function shell(name: string, command: string) {
   return runInDurableObject(env.WORKSPACE_HOST.getByName(name), async (host, state) => {
     await seedWorkspaceRoot(state);
 
-    const started = await host
-      .project({ remainingMs: 60_000 })
-      .startExec({ command, timeoutMs: 20_000, backend: "isolate" });
+    const target = await host.project({ remainingMs: 60_000 });
+
+    const started = await target.startExec({ command, timeoutMs: 20_000, backend: "isolate" });
 
     if (!started.ok) throw new Error(started.error.code);
 

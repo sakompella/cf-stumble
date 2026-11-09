@@ -1,5 +1,6 @@
 import type { Context } from "@earendil-works/chord/context";
 import type { FileError, FileInfo, Result } from "@earendil-works/pi-durable/env";
+import { WORKSPACE_SPILL_DIRECTORY } from "../../workspace-layout.js";
 import type { ProjectFileInfo, ProjectLstatInfo } from "../../workspace/project/protocol.js";
 import {
   aborted,
@@ -11,8 +12,6 @@ import {
   type ComputerWorkspace,
   type WorkspacePath,
 } from "./execution-env-paths.js";
-
-const TEMP_DIRECTORY = "/.cf-stumble/tmp";
 
 type Opened = Result<WorkspacePath, FileError>;
 
@@ -166,11 +165,13 @@ export async function createSpillFile(
   workspace: ComputerWorkspace,
 ): Promise<Result<string, FileError>> {
   const name = `pi-output-${crypto.randomUUID().replaceAll("-", "")}.log`;
-  const path = fromAddressed(`${TEMP_DIRECTORY}/${name}`);
+  const opened = resolveInWorkspace(workspace.cwd, `${WORKSPACE_SPILL_DIRECTORY}/${name}`);
 
-  const created = await capabilityCall(path.absolute, () =>
-    workspace.target.writeFile(path.addressed, new Uint8Array(0), "create-exclusive"),
+  if (!opened.ok) return opened;
+
+  const created = await capabilityCall(opened.value.absolute, () =>
+    workspace.target.writeFile(opened.value.addressed, new Uint8Array(0), "create-exclusive"),
   );
 
-  return created.ok ? { ok: true, value: path.absolute } : created;
+  return created.ok ? { ok: true, value: opened.value.absolute } : created;
 }

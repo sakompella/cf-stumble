@@ -103,9 +103,9 @@ async function nextEvent(frames: NdjsonFrameReader): Promise<ExecEvent | Executi
 
 function fullOutputPath(terminal: Terminal): string | undefined {
   const paths = terminal.outcome === "exited" ? (terminal.fullOutputPaths ?? []) : [];
-  const absolute = paths.map((path) => fromAddressed(path).absolute);
+  const first = paths[0];
 
-  return absolute.length === 0 ? undefined : absolute.join(", ");
+  return first === undefined ? undefined : fromAddressed(first).absolute;
 }
 
 function exitedResult(
@@ -118,9 +118,8 @@ function exitedResult(
   }
 
   const value: ShellExecResult = { exitCode: terminal.exitCode };
-  const reported = fullOutputPath(terminal) ?? spillPath;
 
-  if (reported !== undefined) value.spillPath = reported;
+  if (spillPath !== undefined) value.spillPath = spillPath;
 
   return { ok: true, value };
 }
@@ -210,17 +209,11 @@ async function settle(command: RunningCommand): Promise<ExecResult> {
     if (event instanceof ExecutionError) return stop(event);
 
     if (event.kind === "terminal") {
-      if (fullOutputPath(event) === undefined) {
-        const spilled = await spill?.finish();
+      const spilled = await spill?.finish();
 
-        if (spilled?.ok === false) return stop(spilled.error);
+      if (spilled?.ok === false) return stop(spilled.error);
 
-        return settledResult(event, command.argv, spilled?.value, context);
-      }
-
-      spill?.discard();
-
-      return settledResult(event, command.argv, undefined, context);
+      return settledResult(event, command.argv, spilled?.value ?? fullOutputPath(event), context);
     }
 
     if (event.data === "") continue;

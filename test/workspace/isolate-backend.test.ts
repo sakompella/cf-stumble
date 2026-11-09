@@ -12,7 +12,7 @@ async function linesOf(stream: ReadableStream<Uint8Array>): Promise<string[]> {
 function runIn(name: string, backend?: "isolate", command = "grep two notes.txt") {
   return runInDurableObject(env.WORKSPACE_HOST.getByName(name), async (host, state) => {
     await seedWorkspaceRoot(state);
-    const project = host.project({ remainingMs: 60_000 });
+    const project = await host.project({ remainingMs: 60_000 });
     await project.writeFile("/notes.txt", new TextEncoder().encode("one\ntwo\n"), "overwrite");
 
     const started = await project.startExec({

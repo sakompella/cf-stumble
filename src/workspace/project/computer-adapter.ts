@@ -4,6 +4,7 @@ import type {
   WorkspaceRuntimeTruncation,
 } from "@cloudflare/computer";
 import { shellQuote } from "../../shell-quote.js";
+import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import {
   ContainerRestartedError,
   ISOLATE_BACKEND_ID,
@@ -158,9 +159,11 @@ export function computerExecBackend(
 }
 
 function savedOutputPaths(truncation: WorkspaceRuntimeTruncation): readonly string[] {
-  return [truncation.stdout, truncation.stderr].flatMap((saved) =>
-    saved?.status === "saved" ? [saved.path] : [],
-  );
+  return [truncation.stdout, truncation.stderr]
+    .flatMap((saved) => (saved?.status === "saved" ? [saved.path] : []))
+    .flatMap((path) =>
+      path.startsWith(`${WORKSPACE_ROOT}/`) ? [path.slice(WORKSPACE_ROOT.length)] : [],
+    );
 }
 
 function toBackendEvent(event: WorkspaceRuntimeEvent): BackendExecEvent {

@@ -15,6 +15,7 @@ import {
   durableObjectTransactions,
   isolateShellBackend,
   ProjectRpcTarget,
+  pruneWorkspaceSpills,
   workspaceGit,
 } from "./project/index.js";
 import { WorkspacePlatform } from "./workspace-platform.js";
@@ -201,11 +202,13 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
   }
 
-  project({ remainingMs }: Readonly<{ remainingMs: number }>): ProjectRpcTarget {
+  async project({ remainingMs }: Readonly<{ remainingMs: number }>): Promise<ProjectRpcTarget> {
     if (this.#resetting) throw new Error("workspace-busy: the workspace is resetting");
 
     const endLease = this.#idle.lease(Date.now() + remainingMs);
     const { workspace, lifecycle } = this.#platform;
+
+    await pruneWorkspaceSpills(workspace).catch(() => {});
 
     return new ProjectRpcTarget(
       computerFilesystemProvider(workspace),

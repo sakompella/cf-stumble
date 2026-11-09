@@ -3,8 +3,10 @@ import { getOrThrow } from "@earendil-works/pi-durable/env";
 import { expect, test } from "vitest";
 import { createComputerEnv } from "../../../src/facet/generation-1/execution-env.js";
 import type {
+  ProjectResult,
   ProjectRpcTargetContract,
   StartExecWire,
+  WriteMode,
 } from "../../../src/workspace/project/protocol.js";
 
 const refused = () => Promise.reject(new Error("not used"));
@@ -29,13 +31,50 @@ function recordingTarget(started: StartExecWire[]): ProjectRpcTargetContract {
   };
 }
 
-function streamingTarget(frames: readonly unknown[]): ProjectRpcTargetContract {
+function streamingTarget(
+  frames: readonly unknown[],
+  saved: Readonly<Record<string, string>> = {},
+): ProjectRpcTargetContract {
   const stream = new Response(`${frames.map((frame) => JSON.stringify(frame)).join("\n")}\n`).body;
+  const files = new Map(Object.entries(saved).map(([path, text]) => [path, text]));
+
+  const readFile = (path: string): Promise<ProjectResult<Uint8Array>> => {
+    const text = files.get(path);
+
+    return Promise.resolve(
+      text === undefined
+        ? { ok: false, error: { code: "not-found", path } }
+        : { ok: true, value: new TextEncoder().encode(text) },
+    );
+  };
+
+  const writeFile = (
+    path: string,
+    bytes: Uint8Array,
+    mode: WriteMode,
+  ): Promise<ProjectResult<null>> => {
+    const existing = files.get(path);
+
+    if (mode === "create-exclusive" && existing !== undefined) {
+      return Promise.resolve({ ok: false, error: { code: "already-exists", path } });
+    }
+
+    if (mode === "append" && existing !== undefined) {
+      const combined = new Uint8Array(existing.length + bytes.length);
+      combined.set(new TextEncoder().encode(existing));
+      combined.set(bytes, existing.length);
+      files.set(path, new TextDecoder().decode(combined));
+    } else {
+      files.set(path, new TextDecoder().decode(bytes));
+    }
+
+    return Promise.resolve({ ok: true, value: null });
+  };
 
   return {
     lstat: refused,
-    readFile: refused,
-    writeFile: () => Promise.resolve({ ok: true, value: null }),
+    readFile,
+    writeFile,
     kill: refused,
     endTurn: refused,
     startExec: () =>
@@ -57,7 +96,7 @@ test("the env sends no backend by default and the chosen one when asked", async 
   expect(started.map((input) => input.backend)).toEqual([undefined, "isolate", "container"]);
 });
 
-test("the env names the workspace file that holds output the runtime cut", async () => {
+test("the env names its own spill file when the runtime cut the output", async () => {
   const env = createComputerEnv({
     cwd: "/workspace/project",
     target: streamingTarget([
@@ -80,8 +119,39 @@ test("the env names the workspace file that holds output the runtime cut", async
   );
 
   expect(result.exitCode).toBe(0);
-  expect(result.spillPath).toBe(
-    "/workspace/.cf-stumble/output/run-1.stdout.log, /workspace/.cf-stumble/output/run-1.stderr.log",
+  expect(result.spillPath?.startsWith("/workspace/.cf-stumble/tmp/pi-output-")).toBe(true);
+  expect(getOrThrow(await env.readTextFile(result.spillPath ?? "", BACKGROUND_CONTEXT))).toBe(
+    "x".repeat(96),
+  );
+});
+
+test("the env names the saved runtime file when it spilled nothing of its own", async () => {
+  const env = createComputerEnv({
+    cwd: "/workspace/project",
+    target: streamingTarget(
+      [
+        { kind: "stdout", seq: 0, data: "x".repeat(96) },
+        {
+          kind: "terminal",
+          seq: 1,
+          outcome: "exited",
+          exitCode: 0,
+          fullOutputPaths: [
+            "/.cf-stumble/output/run-1.stdout.log",
+            "/.cf-stumble/output/run-1.stderr.log",
+          ],
+        },
+      ],
+      { "/.cf-stumble/output/run-1.stdout.log": "x".repeat(96) },
+    ),
+  });
+
+  const result = getOrThrow(await env.exec("noisy", {}, BACKGROUND_CONTEXT));
+
+  expect(result.exitCode).toBe(0);
+  expect(result.spillPath).toBe("/workspace/.cf-stumble/output/run-1.stdout.log");
+  expect(getOrThrow(await env.readTextFile(result.spillPath ?? "", BACKGROUND_CONTEXT))).toBe(
+    "x".repeat(96),
   );
 });
 
