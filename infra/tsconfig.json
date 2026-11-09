@@ -4,5 +4,5 @@
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["*.ts", "workspace-image/*.ts"]
+  "include": ["*.ts", "workspace-image/*.ts", "workspace-image/*.mts"]
 }

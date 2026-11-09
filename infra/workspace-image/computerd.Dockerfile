@@ -82,6 +82,7 @@ RUN corepack enable
 
 COPY --from=computerd /usr/local/bin/computerd /usr/local/bin/computerd
 COPY git-readonly.sh /usr/local/bin/git
+COPY git-forward.mts /usr/local/lib/git-forward.mts
 
 ENV PORT=8080
 ENV MOUNT_POINT=/workspace
