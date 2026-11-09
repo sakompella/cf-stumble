@@ -184,6 +184,14 @@ function parseTool(tool: Fields, at: string): Parsed<ToolDefinition> {
   return Result.succeed({ type: "function", function: { name, description, parameters } });
 }
 
+function wireBytes(raw: Fields): Result.Result<number, string> {
+  try {
+    return Result.succeed(REQUEST_BYTES.encode(JSON.stringify(raw)).length);
+  } catch {
+    return Result.fail("request must be JSON-serializable");
+  }
+}
+
 function parseFields(raw: RouteWire): Parsed<ModelRouteRequest> {
   if (!isFields(raw)) return Result.fail("request must be an object");
 
@@ -197,11 +205,11 @@ function parseFields(raw: RouteWire): Parsed<ModelRouteRequest> {
     return Result.fail("messages must be a non-empty array");
   }
 
-  if (REQUEST_BYTES.encode(JSON.stringify(raw)).length > MAX_REQUEST_BYTES) {
-    return Result.fail("request exceeds 1 MiB size limit");
-  }
-
   return Result.gen(function* () {
+    const bytes = yield* wireBytes(raw);
+
+    if (bytes > MAX_REQUEST_BYTES) return yield* Result.fail("request exceeds 1 MiB size limit");
+
     const messages = yield* parseEach(msgs, (index) => `messages[${index}]`, parseMessage);
     const tools = raw.tools;
 

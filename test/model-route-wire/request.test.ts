@@ -3,6 +3,8 @@ import { expect, test } from "vitest";
 import {
   parseRequest,
   type ModelRouteRequest,
+  type RouteMessage,
+  type RouteWire,
   type ValidationFailure,
 } from "../../src/model-route-wire/request.js";
 
@@ -17,5 +19,26 @@ test("rejects a request that includes a field that picks the provider", () => {
     expect(parseRequest({ messages: [USER], [field]: "forbidden" }), field).toEqual(
       rejected(`request must not include provider field: ${field}`),
     );
+  }
+});
+
+class CyclicWire {
+  readonly messages: RouteMessage[] = [{ role: "user", content: "Hi" }];
+  readonly self = this;
+}
+
+test("refuses a request whose values JSON.stringify cannot serialize", () => {
+  const parameters = { maximum: 1n } satisfies object;
+
+  const requests: readonly RouteWire[] = [
+    {
+      messages: [USER],
+      tools: [{ type: "function", function: { name: "t", description: "", parameters } }],
+    },
+    new CyclicWire(),
+  ];
+
+  for (const request of requests) {
+    expect(parseRequest(request)).toEqual(rejected("request must be JSON-serializable"));
   }
 });
