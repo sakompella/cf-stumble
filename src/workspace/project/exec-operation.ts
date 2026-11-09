@@ -144,10 +144,17 @@ function applyBackendRead(
   }
 
   flushDecoders(state, controller, decoders);
-  settleWith(
-    { kind: "terminal", seq: state.seq++, outcome: "exited", exitCode: value.exitCode },
-    false,
-  );
+
+  const exited: TerminalEvent = {
+    kind: "terminal",
+    seq: state.seq++,
+    outcome: "exited",
+    exitCode: value.exitCode,
+  };
+
+  if (value.fullOutputPaths !== undefined) exited.fullOutputPaths = value.fullOutputPaths;
+
+  settleWith(exited, false);
 
   return true;
 }

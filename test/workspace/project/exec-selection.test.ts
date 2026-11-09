@@ -48,6 +48,13 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
   ["ls", "isolate", "isolate"],
   ["git pull", "isolate", "isolate"],
   ["node -e 1 | cat", "isolate", "container"],
+  ["printf 'h\u00C9llo \u2713\\n' > /tmp/u.txt && cat /tmp/u.txt", undefined, "container"],
+  ["printf 'x' > /tmp/u.txt", undefined, "container"],
+  ["cat /tmp/u.txt", undefined, "container"],
+  ["ls /tmp", undefined, "container"],
+  ["cat /workspace/notes.txt", undefined, "isolate"],
+  ["cat /workspace/../workspace/x", undefined, "isolate"],
+  ["echo hi > out.txt", undefined, "isolate"],
 ];
 
 describe("routedBackend", () => {

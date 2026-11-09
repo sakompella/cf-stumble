@@ -1,4 +1,8 @@
-import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
+import type {
+  Workspace,
+  WorkspaceRuntimeEvent,
+  WorkspaceRuntimeTruncation,
+} from "@cloudflare/computer";
 import { shellQuote } from "../../shell-quote.js";
 import {
   ContainerRestartedError,
@@ -153,8 +157,18 @@ export function computerExecBackend(
   };
 }
 
-function toBackendEvent(event: WorkspaceRuntimeEvent): BackendExecEvent {
-  if (event.name === "exit") return { name: "exit", exitCode: event.code };
+function savedOutputPaths(truncation: WorkspaceRuntimeTruncation): readonly string[] {
+  return [truncation.stdout, truncation.stderr].flatMap((saved) =>
+    saved?.status === "saved" ? [saved.path] : [],
+  );
+}
 
-  return { name: event.name, data: event.value };
+function toBackendEvent(event: WorkspaceRuntimeEvent): BackendExecEvent {
+  if (event.name !== "exit") return { name: event.name, data: event.value };
+
+  const exited: BackendExecEvent = { name: "exit", exitCode: event.code };
+
+  if (event.truncated !== undefined) exited.fullOutputPaths = savedOutputPaths(event.truncated);
+
+  return exited;
 }

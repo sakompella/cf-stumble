@@ -24,6 +24,21 @@ export const SHELL_MODULES_FILE = "shell-modules.json";
 
 export const WORKSPACE_CONTAINER_INSTANCE = "standard-3";
 
+const WORKSPACE_OUTPUT_DIRECTORY = "/.cf-stumble/output";
+
+const WORKSPACE_OUTPUT_MAX_LINES = 2_000;
+
+const WORKSPACE_OUTPUT_MAX_BYTES = 64 * 1024;
+
+const WORKSPACE_OUTPUT_KEEP = 50;
+
+export const WORKSPACE_OUTPUT_OPTIONS = {
+  maxLines: WORKSPACE_OUTPUT_MAX_LINES,
+  maxBytes: WORKSPACE_OUTPUT_MAX_BYTES,
+  dir: WORKSPACE_OUTPUT_DIRECTORY,
+  keep: WORKSPACE_OUTPUT_KEEP,
+} as const;
+
 export const WORKSPACE_CONTAINER_MEMORY_MIB = 8192;
 
 export const assetsConfig = { runWorkerFirst: true };
