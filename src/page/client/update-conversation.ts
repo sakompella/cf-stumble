@@ -1,5 +1,6 @@
 import * as Option from "effect/Option";
 import { AbortRun, FetchChatGPT, MintRequestId, ReplaceThread, SendMessage } from "./commands.js";
+import { advanceFreshThread, FreshThread, FreshThreadEvent, Ground } from "./fresh-thread.js";
 import { EMPTY_CONVERSATION, newestEntryId, type Conversation } from "./conversation.js";
 import type { Model } from "./model.js";
 import {
@@ -25,7 +26,11 @@ function send(model: Model): UpdateReturn {
   }
 
   return {
-    model: { ...cleared, prompt: "", isFreshArmed: false, freshThreadStatus: "" },
+    model: {
+      ...cleared,
+      prompt: "",
+      freshThread: advanceFreshThread(model.freshThread, FreshThreadEvent.Sent()).phase,
+    },
     commands: [MintRequestId({ projectId: model.maybeProjectId.value, content })],
   };
 }
@@ -121,33 +126,27 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
   };
 }
 
-function startFreshThread(model: Model): UpdateReturn {
-  const cleared = clearError(model);
+export const INITIAL_CONVERSATION = {
+  conversation: EMPTY_CONVERSATION,
+  outgoing: [],
+  runNote: "",
+  freshThread: FreshThread.Idle(),
+} satisfies Partial<Model>;
 
-  if (Option.isNone(model.maybeProjectId)) {
-    return { model: { ...cleared, freshThreadStatus: "select a project first" } };
-  }
+function groundOf(model: Model): Ground {
+  if (Option.isNone(model.maybeProjectId)) return Ground.NoProject();
 
-  if (model.conversation.isRunning) {
-    return { model: { ...cleared, freshThreadStatus: "a run is active; cancel it first" } };
-  }
+  return model.conversation.isRunning
+    ? Ground.RunActive()
+    : Ground.Ready({ projectId: model.maybeProjectId.value, streamId: model.eventsStreamId });
+}
 
-  if (!model.isFreshArmed) {
-    return {
-      model: {
-        ...cleared,
-        isFreshArmed: true,
-        freshThreadStatus:
-          "click again to replace this conversation; repository files are untouched",
-      },
-    };
-  }
+function withFreshThread(model: Model, event: FreshThreadEvent): UpdateReturn {
+  const step = advanceFreshThread(model.freshThread, event);
 
   return {
-    model: { ...cleared, isFreshArmed: false, freshThreadStatus: "starting a fresh thread" },
-    commands: [
-      ReplaceThread({ projectId: model.maybeProjectId.value, streamId: model.eventsStreamId }),
-    ],
+    model: { ...model, freshThread: step.phase },
+    commands: step.maybeReplace === undefined ? [] : [ReplaceThread(step.maybeReplace)],
   };
 }
 
@@ -240,16 +239,18 @@ export function composerHandlers(
   };
 }
 
-function freshThread(model: Model): Model {
-  return {
-    ...model,
-    eventsStreamId: model.eventsStreamId + 1,
-    conversation: EMPTY_CONVERSATION,
-    outgoing: withoutQueued(model.outgoing),
-    conversationState: "reading",
-    runNote: "",
-    freshThreadStatus: "fresh thread started; repository files are untouched",
-  };
+function replacedThread(model: Model): UpdateReturn {
+  return withFreshThread(
+    {
+      ...model,
+      eventsStreamId: model.eventsStreamId + 1,
+      conversation: EMPTY_CONVERSATION,
+      outgoing: withoutQueued(model.outgoing),
+      conversationState: "reading",
+      runNote: "",
+    },
+    FreshThreadEvent.Succeeded(),
+  );
 }
 
 export function streamHandlers(
@@ -268,30 +269,33 @@ export function streamHandlers(
   | "RefusedEvents"
   | "DisconnectedEvents"
 > {
-  const forStream = (streamId: number, next: () => Model): UpdateReturn =>
-    streamId === model.eventsStreamId ? { model: next() } : { model };
+  const forStream = (streamId: number, next: () => UpdateReturn): UpdateReturn =>
+    streamId === model.eventsStreamId ? next() : { model };
+
+  const showing = (conversationState: string): UpdateReturn => ({
+    model: { ...model, conversationState },
+  });
 
   return {
     ...transcriptHandlers(model),
-    ClickedFreshThread: () => startFreshThread(model),
-    SucceededFreshThread: ({ streamId }) => forStream(streamId, () => freshThread(model)),
+    ClickedFreshThread: () =>
+      withFreshThread(clearError(model), FreshThreadEvent.Clicked({ ground: groundOf(model) })),
+    SucceededFreshThread: ({ streamId }) => forStream(streamId, () => replacedThread(model)),
     RejectedFreshThread: ({ streamId, wording }) =>
-      forStream(streamId, () => ({ ...model, freshThreadStatus: `not started: ${wording}` })),
+      forStream(streamId, () => withFreshThread(model, FreshThreadEvent.Refused({ wording }))),
     FailedFreshThread: ({ streamId, detail }) =>
-      forStream(streamId, () => ({
-        ...withError(model, "the fresh thread request", detail),
-        freshThreadStatus: "request failed",
-      })),
+      forStream(streamId, () =>
+        withFreshThread(
+          withError(model, "the fresh thread request", detail),
+          FreshThreadEvent.Failed(),
+        ),
+      ),
     ReceivedConversation: ({ streamId, conversation }) =>
       streamId === model.eventsStreamId ? receivedConversation(model, conversation) : { model },
     ReceivedUnreadableEvent: ({ streamId }) =>
-      forStream(streamId, () => ({
-        ...model,
-        conversationState: "unreadable event from this Worker",
-      })),
-    RefusedEvents: ({ streamId, wording }) =>
-      forStream(streamId, () => ({ ...model, conversationState: wording })),
+      forStream(streamId, () => showing("unreadable event from this Worker")),
+    RefusedEvents: ({ streamId, wording }) => forStream(streamId, () => showing(wording)),
     DisconnectedEvents: ({ streamId, detail }) =>
-      forStream(streamId, () => ({ ...model, conversationState: `reconnecting: ${detail}` })),
+      forStream(streamId, () => showing(`reconnecting: ${detail}`)),
   };
 }

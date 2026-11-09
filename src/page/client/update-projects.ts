@@ -12,6 +12,7 @@ import {
 } from "./commands.js";
 import type { GitHubReport, Model, Project } from "./model.js";
 import { EMPTY_CONVERSATION } from "./conversation.js";
+import { advanceFreshThread, FreshThreadEvent } from "./fresh-thread.js";
 import { withoutQueued } from "./outgoing.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
@@ -54,9 +55,8 @@ function selectProject(model: Model, project: Project): UpdateReturn {
       eventsStreamId: model.eventsStreamId + 1,
       maybeProjectId: Option.some(project.id),
       conversationProject: project.displayName,
-      isFreshArmed: false,
+      freshThread: advanceFreshThread(model.freshThread, FreshThreadEvent.SelectedProject()).phase,
       runNote: "",
-      freshThreadStatus: "",
       conversation: EMPTY_CONVERSATION,
       outgoing: withoutQueued(model.outgoing),
       conversationState: "reading",

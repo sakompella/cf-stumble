@@ -7,6 +7,7 @@ import {
   gitHubReport,
   submitRejection,
 } from "../../../src/page/client/api.js";
+import { freshThreadWording } from "../../../src/page/client/fresh-thread.js";
 import { Message } from "../../../src/page/client/message.js";
 import { ControlRequest, type Model } from "../../../src/page/client/model.js";
 import { controlLabel } from "../../../src/page/client/update-generation.js";
@@ -231,13 +232,12 @@ test("a dropped stream says it is reconnecting and keeps the conversation it sho
 test("a fresh thread needs two clicks and no active run, then opens a new stream", () => {
   const armed = after(readyPage(), [Message.ClickedFreshThread()]);
 
-  expect(armed.isFreshArmed).toBe(true);
   expect(commandNames(armed, Message.ClickedFreshThread())).toEqual(["ReplaceThread"]);
 
   const busy = after(armed, [conversation(running())]);
 
   expect(commandNames(busy, Message.ClickedFreshThread())).toEqual([]);
-  expect(update(busy, Message.ClickedFreshThread()).model.freshThreadStatus).toBe(
+  expect(freshThreadWording(update(busy, Message.ClickedFreshThread()).model.freshThread)).toBe(
     "a run is active; cancel it first",
   );
 
@@ -248,7 +248,32 @@ test("a fresh thread needs two clicks and no active run, then opens a new stream
 
   expect(fresh.eventsStreamId).toBe(armed.eventsStreamId + 1);
   expect(fresh.conversation.items).toEqual([]);
-  expect(fresh.freshThreadStatus).toBe("fresh thread started; repository files are untouched");
+  expect(freshThreadWording(fresh.freshThread)).toBe(
+    "fresh thread started; repository files are untouched",
+  );
+});
+
+test("clicks while a fresh thread is starting send no second replace", () => {
+  const starting = after(readyPage(), [Message.ClickedFreshThread(), Message.ClickedFreshThread()]);
+
+  const later = [1, 2, 3].flatMap(() =>
+    commandNames(after(starting, [Message.ClickedFreshThread()]), Message.ClickedFreshThread()),
+  );
+
+  expect(later).toEqual([]);
+  expect(commandNames(starting, Message.ClickedFreshThread())).toEqual([]);
+});
+
+test("sending a message while a fresh thread is starting keeps the page saying so", () => {
+  const starting = after(readyPage(), [Message.ClickedFreshThread(), Message.ClickedFreshThread()]);
+
+  const sent = after(starting, [
+    Message.UpdatedPrompt({ value: "hi" }),
+    Message.ClickedSendTurn(),
+    Message.ClickedFreshThread(),
+  ]);
+
+  expect(freshThreadWording(sent.freshThread)).toBe("starting a fresh thread");
 });
 
 test("activation sends nothing until the page has rendered an epoch", () => {

@@ -3,9 +3,9 @@ import * as Option from "effect/Option";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import type { Conversation } from "./conversation.js";
 import { Message } from "./message.js";
+import { FreshThread, freshThreadWording } from "./fresh-thread.js";
 import type { Model } from "./model.js";
 import { statusText } from "./view-parts.js";
-import type { Outgoing } from "./outgoing.js";
 import { transcriptOf } from "./transcript.js";
 import { transcriptView } from "./view-transcript.js";
 
@@ -13,7 +13,7 @@ const lazyTranscript = createLazy();
 
 function conversationTranscript(
   conversation: Conversation,
-  outgoing: readonly Outgoing[],
+  outgoing: Model["outgoing"],
   projectId: string,
   h: HtmlBuilder<Message>,
 ): Html {
@@ -56,7 +56,12 @@ function turnButtons(model: Model, h: HtmlBuilder<Message>): Html {
         ["Cancel turn"],
       ),
       h.button(
-        [h.Id(ID.freshThreadButton), h.Type("button"), h.OnClick(Message.ClickedFreshThread())],
+        [
+          h.Id(ID.freshThreadButton),
+          h.Type("button"),
+          h.Disabled(FreshThread.guards.Starting(model.freshThread)),
+          h.OnClick(Message.ClickedFreshThread()),
+        ],
         ["Start fresh thread"],
       ),
       statusText(ID.turnState, runState(model), h),
@@ -78,7 +83,7 @@ function composerView(model: Model, h: HtmlBuilder<Message>): Html {
         h.OnKeyDownPreventDefault(sendShortcut),
       ]),
       turnButtons(model, h),
-      h.p([h.Class("note"), h.Id(ID.freshThreadStatus)], [model.freshThreadStatus]),
+      h.p([h.Class("note"), h.Id(ID.freshThreadStatus)], [freshThreadWording(model.freshThread)]),
     ],
   );
 }

@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import { BackendSetting } from "../../backend-setting.js";
 import { Conversation } from "./conversation.js";
+import { FreshThread } from "./fresh-thread.js";
 import { Outgoing } from "./outgoing.js";
 
 export const Project = Schema.Struct({
@@ -122,8 +123,7 @@ export const Model = Schema.Struct({
 
   prompt: Schema.String,
   runNote: Schema.String,
-  isFreshArmed: Schema.Boolean,
-  freshThreadStatus: Schema.String,
+  freshThread: FreshThread,
 
   maybeReading: Schema.Option(GenerationReading),
   statusRead: StatusRead,
