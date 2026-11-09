@@ -79,18 +79,37 @@ function accessToken(
   );
 }
 
-function errorOf(response: Response): Effect.Effect<ProviderError> {
-  return Effect.promise(async () => {
-    try {
-      const text = await response.text();
+async function readErrorBody(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<ProviderError> {
+  const decoder = new TextDecoder();
+  let text = "";
+  let totalBytes = 0;
 
-      return text.length > MAX_ERROR_BODY_BYTES
-        ? UNKNOWN_PROVIDER_ERROR
-        : providerErrorOfText(text);
-    } catch {
-      return UNKNOWN_PROVIDER_ERROR;
-    }
-  });
+  for (;;) {
+    const next = await reader.read();
+
+    if (next.done) return providerErrorOfText(text + decoder.decode());
+
+    totalBytes += next.value.byteLength;
+
+    if (totalBytes > MAX_ERROR_BODY_BYTES) return UNKNOWN_PROVIDER_ERROR;
+
+    text += decoder.decode(next.value, { stream: true });
+  }
+}
+
+function errorOf(response: Response): Effect.Effect<ProviderError> {
+  return Effect.acquireUseRelease(
+    Effect.sync(
+      (): ReadableStreamDefaultReader<Uint8Array> | null => response.body?.getReader() ?? null,
+    ),
+    (reader) =>
+      reader === null
+        ? Effect.succeed(UNKNOWN_PROVIDER_ERROR)
+        : Effect.promise(() => readErrorBody(reader).catch(() => UNKNOWN_PROVIDER_ERROR)),
+    (reader) => Effect.promise(() => reader?.cancel().catch(() => {}) ?? Promise.resolve()),
+  );
 }
 
 function refused(
@@ -210,7 +229,7 @@ export function chatgptTurn(
 
       const reader = new ResponsesStreamReader(accumulator);
 
-      yield* pumpSseStream(response.body, (line) => reader.handleLine(line));
+      yield* pumpSseStream(response.body, (data) => reader.handleEvent(data));
 
       if (reader.failure !== undefined) {
         return yield* refused(

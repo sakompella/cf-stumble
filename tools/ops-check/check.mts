@@ -11,8 +11,6 @@ export const METRICS_LAG_MS = 10 * MINUTE_MS;
 
 const RECENT_REQUESTS = 3;
 
-const RUN_ADMISSION_ROUTE = "/api/projects/:projectId/messages";
-
 export interface TimeWindow {
   readonly fromMs: number;
   readonly toMs: number;
@@ -34,6 +32,11 @@ export interface SessionFailure {
   readonly cause: string;
 }
 
+export interface RunSettlement {
+  readonly atMs: number;
+  readonly totalMs: number;
+}
+
 export interface ModelCall {
   readonly promptTokens: number;
   readonly cachedTokens: number;
@@ -48,6 +51,8 @@ export interface Activity {
   readonly invocations: readonly Invocation[];
   readonly usage: readonly UsageBucket[];
   readonly sessionFailures: readonly SessionFailure[];
+  readonly runStarts: readonly number[];
+  readonly runSettlements: readonly RunSettlement[];
 }
 
 export type Source<T> =
@@ -66,6 +71,12 @@ export interface CheckInput {
   readonly window: TimeWindow;
   readonly idleLimitMs: number;
   readonly activity: Source<Activity>;
+}
+
+export function activityWindow(window: TimeWindow, idleLimitMs: number): TimeWindow {
+  const firstBucketMs = Math.floor(window.fromMs / BUCKET_MS) * BUCKET_MS;
+
+  return { fromMs: firstBucketMs - PROJECT_RUN_DEADLINE_MS - idleLimitMs, toMs: window.toMs };
 }
 
 interface Span {
@@ -112,8 +123,25 @@ function completeUntilMs(input: CheckInput): number {
   return Math.min(input.window.toMs, input.nowMs - METRICS_LAG_MS);
 }
 
-function workspaceUseEndMs(call: Invocation): number {
-  return call.endMs + (call.route === RUN_ADMISSION_ROUTE ? PROJECT_RUN_DEADLINE_MS : 0);
+function allowedSpans(
+  activity: Activity,
+  workspaceCalls: readonly Invocation[],
+  idleLimitMs: number,
+): readonly Span[] {
+  return mergeSpans([
+    ...activity.runStarts.map((startedMs) => ({
+      beginMs: startedMs,
+      endMs: startedMs + PROJECT_RUN_DEADLINE_MS + idleLimitMs,
+    })),
+    ...activity.runSettlements.map((settlement) => ({
+      beginMs: settlement.atMs - settlement.totalMs,
+      endMs: settlement.atMs + idleLimitMs,
+    })),
+    ...workspaceCalls.map((call) => ({
+      beginMs: call.endMs - call.wallTimeMs,
+      endMs: call.endMs + idleLimitMs,
+    })),
+  ]);
 }
 
 function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] {
@@ -121,19 +149,13 @@ function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] 
   const { usage } = activity;
   const apiCalls = activity.invocations.filter((call) => call.route.startsWith("/api/"));
   const workspaceCalls = apiCalls.filter((call) => routeClass(call.route) === "workspace");
-
-  const allowed = mergeSpans(
-    workspaceCalls.map((call) => ({
-      beginMs: call.endMs - call.wallTimeMs,
-      endMs: workspaceUseEndMs(call) + idleLimitMs,
-    })),
-  );
+  const allowed = allowedSpans(activity, workspaceCalls, idleLimitMs);
 
   const running = usage
     .filter(
       (bucket) =>
         bucket.runningMinutes > 0 &&
-        bucket.startMs + BUCKET_MS > window.fromMs &&
+        bucket.startMs >= window.fromMs &&
         bucket.startMs + BUCKET_MS <= completeUntilMs(input),
     )
     .toSorted((a, b) => a.startMs - b.startMs);

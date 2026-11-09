@@ -11,10 +11,10 @@ export const rawByteStream = byteChunkStream;
 const encoder = new TextEncoder();
 
 export function sseLine(payload: Schema.Json): string {
-  return `data: ${JSON.stringify(payload)}\n`;
+  return `data: ${JSON.stringify(payload)}\n\n`;
 }
 
-export const DONE_LINE = "data: [DONE]\n";
+export const DONE_LINE = "data: [DONE]\n\n";
 
 export function providerStream(body: string): ReadableStream<Uint8Array> {
   return rawByteStream([encoder.encode(body)]);

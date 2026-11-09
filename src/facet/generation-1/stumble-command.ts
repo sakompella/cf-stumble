@@ -1,9 +1,9 @@
 import type { Context } from "@earendil-works/chord/context";
-import type {
+import {
   ExecutionError,
-  Result,
-  ShellExecOptions,
-  ShellExecResult,
+  type Result,
+  type ShellExecOptions,
+  type ShellExecResult,
 } from "@earendil-works/pi-durable/env";
 import { runStumble, type StumblePorts } from "../../stumble-cli/index.js";
 import { isArgv } from "./execution-env-exec.js";
@@ -24,6 +24,10 @@ export async function runStumbleCommand(
   options: ShellExecOptions | undefined,
   context: Context,
 ): Promise<Result<ShellExecResult, ExecutionError>> {
+  if (context.abortSignal?.aborted === true) {
+    return { ok: false, error: new ExecutionError("aborted", "aborted") };
+  }
+
   const { stdout, stderr, exitCode } = await runStumble(args, ports);
 
   if (stdout !== "") options?.onOutput?.(stdout, context, { stream: "stdout" });

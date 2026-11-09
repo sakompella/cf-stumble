@@ -197,11 +197,8 @@ export class ResponsesStreamReader {
     this.accumulator = accumulator;
   }
 
-  handleLine(line: string): boolean {
-    const trimmed = line.trim();
-
-    if (!trimmed.startsWith("data:")) return false;
-    const event = decodeStreamEvent(trimmed.slice("data:".length).trim());
+  handleEvent(data: string): boolean {
+    const event = decodeStreamEvent(data);
 
     return Option.isSome(event) && this.apply(event.value);
   }

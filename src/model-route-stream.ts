@@ -66,14 +66,9 @@ export class ProviderStreamAccumulator {
     this.emit({ type: "tool-call-delta", delta });
   }
 
-  handleLine(line: string): boolean {
-    const trimmed = line.trim();
-
-    if (trimmed === "" || !trimmed.startsWith("data:")) return false;
-    const payload = trimmed.slice("data:".length).trim();
-
-    if (payload === "[DONE]") return true;
-    const parsed = parseProviderPayload(payload);
+  handleEvent(data: string): boolean {
+    if (data === "[DONE]") return true;
+    const parsed = parseProviderPayload(data);
 
     if (parsed === undefined) return false;
 
@@ -186,7 +181,7 @@ export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteReque
       catch: modelUnavailable,
     }).pipe(
       Effect.flatMap((providerStream) =>
-        pumpSseStream(providerStream, (line) => accumulator.handleLine(line)),
+        pumpSseStream(providerStream, (data) => accumulator.handleEvent(data)),
       ),
       Effect.flatMap(() => {
         if (accumulator.providerFailure !== undefined) {

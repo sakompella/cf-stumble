@@ -18,7 +18,7 @@ const deltaText = gs.text({ alphabet: 'aé日🙂"\\\n', minSize: 1, maxSize: 6 
 const NOISE = [
   "event: ping\n",
   ": comment\n",
-  "data: {not json\n",
+  "data: {not json\n\n",
   sseLine("a bare string"),
   sseLine({ unknown: 1 }),
   "\n",
@@ -103,16 +103,26 @@ test("the events of a provider stream do not depend on where its bytes are cut",
       expect(cut.filter((event) => event.type === "done" || event.type === "error")).toHaveLength(
         1,
       );
-      expect(cut.at(-1)).toMatchObject({
-        type: "done",
-        message: {
-          content: deltas.length === 0 ? null : deltas.join(""),
-          tool_calls: calls.map((call) => ({
-            id: call.id,
-            function: { name: call.name, arguments: call.fragments.join("") },
-          })),
-        },
-      });
+      expect(cut.at(-1)).toMatchObject(
+        unterminated
+          ? {
+              type: "error",
+              error: {
+                code: "model-unavailable",
+                detail: "the stream ended without a terminal event",
+              },
+            }
+          : {
+              type: "done",
+              message: {
+                content: deltas.length === 0 ? null : deltas.join(""),
+                tool_calls: calls.map((call) => ({
+                  id: call.id,
+                  function: { name: call.name, arguments: call.fragments.join("") },
+                })),
+              },
+            },
+      );
     },
     { testCases: 200 },
   );

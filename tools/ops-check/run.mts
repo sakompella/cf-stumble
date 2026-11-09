@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { PRODUCTION_STAGE, workerName } from "../../infra/worker-settings.ts";
 import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.ts";
 import {
+  activityWindow,
   formatReport,
   MINUTE_MS,
   runChecks,
@@ -13,6 +14,8 @@ import {
 import {
   fetchInvocations,
   fetchModelCalls,
+  fetchRunSettlements,
+  fetchRunStarts,
   fetchSessionFailures,
   fetchUsage,
   readToken,
@@ -61,15 +64,17 @@ async function readActivity(options: Options): Promise<Activity> {
   const token = readToken(process.env);
   const account = await resolveAccount(token, process.env);
 
-  const requestWindow = { ...window, fromMs: window.fromMs - WORKSPACE_IDLE_STOP_MS };
+  const requestWindow = activityWindow(window, WORKSPACE_IDLE_STOP_MS);
 
-  const [invocations, usage, sessionFailures] = await Promise.all([
+  const [invocations, usage, sessionFailures, runStarts, runSettlements] = await Promise.all([
     fetchInvocations(token, account, worker, requestWindow),
     fetchUsage(token, account, worker, window),
     fetchSessionFailures(token, account, worker, window),
+    fetchRunStarts(token, account, worker, requestWindow),
+    fetchRunSettlements(token, account, worker, requestWindow),
   ]);
 
-  return { invocations, usage, sessionFailures };
+  return { invocations, usage, sessionFailures, runStarts, runSettlements };
 }
 
 async function readModelCalls(options: Options): Promise<ModelCalls | null> {

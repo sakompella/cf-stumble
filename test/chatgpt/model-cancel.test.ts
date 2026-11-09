@@ -45,6 +45,28 @@ test("cancelling the model stream before ChatGPT answers aborts the provider fet
   expect(seen.aborted).toBe(true);
 });
 
+test("cancelling the model stream cancels a quiet ChatGPT error body", async () => {
+  const seen = { cancelled: false };
+
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("quiet"));
+    },
+    cancel() {
+      seen.cancelled = true;
+    },
+  });
+
+  const reader = modelEventStream(
+    chatgptOnly(() => Promise.resolve(new Response(body, { status: 503 }))),
+  ).getReader();
+
+  expect(await until(() => body.locked)).toBeLessThan(PROMPTLY_MS);
+  await reader.cancel();
+
+  expect(await until(() => seen.cancelled)).toBeLessThan(PROMPTLY_MS);
+});
+
 test("cancelling the model stream cancels a quiet ChatGPT response body", async () => {
   const seen = { cancelled: false };
 

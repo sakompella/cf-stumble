@@ -7,7 +7,7 @@ import { ProviderStreamAccumulator } from "../../src/model-route-stream.js";
 function streamed(events: readonly object[]) {
   const accumulator = new ProviderStreamAccumulator(() => {});
   const reader = new ResponsesStreamReader(accumulator);
-  const ended = events.map((event) => reader.handleLine(`data: ${JSON.stringify(event)}`));
+  const ended = events.map((event) => reader.handleEvent(JSON.stringify(event)));
 
   return { accumulator, reader, ended };
 }
