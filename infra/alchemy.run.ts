@@ -7,6 +7,7 @@ import {
   cache,
   compatibility,
   durableObjectClasses,
+  MODULE_MAPS_BINDING,
   observability,
   plainTextBindings,
   PRODUCTION_STAGE,
@@ -24,6 +25,7 @@ export default Alchemy.Stack(
     const { stage } = yield* Stack;
     const isProduction = stage === PRODUCTION_STAGE;
     const name = workerName(stage);
+    const moduleMaps = yield* Cloudflare.R2.Bucket("ModuleMaps", { forceDestroy: !isProduction });
 
     const worker = yield* Cloudflare.Worker("Worker", {
       name,
@@ -53,6 +55,7 @@ export default Alchemy.Stack(
         LOADER: Cloudflare.WorkerLoader(),
         CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
         AI: Cloudflare.Workers.AI(),
+        [MODULE_MAPS_BINDING]: moduleMaps,
       },
     });
 

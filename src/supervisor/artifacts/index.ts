@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import { loadMainFacet } from "../../facet/index.js";
 import type {
   MainFacetCapabilities,
@@ -8,7 +7,7 @@ import type {
 } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { ModuleMapStore } from "./store.js";
-import type { ModuleMapStorage, StoredModuleMapProblem } from "./store.js";
+import type { StoredModuleMapProblem } from "./store.js";
 import { buildModuleMap, type HarnessBuildProblem } from "./build.js";
 import { SERVING_FACET_NAME } from "./facet-name.js";
 import type { ActiveGeneration } from "../generations.js";
@@ -24,14 +23,16 @@ export class HarnessArtifacts {
   private readonly store: ModuleMapStore;
   private readonly workspace: () => WorkspaceHostRpc<"build">;
 
-  constructor(storage: ModuleMapStorage, workspace: () => WorkspaceHostRpc<"build">) {
-    this.store = new ModuleMapStore(storage);
+  constructor(bucket: R2Bucket, workspace: () => WorkspaceHostRpc<"build">) {
+    this.store = new ModuleMapStore(bucket);
     this.workspace = workspace;
   }
 
   prepare(harnessCommit: HarnessCommit): Effect.Effect<MainHarnessArtifact, ModuleMapProblem> {
     return Effect.gen({ self: this }, function* () {
-      const stored = yield* Effect.fromResult(this.store.read(harnessCommit));
+      const stored = yield* Effect.promise(() => this.store.read(harnessCommit)).pipe(
+        Effect.flatMap(Effect.fromResult),
+      );
 
       if (stored.kind === "stored") {
         return stored.artifact;
@@ -39,7 +40,9 @@ export class HarnessArtifacts {
 
       const built = yield* buildModuleMap(this.workspace, harnessCommit);
 
-      return yield* Effect.fromResult(this.store.write(built));
+      const written = yield* Effect.promise(() => this.store.write(built));
+
+      return yield* Effect.fromResult(written);
     });
   }
 
@@ -48,9 +51,9 @@ export class HarnessArtifacts {
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
     modelRoute: MainFacetCapabilities["MODEL"],
-  ): Result.Result<MountedFacet, MainFacetMountProblem> {
+  ): Effect.Effect<MountedFacet, MainFacetMountProblem> {
     return this.load(active).pipe(
-      Result.map((artifact) => {
+      Effect.map((artifact) => {
         const { facetClass } = loadMainFacet(loader, artifact, { MODEL: modelRoute });
 
         return facets.get<MainFacetTarget>(SERVING_FACET_NAME, () => ({ class: facetClass }));
@@ -60,22 +63,21 @@ export class HarnessArtifacts {
 
   private load(
     active: ActiveGeneration,
-  ): Result.Result<MainHarnessArtifact, MainFacetMountProblem> {
+  ): Effect.Effect<MainHarnessArtifact, MainFacetMountProblem> {
     if (active.generation === undefined) {
-      return Result.fail({ code: "no-active-generation" });
+      return Effect.fail({ code: "no-active-generation" });
     }
 
     const { harnessCommit } = active.generation;
 
-    return this.store
-      .read(harnessCommit)
-      .pipe(
-        Result.flatMap((stored): Result.Result<MainHarnessArtifact, MainFacetMountProblem> =>
-          stored.kind === "stored"
-            ? Result.succeed(stored.artifact)
-            : Result.fail({ code: "stored-module-map-absent", harnessCommit }),
-        ),
-      );
+    return Effect.promise(() => this.store.read(harnessCommit)).pipe(
+      Effect.flatMap(Effect.fromResult),
+      Effect.flatMap((stored) =>
+        stored.kind === "stored"
+          ? Effect.succeed(stored.artifact)
+          : Effect.fail({ code: "stored-module-map-absent", harnessCommit } as const),
+      ),
+    );
   }
 }
 
@@ -83,6 +85,6 @@ export type { MainFacetCapabilities } from "../../facet/index.js";
 
 export { candidateFacetName, SERVING_FACET_NAME } from "./facet-name.js";
 
-export { ModuleMapStore } from "./store.js";
+export { migrateModuleMaps } from "./migrate.js";
 
-export type { ModuleMapStorage } from "./store.js";
+export { ModuleMapStore } from "./store.js";

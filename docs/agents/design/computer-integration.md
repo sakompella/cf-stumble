@@ -60,7 +60,7 @@ A generation must also speak the Supervisor's current facet-to-Supervisor protoc
 
 ## Harness execution
 
-The harness source is TypeScript, while Dynamic Workers need Worker-executable modules. Computer builds a canonical module map for a labeled harness commit. The Supervisor validates it and stores it in its own SQLite under that commit, so nothing rebuilds to serve or roll back. ADR-0028 defines the artifact. The Supervisor uses the commit ID as the Worker Loader name, because Loader names are cached and a changed commit must not reuse old code.
+The harness source is TypeScript, while Dynamic Workers need Worker-executable modules. Computer builds a canonical module map for a labeled harness commit. The Supervisor validates it and stores it in R2 under that commit, so nothing rebuilds to serve or roll back. ADR-0028 defines the artifact. The Supervisor uses the commit ID as the Worker Loader name, because Loader names are cached and a changed commit must not reuse old code.
 
 ### Build isolation
 
@@ -84,7 +84,7 @@ The container does not stop by itself while the Workspace Host exists. Computer'
 
 ## Artifacts (deferred)
 
-Cloudflare Artifacts is a Git server per repository. The owner decided on 2026-10-02 to skip it for now. It does not fit the current stores: the workspace is a live POSIX working tree that a container needs, a container cannot mount the FUSE filesystem Artifacts' mount tool uses (ADR-0042), and module maps must load with no network call. One gap would fit it: cf-stumble keeps no copy of uncommitted work outside the workspace, so a reset or a project disconnect destroys it. A pilot could checkpoint that work to Artifacts before those two operations. A staging probe on 2026-11-08 showed the parts exist: Alchemy declares the binding (`Cloudflare.Artifacts.Namespace`) with the deploy token cf-stumble already uses, the Workspace Host's Git client pushes to and clones from an Artifacts remote with a token in the URL (push 0.3-0.7 s, clone and fetch 0.2-0.3 s), a read token's push gets 403, and `@cloudflare/computer` ships an `artifacts` command for its worker shell. Artifacts has no GitHub sync, and its operations are billed from 2026-11-12. Revisit it only after the owner approves that cost.
+Cloudflare Artifacts is a Git server per repository. The owner decided on 2026-10-02 to skip it for now. It does not fit the current stores: the workspace is a live POSIX working tree that a container needs, a container cannot mount the FUSE filesystem Artifacts' mount tool uses (ADR-0042), and module maps must load with no network call. One gap would fit it: cf-stumble keeps no copy of uncommitted work outside the workspace, so a reset or a project disconnect destroys it. A pilot could checkpoint that work to Artifacts before those two operations. A staging probe on 2026-11-08 showed the parts exist: Alchemy declares the binding (`Cloudflare.Artifacts.Namespace`) with the deploy token cf-stumble already uses, the Workspace Host's Git client pushes to and clones from an Artifacts remote with a token in the URL (push 0.3-0.7 s, clone and fetch 0.2-0.3 s), a read token's push gets 403, and `@cloudflare/computer` ships an `artifacts` command for its worker shell. Artifacts has no GitHub sync, and its operations are billed from 2026-11-12. Revisit it only after the owner approves that cost. Update 2026-11-09: the Supervisor now appends generation history (records and events, no module maps) to an Artifacts repository; see the overview.
 
 ## Deployment risk
 

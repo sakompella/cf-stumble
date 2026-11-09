@@ -11,6 +11,7 @@ export type { BackendSetting, WorkspaceBackendChange };
 export type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
   readonly WORKSPACE_HOST: WorkspaceHostNamespace;
+  readonly MODULE_MAPS: R2Bucket;
   readonly GITHUB_OAUTH_CLIENT_ID?: string;
   readonly GH_TOKEN?: string;
   readonly CHATGPT_MODEL: string;

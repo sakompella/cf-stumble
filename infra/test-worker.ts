@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import {
   compatibility,
   durableObjectClasses,
+  MODULE_MAPS_BINDING,
   plainTextBindings,
   shellModulesAssetDirectory,
   workerEntrypoint,
@@ -18,6 +19,7 @@ export const testWorker = {
       WORKSPACE_HOST: { className: durableObjectClasses.WORKSPACE_HOST, useSQLite: true },
     },
     workerLoaders: { LOADER: {} },
+    r2Buckets: [MODULE_MAPS_BINDING],
     outboundService: (request: Request) =>
       new Response(
         `tests have no outbound network: ${request.method} ${request.headers.get("content-type") ?? "no-type"} ${request.headers.get("authorization") ?? "anonymous"}`,

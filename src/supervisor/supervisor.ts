@@ -26,6 +26,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.#parts = supervisorParts(ctx, env, () => this.#resetInProgress, this);
+    void ctx.blockConcurrencyWhile(() => this.#parts.migrate());
     this.#parts.serving.started(env.CF_VERSION_METADATA?.id ?? null);
   }
 

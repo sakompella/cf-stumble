@@ -78,17 +78,12 @@ export async function servedText(control: DurableObjectStub<Supervisor>): Promis
   return new Response(result.events).text();
 }
 
-export function storeModuleMap(
-  control: DurableObjectStub<Supervisor>,
-  input: MainHarnessArtifactInput,
-): Promise<void> {
-  return runInDurableObject(control, (_instance, state) => {
-    const written = new ModuleMapStore(state.storage).write(parsedArtifact(input));
+export async function storeModuleMap(input: MainHarnessArtifactInput): Promise<void> {
+  const written = await new ModuleMapStore(env.MODULE_MAPS).write(parsedArtifact(input));
 
-    if (written._tag === "Failure") {
-      throw new Error(`a stored module map must be written: ${written.failure.code}`);
-    }
-  });
+  if (written._tag === "Failure") {
+    throw new Error(`a stored module map must be written: ${written.failure.code}`);
+  }
 }
 
 export function connectSampleProjects(control: DurableObjectStub<Supervisor>): Promise<void> {
@@ -158,7 +153,7 @@ export async function prepareWithModuleMap(
   moduleMap: MainHarnessArtifactInput,
   options?: Parameters<Supervisor["prepareGeneration"]>[1],
 ) {
-  await storeModuleMap(control, moduleMap);
+  await storeModuleMap(moduleMap);
 
   return control.prepareGeneration(generationLabel(label), options);
 }
