@@ -13,6 +13,10 @@ export const PROJECTS_DIRECTORY = `${WORKSPACE_ROOT}/projects`;
 
 export const BUILD_SCRATCH_ROOT = "/tmp/cf-stumble-builds";
 
+export const HARNESS_BUILD_OUTPUT_DIRECTORY = `${WORKSPACE_ROOT}/.cf-stumble-build-output`;
+
+export const HARNESS_BUILD_OUTPUT_PATH = `${HARNESS_BUILD_OUTPUT_DIRECTORY}/module-map.json`;
+
 export const MANAGED_AGENT_INSTRUCTIONS_PATH = `${WORKSPACE_ROOT}/AGENTS.md`;
 
 export const GITHUB_CLI_CONFIG_DIRECTORY = `${WORKSPACE_ROOT}/.config/gh`;

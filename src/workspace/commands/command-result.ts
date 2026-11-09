@@ -32,12 +32,14 @@ export type WorkspaceFailure = Readonly<{
 export type WorkspaceCommandResult =
   | Readonly<{
       ok: true;
-      result: Readonly<{
-        kind: "command";
-        stdout: string;
-        stderr: string;
-        exitCode: number;
-      }>;
+      result:
+        | Readonly<{
+            kind: "command";
+            stdout: string;
+            stderr: string;
+            exitCode: number;
+          }>
+        | Readonly<{ kind: "module-map"; text: string }>;
     }>
   | WorkspaceFailure;
 
