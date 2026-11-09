@@ -6,8 +6,14 @@ export interface Tracking {
   readonly behind: number;
 }
 
+interface TrackingClient {
+  configGet: GitClient["configGet"];
+  revParse: GitClient["revParse"];
+  log: GitClient["log"];
+}
+
 async function configString(
-  client: GitClient,
+  client: TrackingClient,
   dir: string,
   key: string,
 ): Promise<string | undefined> {
@@ -16,14 +22,19 @@ async function configString(
   return Array.isArray(value) ? value[0] : value;
 }
 
-async function oids(client: GitClient, dir: string, ref: string, depth: number): Promise<string[]> {
+async function oids(
+  client: TrackingClient,
+  dir: string,
+  ref: string,
+  depth: number,
+): Promise<string[]> {
   const commits = await client.log({ dir, ref, depth });
 
   return commits.map((commit) => commit.oid);
 }
 
 async function aheadBehind(
-  client: GitClient,
+  client: TrackingClient,
   dir: string,
   local: string,
   upstream: string,
@@ -36,23 +47,19 @@ async function aheadBehind(
 
     const mineSet = new Set(mine);
     const theirSet = new Set(theirs);
-    const base = mine.find((oid) => theirSet.has(oid));
     const complete = mine.length < depth && theirs.length < depth;
 
-    if (base !== undefined || complete) {
-      const mineEnd = base === undefined ? mine.length : mine.indexOf(base);
-      const theirEnd = base === undefined ? theirs.length : theirs.indexOf(base);
-
+    if (complete) {
       return [
-        mine.slice(0, mineEnd).filter((oid) => !theirSet.has(oid)).length,
-        theirs.slice(0, theirEnd).filter((oid) => !mineSet.has(oid)).length,
+        mine.filter((oid) => !theirSet.has(oid)).length,
+        theirs.filter((oid) => !mineSet.has(oid)).length,
       ];
     }
   }
 }
 
 export async function branchTracking(
-  client: GitClient,
+  client: TrackingClient,
   dir: string,
   branch: string,
 ): Promise<Tracking | undefined> {
