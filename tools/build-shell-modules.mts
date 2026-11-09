@@ -8,17 +8,56 @@ const repoRoot = resolve(import.meta.dirname, "..");
 
 const outputFile = join(resolve(repoRoot, shellModulesAssetDirectory), SHELL_MODULES_FILE);
 
+const EGRESS_SHELL_MODULE = `
+import { ShellWorker as BaseShellWorker } from "./shell.js";
+
+export class ShellWorker extends BaseShellWorker {
+  shellOptions = {
+    fetch: async (url, options) => {
+      const response = await this.env.EGRESS.fetch(url, {
+        method: options?.method,
+        headers: options?.headers,
+        body: options?.body,
+        redirect: "manual",
+        signal: options?.signal,
+      });
+      const headers = Object.create(null);
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      return {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+        body: new Uint8Array(await response.arrayBuffer()),
+        url: response.url || url,
+      };
+    },
+  };
+}
+`;
+
 const ENTRY = `
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { SHELL_RUNTIME_MODULES, assembleShellModules } from "@cloudflare/computer/backends/worker-shell";
+import curl from "@cloudflare/computer/shell/curl";
 import jq from "@cloudflare/computer/shell/jq";
 import yq from "@cloudflare/computer/shell/yq";
 
-const modules = { ...assembleShellModules([jq, yq]), ...SHELL_RUNTIME_MODULES };
+const egressShellModule = ${JSON.stringify(EGRESS_SHELL_MODULE)};
+
+const modules = {
+  ...assembleShellModules([jq, yq, curl]),
+  "isolate-shell.js": { js: egressShellModule },
+  ...SHELL_RUNTIME_MODULES,
+};
 
 mkdirSync(dirname(${JSON.stringify(outputFile)}), { recursive: true });
-writeFileSync(${JSON.stringify(outputFile)}, JSON.stringify({ mainModule: "shell.js", modules }));
+writeFileSync(
+  ${JSON.stringify(outputFile)},
+  JSON.stringify({ mainModule: "isolate-shell.js", modules }),
+);
 `;
 
 const WORKERS_STUB = "export class WorkerEntrypoint {}";

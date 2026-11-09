@@ -22,6 +22,6 @@ export type {
   WorkspaceHostRpc,
 } from "./host-rpc.js";
 
-export { IsolateWorkspaceGate } from "./project/index.js";
+export { IsolateEgressGateway, IsolateWorkspaceGate } from "./project/index.js";
 
 export { WORKSPACE_BUSY, type WorkspaceResetResult } from "./workspace-reset.js";

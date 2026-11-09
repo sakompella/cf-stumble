@@ -29,7 +29,7 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
   ["git log && node --version", undefined, "container"],
   ["pnpm test", undefined, "container"],
   ["ls && pnpm test", undefined, "container"],
-  ["curl https://example.com", undefined, "container"],
+  ["curl https://github.com/owner/repo", undefined, "isolate"],
   ["echo $(whoami)", undefined, "container"],
   ["echo `whoami`", undefined, "container"],
   ["(cd src; ls)", undefined, "container"],

@@ -3,10 +3,10 @@ import { ownerPageResponse, routeOrbRequest, routeOwnerApiRequest } from "./rout
 import { runAtEntryPoint } from "./run-entry-point.js";
 import { ownerGateRefusal } from "./owner-gate.js";
 import { Supervisor } from "./supervisor/supervisor.js";
-import { IsolateWorkspaceGate, WorkspaceHost } from "./workspace/index.js";
+import { IsolateEgressGateway, IsolateWorkspaceGate, WorkspaceHost } from "./workspace/index.js";
 import { tenantWorkspaceName } from "./workspace-names.js";
 
-export { IsolateWorkspaceGate, Supervisor, WorkspaceHost };
+export { IsolateEgressGateway, IsolateWorkspaceGate, Supervisor, WorkspaceHost };
 
 export { WorkspaceProxy } from "@cloudflare/computer";
 
