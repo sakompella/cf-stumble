@@ -146,11 +146,11 @@ export class GitHubConnectionStore {
     return this.applyAuthorization(AuthorizationEvent.Elapsed({ now })).after;
   }
 
-  applyCredential(revision: number, event: CredentialEvent, persist: boolean): GitHubCredential {
+  applyCredential(revision: number, event: CredentialEvent): GitHubCredential {
     return this.storage.transactionSync(() => {
       const next = credentialTransition(this.credential(), event);
 
-      if (persist && this.revision() === revision) this.writeCredential(next);
+      if (this.revision() === revision) this.writeCredential(next);
 
       return next;
     });

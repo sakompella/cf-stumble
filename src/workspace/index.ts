@@ -11,7 +11,6 @@ export {
   CredentialInstallFailed,
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
-  type WorkspaceCredentialInput,
 } from "./credential-access.js";
 
 export { WorkspaceHost } from "./host.js";

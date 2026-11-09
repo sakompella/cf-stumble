@@ -173,10 +173,10 @@ export class ProjectConnections {
     });
   }
 
-  ensureProvisioned(projectId: ProjectId, signal?: AbortSignal) {
+  ensureProvisioned(projectId: ProjectId) {
     return this.lifecycle.exclusive(
       projectId,
-      this.provisionOnUse(() => this.projects.catalog(), projectId, signal),
+      this.provisionOnUse(() => this.projects.catalog(), projectId),
     );
   }
 
@@ -238,11 +238,7 @@ export class ProjectConnections {
     };
   }
 
-  private provisionOnUse(
-    catalog: () => ProjectCatalog,
-    projectId: ProjectId,
-    signal?: AbortSignal,
-  ) {
+  private provisionOnUse(catalog: () => ProjectCatalog, projectId: ProjectId) {
     return provisionOnUse(
       {
         workspaceName: this.workspaceName,
@@ -251,7 +247,6 @@ export class ProjectConnections {
         catalog,
       },
       projectId,
-      signal,
     );
   }
 

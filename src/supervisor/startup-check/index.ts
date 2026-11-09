@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import type { MainFacetCapabilities } from "../../facet/index.js";
 import { FACET_COMPATIBILITY } from "../../facet/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
@@ -24,8 +25,7 @@ export type StartupCheckHost = Readonly<{
   model: () => MainFacetCapabilities["MODEL"];
   workspace: (
     remainingMs: number,
-    signal: AbortSignal,
-  ) => Effect.Effect<ProjectCapabilityStub | null>;
+  ) => Effect.Effect<ProjectCapabilityStub | null, never, Scope.Scope>;
 }>;
 
 export type StartupCheckOptions = Readonly<{ deadlines?: Partial<StartupCheckDeadlines> }>;

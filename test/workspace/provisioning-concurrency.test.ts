@@ -10,7 +10,7 @@ import {
 } from "../../src/supervisor/readiness/provision-fence.js";
 import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
 import { delayedProvisionHost, NeverSettlingProvisionHost } from "./provisioning-fakes.js";
-import { runToResult } from "./workspace-results.js";
+import { runInterruptible, runToResult } from "./workspace-results.js";
 
 test("provisions different projects in one shared workspace side by side", async () => {
   const delayed = delayedProvisionHost();
@@ -52,7 +52,12 @@ test("holds a project's turns during its own provision only, until a reset clear
   const workspaceName = tenantWorkspaceName("provision-holds-its-project");
 
   const admitted = (projectId: typeof sampleProjectOne.id) =>
-    Effect.runPromise(waitForWorkspaceProvision(workspaceName, projectId, AbortSignal.timeout(50)));
+    Effect.runPromise(
+      waitForWorkspaceProvision(workspaceName, projectId).pipe(
+        Effect.as(true),
+        Effect.timeoutOrElse({ duration: 50, orElse: () => Effect.succeed(false) }),
+      ),
+    );
 
   const provisioning = runToResult(
     provisionProjectWorkspace({
@@ -76,22 +81,20 @@ test("holds a project's turns during its own provision only, until a reset clear
   await provisioning;
 });
 
-test("serializes replacement provisioning until an aborted run has finished", async () => {
+test("serializes replacement provisioning until an interrupted run has finished", async () => {
   const delayed = delayedProvisionHost();
   const workspaceName = tenantWorkspaceName("provisioning-serializes-replacement");
-  const controller = new AbortController();
 
-  const first = runToResult(
+  const first = runInterruptible(
     provisionProjectWorkspace({
       workspaceName,
       project: sampleProjectOne,
       namespace: namespaceFor(delayed.host),
-      signal: controller.signal,
     }),
   );
 
   await delayed.started;
-  controller.abort();
+  first.interrupt();
 
   const replacement = runToResult(
     provisionProjectWorkspace({
@@ -110,7 +113,7 @@ test("serializes replacement provisioning until an aborted run has finished", as
 
   delayed.release();
 
-  expect(Result.isFailure(await first)).toBe(true);
+  await expect(first.interrupted).resolves.toBe(true);
   expect(Result.isSuccess(await replacement)).toBe(true);
   expect(delayed.host.steps).toEqual(["clone", "clone", "instructions"]);
 });
@@ -130,18 +133,15 @@ test("does not queue retries behind a never-settling provision RPC", async () =>
   await Promise.resolve();
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const controller = new AbortController();
-
-    const retry = runToResult(
+    const retry = runInterruptible(
       provisionProjectWorkspace({
         workspaceName: tenantWorkspaceName("never-settling-original"),
         project: sampleProjectOne,
         namespace,
-        signal: controller.signal,
       }),
     );
 
-    controller.abort();
+    retry.interrupt();
 
     const timeout = new Promise<"timed-out">((resolve) => {
       setTimeout(() => {
@@ -149,13 +149,11 @@ test("does not queue retries behind a never-settling provision RPC", async () =>
       }, 100);
     });
 
-    const outcome = await Promise.race([retry, timeout]);
+    const outcome = await Promise.race([retry.interrupted, timeout]);
 
-    expect(outcome).not.toBe("timed-out");
-
-    if (outcome !== "timed-out") {
-      expect(Result.isFailure(outcome) && outcome.failure._tag).toBe("ProvisionUnavailable");
-    }
+    expect(outcome, "a waiting retry leaves the queue when it is interrupted").not.toBe(
+      "timed-out",
+    );
   }
 
   expect(host.requests, "retries must not append work behind the lost RPC").toHaveLength(1);

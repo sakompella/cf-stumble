@@ -1,19 +1,39 @@
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Scope from "effect/Scope";
 import { runAtEntryPoint } from "../../run-entry-point.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { SelectableProject } from "../../selectable-projects.js";
 import type { ProjectCapabilityStub } from "../../workspace/index.js";
 
-export type ObtainWorkspace = (
-  project: SelectableProject,
-  remainingMs: number,
-  signal: AbortSignal,
-) => Effect.Effect<ProjectCapabilityStub | null>;
+export type ScopedWorkspace = Effect.Effect<ProjectCapabilityStub | null, never, Scope.Scope>;
+
+export type ObtainWorkspace = (project: SelectableProject, remainingMs: number) => ScopedWorkspace;
 
 type HeldWorkspace = Readonly<{
   capability: Promise<ProjectCapabilityStub | null>;
-  release: AbortController;
+  scope: Scope.Closeable;
 }>;
+
+function holdWorkspace(scope: Scope.Scope, obtain: ScopedWorkspace) {
+  return runAtEntryPoint(
+    Effect.forkIn(Scope.provide(obtain, scope), scope).pipe(
+      Effect.flatMap(Fiber.await),
+      Effect.map((exit) => (Exit.isSuccess(exit) ? exit.value : null)),
+    ),
+  );
+}
+
+export function heldWorkspace(obtain: ScopedWorkspace) {
+  const scope = Scope.makeUnsafe();
+  let capability: Promise<ProjectCapabilityStub | null> | undefined;
+
+  return {
+    capability: () => (capability ??= holdWorkspace(scope, obtain)),
+    release: Effect.forkDetach(Scope.close(scope, Exit.void)),
+  };
+}
 
 export class HeldWorkspaces {
   readonly #obtain: ObtainWorkspace;
@@ -82,9 +102,9 @@ export class HeldWorkspaces {
   }
 
   #hold(conversationId: string, project: SelectableProject, remainingMs: number): HeldWorkspace {
-    const controller = new AbortController();
-    const capability = runAtEntryPoint(this.#obtain(project, remainingMs, controller.signal));
-    const held = { capability, release: controller };
+    const scope = Scope.makeUnsafe();
+    const capability = holdWorkspace(scope, this.#obtain(project, remainingMs));
+    const held = { capability, scope };
 
     this.#held.set(conversationId, held);
     void capability.then((obtained) => {
@@ -98,16 +118,5 @@ export class HeldWorkspaces {
 }
 
 function release(held: HeldWorkspace): void {
-  held.release.abort();
-  void held.capability.then((capability) => {
-    if (capability !== null) endWorkspaceTurn(capability);
-  });
-}
-
-export function endWorkspaceTurn(capability: ProjectCapabilityStub): void {
-  const dispose = () => {
-    capability[Symbol.dispose]();
-  };
-
-  void capability.endTurn().then(dispose, dispose);
+  void runAtEntryPoint(Scope.close(held.scope, Exit.void));
 }

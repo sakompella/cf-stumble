@@ -47,7 +47,7 @@ function projectParts(
     namespace: env.WORKSPACE_HOST,
     generations,
     github,
-    ensureProvisioned: (projectId, signal) => connections.ensureProvisioned(projectId, signal),
+    ensureProvisioned: (projectId) => connections.ensureProvisioned(projectId),
   });
 
   return { github, connections, readiness };
@@ -86,8 +86,7 @@ export function supervisorParts(
       artifacts,
       generations,
       model: () => ctx.exports.StartupCheckModel({}),
-      workspace: (remainingMs: number, signal: AbortSignal) =>
-        projects.readiness.obtain(null, remainingMs, signal),
+      workspace: (remainingMs: number) => projects.readiness.obtain(null, remainingMs),
     },
     ...projects,
     serving: new ServingConversations({
@@ -96,8 +95,7 @@ export function supervisorParts(
         artifacts.mount(generations.active(), env.LOADER, ctx.facets, modelRoute(instance)),
       catalog: () => projects.connections.catalog(),
       resetting,
-      obtainWorkspace: (project, remainingMs, signal) =>
-        projects.readiness.obtain(project, remainingMs, signal),
+      obtainWorkspace: (project, remainingMs) => projects.readiness.obtain(project, remainingMs),
       generations: generationOperations,
       selection: generations,
     }),

@@ -29,34 +29,13 @@ const harnessProjectId = projectIdOf("harness");
 class FakeHarnessHost implements WorkspaceHostRpc<"build" | "ensureManagedInstructions"> {
   readonly builds: HarnessBuildRequest[] = [];
   instructions = 0;
-  delayedBuild = false;
-  private release: (() => void) | undefined;
-  started: Promise<void> | undefined;
-  private resolveStarted: (() => void) | undefined;
 
   build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
     this.builds.push(request);
 
-    if (!this.delayedBuild) {
-      return Promise.resolve({
-        ok: true,
-        result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-      });
-    }
-
-    this.delayedBuild = false;
-    this.started = new Promise((resolve) => {
-      this.resolveStarted = resolve;
-    });
-    this.resolveStarted?.();
-
-    return new Promise((resolve) => {
-      this.release = () => {
-        resolve({
-          ok: true,
-          result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-        });
-      };
+    return Promise.resolve({
+      ok: true,
+      result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
     });
   }
 
@@ -64,10 +43,6 @@ class FakeHarnessHost implements WorkspaceHostRpc<"build" | "ensureManagedInstru
     this.instructions += 1;
 
     return Promise.resolve({ ok: true, result: { kind: "written" } });
-  }
-
-  releaseBuild(): void {
-    this.release?.();
   }
 }
 
@@ -114,47 +89,6 @@ test("provisions the harness checkout and managed instructions on use", async ()
   expect(Result.isSuccess(outcome)).toBe(true);
   expect(host.builds).toEqual([{ kind: "build-step", harnessCommit, step: "provision" }]);
   expect(host.instructions).toBe(1);
-});
-
-test("stops harness provisioning after its turn signal aborts", async () => {
-  const preHost = new FakeHarnessHost();
-  const preController = new AbortController();
-  preController.abort();
-
-  const refused = await runToResult(
-    provisionHarnessWorkspace({
-      projectId: harnessProjectId,
-      workspaceName: tenantWorkspaceName("harness-provision-already-aborted"),
-      harnessCommit,
-      namespace: namespaceFor(preHost),
-      signal: preController.signal,
-    }),
-  );
-
-  expect(Result.isFailure(refused)).toBe(true);
-  expect(preHost.builds).toEqual([]);
-
-  const host = new FakeHarnessHost();
-  host.delayedBuild = true;
-  const controller = new AbortController();
-
-  const provisioning = runToResult(
-    provisionHarnessWorkspace({
-      projectId: harnessProjectId,
-      workspaceName: tenantWorkspaceName("harness-provision-abort"),
-      harnessCommit,
-      namespace: namespaceFor(host),
-      signal: controller.signal,
-    }),
-  );
-
-  if (host.started === undefined) throw new Error("harness build did not start");
-  await host.started;
-  controller.abort();
-  host.releaseBuild();
-
-  expect(Result.isFailure(await provisioning)).toBe(true);
-  expect(host.instructions).toBe(0);
 });
 
 test("does not hold a harness provision behind a project provision in flight", async () => {

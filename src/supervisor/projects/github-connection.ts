@@ -11,7 +11,6 @@ import {
   CredentialInstallFailed,
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
-  type WorkspaceCredentialInput,
   type WorkspaceHostNamespace,
 } from "../../workspace/index.js";
 import {
@@ -53,8 +52,6 @@ interface GitHubConnectionInput {
   readonly environment: GitHubConnectionEnvironment;
 }
 
-type StatusReadOptions = Pick<WorkspaceCredentialInput, "signal">;
-
 export class GitHubConnection {
   private readonly store: GitHubConnectionStore;
   private readonly workspaceName: string;
@@ -72,14 +69,12 @@ export class GitHubConnection {
     this.store.clear();
   }
 
-  status(now: number, options: StatusReadOptions = {}): Effect.Effect<GitHubConnectionStatus> {
+  status(now: number): Effect.Effect<GitHubConnectionStatus> {
     return Effect.suspend(() => {
       const awaiting = awaitingStatus(this.store.authorization(now));
 
       return awaiting === null
-        ? this.observed(this.store.revision(), now, undefined, options).pipe(
-            Effect.map(checkedStatus),
-          )
+        ? this.observed(this.store.revision(), now).pipe(Effect.map(checkedStatus))
         : Effect.succeed(awaiting);
     });
   }
@@ -101,13 +96,10 @@ export class GitHubConnection {
     return isWorking(this.store.credential());
   }
 
-  ensureCredential(now: number, signal?: AbortSignal): Effect.Effect<GitHubConnectionStatus> {
+  ensureCredential(now: number): Effect.Effect<GitHubConnectionStatus> {
     return Effect.gen({ self: this }, function* () {
-      const credential = yield* this.observed(this.store.revision(), now, undefined, { signal });
+      const credential = yield* this.observed(this.store.revision(), now);
       const current = checkedStatus(credential);
-
-      if (signal?.aborted === true) return current;
-
       const fallback = parseGitHubToken(this.environment.fallbackToken);
 
       return yield* EnsureCommand.$match(ensureCommand(credential, fallback), {
@@ -121,7 +113,7 @@ export class GitHubConnection {
             return status;
           }),
         InstallConfigured: ({ token }) =>
-          this.install(token, "configured-token", now, signal).pipe(
+          this.install(token, "configured-token", now).pipe(
             Effect.tap((repaired) =>
               Effect.sync(() => {
                 logCredentialEnsure(current, true, repaired);
@@ -221,7 +213,6 @@ export class GitHubConnection {
     token: GitHubToken,
     source: CredentialSource,
     now: number,
-    signal?: AbortSignal,
   ): Effect.Effect<GitHubConnectionStatus> {
     return Effect.gen({ self: this }, function* () {
       const revision = this.store.revision();
@@ -231,14 +222,12 @@ export class GitHubConnection {
           workspaceName: this.workspaceName,
           namespace: this.namespace,
           token,
-          signal,
         }),
       );
 
       const credential = Result.isFailure(installed)
         ? this.record(
             revision,
-            signal,
             CredentialEvent.InstallRefused({
               reason:
                 installed.failure instanceof CredentialInstallFailed
@@ -250,14 +239,13 @@ export class GitHubConnection {
         : installed.success === "tooling-missing"
           ? this.record(
               revision,
-              signal,
               CredentialEvent.Observed({
                 answer: { state: "tooling-missing", login: undefined },
                 installedBy: undefined,
                 now,
               }),
             )
-          : yield* this.observed(revision, now, source, { signal });
+          : yield* this.observed(revision, now, source);
 
       const status = checkedStatus(credential);
 
@@ -271,31 +259,20 @@ export class GitHubConnection {
     revision: number,
     now: number,
     installedBy?: CredentialSource,
-    options: StatusReadOptions = {},
   ): Effect.Effect<GitHubCredential> {
     return readWorkspaceCredentialStatus({
       workspaceName: this.workspaceName,
       namespace: this.namespace,
-      ...options,
     }).pipe(
       Effect.match({
-        onFailure: () =>
-          this.record(revision, options.signal, CredentialEvent.WorkspaceUnreachable({ now })),
+        onFailure: () => this.record(revision, CredentialEvent.WorkspaceUnreachable({ now })),
         onSuccess: (answer) =>
-          this.record(
-            revision,
-            options.signal,
-            CredentialEvent.Observed({ answer, installedBy, now }),
-          ),
+          this.record(revision, CredentialEvent.Observed({ answer, installedBy, now })),
       }),
     );
   }
 
-  private record(
-    revision: number,
-    signal: AbortSignal | undefined,
-    event: CredentialEvent,
-  ): GitHubCredential {
-    return this.store.applyCredential(revision, event, signal?.aborted !== true);
+  private record(revision: number, event: CredentialEvent): GitHubCredential {
+    return this.store.applyCredential(revision, event);
   }
 }

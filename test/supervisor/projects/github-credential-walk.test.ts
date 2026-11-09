@@ -55,7 +55,7 @@ test("every stored credential reads back as the state the transition produced", 
       store.clear();
 
       for (const event of sequence) {
-        const next = store.applyCredential(store.revision(), event, true);
+        const next = store.applyCredential(store.revision(), event);
 
         expect(store.credential()).toEqual(next);
       }
