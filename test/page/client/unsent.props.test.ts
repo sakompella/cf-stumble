@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
+import { Outgoing } from "../../../src/page/client/outgoing.js";
 import { init, update } from "../../../src/page/client/update.js";
 
 const PROJECT_IDS = ["repo", "harness"] as const;
@@ -15,7 +16,14 @@ const PROJECTS = [
 
 type Send = Readonly<{ requestId: string; projectId: string; text: string }>;
 
-type Run = { model: Model; unminted: Send[]; inFlight: Send[]; owed: Send[]; sent: number };
+type Run = {
+  model: Model;
+  unminted: Send[];
+  inFlight: Send[];
+  owed: Send[];
+  lost: Send[];
+  sent: number;
+};
 
 const ACTIONS = ["send", "mint", "fail", "succeed", "switch"] as const;
 
@@ -37,7 +45,7 @@ function mint(run: Run, send: Send): void {
 }
 
 function fail(run: Run, send: Send, rejected: boolean): void {
-  run.owed.push(send);
+  (rejected ? run.owed : run.lost).push(send);
 
   apply(
     run,
@@ -89,11 +97,19 @@ function settle(run: Run): void {
   for (const send of run.inFlight.splice(0)) fail(run, send, false);
 }
 
-test("an unsent text comes back in its own project's prompt, whatever the interleaving", () => {
+test("a refused text comes back in its own project's prompt and a lost one stays in its own project's conversation, whatever the interleaving", () => {
   hegel.test(
     (tc) => {
       const listed = update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS }));
-      const run: Run = { model: listed.model, unminted: [], inFlight: [], owed: [], sent: 0 };
+
+      const run: Run = {
+        model: listed.model,
+        unminted: [],
+        inFlight: [],
+        owed: [],
+        lost: [],
+        sent: 0,
+      };
 
       for (let index = tc.draw(gs.integers({ minValue: 0, maxValue: 24 })); index > 0; index -= 1)
         step(tc, run);
@@ -105,6 +121,20 @@ test("an unsent text comes back in its own project's prompt, whatever the interl
           expect(shownIn(run.model, projectId).split(send.text).length - 1, send.text).toBe(
             projectId === send.projectId ? 1 : 0,
           );
+
+      for (const send of run.lost) {
+        const rows = run.model.outgoing.filter(
+          (item) =>
+            Outgoing.guards.Unconfirmed(item) &&
+            item.requestId === send.requestId &&
+            item.projectId === send.projectId,
+        );
+
+        expect(rows, send.text).toHaveLength(1);
+
+        for (const projectId of PROJECT_IDS)
+          expect(shownIn(run.model, projectId), send.text).not.toContain(send.text);
+      }
     },
     { testCases: 300 },
   );

@@ -63,7 +63,7 @@ export class OrbProvider {
     this.#options = options;
   }
 
-  run(listenHost: string, signal: AbortSignal): Effect.Effect<string, OrbFailure> {
+  run(listenHost: string): Effect.Effect<string, OrbFailure> {
     return Effect.acquireUseRelease(
       Effect.sync(() => serveEgress(this.#options)),
       (egress) =>
@@ -74,7 +74,7 @@ export class OrbProvider {
               this.#options.log(`computer.internal listener on ${listenHost}:${port}`);
             }),
           ),
-          Effect.andThen(this.#connected(signal)),
+          Effect.andThen(this.#connected()),
         ),
       (egress) =>
         Effect.sync(() => {
@@ -83,7 +83,7 @@ export class OrbProvider {
     );
   }
 
-  #connected(signal: AbortSignal): Effect.Effect<string> {
+  #connected(): Effect.Effect<string> {
     return Effect.flatMap(Effect.context(), (services) => {
       const runFork = Effect.runForkWith(services);
 
@@ -107,12 +107,6 @@ export class OrbProvider {
           resume(Effect.succeed(reason));
         };
 
-        const stop = (): void => {
-          socket.close(1000, "provider stopping");
-          finish("the provider is stopping");
-        };
-
-        signal.addEventListener("abort", stop, { once: true });
         socket.addEventListener("open", () => {
           this.#options.log("connected to the Workspace Host");
           send(providerFrame.hello({ egressPort: this.#egressPort }));
@@ -123,8 +117,12 @@ export class OrbProvider {
           if (Option.isSome(frame)) runFork(this.#handle(frame.value, send));
         });
         socket.addEventListener("close", (event) => {
-          signal.removeEventListener("abort", stop);
           finish(`the Workspace Host connection closed (${event.code} ${event.reason})`);
+        });
+
+        return Effect.sync(() => {
+          clearInterval(ping);
+          socket.close(1000, "provider stopping");
         });
       });
     });
@@ -183,14 +181,18 @@ export class OrbProvider {
       }
 
       return this.#stopLaunch("delete").pipe(
-        Effect.andThen(this.#script("start", job.container, job.env)),
-        Effect.flatMap((output) => {
-          const address = lastLine(output);
+        Effect.andThen(
+          this.#script("start", job.container, job.env).pipe(
+            Effect.flatMap((output) => {
+              const address = lastLine(output);
 
-          return address === undefined
-            ? Effect.fail(new OrbFailure({ message: "dispatch start printed no address" }))
-            : Effect.succeed(address);
-        }),
+              return address === undefined
+                ? Effect.fail(new OrbFailure({ message: "dispatch start printed no address" }))
+                : Effect.succeed(address);
+            }),
+            Effect.onError(() => Effect.ignore(this.#script("delete", job.container))),
+          ),
+        ),
         Effect.flatMap((address) => {
           const launch = { runtime: randomUUID(), container: job.container, address };
           this.#launch = launch;

@@ -1,6 +1,7 @@
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { chatGPTConnection } from "../../../src/page/client/api.js";
+import { ChatGPT, chatGPTWording, pendingLogin } from "../../../src/page/client/chatgpt.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
@@ -34,23 +35,21 @@ test("only a connected state counts as connected, so only it offers disconnectin
   ];
 
   for (const [connection, isConnected] of cases) {
-    expect(chatGPTConnection(viewOf(connection)).isConnected).toBe(isConnected);
+    expect(ChatGPT.guards.Connected(chatGPTConnection(viewOf(connection)))).toBe(isConnected);
   }
 });
 
-test("a view the page cannot word reads as unknown and holds no login", () => {
+test("a view the page cannot word reads as unknown", () => {
   for (const unreadable of [null, "text", {}, viewOf({ state: "paused" }, LOGIN), viewOf(null)]) {
-    expect(chatGPTConnection(unreadable)).toEqual({
-      connection: "unknown",
-      isConnected: false,
-      maybeLogin: Option.none(),
-    });
+    expect(chatGPTConnection(unreadable)).toEqual(ChatGPT.Unknown());
   }
 });
 
 test("a login needs both its attempt and its link", () => {
-  expect(chatGPTConnection(viewOf(DISCONNECTED, LOGIN)).maybeLogin).toEqual(Option.some(LOGIN));
-  expect(chatGPTConnection(viewOf(DISCONNECTED, { attemptId: "a" })).maybeLogin).toEqual(
+  expect(pendingLogin(chatGPTConnection(viewOf(DISCONNECTED, LOGIN)))).toEqual(
+    Option.some({ ...LOGIN, address: "" }),
+  );
+  expect(pendingLogin(chatGPTConnection(viewOf(DISCONNECTED, { attemptId: "a" })))).toEqual(
     Option.none(),
   );
 });
@@ -91,8 +90,7 @@ test("a refused finish keeps the login and the address so the owner can correct 
   ).model;
 
   expect(refused.chatgptResult).toBe("rejected: wrong-sign-in");
-  expect(refused.chatgptCallbackInput).toBe("wrong");
-  expect(refused.chatgpt.maybeLogin).toEqual(Option.some(LOGIN));
+  expect(pendingLogin(refused.chatgpt)).toEqual(Option.some({ ...LOGIN, address: "wrong" }));
 });
 
 test("a refusal that ends the login drops the address", () => {
@@ -106,8 +104,7 @@ test("a refusal that ends the login drops the address", () => {
     }),
   ).model;
 
-  expect(expired.chatgptCallbackInput).toBe("");
-  expect(Option.isNone(expired.chatgpt.maybeLogin)).toBe(true);
+  expect(Option.isNone(pendingLogin(expired.chatgpt))).toBe(true);
 });
 
 test("a connection answer replaces what the page showed and clears the request wording", () => {
@@ -118,11 +115,8 @@ test("a connection answer replaces what the page showed and clears the request w
 
   const connected = update(typed, succeeded(viewOf({ state: "connected", expiresAt: 1 }))).model;
 
-  expect(connected).toMatchObject({
-    chatgpt: { connection: "connected (gpt-6.1-sol)", isConnected: true },
-    chatgptCallbackInput: "",
-    chatgptResult: "",
-  });
+  expect(chatGPTWording(connected.chatgpt)).toBe("connected (gpt-6.1-sol)");
+  expect(connected.chatgptResult).toBe("");
 });
 
 test("connecting and disconnecting each ask the Worker once", () => {
@@ -151,14 +145,17 @@ function limited(limitedUntil: number | null) {
 }
 
 test("a usage limit is worded with its end when OpenAI named one, and the connection stays", () => {
-  expect(chatGPTConnection(limited(Date.UTC(2026, 9, 16, 9, 30)))).toMatchObject({
-    connection: "connected (gpt-6.1-sol); usage limit reached until 2026-10-16 09:30 UTC",
-    isConnected: true,
-  });
-  expect(chatGPTConnection(limited(null))).toMatchObject({
-    connection: "connected (gpt-6.1-sol); usage limit reached",
-    isConnected: true,
-  });
+  const until = chatGPTConnection(limited(Date.UTC(2026, 9, 16, 9, 30)));
+  const unnamed = chatGPTConnection(limited(null));
+
+  expect(chatGPTWording(until)).toBe(
+    "connected (gpt-6.1-sol); usage limit reached until 2026-10-16 09:30 UTC",
+  );
+  expect(chatGPTWording(unnamed)).toBe("connected (gpt-6.1-sol); usage limit reached");
+  expect([until, unnamed].map((chatgpt) => ChatGPT.guards.Connected(chatgpt))).toEqual([
+    true,
+    true,
+  ]);
 });
 
 function commandsAfterRun(start: Model): readonly string[] {

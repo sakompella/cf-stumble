@@ -11,7 +11,9 @@ import {
   StartChatGPTLogin,
 } from "./commands.js";
 import type { GitHubReport, Model, Project } from "./model.js";
-import { EMPTY_CONVERSATION } from "./conversation.js";
+import { keepingAddress, pendingLogin, withAddress } from "./chatgpt.js";
+import { StreamPhase } from "./stream-phase.js";
+import { withOpenedStream } from "./update-conversation.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 export { backendHandlers, FetchBackend } from "./update-backend.js";
@@ -49,16 +51,9 @@ function withPromptSwitched(model: Model, projectId: string): Model {
 function selectProject(model: Model, project: Project): UpdateReturn {
   return {
     model: {
-      ...withPromptSwitched(model, project.id),
-      eventsStreamId: model.eventsStreamId + 1,
+      ...withOpenedStream(withPromptSwitched(model, project.id)),
       maybeProjectId: Option.some(project.id),
       conversationProject: project.displayName,
-      isFreshArmed: false,
-      runNote: "",
-      freshThreadStatus: "",
-      conversation: EMPTY_CONVERSATION,
-      outbox: [],
-      conversationState: "reading",
     },
   };
 }
@@ -80,7 +75,7 @@ function listedProjects(model: Model, projects: readonly Project[]): UpdateRetur
   };
 
   return Option.match(Array.head(projects), {
-    onNone: () => ({ model: { ...listed, conversationState: "select a project first" } }),
+    onNone: () => ({ model: { ...listed, streamPhase: StreamPhase.NoProjects() } }),
     onSome: (first) =>
       Option.isNone(model.maybeProjectId) ? selectProject(listed, first) : { model: listed },
   });
@@ -206,10 +201,10 @@ function asking(model: Model): Model {
 }
 
 function finish(model: Model): UpdateReturn {
-  return Option.match(model.chatgpt.maybeLogin, {
+  return Option.match(pendingLogin(model.chatgpt), {
     onNone: () => ({ model }),
     onSome: (login) => {
-      const callbackUrl = model.chatgptCallbackInput.trim();
+      const callbackUrl = login.address.trim();
 
       return callbackUrl === ""
         ? { model: { ...clearError(model), chatgptResult: "paste the address first" } }
@@ -235,24 +230,20 @@ export function chatGPTHandlers(
   return {
     ClickedChatGPTLogin: () => ({ model: asking(model), commands: [StartChatGPTLogin()] }),
     UpdatedChatGPTCallbackInput: ({ value }) => ({
-      model: { ...model, chatgptCallbackInput: value },
+      model: { ...model, chatgpt: withAddress(model.chatgpt, value) },
     }),
     ClickedChatGPTFinish: () => finish(model),
     ClickedChatGPTDisconnect: () => ({ model: asking(model), commands: [DisconnectChatGPT()] }),
     SucceededChatGPT: ({ chatgpt }) => ({
-      model: { ...model, chatgpt, chatgptCallbackInput: "", chatgptResult: "" },
+      model: { ...model, chatgpt, chatgptResult: "" },
     }),
     RejectedChatGPT: ({ wording, maybeChatGPT }) => {
-      const chatgpt = Option.getOrElse(maybeChatGPT, () => model.chatgpt);
+      const chatgpt = Option.match(maybeChatGPT, {
+        onNone: () => model.chatgpt,
+        onSome: (next) => keepingAddress(model.chatgpt, next),
+      });
 
-      return {
-        model: {
-          ...model,
-          chatgpt,
-          chatgptCallbackInput: Option.isSome(chatgpt.maybeLogin) ? model.chatgptCallbackInput : "",
-          chatgptResult: wording,
-        },
-      };
+      return { model: { ...model, chatgpt, chatgptResult: wording } };
     },
     FailedChatGPT: ({ detail }) => ({
       model: {

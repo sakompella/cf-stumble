@@ -43,6 +43,11 @@ function sentFailure(sentEpoch: number, wording: string): ControlRequest {
 function runControl(model: Model, kind: ControlKind): UpdateReturn {
   const cleared = clearError(model);
   const panel = kind === "activate" ? model.activate : model.rollback;
+
+  if (ControlRequest.guards.Running(panel.request)) {
+    return { model };
+  }
+
   const maybeEpoch = Option.map(model.maybeReading, (reading) => reading.epoch);
 
   if (Option.isNone(maybeEpoch)) {
@@ -64,6 +69,10 @@ function runControl(model: Model, kind: ControlKind): UpdateReturn {
 }
 
 function submit(model: Model): UpdateReturn {
+  if (SubmitRequest.guards.Running(model.submit)) {
+    return { model };
+  }
+
   const cleared = clearError(model);
   const harnessCommit = model.candidateCommitInput.trim();
 

@@ -24,7 +24,7 @@ function isAnswering(state: Conversation): boolean {
 }
 
 function texts(conversation: Conversation): readonly string[] {
-  return transcriptOf(conversation, []).map((entry) =>
+  return transcriptOf(conversation, [], "repo").map((entry) =>
     entry._tag === "Text"
       ? `${entry.who}: ${entry.text}`
       : entry._tag === "Tool"
@@ -68,7 +68,7 @@ test("folding every event of a run with a tool and a follow-up shows what a fres
   expect(states.some((state) => state.inbox.length === 1)).toBe(true);
   expect(
     states.some((state) =>
-      transcriptOf(state, []).some(
+      transcriptOf(state, [], "repo").some(
         (entry) =>
           entry._tag === "Tool" &&
           Option.exists(entry.maybeOutput, (output) => output === "line one\n"),

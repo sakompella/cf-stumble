@@ -1,10 +1,10 @@
 import * as Option from "effect/Option";
 import { Scene } from "foldkit/test";
+import { chatGPTConnection } from "../../../src/page/client/api.js";
 import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
-import { transcriptOf } from "../../../src/page/client/transcript.js";
 import { init, update } from "../../../src/page/client/update.js";
 import type { AssistantMessage, PiMessage } from "../../../src/page/client/pi-message.js";
 
@@ -55,8 +55,6 @@ export function pageShowing(conversation: Conversation): Model {
   return update(listed, received(listed, conversation)).model;
 }
 
-export function whoShown(model: Model): readonly string[] {
-  return transcriptOf(model.conversation, model.outbox).map((entry) =>
-    entry._tag === "Text" ? entry.who : entry._tag,
-  );
+export function withChatGPT(view: Parameters<typeof chatGPTConnection>[0]): Model {
+  return update(init().model, Message.SucceededChatGPT({ chatgpt: chatGPTConnection(view) })).model;
 }

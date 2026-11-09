@@ -44,7 +44,7 @@ test("each tool result finishes the latest block of its call, or opens one at th
 
       const items = drawn.map((item, index) => entryItem(index + 1, message(item)));
 
-      const shown = transcriptOf({ ...EMPTY_CONVERSATION, items }, []).map((entry) =>
+      const shown = transcriptOf({ ...EMPTY_CONVERSATION, items }, [], "repo").map((entry) =>
         entry._tag === "Tool" ? `${entry.toolCallId}: ${entry.summary}` : entry._tag,
       );
 

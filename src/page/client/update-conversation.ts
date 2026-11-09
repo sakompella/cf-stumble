@@ -1,8 +1,17 @@
 import * as Option from "effect/Option";
+import { ChatGPT } from "./chatgpt.js";
 import { AbortRun, FetchChatGPT, MintRequestId, ReplaceThread, SendMessage } from "./commands.js";
+import { advanceFreshThread, FreshThread, FreshThreadEvent, Ground } from "./fresh-thread.js";
 import { EMPTY_CONVERSATION, newestEntryId, type Conversation } from "./conversation.js";
 import type { Model } from "./model.js";
-import { unseenOutbox, type OutboxItem } from "./outbox.js";
+import {
+  advanceRequest,
+  Outgoing,
+  OutgoingEvent,
+  settledOutgoing,
+  withoutQueued,
+} from "./outgoing.js";
+import { StreamPhase } from "./stream-phase.js";
 import { transcriptHandlers } from "./update-transcript.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
@@ -19,13 +28,13 @@ function send(model: Model): UpdateReturn {
   }
 
   return {
-    model: { ...cleared, prompt: "", isFreshArmed: false, freshThreadStatus: "" },
+    model: {
+      ...cleared,
+      prompt: "",
+      freshThread: advanceFreshThread(model.freshThread, FreshThreadEvent.Sent()).phase,
+    },
     commands: [MintRequestId({ projectId: model.maybeProjectId.value, content })],
   };
-}
-
-function withoutRequest(model: Model, requestId: string): Model {
-  return { ...model, outbox: model.outbox.filter((item) => item.requestId !== requestId) };
 }
 
 function textAbove(text: string, rest: string): string {
@@ -41,15 +50,34 @@ function withTextRestored(model: Model, projectId: string, text: string): Model 
       };
 }
 
-function withUnsentRequestInPrompt(model: Model, requestId: string): Model {
-  const unsent = model.sending.find((item) => item.requestId === requestId);
+function advanced(model: Model, requestId: string, event: OutgoingEvent): Model {
+  const step = advanceRequest(model.outgoing, requestId, event);
+  const next = { ...model, outgoing: step.outgoing };
 
-  const kept = {
-    ...withoutRequest(model, requestId),
-    sending: model.sending.filter((item) => item.requestId !== requestId),
-  };
+  return Option.isSome(step.before) && Option.isNone(step.after)
+    ? withTextRestored(next, step.before.value.projectId, step.before.value.text)
+    : next;
+}
 
-  return unsent === undefined ? kept : withTextRestored(kept, unsent.projectId, unsent.text);
+function retried(model: Model, requestId: string): UpdateReturn {
+  const step = advanceRequest(model.outgoing, requestId, OutgoingEvent.Retried());
+
+  return Option.match(step.before, {
+    onNone: () => ({ model }),
+    onSome: (before) =>
+      Outgoing.guards.Unconfirmed(before)
+        ? {
+            model: { ...clearError(model), outgoing: step.outgoing, runNote: "" },
+            commands: [
+              SendMessage({
+                projectId: before.projectId,
+                requestId,
+                content: before.text,
+              }),
+            ],
+          }
+        : { model },
+  });
 }
 
 function runEndNote(previous: Conversation, next: Conversation): Option.Option<string> {
@@ -70,21 +98,16 @@ function isReplacement(previous: Conversation, next: Conversation): boolean {
   return Option.isSome(previous.maybeId) && !Option.contains(next.maybeId, previous.maybeId.value);
 }
 
-function settledOutbox(model: Model, conversation: Conversation): readonly OutboxItem[] {
-  return unseenOutbox(conversation, model.outbox).filter((item) =>
-    Option.match(item.maybeSubmissionId, {
-      onNone: () => true,
-      onSome: (id) =>
-        conversation.isRunning || conversation.inbox.some((queued) => queued.id === id),
-    }),
-  );
-}
-
 function receivedConversation(held: Model, conversation: Conversation): UpdateReturn {
   const replaced = isReplacement(held.conversation, conversation);
 
   const model = replaced
-    ? { ...held, conversation: EMPTY_CONVERSATION, outbox: [], runNote: "" }
+    ? {
+        ...held,
+        conversation: EMPTY_CONVERSATION,
+        outgoing: withoutQueued(held.outgoing),
+        runNote: "",
+      }
     : held;
 
   const note = runEndNote(model.conversation, conversation);
@@ -94,41 +117,39 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
     model: {
       ...model,
       conversation,
-      conversationState: "live",
-      outbox: settledOutbox(model, conversation),
+      streamPhase: StreamPhase.Live(),
+      outgoing: Option.match(model.maybeProjectId, {
+        onNone: () => model.outgoing,
+        onSome: (projectId) => settledOutgoing(conversation, model.outgoing, projectId),
+      }),
       runNote: Option.getOrElse(note, () => model.runNote),
     },
-    commands: ended && model.chatgpt.isConnected ? [FetchChatGPT()] : [],
+    commands: ended && ChatGPT.guards.Connected(model.chatgpt) ? [FetchChatGPT()] : [],
   };
 }
 
-function startFreshThread(model: Model): UpdateReturn {
-  const cleared = clearError(model);
+export const INITIAL_CONVERSATION = {
+  conversation: EMPTY_CONVERSATION,
+  outgoing: [],
+  runNote: "",
+  freshThread: FreshThread.Idle(),
+  streamPhase: StreamPhase.Idle(),
+} satisfies Partial<Model>;
 
-  if (Option.isNone(model.maybeProjectId)) {
-    return { model: { ...cleared, freshThreadStatus: "select a project first" } };
-  }
+function groundOf(model: Model): Ground {
+  if (Option.isNone(model.maybeProjectId)) return Ground.NoProject();
 
-  if (model.conversation.isRunning) {
-    return { model: { ...cleared, freshThreadStatus: "a run is active; cancel it first" } };
-  }
+  return model.conversation.isRunning
+    ? Ground.RunActive()
+    : Ground.Ready({ projectId: model.maybeProjectId.value, streamId: model.eventsStreamId });
+}
 
-  if (!model.isFreshArmed) {
-    return {
-      model: {
-        ...cleared,
-        isFreshArmed: true,
-        freshThreadStatus:
-          "click again to replace this conversation; repository files are untouched",
-      },
-    };
-  }
+function withFreshThread(model: Model, event: FreshThreadEvent): UpdateReturn {
+  const step = advanceFreshThread(model.freshThread, event);
 
   return {
-    model: { ...cleared, isFreshArmed: false, freshThreadStatus: "starting a fresh thread" },
-    commands: [
-      ReplaceThread({ projectId: model.maybeProjectId.value, streamId: model.eventsStreamId }),
-    ],
+    model: { ...model, freshThread: step.phase },
+    commands: step.maybeReplace === undefined ? [] : [ReplaceThread(step.maybeReplace)],
   };
 }
 
@@ -144,32 +165,43 @@ function mintedRequest(
     return { model: withTextRestored(model, projectId, content) };
   }
 
-  const item = {
+  const item = Outgoing.Sending({
     requestId,
+    projectId,
     text: content,
-    maybeSubmissionId: Option.none(),
     afterEntry: newestEntryId(model.conversation),
-  };
+  });
 
   return {
-    model: {
-      ...model,
-      runNote: "",
-      outbox: [...model.outbox, item],
-      sending: [...model.sending, { requestId, projectId, text: content }],
-    },
+    model: { ...model, runNote: "", outgoing: [...model.outgoing, item] },
     commands: [SendMessage({ projectId, requestId, content })],
   };
 }
 
-function withSubmissionId(model: Model, requestId: string, submissionId: number): Model {
+function sendResultHandlers(
+  model: Model,
+): Handlers<
+  "ClickedRetrySend" | "MintedRequestId" | "SucceededSend" | "RejectedSend" | "FailedSend"
+> {
   return {
-    ...model,
-    outbox: model.outbox.map((item) =>
-      item.requestId === requestId
-        ? { ...item, maybeSubmissionId: Option.some(submissionId) }
-        : item,
-    ),
+    MintedRequestId: (minted) => mintedRequest(model, minted),
+    ClickedRetrySend: ({ requestId }) => retried(model, requestId),
+    SucceededSend: ({ requestId, submissionId }) => ({
+      model: advanced(model, requestId, OutgoingEvent.Admitted({ submissionId })),
+    }),
+    RejectedSend: ({ requestId, wording }) => ({
+      model: { ...advanced(model, requestId, OutgoingEvent.Refused()), runNote: wording },
+    }),
+    FailedSend: ({ requestId, detail }) => ({
+      model: {
+        ...withError(
+          advanced(model, requestId, OutgoingEvent.Lost()),
+          "the message request",
+          detail,
+        ),
+        runNote: "not confirmed: retry it in the conversation",
+      },
+    }),
   };
 }
 
@@ -179,6 +211,7 @@ export function composerHandlers(
   | "UpdatedPrompt"
   | "ClickedSendTurn"
   | "PressedSendShortcut"
+  | "ClickedRetrySend"
   | "MintedRequestId"
   | "SucceededSend"
   | "RejectedSend"
@@ -192,22 +225,7 @@ export function composerHandlers(
     UpdatedPrompt: ({ value }) => ({ model: { ...model, prompt: value } }),
     ClickedSendTurn: () => send(model),
     PressedSendShortcut: () => send(model),
-    MintedRequestId: (minted) => mintedRequest(model, minted),
-    SucceededSend: ({ requestId, submissionId }) => ({
-      model: {
-        ...withSubmissionId(model, requestId, submissionId),
-        sending: model.sending.filter((item) => item.requestId !== requestId),
-      },
-    }),
-    RejectedSend: ({ requestId, wording }) => ({
-      model: { ...withUnsentRequestInPrompt(model, requestId), runNote: wording },
-    }),
-    FailedSend: ({ requestId, detail }) => ({
-      model: {
-        ...withError(withUnsentRequestInPrompt(model, requestId), "the message request", detail),
-        runNote: "not sent",
-      },
-    }),
+    ...sendResultHandlers(model),
     ClickedCancelTurn: () =>
       Option.match(model.maybeProjectId, {
         onNone: () => ({ model }),
@@ -224,16 +242,20 @@ export function composerHandlers(
   };
 }
 
-function freshThread(model: Model): Model {
+export function withOpenedStream(model: Model): Model {
   return {
     ...model,
     eventsStreamId: model.eventsStreamId + 1,
     conversation: EMPTY_CONVERSATION,
-    outbox: [],
-    conversationState: "reading",
+    outgoing: withoutQueued(model.outgoing),
+    streamPhase: StreamPhase.Reading(),
+    freshThread: advanceFreshThread(model.freshThread, FreshThreadEvent.StreamReplaced()).phase,
     runNote: "",
-    freshThreadStatus: "fresh thread started; repository files are untouched",
   };
+}
+
+function replacedThread(model: Model): UpdateReturn {
+  return withFreshThread(withOpenedStream(model), FreshThreadEvent.Succeeded());
 }
 
 export function streamHandlers(
@@ -252,30 +274,34 @@ export function streamHandlers(
   | "RefusedEvents"
   | "DisconnectedEvents"
 > {
-  const forStream = (streamId: number, next: () => Model): UpdateReturn =>
-    streamId === model.eventsStreamId ? { model: next() } : { model };
+  const forStream = (streamId: number, next: () => UpdateReturn): UpdateReturn =>
+    streamId === model.eventsStreamId ? next() : { model };
+
+  const showing = (streamPhase: StreamPhase): UpdateReturn => ({
+    model: { ...model, streamPhase },
+  });
 
   return {
     ...transcriptHandlers(model),
-    ClickedFreshThread: () => startFreshThread(model),
-    SucceededFreshThread: ({ streamId }) => forStream(streamId, () => freshThread(model)),
+    ClickedFreshThread: () =>
+      withFreshThread(clearError(model), FreshThreadEvent.Clicked({ ground: groundOf(model) })),
+    SucceededFreshThread: ({ streamId }) => forStream(streamId, () => replacedThread(model)),
     RejectedFreshThread: ({ streamId, wording }) =>
-      forStream(streamId, () => ({ ...model, freshThreadStatus: `not started: ${wording}` })),
+      forStream(streamId, () => withFreshThread(model, FreshThreadEvent.Refused({ wording }))),
     FailedFreshThread: ({ streamId, detail }) =>
-      forStream(streamId, () => ({
-        ...withError(model, "the fresh thread request", detail),
-        freshThreadStatus: "request failed",
-      })),
+      forStream(streamId, () =>
+        withFreshThread(
+          withError(model, "the fresh thread request", detail),
+          FreshThreadEvent.Failed(),
+        ),
+      ),
     ReceivedConversation: ({ streamId, conversation }) =>
       streamId === model.eventsStreamId ? receivedConversation(model, conversation) : { model },
     ReceivedUnreadableEvent: ({ streamId }) =>
-      forStream(streamId, () => ({
-        ...model,
-        conversationState: "unreadable event from this Worker",
-      })),
+      forStream(streamId, () => showing(StreamPhase.Unreadable())),
     RefusedEvents: ({ streamId, wording }) =>
-      forStream(streamId, () => ({ ...model, conversationState: wording })),
+      forStream(streamId, () => showing(StreamPhase.Refused({ wording }))),
     DisconnectedEvents: ({ streamId, detail }) =>
-      forStream(streamId, () => ({ ...model, conversationState: `reconnecting: ${detail}` })),
+      forStream(streamId, () => showing(StreamPhase.Reconnecting({ detail }))),
   };
 }

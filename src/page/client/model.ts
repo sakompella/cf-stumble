@@ -2,7 +2,10 @@ import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import { BackendSetting } from "../../backend-setting.js";
 import { Conversation } from "./conversation.js";
-import { OutboxItem } from "./outbox.js";
+import { ChatGPT } from "./chatgpt.js";
+import { FreshThread } from "./fresh-thread.js";
+import { StreamPhase } from "./stream-phase.js";
+import { Outgoing } from "./outgoing.js";
 
 export const Project = Schema.Struct({
   id: Schema.String,
@@ -28,19 +31,6 @@ export const GitHubReport = defineTaggedUnion({
 });
 
 export type GitHubReport = typeof GitHubReport.Type;
-
-const ChatGPTLogin = Schema.Struct({
-  attemptId: Schema.String,
-  authorizeUrl: Schema.String,
-});
-
-export const ChatGPTConnection = Schema.Struct({
-  connection: Schema.String,
-  isConnected: Schema.Boolean,
-  maybeLogin: Schema.Option(ChatGPTLogin),
-});
-
-export type ChatGPTConnection = typeof ChatGPTConnection.Type;
 
 export const ControlKind = Schema.Literals(["activate", "rollback"]);
 
@@ -106,27 +96,22 @@ export const Model = Schema.Struct({
   github: GitHubConnection,
   connectRepositoryInput: Schema.String,
   connectStatus: Schema.String,
-  chatgpt: ChatGPTConnection,
-  chatgptCallbackInput: Schema.String,
+  chatgpt: ChatGPT,
   chatgptResult: Schema.String,
   maybeBackend: Schema.Option(BackendSetting),
   backendResult: Schema.String,
 
   maybeProjectId: Schema.Option(Schema.String),
   conversationProject: Schema.String,
-  conversationState: Schema.String,
+  streamPhase: StreamPhase,
   eventsStreamId: Schema.Number,
   conversation: Conversation,
-  outbox: Schema.Array(OutboxItem),
-  sending: Schema.Array(
-    Schema.Struct({ requestId: Schema.String, projectId: Schema.String, text: Schema.String }),
-  ),
+  outgoing: Schema.Array(Outgoing),
   drafts: Schema.Record(Schema.String, Schema.String),
 
   prompt: Schema.String,
   runNote: Schema.String,
-  isFreshArmed: Schema.Boolean,
-  freshThreadStatus: Schema.String,
+  freshThread: FreshThread,
 
   maybeReading: Schema.Option(GenerationReading),
   statusRead: StatusRead,

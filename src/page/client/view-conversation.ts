@@ -1,22 +1,23 @@
 import { createLazy, type Html, type HtmlBuilder } from "foldkit/html";
 import * as Option from "effect/Option";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
-import type { Conversation } from "./conversation.js";
 import { Message } from "./message.js";
+import { FreshThread, freshThreadWording } from "./fresh-thread.js";
 import type { Model } from "./model.js";
+import { streamWording } from "./stream-phase.js";
 import { statusText } from "./view-parts.js";
-import type { OutboxItem } from "./outbox.js";
 import { transcriptOf } from "./transcript.js";
 import { transcriptView } from "./view-transcript.js";
 
 const lazyTranscript = createLazy();
 
 function conversationTranscript(
-  conversation: Conversation,
-  outbox: readonly OutboxItem[],
+  conversation: Model["conversation"],
+  outgoing: Model["outgoing"],
+  projectId: string,
   h: HtmlBuilder<Message>,
 ): Html {
-  return transcriptView(transcriptOf(conversation, outbox), ID.messageList, h);
+  return transcriptView(transcriptOf(conversation, outgoing, projectId), ID.messageList, h);
 }
 
 function sendShortcut(key: string, modifiers: Readonly<{ ctrlKey: boolean; metaKey: boolean }>) {
@@ -55,7 +56,12 @@ function turnButtons(model: Model, h: HtmlBuilder<Message>): Html {
         ["Cancel turn"],
       ),
       h.button(
-        [h.Id(ID.freshThreadButton), h.Type("button"), h.OnClick(Message.ClickedFreshThread())],
+        [
+          h.Id(ID.freshThreadButton),
+          h.Type("button"),
+          h.Disabled(FreshThread.guards.Starting(model.freshThread)),
+          h.OnClick(Message.ClickedFreshThread()),
+        ],
         ["Start fresh thread"],
       ),
       statusText(ID.turnState, runState(model), h),
@@ -77,7 +83,7 @@ function composerView(model: Model, h: HtmlBuilder<Message>): Html {
         h.OnKeyDownPreventDefault(sendShortcut),
       ]),
       turnButtons(model, h),
-      h.p([h.Class("note"), h.Id(ID.freshThreadStatus)], [model.freshThreadStatus]),
+      h.p([h.Class("note"), h.Id(ID.freshThreadStatus)], [freshThreadWording(model.freshThread)]),
     ],
   );
 }
@@ -90,10 +96,15 @@ export function conversationView(model: Model, h: HtmlBuilder<Message>): Html {
         [h.Class("conversation-head")],
         [
           h.h2([h.Id(ID.conversationProject)], [model.conversationProject]),
-          h.span([h.Class("note"), h.Id(ID.conversationState)], [model.conversationState]),
+          h.span([h.Class("note"), h.Id(ID.conversationState)], [streamWording(model.streamPhase)]),
         ],
       ),
-      lazyTranscript(conversationTranscript, [model.conversation, model.outbox, h]),
+      lazyTranscript(conversationTranscript, [
+        model.conversation,
+        model.outgoing,
+        Option.getOrElse(model.maybeProjectId, () => ""),
+        h,
+      ]),
       composerView(model, h),
     ],
   );

@@ -124,8 +124,10 @@ test("a page that joins mid-run shows what a page that watched from the start sh
 
         expect(Option.isSome(joined)).toBe(true);
         expect(joined).toEqual(fromStart);
-        expect(Option.map(joined, (conversation) => transcriptOf(conversation, []).length)).toEqual(
-          Option.map(fromStart, (conversation) => transcriptOf(conversation, []).length),
+        expect(
+          Option.map(joined, (conversation) => transcriptOf(conversation, [], "repo").length),
+        ).toEqual(
+          Option.map(fromStart, (conversation) => transcriptOf(conversation, [], "repo").length),
         );
       });
     },

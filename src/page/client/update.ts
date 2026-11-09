@@ -1,8 +1,8 @@
 import * as Option from "effect/Option";
 import type { Runtime } from "foldkit";
 import { FetchChatGPT, FetchGitHub, FetchProjects, FetchStatus } from "./commands.js";
+import { ChatGPT } from "./chatgpt.js";
 import { Message } from "./message.js";
-import { EMPTY_CONVERSATION } from "./conversation.js";
 import { ControlRequest, StatusRead, SubmitRequest, type Model } from "./model.js";
 import { controlHandlers, statusHandlers, submitHandlers } from "./update-generation.js";
 import {
@@ -14,7 +14,7 @@ import {
   projectHandlers,
 } from "./update-projects.js";
 import type { UpdateReturn } from "./update-shared.js";
-import { composerHandlers, streamHandlers } from "./update-conversation.js";
+import { composerHandlers, INITIAL_CONVERSATION, streamHandlers } from "./update-conversation.js";
 
 const EMPTY_PANEL = { labelInput: "", request: ControlRequest.Idle() };
 
@@ -27,23 +27,16 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     github: { state: "", detail: "", verificationUri: "", checked: "" },
     connectRepositoryInput: "",
     connectStatus: "",
-    chatgpt: { connection: "", isConnected: false, maybeLogin: Option.none() },
-    chatgptCallbackInput: "",
+    chatgpt: ChatGPT.Unknown(),
     chatgptResult: "",
     maybeBackend: Option.none(),
     backendResult: "",
     maybeProjectId: Option.none(),
     conversationProject: "No project selected",
-    conversationState: "",
     eventsStreamId: 0,
-    conversation: EMPTY_CONVERSATION,
-    outbox: [],
-    sending: [],
+    ...INITIAL_CONVERSATION,
     drafts: {},
     prompt: "",
-    runNote: "",
-    isFreshArmed: false,
-    freshThreadStatus: "",
     maybeReading: Option.none(),
     statusRead: StatusRead.Running(),
     candidateCommitInput: "",

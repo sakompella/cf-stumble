@@ -2,13 +2,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import { ChatGPT, UsageLimit, type PendingLogin } from "./chatgpt.js";
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
-import {
-  GitHubReport,
-  type ChatGPTConnection,
-  type GenerationReading,
-  type Project,
-} from "./model.js";
+import { GitHubReport, type GenerationReading, type Project } from "./model.js";
 
 export function transportDetail(cause: unknown): string {
   return Predicate.isError(cause) ? cause.message : String(cause);
@@ -187,54 +183,43 @@ export function gitHubReport(status: Wire, checkedAt: Wire, now: number): GitHub
   });
 }
 
-const UNKNOWN_CHATGPT: ChatGPTConnection = {
-  connection: "unknown",
-  isConnected: false,
-  maybeLogin: Option.none(),
-};
-
-function chatGPTLogin(login: Wire): ChatGPTConnection["maybeLogin"] {
+function chatGPTLogin(login: Wire): Option.Option<PendingLogin> {
   const attemptId = text(field(login, "attemptId"));
   const authorizeUrl = text(field(login, "authorizeUrl"));
 
   return attemptId === "" || authorizeUrl === ""
     ? Option.none()
-    : Option.some({ attemptId, authorizeUrl });
+    : Option.some({ attemptId, authorizeUrl, address: "" });
 }
 
-function usageLimitText(limit: Wire): string {
+function usageLimit(limit: Wire): UsageLimit {
   const limitedUntil = field(limit, "limitedUntil");
 
   if (limitedUntil === undefined) {
-    return "";
+    return UsageLimit.Clear();
   }
 
-  return Predicate.isNumber(limitedUntil)
-    ? `; usage limit reached until ${new Date(limitedUntil).toISOString().slice(0, 16).replace("T", " ")} UTC`
-    : "; usage limit reached";
+  return UsageLimit.Limited({
+    maybeUntil: Predicate.isNumber(limitedUntil) ? Option.some(limitedUntil) : Option.none(),
+  });
 }
 
-export function chatGPTConnection(view: Wire): ChatGPTConnection {
+export function chatGPTConnection(view: Wire): ChatGPT {
   const connection = field(view, "connection");
   const maybeLogin = chatGPTLogin(field(view, "login"));
 
   switch (text(field(connection, "state"))) {
     case "disconnected":
-      return { connection: "not connected (Workers AI fallback)", isConnected: false, maybeLogin };
+      return ChatGPT.Disconnected({ maybeLogin });
     case "connected":
-      return {
-        connection: `connected (${text(field(view, "model"))})${usageLimitText(field(connection, "usageLimit"))}`,
-        isConnected: true,
-        maybeLogin,
-      };
+      return ChatGPT.Connected({
+        model: text(field(view, "model")),
+        usageLimit: usageLimit(field(connection, "usageLimit")),
+      });
     case "needs-reconnect":
-      return {
-        connection: `reconnect required: ${text(field(connection, "reason"))}`,
-        isConnected: false,
-        maybeLogin,
-      };
+      return ChatGPT.NeedsReconnect({ reason: text(field(connection, "reason")), maybeLogin });
     default:
-      return UNKNOWN_CHATGPT;
+      return ChatGPT.Unknown();
   }
 }
 

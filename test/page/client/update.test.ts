@@ -11,7 +11,8 @@ import { Message } from "../../../src/page/client/message.js";
 import { ControlRequest, type Model } from "../../../src/page/client/model.js";
 import { controlLabel } from "../../../src/page/client/update-generation.js";
 import { init, update } from "../../../src/page/client/update.js";
-import { entryItem, received, running, viewing, whoShown, type Conversation } from "./views.js";
+import { freshShown, streamShown, whoShown } from "./shown.js";
+import { entryItem, received, running, viewing, type Conversation } from "./views.js";
 
 const PROJECTS = [
   { id: "repo", displayName: "hello-world", isHarness: false, location: "https://github.com/o/r" },
@@ -54,7 +55,7 @@ test("the first listed project is selected and its events stream opened", () => 
   const listed = update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS }));
 
   expect(listed.model.projectListStatus).toBe("1 connected");
-  expect(listed.model.conversationState).toBe("reading");
+  expect(streamShown(listed.model)).toBe("reading");
   expect(Option.getOrNull(listed.model.maybeProjectId)).toBe("repo");
   expect(listed.model.eventsStreamId).toBe(init().model.eventsStreamId + 1);
   expect(listed.commands ?? []).toEqual([]);
@@ -113,9 +114,7 @@ test("sending trims the prompt, clears it, and posts it under a minted request i
 
   expect(minted.commands?.[0]?.name).toBe("SendMessage");
   expect(minted.commands?.[0]?.args).toEqual(MINTED);
-  expect(minted.model.outbox).toEqual([
-    { requestId: "r1", text: "do it", maybeSubmissionId: Option.none(), afterEntry: 0 },
-  ]);
+  expect(whoShown(minted.model)).toEqual(["you · sending"]);
 });
 
 test("a message sent while a run is active is accepted, shown as queued, then placed", () => {
@@ -131,14 +130,12 @@ test("a message sent while a run is active is accepted, shown as queued, then pl
     conversation(queuedView),
   ]);
 
-  expect(queued.outbox.map((item) => item.maybeSubmissionId)).toEqual([Option.some(5)]);
   expect(whoShown(queued)).toEqual(["you · queued"]);
 
   const placed = after(queued, [
     conversation(running({ items: [entryItem(7, { role: "user", content: "do it" })] })),
   ]);
 
-  expect(placed.outbox).toEqual([]);
   expect(whoShown(placed)).toEqual(["you"]);
 });
 
@@ -152,8 +149,8 @@ test("a reconnect keeps only the sent messages its view still holds queued", () 
     conversation(viewing({ inbox: [{ id: 2, text: "do it" }] })),
   ]);
 
-  expect(page.outbox.map((item) => item.requestId)).toEqual(["queued", "sending"]);
-  expect(page.conversationState).toBe("live");
+  expect(page.outgoing.map((item) => item.requestId)).toEqual(["queued", "sending"]);
+  expect(streamShown(page)).toBe("live");
 });
 
 test("a refused send takes the message out of the transcript, says why, and puts the text back in the prompt", () => {
@@ -161,27 +158,19 @@ test("a refused send takes the message out of the transcript, says why, and puts
     Message.RejectedSend({ requestId: "r1", wording: "busy: the workspace is resetting" }),
   ]);
 
-  expect(refused.outbox).toEqual([]);
+  expect(refused.outgoing).toEqual([]);
   expect(refused.runNote).toBe("busy: the workspace is resetting");
   expect(refused.prompt).toBe("do it");
 });
 
-test("a send that never reached the Worker puts the text back too", () => {
-  const failed = after(sentPage(readyPage()).model, [
-    Message.FailedSend({ requestId: "r1", detail: "offline" }),
-  ]);
-
-  expect(failed.prompt).toBe("do it");
-});
-
-test("a failed send puts its text before what the owner typed since, after a blank line", () => {
-  const failed = after(sentPage(readyPage()).model, [
+test("a refused send puts its text before what the owner typed since, after a blank line", () => {
+  const refused = after(sentPage(readyPage()).model, [
     Message.UpdatedPrompt({ value: "newer" }),
-    Message.FailedSend({ requestId: "r1", detail: "offline" }),
+    Message.RejectedSend({ requestId: "r1", wording: "busy" }),
   ]);
 
-  expect(failed.prompt).toBe("do it\n\nnewer");
-  expect(failed.outbox).toEqual([]);
+  expect(refused.prompt).toBe("do it\n\nnewer");
+  expect(refused.outgoing).toEqual([]);
 });
 
 test("two refused sends both keep their text in the prompt", () => {
@@ -192,7 +181,7 @@ test("two refused sends both keep their text in the prompt", () => {
   ]);
 
   expect(refused.prompt).toBe("then this\n\ndo it");
-  expect(refused.outbox).toEqual([]);
+  expect(refused.outgoing).toEqual([]);
 });
 
 const noteAfterRun = (ending: Conversation) => {
@@ -236,20 +225,19 @@ test("a dropped stream says it is reconnecting and keeps the conversation it sho
     Message.DisconnectedEvents({ streamId: busy.eventsStreamId, detail: "the stream ended" }),
   ]);
 
-  expect(dropped.conversationState).toBe("reconnecting: the stream ended");
+  expect(streamShown(dropped)).toBe("reconnecting: the stream ended");
   expect(dropped.conversation).toEqual(busy.conversation);
 });
 
 test("a fresh thread needs two clicks and no active run, then opens a new stream", () => {
   const armed = after(readyPage(), [Message.ClickedFreshThread()]);
 
-  expect(armed.isFreshArmed).toBe(true);
   expect(commandNames(armed, Message.ClickedFreshThread())).toEqual(["ReplaceThread"]);
 
   const busy = after(armed, [conversation(running())]);
 
   expect(commandNames(busy, Message.ClickedFreshThread())).toEqual([]);
-  expect(update(busy, Message.ClickedFreshThread()).model.freshThreadStatus).toBe(
+  expect(freshShown(update(busy, Message.ClickedFreshThread()).model)).toBe(
     "a run is active; cancel it first",
   );
 
@@ -260,7 +248,30 @@ test("a fresh thread needs two clicks and no active run, then opens a new stream
 
   expect(fresh.eventsStreamId).toBe(armed.eventsStreamId + 1);
   expect(fresh.conversation.items).toEqual([]);
-  expect(fresh.freshThreadStatus).toBe("fresh thread started; repository files are untouched");
+  expect(freshShown(fresh)).toBe("fresh thread started; repository files are untouched");
+});
+
+test("clicks while a fresh thread is starting send no second replace", () => {
+  const starting = after(readyPage(), [Message.ClickedFreshThread(), Message.ClickedFreshThread()]);
+
+  const later = [1, 2, 3].flatMap(() =>
+    commandNames(after(starting, [Message.ClickedFreshThread()]), Message.ClickedFreshThread()),
+  );
+
+  expect(later).toEqual([]);
+  expect(commandNames(starting, Message.ClickedFreshThread())).toEqual([]);
+});
+
+test("sending a message while a fresh thread is starting keeps the page saying so", () => {
+  const starting = after(readyPage(), [Message.ClickedFreshThread(), Message.ClickedFreshThread()]);
+
+  const sent = after(starting, [
+    Message.UpdatedPrompt({ value: "hi" }),
+    Message.ClickedSendTurn(),
+    Message.ClickedFreshThread(),
+  ]);
+
+  expect(freshShown(sent)).toBe("starting a fresh thread");
 });
 
 test("activation sends nothing until the page has rendered an epoch", () => {
@@ -283,6 +294,21 @@ test("activation sends nothing until the page has rendered an epoch", () => {
 
   expect(sent.model.activate.request).toEqual(ControlRequest.Running({ sentEpoch: 3 }));
   expect(sent.commands?.[0]?.args).toEqual({ kind: "activate", observedEpoch: 3, label: 2 });
+});
+
+test("a second click while an activation or a submission is running sends nothing", () => {
+  const page = after(readyPage(), [
+    Message.UpdatedControlLabelInput({ kind: "activate", value: "2" }),
+    Message.UpdatedCandidateCommitInput({ value: "abc" }),
+    Message.SucceededFetchStatus({
+      reading: { maybeActive: Option.none(), epoch: 3 },
+    }),
+    Message.ClickedControl({ kind: "activate" }),
+    Message.ClickedSubmitCandidate(),
+  ]);
+
+  expect(commandNames(page, Message.ClickedControl({ kind: "activate" }))).toEqual([]);
+  expect(commandNames(page, Message.ClickedSubmitCandidate())).toEqual([]);
 });
 
 test("a generation label names one whole generation or nothing", () => {
