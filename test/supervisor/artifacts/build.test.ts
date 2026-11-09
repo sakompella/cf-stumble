@@ -125,6 +125,23 @@ test("a scratch cleanup the workspace cannot run does not change the build's res
   expect(Result.isSuccess(await built(host))).toBe(true);
 });
 
+test("a scratch cleanup that exits nonzero is logged as scratch left behind and does not change the build's result", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const host = new FakeBuildHost();
+  const build = host.build.bind(host);
+
+  host.build = (request) =>
+    request.kind === "build-discard"
+      ? Promise.resolve({
+          ok: true,
+          result: { kind: "command", stdout: "", stderr: "rm: busy", exitCode: 1 },
+        })
+      : build(request);
+
+  expect(Result.isSuccess(await built(host))).toBe(true);
+  expect(errors.mock.calls.flat().join("\n")).toContain("scratch-left-behind");
+});
+
 test("reports missing and invalid build output as plain typed failures", async () => {
   const missing = new FakeBuildHost();
   missing.output = undefined;
