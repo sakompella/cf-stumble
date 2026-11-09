@@ -27,18 +27,20 @@ function runCurl(name: string, command: string, hosts = "") {
   });
 }
 
-test("curl in the isolate fetches an allowed host through the gateway", async () => {
-  const lines = await runCurl("isolate-curl-allowed", "curl https://github.com/owner/repo");
+test("curl in the isolate fetches any host through the gateway", async () => {
+  const lines = await runCurl("isolate-curl-any-host", "curl https://example.com/");
 
-  expect(lines.join("\n")).toContain("tests have no outbound network: cf-stumble-isolate");
+  expect(lines.join("\n")).toContain("tests have no outbound network: GET no-type anonymous");
   expect(lines.at(-1)).toContain('"outcome":"exited"');
   expect(lines.at(-1)).toContain('"exitCode":0');
 });
 
-test("curl in the isolate is refused for a host outside the allowlist", async () => {
-  const lines = await runCurl("isolate-curl-refused", "curl https://example.com/");
+test("curl in the isolate posts with a body and its headers through the gateway", async () => {
+  const lines = await runCurl("isolate-curl-post", "curl -X POST -d 'a=b' https://example.com/api");
 
-  expect(lines.join("\n")).toContain("is not an allowed host");
+  expect(lines.join("\n")).toContain(
+    "tests have no outbound network: POST application/x-www-form-urlencoded anonymous",
+  );
   expect(lines.at(-1)).toContain('"exitCode":0');
 });
 
@@ -50,7 +52,7 @@ test("curl to api.github.com in the isolate carries the workspace's GitHub token
   );
 
   expect(lines.join("\n")).toContain(
-    "tests have no outbound network: cf-stumble-isolate Bearer ghp_cfstumbleFAKEtokenFAKEtoken0123456789",
+    "tests have no outbound network: GET no-type Bearer ghp_cfstumbleFAKEtokenFAKEtoken0123456789",
   );
 });
 
@@ -61,9 +63,7 @@ test("curl to a host other than api.github.com never carries the GitHub token", 
     "github.com:\n    oauth_token: ghp_cfstumbleFAKEtokenFAKEtoken0123456789\n",
   );
 
-  expect(lines.join("\n")).toContain(
-    "tests have no outbound network: cf-stumble-isolate anonymous",
-  );
+  expect(lines.join("\n")).toContain("tests have no outbound network: GET no-type anonymous");
 });
 
 test("curl to api.github.com without a stored token goes out unauthenticated", async () => {
@@ -72,7 +72,5 @@ test("curl to api.github.com without a stored token goes out unauthenticated", a
     "curl https://api.github.com/repos/owner/repo",
   );
 
-  expect(lines.join("\n")).toContain(
-    "tests have no outbound network: cf-stumble-isolate anonymous",
-  );
+  expect(lines.join("\n")).toContain("tests have no outbound network: GET no-type anonymous");
 });
