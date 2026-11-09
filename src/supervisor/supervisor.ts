@@ -140,7 +140,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     const { connections, serving } = this.#parts;
 
     return runAtEntryPoint(
-      connections.disconnect(projectId, (connected) => serving.release(connected)),
+      connections.disconnect(projectId, (connected, mark) => serving.release(connected, mark)),
     );
   }
 

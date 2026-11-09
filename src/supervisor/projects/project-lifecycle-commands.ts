@@ -69,17 +69,11 @@ function perform(
   });
 }
 
-export function disconnect(
-  effects: LifecycleEffects,
+export function markRemoving(
+  projects: ConnectedProjects,
   projectId: ProjectId,
-): Effect.Effect<Execution> {
-  return Effect.suspend(() =>
-    execute(
-      effects,
-      projectId,
-      effects.projects.apply(projectId, LifecycleEvent.cases.disconnect.make({}))?.commands ?? [],
-    ),
-  );
+): readonly LifecycleCommand[] {
+  return projects.apply(projectId, LifecycleEvent.cases.disconnect.make({}))?.commands ?? [];
 }
 
 export function recover(effects: LifecycleEffects, projectId: ProjectId): Effect.Effect<Execution> {
@@ -95,6 +89,8 @@ export function recover(effects: LifecycleEffects, projectId: ProjectId): Effect
       );
     }
 
-    return state === "removing" ? disconnect(effects, projectId) : Effect.succeed({});
+    return state === "removing"
+      ? execute(effects, projectId, markRemoving(effects.projects, projectId))
+      : Effect.succeed({});
   });
 }

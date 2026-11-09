@@ -5,6 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import type { ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { tenantConnections } from "./tenant-connections.js";
+import { noRunActive } from "./connection-tenant.js";
 import { projectIdOf } from "../../project-fixtures.js";
 
 const NOW = 1_700_000_000_000;
@@ -18,8 +19,6 @@ const PROJECT_ID = projectIdOf("sample-repo-1");
 const REMOVAL = "rm -rf --";
 
 const CLONE = "git clone";
-
-const noRunActive = () => true;
 
 function withConnections<T>(
   name: string,
@@ -153,7 +152,7 @@ test("a disconnect waits for the run check until an earlier connection has settl
       connections.disconnect(PROJECT_ID, () => {
         runChecked = true;
 
-        return false;
+        return Effect.succeed(null);
       }),
     );
 

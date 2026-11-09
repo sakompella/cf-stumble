@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { ConnectedProjects } from "./connected-projects.js";
-import { disconnect, execute, recover } from "./project-lifecycle-commands.js";
+import { execute, markRemoving, recover } from "./project-lifecycle-commands.js";
 import { ProjectLifecycleQueue } from "./project-lifecycle-queue.js";
 import type { GitHubConnection, GitHubConnectionStatus } from "./github-connection.js";
 import {
@@ -26,7 +26,10 @@ export type DisconnectRepositoryResult =
       }>;
     }>;
 
-type ReleaseProject = (projectId: ProjectId) => boolean;
+type ReleaseProject = <Marked>(
+  projectId: ProjectId,
+  mark: () => Marked,
+) => Effect.Effect<Readonly<{ marked: Marked }> | null>;
 
 type ConnectRepositoryProblem = Readonly<{
   code:
@@ -152,11 +155,13 @@ export class ProjectConnections {
             return { ok: false, problem: { code: "unknown-project-id" } } as const;
           }
 
-          if (!release(parsed)) {
+          const released = yield* release(parsed, () => markRemoving(this.projects, parsed));
+
+          if (released === null) {
             return { ok: false, problem: { code: "run-active" } } as const;
           }
 
-          const settled = yield* disconnect(this.effects(), parsed);
+          const settled = yield* execute(this.effects(), parsed, released.marked);
 
           return {
             ok: true,

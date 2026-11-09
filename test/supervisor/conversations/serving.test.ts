@@ -21,13 +21,14 @@ const SCRIPTED_COMMITS = [
   "d0d0000000000000000000000000000000000002",
 ] as const;
 
-function scriptedFacet(harnessCommit: string): string {
+function scriptedFacet(harnessCommit: string, attachDelayMs = 0): string {
   return `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
   ${FACET_COMPATIBILITY_METHOD}
   fetch() { return new Response("ready"); }
   async attach(host) {
+    await new Promise((resume) => setTimeout(resume, ${attachDelayMs}));
     const refusals = this.ctx.storage.kv.get("refuse-attach") ?? 0;
     if (refusals > 0) {
       this.ctx.storage.kv.put("refuse-attach", refusals - 1);
@@ -69,16 +70,27 @@ export class MainFacet extends DurableObject {
 async function readyScripted(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
+  attachDelayMs = 0,
 ): Promise<number> {
   const label = await submitCandidate(control, harnessCommit);
-  await prepareWithModuleMap(control, label, artifact(harnessCommit, scriptedFacet(harnessCommit)));
+  await prepareWithModuleMap(
+    control,
+    label,
+    artifact(harnessCommit, scriptedFacet(harnessCommit, attachDelayMs)),
+  );
 
   return label;
 }
 
-async function servingScripted(name: string): Promise<DurableObjectStub<Supervisor>> {
+async function servingScripted(
+  name: string,
+  attachDelayMs = 0,
+): Promise<DurableObjectStub<Supervisor>> {
   const control = await connectedSupervisor(name);
-  await activateGeneration(control, await readyScripted(control, SCRIPTED_COMMITS[0]));
+  await activateGeneration(
+    control,
+    await readyScripted(control, SCRIPTED_COMMITS[0], attachDelayMs),
+  );
 
   return control;
 }
@@ -252,4 +264,15 @@ test("an alarm whose attach fails throws, so the platform retries it, and the re
     runInDurableObject(control, (instance) => instance.alarm()),
   ).resolves.toBeUndefined();
   expect(await alarm(control)).not.toBeNull();
+});
+
+test("a message that was checked before its project was disconnected does not give the project a new conversation", async () => {
+  const control = await servingScripted("conversations-disconnect-race", 200);
+
+  const submitting = control.submitProjectMessage("sample-project-one", "hello", "r1");
+  const disconnecting = control.disconnectProject("sample-project-one");
+
+  expect((await disconnecting).ok).toBe(true);
+  expect(await submitting).toEqual({ ok: false, problem: { code: "unknown-project-id" } });
+  expect(await conversationOf(control, "sample-project-one")).toBeUndefined();
 });
