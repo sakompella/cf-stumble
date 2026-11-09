@@ -15,7 +15,7 @@ const commit = testHarnessCommit("7000000000000000000000000000000000000001");
 
 test("a module map larger than the output limits arrives whole, through the workspace filesystem", async () => {
   await runInDurableObject(env.SUPERVISOR.getByName("build-output"), async (_instance, state) => {
-    const operations = await operationsOverPublishedModuleMap(state);
+    const operations = await operationsOverPublishedModuleMap(state, commit);
 
     const answered = await Effect.runPromise(
       executeHarnessBuildRequest({

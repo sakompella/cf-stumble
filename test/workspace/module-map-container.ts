@@ -5,7 +5,12 @@ import {
   newHarnessPermit,
 } from "../../src/workspace/computer-operations.js";
 import { computerStorage } from "../../src/workspace/workspace-platform.js";
-import { HARNESS_BUILD_OUTPUT_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
+import type { HarnessCommit } from "../../src/harness-commit.js";
+import {
+  HARNESS_BUILD_OUTPUT_DIRECTORY,
+  harnessBuildOutputPath,
+  WORKSPACE_ROOT,
+} from "../../src/workspace-layout.js";
 
 type Connection = Awaited<ReturnType<WorkspaceBackend["connect"]>>;
 
@@ -90,7 +95,7 @@ function publishingSync(published: readonly ChangeEntry[], fileBytes: Uint8Array
   };
 }
 
-async function publishedEntries(): Promise<readonly ChangeEntry[]> {
+async function publishedEntries(harnessCommit: HarnessCommit): Promise<readonly ChangeEntry[]> {
   const fileBytes = new TextEncoder().encode(oversizedModuleMap);
 
   const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", fileBytes));
@@ -100,14 +105,14 @@ async function publishedEntries(): Promise<readonly ChangeEntry[]> {
     {
       kind: "dir",
       rev: 1,
-      path: HARNESS_BUILD_OUTPUT_PATH.slice(0, HARNESS_BUILD_OUTPUT_PATH.lastIndexOf("/")),
+      path: HARNESS_BUILD_OUTPUT_DIRECTORY,
       mode: 0o755,
       mtime: 1,
     },
     {
       kind: "file",
       rev: 1,
-      path: HARNESS_BUILD_OUTPUT_PATH,
+      path: harnessBuildOutputPath(harnessCommit),
       mode: 0o644,
       mtime: 1,
       size: fileBytes.byteLength,
@@ -118,9 +123,10 @@ async function publishedEntries(): Promise<readonly ChangeEntry[]> {
 
 export async function operationsOverPublishedModuleMap(
   state: DurableObjectState,
+  harnessCommit: HarnessCommit,
 ): Promise<ComputerWorkspaceOperations> {
   const fileBytes = new TextEncoder().encode(oversizedModuleMap);
-  const published = await publishedEntries();
+  const published = await publishedEntries(harnessCommit);
 
   const workspace = new Workspace({
     storage: computerStorage(state.storage),
