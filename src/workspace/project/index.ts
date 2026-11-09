@@ -4,6 +4,8 @@ export { chosenExecBackend } from "./exec-selection.js";
 
 export { githubTokenFromHosts, workspaceGit } from "./git-fs.js";
 
+export { resolveGlobalOptions } from "./git-cli.js";
+
 export { IsolateEgressGateway } from "./isolate-egress.js";
 
 export { isolateShellBackend } from "./isolate-shell.js";
