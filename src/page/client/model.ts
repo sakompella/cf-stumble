@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import { BackendSetting } from "../../backend-setting.js";
 import { Conversation } from "./conversation.js";
-import { OutboxItem } from "./outbox.js";
+import { Outgoing } from "./outgoing.js";
 
 export const Project = Schema.Struct({
   id: Schema.String,
@@ -117,10 +117,7 @@ export const Model = Schema.Struct({
   conversationState: Schema.String,
   eventsStreamId: Schema.Number,
   conversation: Conversation,
-  outbox: Schema.Array(OutboxItem),
-  sending: Schema.Array(
-    Schema.Struct({ requestId: Schema.String, projectId: Schema.String, text: Schema.String }),
-  ),
+  outgoing: Schema.Array(Outgoing),
   drafts: Schema.Record(Schema.String, Schema.String),
 
   prompt: Schema.String,

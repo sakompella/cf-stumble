@@ -113,9 +113,7 @@ test("sending trims the prompt, clears it, and posts it under a minted request i
 
   expect(minted.commands?.[0]?.name).toBe("SendMessage");
   expect(minted.commands?.[0]?.args).toEqual(MINTED);
-  expect(minted.model.outbox).toEqual([
-    { requestId: "r1", text: "do it", maybeSubmissionId: Option.none(), afterEntry: 0 },
-  ]);
+  expect(whoShown(minted.model)).toEqual(["you · sending"]);
 });
 
 test("a message sent while a run is active is accepted, shown as queued, then placed", () => {
@@ -131,14 +129,12 @@ test("a message sent while a run is active is accepted, shown as queued, then pl
     conversation(queuedView),
   ]);
 
-  expect(queued.outbox.map((item) => item.maybeSubmissionId)).toEqual([Option.some(5)]);
   expect(whoShown(queued)).toEqual(["you · queued"]);
 
   const placed = after(queued, [
     conversation(running({ items: [entryItem(7, { role: "user", content: "do it" })] })),
   ]);
 
-  expect(placed.outbox).toEqual([]);
   expect(whoShown(placed)).toEqual(["you"]);
 });
 
@@ -152,7 +148,7 @@ test("a reconnect keeps only the sent messages its view still holds queued", () 
     conversation(viewing({ inbox: [{ id: 2, text: "do it" }] })),
   ]);
 
-  expect(page.outbox.map((item) => item.requestId)).toEqual(["queued", "sending"]);
+  expect(page.outgoing.map((item) => item.requestId)).toEqual(["queued", "sending"]);
   expect(page.conversationState).toBe("live");
 });
 
@@ -161,27 +157,19 @@ test("a refused send takes the message out of the transcript, says why, and puts
     Message.RejectedSend({ requestId: "r1", wording: "busy: the workspace is resetting" }),
   ]);
 
-  expect(refused.outbox).toEqual([]);
+  expect(refused.outgoing).toEqual([]);
   expect(refused.runNote).toBe("busy: the workspace is resetting");
   expect(refused.prompt).toBe("do it");
 });
 
-test("a send that never reached the Worker puts the text back too", () => {
-  const failed = after(sentPage(readyPage()).model, [
-    Message.FailedSend({ requestId: "r1", detail: "offline" }),
-  ]);
-
-  expect(failed.prompt).toBe("do it");
-});
-
-test("a failed send puts its text before what the owner typed since, after a blank line", () => {
-  const failed = after(sentPage(readyPage()).model, [
+test("a refused send puts its text before what the owner typed since, after a blank line", () => {
+  const refused = after(sentPage(readyPage()).model, [
     Message.UpdatedPrompt({ value: "newer" }),
-    Message.FailedSend({ requestId: "r1", detail: "offline" }),
+    Message.RejectedSend({ requestId: "r1", wording: "busy" }),
   ]);
 
-  expect(failed.prompt).toBe("do it\n\nnewer");
-  expect(failed.outbox).toEqual([]);
+  expect(refused.prompt).toBe("do it\n\nnewer");
+  expect(refused.outgoing).toEqual([]);
 });
 
 test("two refused sends both keep their text in the prompt", () => {
@@ -192,7 +180,7 @@ test("two refused sends both keep their text in the prompt", () => {
   ]);
 
   expect(refused.prompt).toBe("then this\n\ndo it");
-  expect(refused.outbox).toEqual([]);
+  expect(refused.outgoing).toEqual([]);
 });
 
 const noteAfterRun = (ending: Conversation) => {

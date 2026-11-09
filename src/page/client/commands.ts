@@ -189,7 +189,10 @@ export const SendMessage = Command.define("SendMessage", {
       Effect.map((answer) =>
         Option.match(sentMessage(answer.payload), {
           onSome: ({ submissionId }) => Message.SucceededSend({ requestId, submissionId }),
-          onNone: () => Message.RejectedSend({ requestId, wording: sendRefusalText(answer) }),
+          onNone: () =>
+            answer.status >= 500
+              ? Message.FailedSend({ requestId, detail: sendRefusalText(answer) })
+              : Message.RejectedSend({ requestId, wording: sendRefusalText(answer) }),
         }),
       ),
       Effect.catch((detail) => Effect.succeed(Message.FailedSend({ requestId, detail }))),

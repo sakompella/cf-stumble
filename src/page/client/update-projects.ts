@@ -12,6 +12,7 @@ import {
 } from "./commands.js";
 import type { GitHubReport, Model, Project } from "./model.js";
 import { EMPTY_CONVERSATION } from "./conversation.js";
+import { withoutQueued } from "./outgoing.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 export { backendHandlers, FetchBackend } from "./update-backend.js";
@@ -57,7 +58,7 @@ function selectProject(model: Model, project: Project): UpdateReturn {
       runNote: "",
       freshThreadStatus: "",
       conversation: EMPTY_CONVERSATION,
-      outbox: [],
+      outgoing: withoutQueued(model.outgoing),
       conversationState: "reading",
     },
   };

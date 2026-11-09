@@ -2,6 +2,7 @@ import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
 import type { PiMessage } from "../../../src/page/client/pi-message.js";
+import { Outgoing } from "../../../src/page/client/outgoing.js";
 import { boundedLines, transcriptOf } from "../../../src/page/client/transcript.js";
 import { entryItem } from "./views.js";
 
@@ -41,7 +42,7 @@ test("a conversation shows its text, fills each tool call's block with its resul
     toolResult,
   );
 
-  expect(transcriptOf(conversation, [])).toMatchObject([
+  expect(transcriptOf(conversation, [], "repo")).toMatchObject([
     { _tag: "Text", role: "user", who: "you", text: "hi" },
     { _tag: "Text", role: "assistant", text: "ab" },
     { _tag: "Tool", toolCallId: "t", summary: "read — done", isFailed: false },
@@ -54,7 +55,7 @@ test("an answer that holds only tool calls adds no empty entry, and a running ca
     tools: [{ callId: "t", name: "read", status: "running", output: "so far" }],
   };
 
-  expect(transcriptOf(conversation, [])).toMatchObject([
+  expect(transcriptOf(conversation, [], "repo")).toMatchObject([
     { _tag: "Text", role: "user" },
     {
       _tag: "Tool",
@@ -70,7 +71,7 @@ test("an answer Workers AI gave after ChatGPT's usage limit is preceded by a not
     diagnostics: [{ type: "provider-fallback" }],
   });
 
-  expect(transcriptOf(conversation, [])).toMatchObject([
+  expect(transcriptOf(conversation, [], "repo")).toMatchObject([
     {
       role: "system",
       who: "notice",
@@ -86,7 +87,7 @@ test("an aborted or failed answer ends with what stopped it", () => {
     errorMessage: "model-call-limit",
   });
 
-  expect(transcriptOf(conversation, [])).toMatchObject([
+  expect(transcriptOf(conversation, [], "repo")).toMatchObject([
     { _tag: "Terminal", wording: "cancelled", isProblem: true },
     { _tag: "Terminal", wording: "failed: model-call-limit", isProblem: true },
   ]);
@@ -98,16 +99,25 @@ test("the streaming answer and the messages this page has not seen placed follow
     maybePartial: Option.some(answer([{ type: "text", text: "Hel" }], "pending")),
   };
 
-  const outbox = [
-    { requestId: "a", text: "queued one", maybeSubmissionId: Option.some(9), afterEntry: 0 },
-    { requestId: "b", text: "sending one", maybeSubmissionId: Option.none(), afterEntry: 0 },
+  const outgoing = [
+    Outgoing.Queued({
+      requestId: "a",
+      projectId: "repo",
+      text: "queued one",
+      afterEntry: 0,
+      submissionId: 9,
+    }),
+    Outgoing.Sending({ requestId: "b", projectId: "repo", text: "sending one", afterEntry: 0 }),
+    Outgoing.Unconfirmed({ requestId: "c", projectId: "repo", text: "lost one", afterEntry: 0 }),
+    Outgoing.Sending({ requestId: "d", projectId: "other", text: "elsewhere", afterEntry: 0 }),
   ];
 
-  expect(transcriptOf(conversation, outbox)).toMatchObject([
+  expect(transcriptOf(conversation, outgoing, "repo")).toMatchObject([
     { who: "you", text: "first" },
     { who: "assistant", text: "Hel" },
     { who: "you · queued", text: "queued one" },
     { who: "you · sending", text: "sending one" },
+    { _tag: "Unconfirmed", requestId: "c", text: "lost one" },
   ]);
 });
 

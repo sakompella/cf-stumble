@@ -28,6 +28,7 @@ export const Message = defineMessageUnion({
   PressedSendShortcut: {},
   ClickedCancelTurn: {},
   ClickedFreshThread: {},
+  ClickedRetrySend: { requestId: Schema.String },
 
   ClickedRefreshStatus: {},
   UpdatedCandidateCommitInput: { value: Schema.String },

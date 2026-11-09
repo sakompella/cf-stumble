@@ -56,7 +56,7 @@ export function pageShowing(conversation: Conversation): Model {
 }
 
 export function whoShown(model: Model): readonly string[] {
-  return transcriptOf(model.conversation, model.outbox).map((entry) =>
+  return transcriptOf(model.conversation, model.outgoing, "repo").map((entry) =>
     entry._tag === "Text" ? entry.who : entry._tag,
   );
 }

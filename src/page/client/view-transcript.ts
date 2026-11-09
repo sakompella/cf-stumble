@@ -98,6 +98,24 @@ function terminalRow(
   );
 }
 
+function unconfirmedRow(
+  requestId: string,
+  text: string,
+  key: string,
+  h: HtmlBuilder<Message>,
+): Html {
+  return entry(
+    "user",
+    "you · not confirmed",
+    [
+      h.pre([h.Class("text")], [text]),
+      h.button([h.Type("button"), h.OnClick(Message.ClickedRetrySend({ requestId }))], ["Retry"]),
+    ],
+    key,
+    h,
+  );
+}
+
 function loadRow(label: string, onClick: Message, key: string, h: HtmlBuilder<Message>): Html {
   return h.li(
     [h.Key(key), h.Class(`${CLASS.message} load`)],
@@ -114,6 +132,7 @@ function entryView(item: TranscriptEntry, index: number, h: HtmlBuilder<Message>
     Text: ({ role, who, text }) => lazyRow(key, textRow, [role, who, text, key, h]),
     Tool: ({ summary, isFailed, maybeOutput }) =>
       lazyRow(key, toolRow, [summary, isFailed, Option.getOrUndefined(maybeOutput), key, h]),
+    Unconfirmed: ({ requestId, text }) => lazyRow(key, unconfirmedRow, [requestId, text, key, h]),
     Terminal: ({ wording, isProblem }) => lazyRow(key, terminalRow, [wording, isProblem, key, h]),
     Earlier: () => loadRow("Load earlier messages", Message.ClickedLoadEarlier(), key, h),
     Gap: ({ itemIndex }) =>

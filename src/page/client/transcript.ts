@@ -3,7 +3,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import type { Conversation } from "./conversation.js";
-import { undisplayedOutbox, type OutboxItem } from "./outbox.js";
+import { Outgoing, undisplayedOutgoing } from "./outgoing.js";
 import { blocksText, type AssistantMessage, type PiMessage } from "./pi-message.js";
 
 export const TranscriptEntry = defineTaggedUnion({
@@ -14,6 +14,7 @@ export const TranscriptEntry = defineTaggedUnion({
     maybeOutput: Schema.Option(Schema.String),
     isFailed: Schema.Boolean,
   },
+  Unconfirmed: { requestId: Schema.String, text: Schema.String },
   Terminal: { wording: Schema.String, isProblem: Schema.Boolean },
   Earlier: {},
   Gap: { itemIndex: Schema.Number },
@@ -170,22 +171,29 @@ function addMessage(
   }
 }
 
-function waitingRows(conversation: Conversation, outbox: readonly OutboxItem[]) {
+function waitingRow(item: Outgoing): TranscriptEntry {
+  return Outgoing.match<TranscriptEntry>(item, {
+    Sending: ({ text }) => textEntry("user", "you · sending", text),
+    Unconfirmed: ({ requestId, text }) => TranscriptEntry.Unconfirmed({ requestId, text }),
+    Queued: ({ text }) => textEntry("user", "you · queued", text),
+  });
+}
+
+function waitingRows(
+  conversation: Conversation,
+  outgoing: readonly Outgoing[],
+  projectId: string,
+): readonly TranscriptEntry[] {
   return [
     ...conversation.inbox.map(({ text }) => textEntry("user", "you · queued", text)),
-    ...undisplayedOutbox(conversation, outbox).map((item) =>
-      textEntry(
-        "user",
-        Option.isSome(item.maybeSubmissionId) ? "you · queued" : "you · sending",
-        item.text,
-      ),
-    ),
+    ...undisplayedOutgoing(conversation, outgoing, projectId).map(waitingRow),
   ];
 }
 
 export function transcriptOf(
   conversation: Conversation,
-  outbox: readonly OutboxItem[],
+  outgoing: readonly Outgoing[],
+  projectId: string,
 ): readonly TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   const toolBlocks = new Map<string, number>();
@@ -208,6 +216,6 @@ export function transcriptOf(
 
   return [
     ...entries.map((entry) => withLiveOutput(entry, conversation)),
-    ...waitingRows(conversation, outbox),
+    ...waitingRows(conversation, outgoing, projectId),
   ];
 }

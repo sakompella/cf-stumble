@@ -84,19 +84,27 @@ test("a tab whose conversation was replaced starts its transcript over, and a la
   expect(ids(viewReader(held)(viewLine(2, [entry(20, 2)])))).toEqual([20]);
 });
 
-test("a page showing a replaced conversation drops the old one's unsent messages and note", () => {
-  const listed = update(init().model, Message.SucceededFetchProjects({ projects: [] })).model;
+test("a page showing a replaced conversation drops the old one's queued messages and note", () => {
+  const listed = update(
+    init().model,
+    Message.SucceededFetchProjects({
+      projects: [
+        { id: "repo", displayName: "repo", isHarness: false, location: "/workspace/repo" },
+      ],
+    }),
+  ).model;
 
   const old = update(listed, received(listed, viewing({ maybeId: Option.some(1) }))).model;
 
-  const unsent = {
-    ...old,
-    runNote: "stopped: aborted",
-    outbox: [{ requestId: "r", text: "hi", maybeSubmissionId: Option.none(), afterEntry: 0 }],
-  };
+  const queued = [
+    Message.MintedRequestId({ projectId: "repo", requestId: "r", content: "hi" }),
+    Message.SucceededSend({ requestId: "r", submissionId: 4 }),
+  ].reduce((model, message) => update(model, message).model, old);
+
+  const unsent = { ...queued, runNote: "stopped: aborted" };
 
   const replaced = update(unsent, received(unsent, viewing({ maybeId: Option.some(2) }))).model;
 
-  expect(replaced.outbox).toEqual([]);
+  expect(replaced.outgoing).toEqual([]);
   expect(replaced.runNote).toBe("");
 });

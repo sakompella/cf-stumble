@@ -2,7 +2,13 @@ import * as Option from "effect/Option";
 import { AbortRun, FetchChatGPT, MintRequestId, ReplaceThread, SendMessage } from "./commands.js";
 import { EMPTY_CONVERSATION, newestEntryId, type Conversation } from "./conversation.js";
 import type { Model } from "./model.js";
-import { unseenOutbox, type OutboxItem } from "./outbox.js";
+import {
+  advanceRequest,
+  Outgoing,
+  OutgoingEvent,
+  settledOutgoing,
+  withoutQueued,
+} from "./outgoing.js";
 import { transcriptHandlers } from "./update-transcript.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
@@ -24,10 +30,6 @@ function send(model: Model): UpdateReturn {
   };
 }
 
-function withoutRequest(model: Model, requestId: string): Model {
-  return { ...model, outbox: model.outbox.filter((item) => item.requestId !== requestId) };
-}
-
 function textAbove(text: string, rest: string): string {
   return rest === "" ? text : `${text}\n\n${rest}`;
 }
@@ -41,15 +43,34 @@ function withTextRestored(model: Model, projectId: string, text: string): Model 
       };
 }
 
-function withUnsentRequestInPrompt(model: Model, requestId: string): Model {
-  const unsent = model.sending.find((item) => item.requestId === requestId);
+function advanced(model: Model, requestId: string, event: OutgoingEvent): Model {
+  const step = advanceRequest(model.outgoing, requestId, event);
+  const next = { ...model, outgoing: step.outgoing };
 
-  const kept = {
-    ...withoutRequest(model, requestId),
-    sending: model.sending.filter((item) => item.requestId !== requestId),
-  };
+  return Option.isSome(step.before) && Option.isNone(step.after)
+    ? withTextRestored(next, step.before.value.projectId, step.before.value.text)
+    : next;
+}
 
-  return unsent === undefined ? kept : withTextRestored(kept, unsent.projectId, unsent.text);
+function retried(model: Model, requestId: string): UpdateReturn {
+  const step = advanceRequest(model.outgoing, requestId, OutgoingEvent.Retried());
+
+  return Option.match(step.before, {
+    onNone: () => ({ model }),
+    onSome: (before) =>
+      Outgoing.guards.Unconfirmed(before)
+        ? {
+            model: { ...clearError(model), outgoing: step.outgoing, runNote: "" },
+            commands: [
+              SendMessage({
+                projectId: before.projectId,
+                requestId,
+                content: before.text,
+              }),
+            ],
+          }
+        : { model },
+  });
 }
 
 function runEndNote(previous: Conversation, next: Conversation): Option.Option<string> {
@@ -70,21 +91,16 @@ function isReplacement(previous: Conversation, next: Conversation): boolean {
   return Option.isSome(previous.maybeId) && !Option.contains(next.maybeId, previous.maybeId.value);
 }
 
-function settledOutbox(model: Model, conversation: Conversation): readonly OutboxItem[] {
-  return unseenOutbox(conversation, model.outbox).filter((item) =>
-    Option.match(item.maybeSubmissionId, {
-      onNone: () => true,
-      onSome: (id) =>
-        conversation.isRunning || conversation.inbox.some((queued) => queued.id === id),
-    }),
-  );
-}
-
 function receivedConversation(held: Model, conversation: Conversation): UpdateReturn {
   const replaced = isReplacement(held.conversation, conversation);
 
   const model = replaced
-    ? { ...held, conversation: EMPTY_CONVERSATION, outbox: [], runNote: "" }
+    ? {
+        ...held,
+        conversation: EMPTY_CONVERSATION,
+        outgoing: withoutQueued(held.outgoing),
+        runNote: "",
+      }
     : held;
 
   const note = runEndNote(model.conversation, conversation);
@@ -95,7 +111,10 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
       ...model,
       conversation,
       conversationState: "live",
-      outbox: settledOutbox(model, conversation),
+      outgoing: Option.match(model.maybeProjectId, {
+        onNone: () => model.outgoing,
+        onSome: (projectId) => settledOutgoing(conversation, model.outgoing, projectId),
+      }),
       runNote: Option.getOrElse(note, () => model.runNote),
     },
     commands: ended && model.chatgpt.isConnected ? [FetchChatGPT()] : [],
@@ -144,32 +163,43 @@ function mintedRequest(
     return { model: withTextRestored(model, projectId, content) };
   }
 
-  const item = {
+  const item = Outgoing.Sending({
     requestId,
+    projectId,
     text: content,
-    maybeSubmissionId: Option.none(),
     afterEntry: newestEntryId(model.conversation),
-  };
+  });
 
   return {
-    model: {
-      ...model,
-      runNote: "",
-      outbox: [...model.outbox, item],
-      sending: [...model.sending, { requestId, projectId, text: content }],
-    },
+    model: { ...model, runNote: "", outgoing: [...model.outgoing, item] },
     commands: [SendMessage({ projectId, requestId, content })],
   };
 }
 
-function withSubmissionId(model: Model, requestId: string, submissionId: number): Model {
+function sendResultHandlers(
+  model: Model,
+): Handlers<
+  "ClickedRetrySend" | "MintedRequestId" | "SucceededSend" | "RejectedSend" | "FailedSend"
+> {
   return {
-    ...model,
-    outbox: model.outbox.map((item) =>
-      item.requestId === requestId
-        ? { ...item, maybeSubmissionId: Option.some(submissionId) }
-        : item,
-    ),
+    MintedRequestId: (minted) => mintedRequest(model, minted),
+    ClickedRetrySend: ({ requestId }) => retried(model, requestId),
+    SucceededSend: ({ requestId, submissionId }) => ({
+      model: advanced(model, requestId, OutgoingEvent.Admitted({ submissionId })),
+    }),
+    RejectedSend: ({ requestId, wording }) => ({
+      model: { ...advanced(model, requestId, OutgoingEvent.Refused()), runNote: wording },
+    }),
+    FailedSend: ({ requestId, detail }) => ({
+      model: {
+        ...withError(
+          advanced(model, requestId, OutgoingEvent.Lost()),
+          "the message request",
+          detail,
+        ),
+        runNote: "not confirmed: retry it in the conversation",
+      },
+    }),
   };
 }
 
@@ -179,6 +209,7 @@ export function composerHandlers(
   | "UpdatedPrompt"
   | "ClickedSendTurn"
   | "PressedSendShortcut"
+  | "ClickedRetrySend"
   | "MintedRequestId"
   | "SucceededSend"
   | "RejectedSend"
@@ -192,22 +223,7 @@ export function composerHandlers(
     UpdatedPrompt: ({ value }) => ({ model: { ...model, prompt: value } }),
     ClickedSendTurn: () => send(model),
     PressedSendShortcut: () => send(model),
-    MintedRequestId: (minted) => mintedRequest(model, minted),
-    SucceededSend: ({ requestId, submissionId }) => ({
-      model: {
-        ...withSubmissionId(model, requestId, submissionId),
-        sending: model.sending.filter((item) => item.requestId !== requestId),
-      },
-    }),
-    RejectedSend: ({ requestId, wording }) => ({
-      model: { ...withUnsentRequestInPrompt(model, requestId), runNote: wording },
-    }),
-    FailedSend: ({ requestId, detail }) => ({
-      model: {
-        ...withError(withUnsentRequestInPrompt(model, requestId), "the message request", detail),
-        runNote: "not sent",
-      },
-    }),
+    ...sendResultHandlers(model),
     ClickedCancelTurn: () =>
       Option.match(model.maybeProjectId, {
         onNone: () => ({ model }),
@@ -229,7 +245,7 @@ function freshThread(model: Model): Model {
     ...model,
     eventsStreamId: model.eventsStreamId + 1,
     conversation: EMPTY_CONVERSATION,
-    outbox: [],
+    outgoing: withoutQueued(model.outgoing),
     conversationState: "reading",
     runNote: "",
     freshThreadStatus: "fresh thread started; repository files are untouched",
