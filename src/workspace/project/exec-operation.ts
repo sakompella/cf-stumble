@@ -9,7 +9,9 @@ import {
 import { enqueueEvent, enqueueOutput } from "./exec-framing.js";
 import type { ExecBackendChoice, ExecEvent } from "./protocol.js";
 
-type TerminalEvent = Extract<ExecEvent, { kind: "terminal" }>;
+export type TerminalEvent = Extract<ExecEvent, { kind: "terminal" }>;
+
+export type SettleListener = (terminal: TerminalEvent) => void;
 
 export interface ExecOperation {
   readonly events: ReadableStream<Uint8Array>;
@@ -35,7 +37,7 @@ function resumePump(state: SettleState): void {
 function settle(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
-  onSettle: () => void,
+  onSettle: SettleListener,
   outcome: TerminalEvent,
   killBackend: boolean,
 ): void {
@@ -68,7 +70,7 @@ function settle(
     void state.handle.kill().catch(() => {});
   }
 
-  onSettle();
+  onSettle(outcome);
 }
 
 function failed(
@@ -176,7 +178,7 @@ async function pumpBackendEvents(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
   handle: ExecBackendHandle,
-  onSettle: () => void,
+  onSettle: SettleListener,
 ): Promise<void> {
   const decoders: Decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
 
@@ -218,7 +220,7 @@ function startBackendExec(
 function armTimeout(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
-  onSettle: () => void,
+  onSettle: SettleListener,
   timeoutMs: number,
   timeoutEndsTurn: boolean,
 ): void {
@@ -238,7 +240,7 @@ function watchBackendExec(
   controller: ReadableStreamDefaultController<Uint8Array>,
   execBackend: ExecBackend,
   input: ExecBackendInput,
-  onSettle: () => void,
+  onSettle: SettleListener,
 ): void {
   startBackendExec(execBackend, input).then(
     (handle) => {
@@ -269,7 +271,7 @@ function watchBackendExec(
 export function startExecOperation(
   execBackend: ExecBackend,
   input: ExecBackendInput,
-  onSettle: () => void,
+  onSettle: SettleListener,
   timeoutEndsTurn = false,
 ): ExecOperation {
   const state: SettleState = {
