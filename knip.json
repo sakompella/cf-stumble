@@ -23,6 +23,7 @@
     "src/selectable-projects.ts": ["exports"],
     "src/stumble-cli/orb/tunnel.ts": ["exports", "types"],
     "src/supervisor/readiness/provisioning.ts": ["exports"],
+    "src/workspace-command-timeout.ts": ["exports"],
     "src/workspace/commands/build-harness.ts": ["exports", "types"],
     "src/workspace/commands/provision-project.ts": ["exports"],
     "src/workspace/commands/remove-project.ts": ["exports"],

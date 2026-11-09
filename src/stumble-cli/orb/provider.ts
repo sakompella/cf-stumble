@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { Server } from "node:net";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -194,7 +193,7 @@ export class OrbProvider {
           ),
         ),
         Effect.flatMap((address) => {
-          const launch = { runtime: randomUUID(), container: job.container, address };
+          const launch = { runtime: crypto.randomUUID(), container: job.container, address };
           this.#launch = launch;
 
           return Effect.forkDetach(this.#watch(launch, send)).pipe(Effect.as(launch.runtime));
