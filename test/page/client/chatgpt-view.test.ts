@@ -5,7 +5,7 @@ import { chatGPTConnection } from "../../../src/page/client/api.js";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
-import type { ChatGPTConnection } from "../../../src/page/client/model.js";
+import type { ChatGPT } from "../../../src/page/client/chatgpt.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
 
@@ -41,7 +41,7 @@ function findById(node: Rendered | string, id: string): Rendered | undefined {
     : (node.children ?? []).map((child) => findById(child, id)).find(Predicate.isNotUndefined);
 }
 
-function rendered(chatgpt: ChatGPTConnection): (id: string) => Rendered | undefined {
+function rendered(chatgpt: ChatGPT): (id: string) => Rendered | undefined {
   let html: Rendered | undefined;
 
   Scene.scene(
@@ -75,7 +75,7 @@ test("the sidebar offers one way forward for each state", () => {
     disconnect: ID.chatgptDisconnectButton,
   };
 
-  const offered = (chatgpt: ChatGPTConnection) => {
+  const offered = (chatgpt: ChatGPT) => {
     const find = rendered(chatgpt);
 
     return Object.entries(controls)

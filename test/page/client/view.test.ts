@@ -4,10 +4,10 @@ import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
-import type { ChatGPTConnection, Model } from "../../../src/page/client/model.js";
+import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
-import { entryItem, followResolved, pageShowing, running } from "./views.js";
+import { entryItem, followResolved, pageShowing, running, withChatGPT } from "./views.js";
 
 type Rendered = NonNullable<ReturnType<typeof view>>;
 
@@ -80,19 +80,15 @@ function idsRendered(model: Model): readonly string[] {
   return ids;
 }
 
-function withChatGPT(chatgpt: ChatGPTConnection): Model {
-  return update(init().model, Message.SucceededChatGPT({ chatgpt })).model;
-}
-
 test("the page renders every stable element id, and none twice", () => {
   const pages = [
     shownWithDiagnostics(),
     withChatGPT({
-      connection: "not connected",
-      isConnected: false,
-      maybeLogin: Option.some({ attemptId: "a", authorizeUrl: "https://auth.example/authorize" }),
+      connection: { state: "disconnected" },
+      login: { attemptId: "a", authorizeUrl: "https://auth.example/authorize" },
+      model: "gpt",
     }),
-    withChatGPT({ connection: "connected", isConnected: true, maybeLogin: Option.none() }),
+    withChatGPT({ connection: { state: "connected" }, login: null, model: "gpt" }),
   ].map((model) => idsRendered(model));
 
   for (const id of Object.values(ID)) {

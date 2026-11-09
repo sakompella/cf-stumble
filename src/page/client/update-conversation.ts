@@ -1,4 +1,5 @@
 import * as Option from "effect/Option";
+import { ChatGPT } from "./chatgpt.js";
 import { AbortRun, FetchChatGPT, MintRequestId, ReplaceThread, SendMessage } from "./commands.js";
 import { advanceFreshThread, FreshThread, FreshThreadEvent, Ground } from "./fresh-thread.js";
 import { EMPTY_CONVERSATION, newestEntryId, type Conversation } from "./conversation.js";
@@ -123,7 +124,7 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
       }),
       runNote: Option.getOrElse(note, () => model.runNote),
     },
-    commands: ended && model.chatgpt.isConnected ? [FetchChatGPT()] : [],
+    commands: ended && ChatGPT.guards.Connected(model.chatgpt) ? [FetchChatGPT()] : [],
   };
 }
 
@@ -132,6 +133,7 @@ export const INITIAL_CONVERSATION = {
   outgoing: [],
   runNote: "",
   freshThread: FreshThread.Idle(),
+  streamPhase: StreamPhase.Idle(),
 } satisfies Partial<Model>;
 
 function groundOf(model: Model): Ground {
@@ -240,18 +242,20 @@ export function composerHandlers(
   };
 }
 
+export function withOpenedStream(model: Model): Model {
+  return {
+    ...model,
+    eventsStreamId: model.eventsStreamId + 1,
+    conversation: EMPTY_CONVERSATION,
+    outgoing: withoutQueued(model.outgoing),
+    streamPhase: StreamPhase.Reading(),
+    freshThread: advanceFreshThread(model.freshThread, FreshThreadEvent.StreamReplaced()).phase,
+    runNote: "",
+  };
+}
+
 function replacedThread(model: Model): UpdateReturn {
-  return withFreshThread(
-    {
-      ...model,
-      eventsStreamId: model.eventsStreamId + 1,
-      conversation: EMPTY_CONVERSATION,
-      outgoing: withoutQueued(model.outgoing),
-      streamPhase: StreamPhase.Reading(),
-      runNote: "",
-    },
-    FreshThreadEvent.Succeeded(),
-  );
+  return withFreshThread(withOpenedStream(model), FreshThreadEvent.Succeeded());
 }
 
 export function streamHandlers(

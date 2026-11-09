@@ -11,8 +11,8 @@ import { Message } from "../../../src/page/client/message.js";
 import { ControlRequest, type Model } from "../../../src/page/client/model.js";
 import { controlLabel } from "../../../src/page/client/update-generation.js";
 import { init, update } from "../../../src/page/client/update.js";
-import { freshShown, streamShown } from "./shown.js";
-import { entryItem, received, running, viewing, whoShown, type Conversation } from "./views.js";
+import { freshShown, streamShown, whoShown } from "./shown.js";
+import { entryItem, received, running, viewing, type Conversation } from "./views.js";
 
 const PROJECTS = [
   { id: "repo", displayName: "hello-world", isHarness: false, location: "https://github.com/o/r" },

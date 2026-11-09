@@ -5,7 +5,8 @@ import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { openedTranscript } from "./transcript-resource.js";
-import { received, viewing, whoShown } from "./views.js";
+import { whoShown } from "./shown.js";
+import { received, viewing } from "./views.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();

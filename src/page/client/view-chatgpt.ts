@@ -1,6 +1,7 @@
 import * as Option from "effect/Option";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
+import { ChatGPT, chatGPTWording, pendingLogin } from "./chatgpt.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
 import { controlRow, valueRow } from "./view-parts.js";
@@ -34,7 +35,7 @@ function buttonRow(
 }
 
 function loginRows(model: Model, h: HtmlBuilder<Message>): readonly Html[] {
-  return Option.match(model.chatgpt.maybeLogin, {
+  return Option.match(pendingLogin(model.chatgpt), {
     onNone: () => [],
     onSome: (login) => [
       h.p(
@@ -57,7 +58,7 @@ function loginRows(model: Model, h: HtmlBuilder<Message>): readonly Html[] {
           label: "address",
           inputId: ID.chatgptCallbackInput,
           isNumber: false,
-          value: model.chatgptCallbackInput,
+          value: login.address,
           onInput: (value) => Message.UpdatedChatGPTCallbackInput({ value }),
           buttonId: ID.chatgptFinishButton,
           buttonText: "Finish",
@@ -74,8 +75,8 @@ export function chatGPTPanel(model: Model, h: HtmlBuilder<Message>): Html {
     [h.Class("sidebar-panel")],
     [
       h.h3([], ["ChatGPT"]),
-      valueRow("connection", ID.chatgptConnection, model.chatgpt.connection, h),
-      ...(model.chatgpt.isConnected
+      valueRow("connection", ID.chatgptConnection, chatGPTWording(model.chatgpt), h),
+      ...(ChatGPT.guards.Connected(model.chatgpt)
         ? [
             buttonRow(
               ID.chatgptDisconnectButton,

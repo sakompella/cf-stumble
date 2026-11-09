@@ -21,7 +21,7 @@ export type Ground = typeof Ground.Type;
 export const FreshThreadEvent = defineTaggedUnion({
   Clicked: { ground: Ground },
   Sent: {},
-  SelectedProject: {},
+  StreamReplaced: {},
   Succeeded: {},
   Refused: { wording: Schema.String },
   Failed: {},
@@ -75,7 +75,7 @@ export function advanceFreshThread(phase: FreshThread, event: FreshThreadEvent):
         Starting: () => stay(phase),
         Told: () => stay(phase),
       }),
-    SelectedProject: () => stay(FreshThread.Idle()),
+    StreamReplaced: () => stay(FreshThread.Idle()),
     Succeeded: () => told("fresh thread started; repository files are untouched"),
     Refused: ({ wording }) => told(`not started: ${wording}`),
     Failed: () => told("request failed"),
