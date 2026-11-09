@@ -195,3 +195,42 @@ test("provisioning on use waits for a failing connection and then finds no proje
     );
   });
 });
+
+test("a clone that fails is removed from the workspace, not only from the catalog", async () => {
+  const workspace = new FakeTenantWorkspace();
+
+  await withConnections("failed-clone-cleanup", workspace, async (connections) => {
+    const clone = workspace.holdNext(CLONE);
+    const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    await clone.reached;
+    clone.release(128);
+
+    await expect(connecting).resolves.toMatchObject({ ok: false });
+    expect(indexOfLast(workspace.commands, REMOVAL)).toBeGreaterThan(
+      indexOfLast(workspace.commands, CLONE),
+    );
+    expect(isConnected(connections)).toBe(false);
+  });
+});
+
+test("a removal that failed is finished when another project connects", async () => {
+  const workspace = new FakeTenantWorkspace();
+
+  await withConnections("failed-removal-retry", workspace, async (connections) => {
+    await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    workspace.commandSync = "incomplete";
+
+    await expect(
+      Effect.runPromise(connections.disconnect(PROJECT_ID, noRunActive)),
+    ).resolves.toMatchObject({ ok: true, workspace: "failed" });
+    expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBe("directory");
+
+    workspace.commandSync = "complete";
+    await Effect.runPromise(
+      connections.connect("https://github.com/sample/repo-2", undefined, NOW),
+    );
+
+    expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBeUndefined();
+    expect(isConnected(connections)).toBe(false);
+  });
+});

@@ -1,13 +1,14 @@
 import * as Effect from "effect/Effect";
 import { ConnectedProjects } from "./connected-projects.js";
+import { disconnect, execute, recover } from "./project-lifecycle-commands.js";
 import { ProjectLifecycleQueue } from "./project-lifecycle-queue.js";
 import type { GitHubConnection, GitHubConnectionStatus } from "./github-connection.js";
 import {
   canonicalRepositoryUrl,
   parseProjectId,
   projectIdForRepository,
-  resolveProject,
   type Project,
+  type ProjectCatalog,
   type ProjectId,
   type PublicRepositoryUrl,
 } from "../../project-catalog.js";
@@ -99,6 +100,8 @@ export class ProjectConnections {
         );
       }
 
+      yield* this.sweep(projectId);
+
       const github = yield* this.github.ensureCredential(now);
 
       if (github.state === "tooling-missing") {
@@ -139,34 +142,47 @@ export class ProjectConnections {
       return Effect.succeed({ ok: false, problem: { code: "invalid-project-id" } });
     }
 
-    return this.lifecycle.exclusive(
-      parsed,
-      Effect.gen({ self: this }, function* () {
-        const resolved = resolveProject(parsed, this.projects.catalog());
+    return Effect.gen({ self: this }, function* () {
+      yield* this.sweep(parsed);
 
-        if (!resolved.ok) {
-          return { ok: false, problem: { code: resolved.reason } } as const;
-        }
+      return yield* this.lifecycle.exclusive(
+        parsed,
+        Effect.gen({ self: this }, function* () {
+          if (this.projects.stateOf(parsed) === undefined) {
+            return { ok: false, problem: { code: "unknown-project-id" } } as const;
+          }
 
-        if (!release(resolved.project.id)) {
-          return { ok: false, problem: { code: "run-active" } } as const;
-        }
+          if (!release(parsed)) {
+            return { ok: false, problem: { code: "run-active" } } as const;
+          }
 
-        this.projects.disconnect(resolved.project.id);
+          const settled = yield* disconnect(this.effects(), parsed);
 
-        const workspace = yield* removeProjectDirectories(
-          this.namespace,
-          this.workspaceName,
-          resolved.project.id,
-        );
-
-        return { ok: true, projectId: resolved.project.id, workspace } as const;
-      }),
-    );
+          return {
+            ok: true,
+            projectId: parsed,
+            workspace: settled.removal ?? "failed",
+          } as const;
+        }),
+      );
+    });
   }
 
   ensureProvisioned(projectId: ProjectId, signal?: AbortSignal) {
-    return this.lifecycle.exclusive(projectId, this.provisionOnUse(projectId, signal));
+    return this.lifecycle.exclusive(
+      projectId,
+      this.provisionOnUse(() => this.projects.catalog(), projectId, signal),
+    );
+  }
+
+  private sweep(except: ProjectId): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      for (const { id } of this.projects.unfinished()) {
+        if (id === except || this.lifecycle.busy(id)) continue;
+
+        yield* this.lifecycle.exclusive(id, recover(this.effects(), id));
+      }
+    });
   }
 
   private store(
@@ -182,17 +198,13 @@ export class ProjectConnections {
         return this.refused({ code: connected.problem.code, detail: "" }, github);
       }
 
-      const provisioned = yield* this.provisionOnUse(connected.project.id);
+      const settled = yield* execute(this.effects(), connected.project.id, connected.commands);
 
-      if (!provisioned.ok) {
-        if (!connected.alreadyConnected) {
-          this.projects.disconnect(connected.project.id);
-        }
-
+      if (settled.provision !== undefined && !settled.provision.ok) {
         return this.refused(
           {
             code:
-              provisioned.problem.code === "repository-too-large"
+              settled.provision.problem.code === "repository-too-large"
                 ? "repository-too-large"
                 : "provisioning-failed",
             detail: "",
@@ -204,20 +216,34 @@ export class ProjectConnections {
       return {
         ok: true,
         project: connected.project,
-        alreadyConnected: connected.alreadyConnected,
+        alreadyConnected: connected.before === "connected",
         github,
         checkedAt: this.github.checkedAt(),
       } as const;
     });
   }
 
-  private provisionOnUse(projectId: ProjectId, signal?: AbortSignal) {
+  private effects() {
+    return {
+      projects: this.projects,
+      provision: (projectId: ProjectId) =>
+        this.provisionOnUse(() => this.projects.provisionable(), projectId),
+      remove: (projectId: ProjectId) =>
+        removeProjectDirectories(this.namespace, this.workspaceName, projectId),
+    };
+  }
+
+  private provisionOnUse(
+    catalog: () => ProjectCatalog,
+    projectId: ProjectId,
+    signal?: AbortSignal,
+  ) {
     return provisionOnUse(
       {
         workspaceName: this.workspaceName,
         namespace: this.namespace,
         github: this.github,
-        catalog: () => this.projects.catalog(),
+        catalog,
       },
       projectId,
       signal,

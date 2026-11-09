@@ -1,8 +1,7 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
-import { ConnectedProjects } from "../../src/supervisor/projects/connected-projects.js";
-import { sampleCatalog } from "../project-fixtures.js";
+import { seedSampleProjects } from "./projects/seed-connected.js";
 import {
   fixtureMainHarnessArtifact,
   fixtureMainHarnessCommit,
@@ -88,14 +87,7 @@ export async function storeModuleMap(input: MainHarnessArtifactInput): Promise<v
 
 export function connectSampleProjects(control: DurableObjectStub<Supervisor>): Promise<void> {
   return runInDurableObject(control, (_instance, state) => {
-    const projects = new ConnectedProjects(state.storage);
-
-    for (const project of sampleCatalog) {
-      projects.connect(
-        { repositoryUrl: project.repositoryUrl, displayName: project.displayName },
-        0,
-      );
-    }
+    seedSampleProjects(state.storage);
   });
 }
 
