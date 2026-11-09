@@ -89,9 +89,45 @@ function command(
         );
       }
 
+      if (result.result.kind !== "command") {
+        return Effect.fail(
+          new BuildWorkspaceRefused({
+            message: `the build workspace answered ${label} with a ${result.result.kind} result`,
+          }),
+        );
+      }
+
       const { stdout, stderr, exitCode } = result.result;
 
       return Effect.succeed({ stdout, stderr, exitCode });
+    }),
+  );
+}
+
+function moduleMapText(
+  workspace: () => WorkspaceHostRpc<"build">,
+  harnessCommit: HarnessCommit,
+): Effect.Effect<string, unknown> {
+  return boundedRpc(
+    () => workspace().build({ kind: "build-output", harnessCommit }),
+    WORKSPACE_RPC_TIMEOUT_MS,
+  ).pipe(
+    Effect.flatMap((result) => {
+      if (!result.ok) {
+        return Effect.fail(
+          new BuildWorkspaceRefused({
+            message: `the build workspace refused the build output: ${result.error.code}`,
+          }),
+        );
+      }
+
+      if (result.result.kind === "module-map") return Effect.succeed(result.result.text);
+
+      return Effect.fail(
+        new BuildWorkspaceRefused({
+          message: "the build wrote no readable module map: the publish step failed",
+        }),
+      );
     }),
   );
 }
@@ -127,23 +163,6 @@ function runStep(
             exitCode: output.exitCode,
             diagnostics: stepDiagnostics(output),
           }),
-    ),
-  );
-}
-
-function moduleMapText(
-  workspace: () => WorkspaceHostRpc<"build">,
-  harnessCommit: HarnessCommit,
-): Effect.Effect<string, unknown> {
-  return command(workspace, { kind: "build-output", harnessCommit }, "the build output").pipe(
-    Effect.flatMap((output) =>
-      output.exitCode === 0
-        ? Effect.succeed(output.stdout)
-        : Effect.fail(
-            new BuildWorkspaceRefused({
-              message: `the build wrote no readable module map: exit ${output.exitCode}`,
-            }),
-          ),
     ),
   );
 }

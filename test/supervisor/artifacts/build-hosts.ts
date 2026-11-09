@@ -27,11 +27,17 @@ export class BuildHost implements WorkspaceHostRpc<"build"> {
   build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
     this.requests.push(request);
     const failed = request.kind === "build-step" && request.step === this.failing;
-    const stdout = request.kind === "build-output" ? builtModuleMapFile : "";
+
+    if (request.kind === "build-output") {
+      return Promise.resolve({
+        ok: true,
+        result: { kind: "module-map", text: builtModuleMapFile },
+      });
+    }
 
     return Promise.resolve({
       ok: true,
-      result: { kind: "command", stdout, stderr: "", exitCode: failed ? 2 : 0 },
+      result: { kind: "command", stdout: "", stderr: "", exitCode: failed ? 2 : 0 },
     });
   }
 

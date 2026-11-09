@@ -9,7 +9,11 @@ import {
 import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js";
 import { invariant } from "../../invariant.js";
 import { shellQuote } from "../../shell-quote.js";
-import { WORKSPACE_ROOT } from "../../workspace-layout.js";
+import {
+  HARNESS_BUILD_OUTPUT_DIRECTORY,
+  HARNESS_BUILD_OUTPUT_PATH,
+  WORKSPACE_ROOT,
+} from "../../workspace-layout.js";
 import type { WorkspaceEffects } from "../operations.js";
 import {
   answerUnavailable,
@@ -120,15 +124,18 @@ export function parseHarnessBuildRequest(
     : { kind: request.kind, harnessCommit };
 }
 
-function readModuleMapSource(plan: HarnessBuildPlan): string {
+function publishModuleMapSource(plan: HarnessBuildPlan): string {
   return [
     "set -eu",
     `path=${shellQuote(plan.moduleMapPath)}`,
+    `output_directory=${shellQuote(HARNESS_BUILD_OUTPUT_DIRECTORY)}`,
+    `output=${shellQuote(HARNESS_BUILD_OUTPUT_PATH)}`,
     'if [ -L "$path" ]; then',
     '  echo "the module map path is a symbolic link" >&2',
     "  exit 3",
     "fi",
-    'cat -- "$path"',
+    'mkdir -p -- "$output_directory"',
+    'cp -- "$path" "$output"',
   ].join("\n");
 }
 
@@ -143,8 +150,8 @@ export function planHarnessBuildRequest(
       kind: "run-command",
       source:
         request.kind === "build-output"
-          ? readModuleMapSource(plan)
-          : `rm -rf -- ${shellQuote(plan.directory)}`,
+          ? publishModuleMapSource(plan)
+          : `rm -rf -- ${shellQuote(plan.directory)} ${shellQuote(HARNESS_BUILD_OUTPUT_DIRECTORY)}`,
       cwd: WORKSPACE_ROOT,
       timeoutMs: configuration.stepTimeoutMs,
     };
@@ -178,6 +185,25 @@ export function executeHarnessBuildRequest(
       ? operations
           .provisionHarness(configuration, parsed.harnessCommit)
           .pipe(Effect.map(commandResult))
-      : executePlan(operations, planHarnessBuildRequest(configuration, parsed)),
+      : parsed.kind === "build-output"
+        ? executePlan(operations, planHarnessBuildRequest(configuration, parsed)).pipe(
+            Effect.flatMap(readPublishedModuleMap(operations)),
+          )
+        : executePlan(operations, planHarnessBuildRequest(configuration, parsed)),
   ).pipe(answerUnavailable(`workspace.harness-build.${parsed.kind}`));
+}
+
+function readPublishedModuleMap(
+  operations: WorkspaceEffects,
+): (result: WorkspaceCommandResult) => Effect.Effect<WorkspaceCommandResult> {
+  return (result) =>
+    result.ok && result.result.kind === "command" && result.result.exitCode === 0
+      ? operations.readFile(HARNESS_BUILD_OUTPUT_PATH).pipe(
+          Effect.map((text): WorkspaceCommandResult => ({
+            ok: true,
+            result: { kind: "module-map", text },
+          })),
+          Effect.orElseSucceed(() => result),
+        )
+      : Effect.succeed(result);
 }

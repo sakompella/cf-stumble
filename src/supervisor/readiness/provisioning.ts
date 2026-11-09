@@ -49,9 +49,13 @@ function commandStep(
   call: () => Promise<WorkspaceCommandResult>,
 ): Effect.Effect<void, ProvisionProblem> {
   return hostStep(context, signal, call).pipe(
-    Effect.flatMap(({ exitCode }) =>
-      exitCode === 0 ? Effect.void : Effect.fail(new ProvisionFailed({ exitCode })),
-    ),
+    Effect.flatMap((result): Effect.Effect<void, ProvisionProblem> => {
+      if (result.kind !== "command") return Effect.fail(new ProvisionUnavailable());
+
+      return result.exitCode === 0
+        ? Effect.void
+        : Effect.fail(new ProvisionFailed({ exitCode: result.exitCode }));
+    }),
   );
 }
 

@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { HARNESS_BUILD_CONFIGURATION, type HarnessBuildRequest } from "../../src/harness-build.js";
 import { executeHarnessBuildRequest } from "../../src/workspace/commands/build-harness.js";
+import { HARNESS_BUILD_OUTPUT_PATH } from "../../src/workspace-layout.js";
 import {
   workspaceEffects,
   type PromiseOperations,
@@ -107,28 +108,39 @@ test("a build step that cannot run is one workspace-unavailable failure", async 
   ).resolves.toEqual({ ok: false, error: { code: "workspace-unavailable" } });
 });
 
-test("reads the module map the build wrote, through the shell that wrote it", async () => {
+test("publishes the module map the build wrote and returns its text through the workspace filesystem", async () => {
   const operations = new FakeBuildOperations();
-  operations.stdout = '{"entryModule":"main.js","modules":[]}';
+  operations.files.set(HARNESS_BUILD_OUTPUT_PATH, '{"entryModule":"main.js","modules":[]}');
 
   const result = await build(operations, { kind: "build-output", harnessCommit: commit });
 
   expect(result).toEqual({
     ok: true,
-    result: {
-      kind: "command",
-      stdout: '{"entryModule":"main.js","modules":[]}',
-      stderr: "",
-      exitCode: 0,
-    },
+    result: { kind: "module-map", text: '{"entryModule":"main.js","modules":[]}' },
   });
   expect(Object.getPrototypeOf(result), "the result crosses RPC as a plain value").toBe(
     Object.prototype,
   );
-  const read = operations.calls.at(0) ?? "";
-  expect(read, "the read names the commit's own module map and no other path").toContain(
+  const publish = operations.calls[0] ?? "";
+  expect(publish, "the publish step names the commit's own module map and no other path").toContain(
     moduleMapPath,
   );
+  expect(publish, "the publish step writes no module map text to its stdout").not.toContain("cat");
+  expect(operations.calls, "the text comes from the workspace filesystem, not from stdout").toEqual(
+    expect.arrayContaining([`read:${HARNESS_BUILD_OUTPUT_PATH}`]),
+  );
+});
+
+test("a publish step that fails answers with its exit code, not a module map", async () => {
+  const operations = new FakeBuildOperations();
+  operations.exitCode = 3;
+
+  const result = await build(operations, { kind: "build-output", harnessCommit: commit });
+
+  expect(result).toEqual({
+    ok: true,
+    result: { kind: "command", stdout: "", stderr: "", exitCode: 3 },
+  });
 });
 
 test("rejects a commit that is not a harness commit, so no path can escape the build root", async () => {
