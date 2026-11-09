@@ -66,9 +66,7 @@ export function projectIdFromPath(
   if (encodedProjectId === undefined || rest !== suffix) return undefined;
 
   try {
-    const projectId = decodeURIComponent(encodedProjectId);
-
-    return projectId.length === 0 ? undefined : projectId;
+    return decodeURIComponent(encodedProjectId);
   } catch {
     return undefined;
   }
