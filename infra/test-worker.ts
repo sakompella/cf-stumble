@@ -18,7 +18,13 @@ export const testWorker = {
       WORKSPACE_HOST: { className: durableObjectClasses.WORKSPACE_HOST, useSQLite: true },
     },
     workerLoaders: { LOADER: {} },
-    outboundService: () => new Response("tests have no outbound network", { status: 503 }),
+    outboundService: (request: Request) =>
+      new Response(
+        `tests have no outbound network: ${request.headers.get("user-agent") ?? "none"}`,
+        {
+          status: 503,
+        },
+      ),
     versionMetadata: "CF_VERSION_METADATA",
     assets: {
       directory: resolve(import.meta.dirname, "..", shellModulesAssetDirectory),

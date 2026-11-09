@@ -21,6 +21,7 @@ export interface ShellHost {
   readonly isolateToken: string;
   readonly exports: {
     IsolateWorkspaceGate(options: { props: IsolateGateProps }): Fetcher;
+    IsolateEgressGateway(options: { props: Readonly<Record<string, never>> }): Fetcher;
   };
 }
 
@@ -111,6 +112,7 @@ export function isolateShellBackend(
             HOST: host.exports.IsolateWorkspaceGate({
               props: { id: host.id.toString(), token: host.isolateToken },
             }),
+            EGRESS: host.exports.IsolateEgressGateway({ props: {} }),
           },
           globalOutbound: null,
         };
@@ -120,7 +122,8 @@ export function isolateShellBackend(
   return {
     id: ISOLATE_BACKEND_ID,
     type: "worker-shell",
-    description: "A just-bash shell in a Dynamic Worker with no container and no network.",
+    description:
+      "A just-bash shell in a Dynamic Worker with no container, Git over the workspace, and curl through an egress gateway that allows only GET and HEAD to a fixed list of hosts.",
     connect: () =>
       Promise.resolve({
         rpc: { sync: NO_SYNC, shell: shellRpc(runtime) },
