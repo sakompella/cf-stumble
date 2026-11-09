@@ -24,6 +24,7 @@
     "src/stumble-cli/orb/tunnel.ts": ["exports", "types"],
     "src/supervisor/artifacts/store.ts": ["exports"],
     "src/supervisor/conversations/host-target.ts": ["exports"],
+    "src/supervisor/generation-decisions.ts": ["exports"],
     "src/supervisor/generations.ts": ["exports", "types"],
     "src/supervisor/readiness/provisioning.ts": ["exports"],
     "src/workspace/commands/build-harness.ts": ["exports", "types"],

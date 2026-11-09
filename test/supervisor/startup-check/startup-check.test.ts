@@ -1,4 +1,5 @@
-import { reset, runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import {
   activeSupervisor,
@@ -9,6 +10,7 @@ import {
   servingFacetSource,
   storeModuleMap,
   FACET_COMPATIBILITY_METHOD,
+  fixtureMainHarnessCommit,
   generationLabel,
 } from "../helpers.js";
 import { expectFailedCandidate } from "../generation-reads.js";
@@ -258,10 +260,7 @@ test("refuses a candidate when the serving generation's artifact cannot be prepa
   const control = await activeSupervisor("startup-check-serving-artifact-lost");
   const label = await labelCandidate(control, commits.ordinary);
 
-  await runInDurableObject(control, (_instance, state) => {
-    state.storage.sql.exec("DELETE FROM module_map_manifests");
-    state.storage.sql.exec("DELETE FROM module_map_chunks");
-  });
+  await env.MODULE_MAPS.delete(`module-maps/${fixtureMainHarnessCommit}.json`);
 
   const result = await prepareWithModuleMap(
     control,
@@ -295,7 +294,7 @@ test("remounts a checked generation instead of reusing its warm candidate instan
     ),
   );
 
-  await storeModuleMap(control, candidate);
+  await storeModuleMap(candidate);
   const first = await control.prepareGeneration(generationLabel(label));
   const second = await control.prepareGeneration(generationLabel(label));
 
@@ -311,7 +310,6 @@ test("overlapping preparations of one generation do not abort each other's start
   const label = await labelCandidate(control, commits.ordinary);
 
   await storeModuleMap(
-    control,
     artifact(
       commits.ordinary,
       servingFacetSource(

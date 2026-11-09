@@ -70,7 +70,7 @@ test("a later preparation outcome replaces the recorded status", async () => {
   const control = supervisor("records-latest-preparation-outcome");
   const label = await submitCandidate(control, secondHarnessCommit);
 
-  await storeModuleMap(control, stagedPreparationArtifact(secondHarnessCommit));
+  await storeModuleMap(stagedPreparationArtifact(secondHarnessCommit));
   const recorded = await control.prepareGeneration(generationLabel(label));
   const repeated = await control.prepareGeneration(generationLabel(label));
   const failed = await control.prepareGeneration(generationLabel(label));

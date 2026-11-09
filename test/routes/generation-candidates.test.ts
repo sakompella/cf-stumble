@@ -20,12 +20,8 @@ const commits = {
   resubmittedUnbuildable: "5100000000000000000000000000000000000006",
 } as const;
 
-function seedModuleMap(
-  control: DurableObjectStub<Supervisor>,
-  harnessCommit: string,
-  versionMethod?: string,
-): Promise<void> {
-  return storeModuleMap(control, {
+function seedModuleMap(harnessCommit: string, versionMethod?: string): Promise<void> {
+  return storeModuleMap({
     harnessCommit,
     entryModule: "main.js",
     modules: [{ name: "main.js", source: servingFacetSource("candidate serving", versionMethod) }],
@@ -75,7 +71,7 @@ afterEach(async () => {
 
 test("submits a passing candidate and leaves the active generation serving", async () => {
   const control = await activeSupervisor("submit-passing-candidate");
-  await seedModuleMap(control, commits.passing);
+  await seedModuleMap(commits.passing);
 
   const result = await submission(control, commits.passing);
 
@@ -115,7 +111,7 @@ test("returns a recorded failing preparation when the candidate module map canno
 
 test("records a candidate that fails its startup check and keeps the active generation", async () => {
   const control = await activeSupervisor("submit-failing-candidate");
-  await seedModuleMap(control, commits.rejecting, `compatibility() { return "0.0.1"; }`);
+  await seedModuleMap(commits.rejecting, `compatibility() { return "0.0.1"; }`);
 
   const result = await submission(control, commits.rejecting);
   const label = submittedLabel(result);
@@ -160,7 +156,7 @@ test.each(resubmissions)(
     const control = await activeSupervisor(`submit-resubmit-${seeded ? "passing" : "unbuildable"}`);
 
     if (seeded) {
-      await seedModuleMap(control, commit);
+      await seedModuleMap(commit);
     }
 
     const first = await submission(control, commit);

@@ -4,8 +4,7 @@ import { afterEach, expect, test } from "vitest";
 import * as Result from "effect/Result";
 import { ModuleMapStore } from "../../../src/supervisor/artifacts/index.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
-import { MODULE_MAP_CHUNK_BYTES } from "../../../src/supervisor/artifacts/store.js";
-import type { ModuleMapStorage } from "../../../src/supervisor/artifacts/index.js";
+import { migrateModuleMaps } from "../../../src/supervisor/artifacts/migrate.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activateGeneration,
@@ -28,33 +27,18 @@ const commits = {
   large: "7100000000000000000000000000000000000003",
   rolledForward: "7100000000000000000000000000000000000005",
   unbuildable: "7100000000000000000000000000000000000006",
+  immutable: "7100000000000000000000000000000000000007",
+  migrated: "7100000000000000000000000000000000000008",
 } as const;
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
 }
 
-function refusingSecondChunk(storage: DurableObjectStorage): ModuleMapStorage {
-  let chunkWrites = 0;
-
+function refusingPut(bucket: R2Bucket): R2Bucket {
   return {
-    sql: {
-      exec: <T extends Record<string, SqlStorageValue>>(
-        query: string,
-        ...bindings: unknown[]
-      ): SqlStorageCursor<T> => {
-        if (query.includes("INSERT INTO module_map_chunks")) {
-          chunkWrites += 1;
-
-          if (chunkWrites > 1) {
-            throw new Error(`the storage refused a chunk ghp_${"a".repeat(36)}`);
-          }
-        }
-
-        return storage.sql.exec<T>(query, ...bindings);
-      },
-    },
-    transactionSync: (operation) => storage.transactionSync(operation),
+    ...bucket,
+    put: () => Promise.reject(new Error(`the bucket refused a write ghp_${"a".repeat(36)}`)),
   };
 }
 
@@ -65,114 +49,113 @@ afterEach(async () => {
 test("keeps a stored module map across a Durable Object eviction", async () => {
   const control = supervisor("stored-module-map-survives-eviction");
   const input = artifact(commits.evicted, 'export const body = "stored across eviction";\n');
-  await storeModuleMap(control, input);
+  await storeModuleMap(input);
+  await control.getActiveGeneration();
 
   await evictDurableObject(control);
 
-  const found = await runInDurableObject(control, (_instance, state) => {
-    const read = new ModuleMapStore(state.storage).read(testHarnessCommit(commits.evicted));
+  const read = await new ModuleMapStore(env.MODULE_MAPS).read(testHarnessCommit(commits.evicted));
 
-    if (Result.isFailure(read) || read.success.kind === "absent") {
-      throw new Error("an evicted Supervisor must still hold its stored module map");
-    }
+  if (Result.isFailure(read) || read.success.kind === "absent") {
+    throw new Error("an evicted Supervisor must still find its stored module map");
+  }
 
-    return encodeModuleMap(read.success.artifact);
-  });
-
-  expect(found).toBe(encodeModuleMap(parsedArtifact(input)));
+  expect(encodeModuleMap(read.success.artifact)).toBe(encodeModuleMap(parsedArtifact(input)));
 });
 
-test("stores a module map larger than one chunk and reads back the same bytes", async () => {
-  const control = supervisor("module-map-larger-than-one-chunk");
-  const input = largeModuleMap(commits.large);
+test("stores a large module map under its commit key and reads back the same bytes", async () => {
+  const store = new ModuleMapStore(env.MODULE_MAPS);
+  const written = await store.write(parsedArtifact(largeModuleMap(commits.large)));
 
-  const stored = await runInDurableObject(control, (_instance, state) => {
-    const store = new ModuleMapStore(state.storage);
-    const written = store.write(parsedArtifact(input));
+  if (Result.isFailure(written)) {
+    throw new Error(`a large module map must be written: ${written.failure.code}`);
+  }
 
-    if (Result.isFailure(written)) {
-      throw new Error(`a large module map must be written: ${written.failure.code}`);
-    }
+  const read = await store.read(testHarnessCommit(commits.large));
+  const object = await env.MODULE_MAPS.get(`module-maps/${commits.large}.json`);
 
-    const read = store.read(testHarnessCommit(commits.large));
+  if (Result.isFailure(read) || read.success.kind === "absent") {
+    throw new Error("a large module map must read back");
+  }
 
-    if (Result.isFailure(read) || read.success.kind === "absent") {
-      throw new Error("a large module map must read back");
-    }
+  expect(await object?.text()).toBe(encodeModuleMap(written.success));
+  expect(encodeModuleMap(read.success.artifact)).toBe(encodeModuleMap(written.success));
+});
 
-    return {
-      chunkSizes: state.storage.sql
-        .exec<{ readonly size: number }>(
-          "SELECT LENGTH(bytes) AS size FROM module_map_chunks WHERE harness_commit = ? ORDER BY chunk_index ASC",
-          commits.large,
-        )
-        .toArray()
-        .map((row) => row.size),
-      manifest: state.storage.sql
-        .exec<{ readonly chunk_count: number; readonly byte_count: number }>(
-          "SELECT chunk_count, byte_count FROM module_map_manifests WHERE harness_commit = ?",
-          commits.large,
-        )
-        .one(),
-      sameBytes: encodeModuleMap(read.success.artifact) === encodeModuleMap(written.success),
-    };
-  });
+test("never overwrites a stored module map", async () => {
+  const store = new ModuleMapStore(env.MODULE_MAPS);
+  await store.write(parsedArtifact(artifact(commits.immutable, "export const first = 1;\n")));
+  await store.write(parsedArtifact(artifact(commits.immutable, "export const second = 2;\n")));
 
-  expect(stored.chunkSizes.length).toBeGreaterThan(1);
-  expect(stored.chunkSizes.length).toBe(stored.manifest.chunk_count);
+  const read = await store.read(testHarnessCommit(commits.immutable));
+
   expect(
-    Math.max(...stored.chunkSizes),
-    "no row may approach the 2 MB Durable Object row limit",
-  ).toBeLessThanOrEqual(MODULE_MAP_CHUNK_BYTES);
-  expect(stored.chunkSizes.reduce((total, size) => total + size, 0)).toBe(
-    stored.manifest.byte_count,
-  );
-  expect(stored.sameBytes, "a chunk boundary inside a character must not change the map").toBe(
-    true,
-  );
+    Result.isSuccess(read) && read.success.kind === "stored"
+      ? read.success.artifact.modules[0].source
+      : "",
+  ).toBe("export const first = 1;\n");
 });
 
-test("a write that fails part way through leaves no partial module map", async () => {
-  const control = supervisor("module-map-write-is-atomic");
-  const input = largeModuleMap(commits.atomic);
+test("a refused write reports a problem and stores nothing", async () => {
+  const written = await new ModuleMapStore(refusingPut(env.MODULE_MAPS)).write(
+    parsedArtifact(largeModuleMap(commits.atomic)),
+  );
 
-  const outcome = await runInDurableObject(control, (_instance, state) => {
-    const written = new ModuleMapStore(refusingSecondChunk(state.storage)).write(
-      parsedArtifact(input),
+  const read = await new ModuleMapStore(env.MODULE_MAPS).read(testHarnessCommit(commits.atomic));
+
+  expect(Result.isFailure(written) ? written.failure.code : "written").toBe(
+    "artifact-write-failed",
+  );
+  expect(Result.isSuccess(read) ? read.success.kind : "problem").toBe("absent");
+});
+
+test("copies module maps from the old SQLite tables to R2 and drops the tables", async () => {
+  const control = supervisor("module-map-migration");
+  const input = largeModuleMap(commits.migrated);
+  const expected = encodeModuleMap(parsedArtifact(input));
+  const bytes = new TextEncoder().encode(expected);
+  const split = Math.floor(bytes.byteLength / 2);
+
+  const remaining = await runInDurableObject(control, async (_instance, state) => {
+    state.storage.sql.exec(
+      `CREATE TABLE module_map_manifests (harness_commit TEXT PRIMARY KEY, chunk_count INTEGER, byte_count INTEGER);
+       CREATE TABLE module_map_chunks (harness_commit TEXT, chunk_index INTEGER, bytes BLOB, PRIMARY KEY (harness_commit, chunk_index))`,
+    );
+    state.storage.sql.exec(
+      "INSERT INTO module_map_manifests VALUES (?, 2, ?)",
+      commits.migrated,
+      bytes.byteLength,
+    );
+    state.storage.sql.exec(
+      "INSERT INTO module_map_chunks VALUES (?, 0, ?)",
+      commits.migrated,
+      bytes.slice(0, split),
+    );
+    state.storage.sql.exec(
+      "INSERT INTO module_map_chunks VALUES (?, 1, ?)",
+      commits.migrated,
+      bytes.slice(split),
     );
 
-    const store = new ModuleMapStore(state.storage);
-    const read = store.read(testHarnessCommit(commits.atomic));
+    await migrateModuleMaps(state.storage.sql, env.MODULE_MAPS);
 
-    return {
-      write: Result.isFailure(written) ? written.failure.code : "written",
-      read: Result.isFailure(read) ? `problem:${read.failure.code}` : read.success.kind,
-      rows: state.storage.sql
-        .exec<{ readonly manifests: number; readonly chunks: number }>(
-          `SELECT
-             (SELECT COUNT(*) FROM module_map_manifests WHERE harness_commit = ?) AS manifests,
-             (SELECT COUNT(*) FROM module_map_chunks WHERE harness_commit = ?) AS chunks`,
-          commits.atomic,
-          commits.atomic,
-        )
-        .one(),
-    };
+    return state.storage.sql
+      .exec<{ readonly name: string }>(
+        "SELECT name FROM sqlite_master WHERE name LIKE 'module_map_%'",
+      )
+      .toArray();
   });
 
-  expect(outcome).toEqual({
-    write: "artifact-write-failed",
-    read: "absent",
-    rows: { manifests: 0, chunks: 0 },
-  });
+  expect(remaining).toEqual([]);
+  expect(await (await env.MODULE_MAPS.get(`module-maps/${commits.migrated}.json`))?.text()).toBe(
+    expected,
+  );
 });
 
 test("rolls back to a stored generation while every build fails", async () => {
   const control = await activeSupervisor("rollback-loads-stored-module-map");
   const secondCommit = commits.rolledForward;
-  await storeModuleMap(
-    control,
-    artifact(secondCommit, servingFacetSource("second generation serving")),
-  );
+  await storeModuleMap(artifact(secondCommit, servingFacetSource("second generation serving")));
   const second = await submitCandidate(control, secondCommit);
   const preparedSecond = await control.prepareGeneration(generationLabel(second));
   expect(preparedSecond).toMatchObject({ ok: true, report: { stage: "ready" } });

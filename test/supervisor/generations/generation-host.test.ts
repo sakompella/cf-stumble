@@ -13,7 +13,7 @@ afterEach(async () => {
 
 test("a repeated submission through the generation host keeps one label, and overlapping preparations run one check", async () => {
   const control = env.SUPERVISOR.getByName("generation-host-duplicates");
-  await storeModuleMap(control, readyArtifact(commit));
+  await storeModuleMap(readyArtifact(commit));
 
   const { submissions, preparations, before, after } = await runInDurableObject(
     control,

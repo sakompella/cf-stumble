@@ -5,9 +5,8 @@ import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   decideActivation,
   decidePreparation,
-  type Generation,
-  type GenerationStatus,
-} from "../../../src/supervisor/generations.js";
+} from "../../../src/supervisor/generation-decisions.js";
+import type { Generation, GenerationStatus } from "../../../src/supervisor/generations.js";
 import { label } from "./fixtures.js";
 
 const COMMIT = testHarnessCommit("a".repeat(40));

@@ -12,6 +12,8 @@ declare global {
       readonly LOADER: WorkerLoader;
       readonly ASSETS: Fetcher;
       readonly AI: Ai;
+      readonly MODULE_MAPS: R2Bucket;
+      readonly ARTIFACTS?: Artifacts;
       readonly SUPERVISOR: DurableObjectNamespace<Supervisor>;
       readonly WORKSPACE_HOST: DurableObjectNamespace<WorkspaceHost>;
       readonly GITHUB_OAUTH_CLIENT_ID?: string;

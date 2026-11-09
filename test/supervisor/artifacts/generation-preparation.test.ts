@@ -51,7 +51,7 @@ afterEach(async () => {
 
 test("prepares and serves a generation from its stored module map", async () => {
   const control = await activeSupervisor("prepare-from-stored-module-map");
-  await storeModuleMap(control, storedModuleMap(commits.stored));
+  await storeModuleMap(storedModuleMap(commits.stored));
   const label = await labelCandidate(control, commits.stored);
 
   const prepared = await control.prepareGeneration(generationLabel(label));

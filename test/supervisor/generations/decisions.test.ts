@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import { decidePreparation, type GenerationRecord } from "../../../src/supervisor/generations.js";
+import { decidePreparation } from "../../../src/supervisor/generation-decisions.js";
+import type { GenerationRecord } from "../../../src/supervisor/generations.js";
 import { label } from "./fixtures.js";
 
 const COMPATIBILITY = "pi-durable@1.4.0/host-2";

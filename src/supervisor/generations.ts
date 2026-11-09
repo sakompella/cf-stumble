@@ -1,6 +1,15 @@
 import { logEvent } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
+import { decideActivation, decidePreparation } from "./generation-decisions.js";
+import {
+  allRecords,
+  GENERATION_COLUMNS,
+  recordFromRow,
+  type GenerationRow,
+  type SelectionRow,
+} from "./generation-rows.js";
 import { GenerationProbation, type RunOutcome } from "./probation.js";
+import type { GenerationChange } from "./history/commits.js";
 
 export type GenerationStatus = "candidate" | "ready" | "failed";
 
@@ -77,92 +86,20 @@ export type PreparationRecord = Readonly<{
   effect: "recorded" | "no-op";
 }>;
 
-function refused(code: ControlProblemCode): GenerationControlResult {
-  return { ok: false, problem: { code } };
-}
-
-export function decideActivation(
-  command: ActivationCommand,
-  target: GenerationRecord | undefined,
-  selection: Selection,
-  compatibility: string,
-): GenerationControlResult {
-  if (command.observedEpoch !== selection.epoch) return refused("stale-epoch");
-
-  if (target === undefined) return refused("unknown-generation");
-
-  if (target.generation.status !== "ready") return refused("not-ready");
-
-  if (command.kind === "rollback" && !target.wasActive) return refused("not-previously-active");
-
-  if (target.compatibility !== compatibility) return refused("facet-compatibility-mismatch");
-
-  const kind = command.kind === "activate" ? "activated" : "rolled-back";
-  const unchanged = selection.activeLabel === target.generation.label;
-
-  return {
-    ok: true,
-    outcome: {
-      kind,
-      generation: target.generation,
-      epoch: unchanged ? selection.epoch : selection.epoch + 1,
-      effect: unchanged ? "no-op" : "activated",
-    },
-  };
-}
-
-export function decidePreparation(
-  current: GenerationRecord,
-  outcome: PreparationOutcome,
-  selection: Selection,
-): PreparationRecord {
-  const compatibility = outcome.status === "ready" ? outcome.compatibility : undefined;
-
-  const unchanged =
-    current.generation.status === outcome.status && current.compatibility === compatibility;
-
-  return {
-    record: {
-      ...current,
-      generation: { ...current.generation, status: outcome.status },
-      compatibility,
-    },
-    epoch: unchanged ? selection.epoch : selection.epoch + 1,
-    effect: unchanged ? "no-op" : "recorded",
-  };
-}
-
-type GenerationRow = {
-  readonly label: GenerationLabel;
-  readonly harness_commit: HarnessCommit;
-  readonly status: GenerationStatus;
-  readonly was_active: number;
-  readonly facet_compatibility: string | null;
-};
-
-type SelectionRow = {
-  readonly active_label: GenerationLabel | null;
-  readonly epoch: number;
-};
-
-const GENERATION_COLUMNS = "label, harness_commit, status, was_active, facet_compatibility";
-
-function recordFromRow(row: GenerationRow): GenerationRecord {
-  return {
-    generation: { label: row.label, harnessCommit: row.harness_commit, status: row.status },
-    wasActive: row.was_active === 1,
-    compatibility: row.facet_compatibility ?? undefined,
-  };
-}
-
 export class Generations {
   readonly #storage: DurableObjectStorage;
   readonly #sql: SqlStorage;
   readonly #compatibility: string;
   readonly #probation: GenerationProbation;
+  readonly #onChange: ((change: GenerationChange) => void) | undefined;
 
-  constructor(storage: DurableObjectStorage, compatibility: string) {
+  constructor(
+    storage: DurableObjectStorage,
+    compatibility: string,
+    onChange?: (change: GenerationChange) => void,
+  ) {
     this.#storage = storage;
+    this.#onChange = onChange;
     this.#sql = storage.sql;
     this.#compatibility = compatibility;
     this.#probation = new GenerationProbation(storage.kv);
@@ -186,7 +123,9 @@ export class Generations {
   }
 
   submit(harnessCommit: HarnessCommit): Submission {
-    return this.#storage.transactionSync(() => {
+    const before = this.#selection().epoch;
+
+    const submission = this.#storage.transactionSync((): Submission => {
       const { epoch } = this.#selection();
 
       const existing = this.#sql
@@ -221,24 +160,40 @@ export class Generations {
         epoch: epoch + 1,
       };
     });
+
+    if (submission.epoch !== before) {
+      this.#announce("submitted", submission.epoch, submission.generation.label);
+    }
+
+    return submission;
   }
 
   activate(command: ActivationCommand): GenerationControlResult {
-    return this.#storage.transactionSync(() => {
-      const result = decideActivation(
+    const result = this.#storage.transactionSync(() => {
+      const decided = decideActivation(
         command,
         this.#record(command.label),
         this.#selection(),
         this.#compatibility,
       );
 
-      if (result.ok && result.outcome.effect === "activated") {
-        this.#select(command.label, result.outcome.epoch);
+      if (decided.ok && decided.outcome.effect === "activated") {
+        this.#select(command.label, decided.outcome.epoch);
         this.#probation.activated(command.label);
       }
 
-      return result;
+      return decided;
     });
+
+    if (result.ok && result.outcome.effect === "activated") {
+      this.#announce(
+        command.kind === "activate" ? "activated" : "rolled-back",
+        result.outcome.epoch,
+        command.label,
+      );
+    }
+
+    return result;
   }
 
   settled({
@@ -252,7 +207,9 @@ export class Generations {
     const fallback =
       activeLabel === undefined ? undefined : this.#probation.settled(activeLabel, outcome);
 
-    if (fallback === undefined) return undefined;
+    if (fallback === undefined || activeLabel === undefined) return undefined;
+
+    this.#announce("probation-failed", this.#selection().epoch, activeLabel, outcome, errorCode);
 
     const command = {
       kind: "rollback",
@@ -263,7 +220,7 @@ export class Generations {
     const result = this.activate(command);
 
     logEvent("warn", "generation.probation-failed", {
-      label: activeLabel ?? null,
+      label: activeLabel,
       fallback,
       outcome,
       errorCode,
@@ -279,13 +236,33 @@ export class Generations {
     label: GenerationLabel,
     outcome: PreparationOutcome,
   ): PreparationRecord | undefined {
-    return this.#storage.transactionSync(() => {
+    const recorded = this.#storage.transactionSync(() => {
       const current = this.#record(label);
 
       return current === undefined
         ? undefined
         : this.#writePreparation(decidePreparation(current, outcome, this.#selection()));
     });
+
+    if (recorded !== undefined && recorded.effect === "recorded") {
+      this.#announce("prepared", recorded.epoch, label, outcome.status);
+    }
+
+    return recorded;
+  }
+
+  #announce(
+    kind: GenerationChange["kind"],
+    epoch: number,
+    label: GenerationLabel,
+    outcome: string | null = null,
+    errorCode: string | null = null,
+  ): void {
+    const record = this.#record(label);
+
+    if (record !== undefined) {
+      this.#onChange?.({ kind, epoch, outcome, errorCode, record });
+    }
   }
 
   #writePreparation(recorded: PreparationRecord): PreparationRecord {
@@ -300,6 +277,10 @@ export class Generations {
     this.#writeEpoch(recorded.epoch);
 
     return recorded;
+  }
+
+  all(): readonly GenerationRecord[] {
+    return allRecords(this.#sql);
   }
 
   active(): ActiveGeneration {

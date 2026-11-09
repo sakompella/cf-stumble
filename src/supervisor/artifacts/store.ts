@@ -4,17 +4,10 @@ import { MainHarnessArtifact } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { encodeModuleMap } from "./module-map.js";
 
-export const MODULE_MAP_CHUNK_BYTES = 1_048_576;
-
-export type ModuleMapStorage = Readonly<{
-  sql: Pick<SqlStorage, "exec">;
-  transactionSync: <T>(operation: () => T) => T;
-}>;
-
 export type StoredModuleMapProblem =
   | { readonly code: "stored-module-map-absent"; readonly harnessCommit: string }
-  | { readonly code: "stored-module-map-incomplete"; readonly harnessCommit: string }
   | { readonly code: "corrupt-artifact"; readonly harnessCommit: string }
+  | { readonly code: "artifact-read-failed"; readonly harnessCommit: string }
   | { readonly code: "artifact-write-failed"; readonly harnessCommit: string };
 
 type StoredModuleMap =
@@ -23,65 +16,38 @@ type StoredModuleMap =
 
 type StoredModuleMapResult = Result.Result<StoredModuleMap, StoredModuleMapProblem>;
 
-type ManifestRow = { readonly chunk_count: number; readonly byte_count: number };
-
-type ChunkRow = { readonly chunk_index: number; readonly bytes: ArrayBuffer };
+export function moduleMapKey(harnessCommit: string): string {
+  return `module-maps/${harnessCommit}.json`;
+}
 
 export class ModuleMapStore {
-  private readonly storage: ModuleMapStorage;
+  private readonly bucket: R2Bucket;
 
-  constructor(storage: ModuleMapStorage) {
-    this.storage = storage;
-    this.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS module_map_manifests (
-        harness_commit TEXT PRIMARY KEY,
-        chunk_count INTEGER NOT NULL CHECK (chunk_count > 0),
-        byte_count INTEGER NOT NULL CHECK (byte_count > 0)
-      );
-      CREATE TABLE IF NOT EXISTS module_map_chunks (
-        harness_commit TEXT NOT NULL,
-        chunk_index INTEGER NOT NULL CHECK (chunk_index >= 0),
-        bytes BLOB NOT NULL,
-        PRIMARY KEY (harness_commit, chunk_index)
-      );
-    `);
+  constructor(bucket: R2Bucket) {
+    this.bucket = bucket;
   }
 
-  read(harnessCommit: HarnessCommit): StoredModuleMapResult {
-    const manifest = this.storage.sql
-      .exec<ManifestRow>(
-        "SELECT chunk_count, byte_count FROM module_map_manifests WHERE harness_commit = ?",
-        harnessCommit,
-      )
-      .toArray()[0];
-
-    if (manifest === undefined) {
-      return Result.succeed({ kind: "absent" });
-    }
-
-    const chunks = this.storage.sql
-      .exec<ChunkRow>(
-        "SELECT chunk_index, bytes FROM module_map_chunks WHERE harness_commit = ? ORDER BY chunk_index ASC",
-        harnessCommit,
-      )
-      .toArray();
-
-    const bytes = assembled(manifest, chunks);
-
-    if (bytes === undefined) {
-      return Result.fail({ code: "stored-module-map-incomplete", harnessCommit });
-    }
-
-    return decoded(bytes, harnessCommit);
-  }
-
-  write(artifact: MainHarnessArtifact): Result.Result<MainHarnessArtifact, StoredModuleMapProblem> {
-    const bytes = new TextEncoder().encode(encodeModuleMap(artifact));
-    const chunks = chunked(bytes);
+  async read(harnessCommit: HarnessCommit): Promise<StoredModuleMapResult> {
+    let text: string | undefined;
 
     try {
-      this.storage.transactionSync(() => {
-        this.replace(artifact.harnessCommit, bytes.byteLength, chunks);
+      const object = await this.bucket.get(moduleMapKey(harnessCommit));
+      text = await object?.text();
+    } catch (cause) {
+      logRedactedCause(`artifact-store.read ${harnessCommit}: artifact-read-failed`, cause);
+
+      return Result.fail({ code: "artifact-read-failed", harnessCommit });
+    }
+
+    return text === undefined ? Result.succeed({ kind: "absent" }) : decoded(text, harnessCommit);
+  }
+
+  async write(
+    artifact: MainHarnessArtifact,
+  ): Promise<Result.Result<MainHarnessArtifact, StoredModuleMapProblem>> {
+    try {
+      await this.bucket.put(moduleMapKey(artifact.harnessCommit), encodeModuleMap(artifact), {
+        onlyIf: { etagDoesNotMatch: "*" },
       });
     } catch (cause) {
       logRedactedCause(
@@ -94,73 +60,9 @@ export class ModuleMapStore {
 
     return Result.succeed(artifact);
   }
-
-  private replace(
-    harnessCommit: HarnessCommit,
-    byteCount: number,
-    chunks: readonly Uint8Array[],
-  ): void {
-    this.storage.sql.exec("DELETE FROM module_map_chunks WHERE harness_commit = ?", harnessCommit);
-    this.storage.sql.exec(
-      `INSERT INTO module_map_manifests (harness_commit, chunk_count, byte_count)
-       VALUES (?, ?, ?)
-       ON CONFLICT (harness_commit) DO UPDATE SET chunk_count = excluded.chunk_count,
-         byte_count = excluded.byte_count`,
-      harnessCommit,
-      chunks.length,
-      byteCount,
-    );
-
-    for (const [index, chunk] of chunks.entries()) {
-      this.storage.sql.exec(
-        "INSERT INTO module_map_chunks (harness_commit, chunk_index, bytes) VALUES (?, ?, ?)",
-        harnessCommit,
-        index,
-        chunk,
-      );
-    }
-  }
 }
 
-function chunked(bytes: Uint8Array): readonly Uint8Array[] {
-  const chunks: Uint8Array[] = [];
-
-  for (let offset = 0; offset < bytes.byteLength; offset += MODULE_MAP_CHUNK_BYTES) {
-    chunks.push(bytes.slice(offset, offset + MODULE_MAP_CHUNK_BYTES));
-  }
-
-  return chunks;
-}
-
-function assembled(manifest: ManifestRow, chunks: readonly ChunkRow[]): Uint8Array | undefined {
-  if (chunks.length !== manifest.chunk_count) {
-    return undefined;
-  }
-
-  const bytes = new Uint8Array(manifest.byte_count);
-  let offset = 0;
-
-  for (const [index, chunk] of chunks.entries()) {
-    if (chunk.chunk_index !== index || offset + chunk.bytes.byteLength > manifest.byte_count) {
-      return undefined;
-    }
-
-    bytes.set(new Uint8Array(chunk.bytes), offset);
-    offset += chunk.bytes.byteLength;
-  }
-
-  return offset === manifest.byte_count ? bytes : undefined;
-}
-
-function decoded(bytes: Uint8Array, harnessCommit: HarnessCommit): StoredModuleMapResult {
-  let text: string;
-
-  try {
-    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
-  } catch {
-    return Result.fail({ code: "corrupt-artifact", harnessCommit });
-  }
-
+function decoded(text: string, harnessCommit: HarnessCommit): StoredModuleMapResult {
   const parsed = MainHarnessArtifact.parseJson(text);
 
   if (Result.isFailure(parsed) || parsed.success.harnessCommit !== harnessCommit) {
