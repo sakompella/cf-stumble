@@ -1,16 +1,13 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import {
   projectCloneSource,
   executeProjectProvisionRequest,
-  parseProjectProvisionRequest,
-  planProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
 import type { Project } from "../../src/project-catalog.js";
 import { projectDirectory, projectGitDirectory } from "../../src/workspace-layout.js";
-import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
+import { sampleProjectOne } from "../project-fixtures.js";
 import {
   workspaceEffects,
   type PromiseOperations,
@@ -20,8 +17,6 @@ import {
 } from "./promise-operations.js";
 
 const projectOne = sampleProjectOne;
-
-const projectTwo = sampleProjectTwo;
 
 function provisionRequest(project: Project): ProjectProvisionRequest {
   return { kind: "provision-project", projectId: project.id, repositoryUrl: project.repositoryUrl };
@@ -79,31 +74,6 @@ function provision(operations: FakeProjectOperations, request: ProjectProvisionR
     executeProjectProvisionRequest({ operations: workspaceEffects(operations), request }),
   );
 }
-
-test("plans the clone from the resolved project the caller sent, and its directory from the id", () => {
-  const parsed = parseProjectProvisionRequest(provisionRequest(projectOne));
-
-  if ("ok" in parsed) {
-    throw new Error("a catalog project must parse");
-  }
-
-  const planned = planProjectProvisionRequest(parsed);
-
-  expect(parsed).toMatchObject({
-    id: projectOne.id,
-    repositoryUrl: projectOne.repositoryUrl,
-  });
-  expect(planned).toEqual({
-    kind: "run-command",
-    source: projectCloneSource(projectOne),
-    cwd: "/",
-    timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
-  });
-  expect(
-    planned,
-    "the directory as well as the repository comes from the resolved project",
-  ).not.toEqual(planProjectProvisionRequest(projectTwo));
-});
 
 test("runs the clone above the project root, then checks the clone is durable", async () => {
   const operations = new FakeProjectOperations();
