@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
+import { KeyedLock } from "../../keyed-lock.js";
 import { ConnectedProjects } from "./connected-projects.js";
 import { execute, markRemoving, recover } from "./project-lifecycle-commands.js";
-import { ProjectLifecycleQueue } from "./project-lifecycle-queue.js";
 import type { GitHubConnection, GitHubConnectionStatus } from "./github-connection.js";
 import {
   canonicalRepositoryUrl,
@@ -71,7 +71,7 @@ interface ProjectConnectionsInput {
 
 export class ProjectConnections {
   private readonly projects: ConnectedProjects;
-  private readonly lifecycle = new ProjectLifecycleQueue();
+  private readonly lifecycle = new KeyedLock<ProjectId>();
   private readonly github: GitHubConnection;
   private readonly workspaceName: string;
   private readonly namespace: ConnectionsNamespace;
@@ -128,7 +128,7 @@ export class ProjectConnections {
 
       if (accessRefusal !== undefined) return accessRefusal;
 
-      return yield* this.lifecycle.exclusive(
+      return yield* this.lifecycle.withLock(
         projectId,
         this.store(canonical, displayName, github, now),
       );
@@ -148,7 +148,7 @@ export class ProjectConnections {
     return Effect.gen({ self: this }, function* () {
       yield* this.sweep(parsed);
 
-      return yield* this.lifecycle.exclusive(
+      return yield* this.lifecycle.withLock(
         parsed,
         Effect.gen({ self: this }, function* () {
           if (this.projects.stateOf(parsed) === undefined) {
@@ -174,7 +174,7 @@ export class ProjectConnections {
   }
 
   ensureProvisioned(projectId: ProjectId) {
-    return this.lifecycle.exclusive(
+    return this.lifecycle.withLock(
       projectId,
       this.provisionOnUse(() => this.projects.catalog(), projectId),
     );
@@ -185,7 +185,7 @@ export class ProjectConnections {
       for (const { id } of this.projects.unfinished()) {
         if (id === except || this.lifecycle.busy(id)) continue;
 
-        yield* this.lifecycle.exclusive(id, recover(this.effects(), id));
+        yield* this.lifecycle.withLock(id, recover(this.effects(), id));
       }
     });
   }

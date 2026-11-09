@@ -5,9 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import { expect, test } from "vitest";
-import { ProjectLifecycleQueue } from "../../../src/supervisor/projects/project-lifecycle-queue.js";
-import type { ProjectId } from "../../../src/project-catalog.js";
-import { projectIdOf } from "../../project-fixtures.js";
+import { KeyedLock } from "../src/keyed-lock.js";
+import type { ProjectId } from "../src/project-catalog.js";
+import { projectIdOf } from "./project-fixtures.js";
 
 const PROJECTS = ["sample-one", "sample-two", "sample-three"].map(projectIdOf);
 
@@ -38,7 +38,7 @@ type Entry = Readonly<{
 type Run = ReturnType<typeof launch>;
 
 function launch(
-  queue: ProjectLifecycleQueue,
+  lock: KeyedLock<ProjectId>,
   events: Event[],
   exits: Map<number, Exit.Exit<void, string>>,
   entry: Entry,
@@ -52,8 +52,8 @@ function launch(
     });
 
   const fiber = Effect.runFork(
-    queue
-      .exclusive(
+    lock
+      .withLock(
         entry.project,
         record("start").pipe(
           Effect.andThen(Deferred.await(gate).pipe(Effect.ensuring(record("end")))),
@@ -90,13 +90,13 @@ function expectOneAtATimeInOrder(events: readonly Event[], runs: readonly Run[])
 
 test("operations on one project run one at a time in submission order, whatever happens to the others", async () => {
   await hegel.testAsync(async (tc) => {
-    const queue = new ProjectLifecycleQueue();
+    const lock = new KeyedLock<ProjectId>();
     const events: Event[] = [];
     const exits = new Map<number, Exit.Exit<void, string>>();
 
     const runs = tc
       .draw(gs.arrays(operation, { minSize: 1, maxSize: 8 }))
-      .map((entry, index) => launch(queue, events, exits, entry, index));
+      .map((entry, index) => launch(lock, events, exits, entry, index));
 
     for (const run of runs) {
       if (run.interrupted) Effect.runFork(Fiber.interrupt(run.fiber));
@@ -125,5 +125,9 @@ test("operations on one project run one at a time in submission order, whatever 
     }
 
     expectOneAtATimeInOrder(events, runs);
+
+    for (const project of PROJECTS) {
+      expect(lock.busy(project), "no key outlives its last user").toBe(false);
+    }
   });
 });
