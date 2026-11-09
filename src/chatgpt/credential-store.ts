@@ -1,31 +1,11 @@
-export type ReconnectReason = "refresh-refused" | "provider-refused" | "missing-scope";
-
-export type StoredConnection =
-  | Readonly<{
-      state: "connected";
-      accessToken: string;
-      refreshToken: string;
-      expiresAt: number;
-      clientId: string;
-    }>
-  | Readonly<{ state: "needs-reconnect"; reason: ReconnectReason }>;
-
-export type StoredUsageLimit = Readonly<{ reachedAt: number; limitedUntil: number | null }>;
-
-export type StoredLogin = Readonly<{
-  attemptId: string;
-  state: string;
-  verifier: string;
-  authorizeUrl: string;
-  expiresAt: number;
-}>;
-
-export type StoredGrant = Readonly<{
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-  clientId: string;
-}>;
+import {
+  ChatGPTAccount,
+  transition,
+  type AccountEvent,
+  type ReconnectReason,
+  type UsageLimit,
+} from "./account.js";
+import { SignIn, signInTransition, type SignInEvent, type SignInStep } from "./sign-in.js";
 
 type ConnectionRow = {
   readonly status: string;
@@ -66,9 +46,12 @@ function restoreRenamedTables(sql: SqlStorage): void {
 }
 
 export class ChatGPTCredentialStore {
+  private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
+  private exchanging: string | null = null;
 
   constructor(storage: DurableObjectStorage) {
+    this.storage = storage;
     this.sql = storage.sql;
     restoreRenamedTables(this.sql);
     this.sql.exec(`
@@ -102,7 +85,7 @@ export class ChatGPTCredentialStore {
     `);
   }
 
-  connection(): StoredConnection | undefined {
+  account(): ChatGPTAccount {
     const row = this.sql
       .exec<ConnectionRow>(
         `SELECT status, reconnect_reason, access_token, refresh_token, expires_at, client_id
@@ -110,126 +93,68 @@ export class ChatGPTCredentialStore {
       )
       .toArray()[0];
 
-    if (row === undefined) return undefined;
+    if (row === undefined) return ChatGPTAccount.cases.disconnected.make({});
 
-    return row.status === "connected"
-      ? {
-          state: "connected",
-          accessToken: row.access_token,
-          refreshToken: row.refresh_token,
-          expiresAt: row.expires_at,
-          clientId: row.client_id,
-        }
-      : { state: "needs-reconnect", reason: reconnectReason(row.reconnect_reason) };
+    if (row.status !== "connected") {
+      return ChatGPTAccount.cases.needsReconnect.make({
+        reason: reconnectReason(row.reconnect_reason),
+      });
+    }
+
+    return ChatGPTAccount.cases.connected.make({
+      accessToken: row.access_token,
+      refreshToken: row.refresh_token,
+      expiresAt: row.expires_at,
+      clientId: row.client_id,
+      usageLimit: this.usageLimit(),
+    });
   }
 
-  connect(grant: StoredGrant, now: number): void {
-    this.clearUsageLimit();
-    this.sql.exec(
-      `INSERT OR REPLACE INTO chatgpt_connection
-         (id, status, reconnect_reason, access_token, refresh_token, expires_at, client_id, updated_at)
-       VALUES (1, 'connected', NULL, ?, ?, ?, ?, ?)`,
-      grant.accessToken,
-      grant.refreshToken,
-      grant.expiresAt,
-      grant.clientId,
-      now,
-    );
+  update(event: AccountEvent, now: number): ChatGPTAccount {
+    return this.storage.transactionSync(() => this.apply(event, now));
   }
 
-  replaceRefreshed(redeemed: string, grant: Omit<StoredGrant, "clientId">, now: number): boolean {
-    return (
-      this.sql
-        .exec(
-          `UPDATE chatgpt_connection
-           SET access_token = ?, refresh_token = ?, expires_at = ?, updated_at = ?
-           WHERE id = 1 AND status = 'connected' AND refresh_token = ?
-           RETURNING id`,
-          grant.accessToken,
-          grant.refreshToken,
-          grant.expiresAt,
-          now,
-          redeemed,
-        )
-        .toArray().length > 0
-    );
-  }
-
-  markNeedsReconnect(accessToken: string, reason: ReconnectReason, now: number): void {
-    this.sql.exec(
-      `UPDATE chatgpt_connection SET status = 'needs-reconnect', reconnect_reason = ?, updated_at = ?
-       WHERE id = 1 AND access_token = ?`,
-      reason,
-      now,
-      accessToken,
-    );
-  }
-
-  disconnect(): void {
-    this.sql.exec("DELETE FROM chatgpt_connection");
-    this.sql.exec("DELETE FROM chatgpt_login");
-    this.clearUsageLimit();
-  }
-
-  usageLimit(): StoredUsageLimit | undefined {
-    const row = this.sql
-      .exec<{ readonly reached_at: number; readonly limited_until: number | null }>(
-        "SELECT reached_at, limited_until FROM chatgpt_usage_limit WHERE id = 1",
-      )
-      .toArray()[0];
-
-    return row === undefined
-      ? undefined
-      : { reachedAt: row.reached_at, limitedUntil: row.limited_until };
-  }
-
-  markUsageLimited(accessToken: string, limit: StoredUsageLimit): void {
-    this.sql.exec(
-      `INSERT OR REPLACE INTO chatgpt_usage_limit (id, reached_at, limited_until)
-       SELECT 1, ?, ? FROM chatgpt_connection
-       WHERE id = 1 AND status = 'connected' AND access_token = ?`,
-      limit.reachedAt,
-      limit.limitedUntil,
-      accessToken,
-    );
-  }
-
-  clearUsageLimit(): void {
-    this.sql.exec("DELETE FROM chatgpt_usage_limit");
-  }
-
-  login(): StoredLogin | undefined {
+  signIn(): SignIn {
     const row = this.sql
       .exec<LoginRow>(
         `SELECT attempt_id, state, verifier, authorize_url, expires_at FROM chatgpt_login WHERE id = 1`,
       )
       .toArray()[0];
 
-    return row === undefined
-      ? undefined
-      : {
-          attemptId: row.attempt_id,
-          state: row.state,
-          verifier: row.verifier,
-          authorizeUrl: row.authorize_url,
-          expiresAt: row.expires_at,
-        };
+    if (row !== undefined) {
+      return SignIn.cases.pending.make({
+        attemptId: row.attempt_id,
+        state: row.state,
+        verifier: row.verifier,
+        authorizeUrl: row.authorize_url,
+        expiresAt: row.expires_at,
+      });
+    }
+
+    return this.exchanging === null
+      ? SignIn.cases.idle.make({})
+      : SignIn.cases.exchanging.make({ attemptId: this.exchanging });
   }
 
-  startLogin(login: StoredLogin): void {
-    this.sql.exec(
-      `INSERT OR REPLACE INTO chatgpt_login (id, attempt_id, state, verifier, authorize_url, expires_at)
-       VALUES (1, ?, ?, ?, ?, ?)`,
-      login.attemptId,
-      login.state,
-      login.verifier,
-      login.authorizeUrl,
-      login.expiresAt,
-    );
-  }
+  updateSignIn(event: SignInEvent, now: number): SignInStep {
+    const step = this.storage.transactionSync(() => {
+      const current = this.signIn();
+      const next = signInTransition(current, event);
 
-  clearLogin(): void {
-    this.sql.exec("DELETE FROM chatgpt_login");
+      if (next.signIn !== current) this.writeLogin(next.signIn);
+
+      if (next.account !== null) this.apply(next.account, now);
+
+      return next;
+    });
+
+    this.exchanging = SignIn.match(step.signIn, {
+      idle: () => null,
+      pending: () => null,
+      exchanging: ({ attemptId }) => attemptId,
+    });
+
+    return step;
   }
 
   agentHostId(): string {
@@ -243,5 +168,102 @@ export class ChatGPTCredentialStore {
         "SELECT agent_host_id FROM chatgpt_host WHERE id = 1",
       )
       .one().agent_host_id;
+  }
+
+  private usageLimit(): UsageLimit | null {
+    const row = this.sql
+      .exec<{ readonly reached_at: number; readonly limited_until: number | null }>(
+        "SELECT reached_at, limited_until FROM chatgpt_usage_limit WHERE id = 1",
+      )
+      .toArray()[0];
+
+    return row === undefined
+      ? null
+      : { reachedAt: row.reached_at, limitedUntil: row.limited_until };
+  }
+
+  private apply(event: AccountEvent, now: number): ChatGPTAccount {
+    const current = this.account();
+    const next = transition(current, event);
+
+    if (next !== current) this.writeAccount(next, now);
+
+    return next;
+  }
+
+  private writeAccount(account: ChatGPTAccount, now: number): void {
+    ChatGPTAccount.match(account, {
+      disconnected: () => {
+        this.sql.exec("DELETE FROM chatgpt_connection");
+        this.writeUsageLimit(null);
+      },
+      connected: (current) => {
+        this.writeConnection("connected", null, current, now);
+        this.writeUsageLimit(current.usageLimit);
+      },
+      needsReconnect: ({ reason }) => {
+        const tokens = { accessToken: "", refreshToken: "", expiresAt: 0, clientId: "" };
+
+        this.writeConnection("needs-reconnect", reason, tokens, now);
+        this.writeUsageLimit(null);
+      },
+    });
+  }
+
+  private writeConnection(
+    status: "connected" | "needs-reconnect",
+    reason: ReconnectReason | null,
+    tokens: Readonly<{
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: number;
+      clientId: string;
+    }>,
+    now: number,
+  ): void {
+    this.sql.exec(
+      `INSERT OR REPLACE INTO chatgpt_connection
+         (id, status, reconnect_reason, access_token, refresh_token, expires_at, client_id, updated_at)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
+      status,
+      reason,
+      tokens.accessToken,
+      tokens.refreshToken,
+      tokens.expiresAt,
+      tokens.clientId,
+      now,
+    );
+  }
+
+  private writeUsageLimit(limit: UsageLimit | null): void {
+    if (limit === null) {
+      this.sql.exec("DELETE FROM chatgpt_usage_limit");
+
+      return;
+    }
+
+    this.sql.exec(
+      "INSERT OR REPLACE INTO chatgpt_usage_limit (id, reached_at, limited_until) VALUES (1, ?, ?)",
+      limit.reachedAt,
+      limit.limitedUntil,
+    );
+  }
+
+  private writeLogin(signIn: SignIn): void {
+    SignIn.match(signIn, {
+      idle: () => this.sql.exec("DELETE FROM chatgpt_login"),
+      exchanging: () => this.sql.exec("DELETE FROM chatgpt_login"),
+      pending: (pending) =>
+        this.sql.exec(
+          `INSERT OR REPLACE INTO chatgpt_login
+             (id, attempt_id, state, verifier, authorize_url, expires_at)
+           VALUES (1, ?, ?, ?, ?, ?)`,
+          pending.attemptId,
+          pending.state,
+          pending.verifier,
+          pending.authorizeUrl,
+          pending.expiresAt,
+        ),
+    });
   }
 }

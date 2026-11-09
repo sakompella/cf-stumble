@@ -1,7 +1,16 @@
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { logEvent } from "../diagnostics.js";
+import {
+  AccessStep,
+  AccountEvent,
+  decideAccess,
+  refreshAccess,
+  type ChatGPTAccount,
+  type ConnectedAccount,
+} from "./account.js";
 import {
   authorizeUrl,
   exchangeFields,
@@ -12,21 +21,28 @@ import {
   type ProviderFetch,
   type TokenFailure,
 } from "./oauth.js";
-import type { ChatGPTCredentialStore, StoredConnection } from "./credential-store.js";
-import type {
-  ChatGPTAccess,
-  ChatGPTConnectionStatus,
-  ChatGPTConnectionView,
-  ChatGPTLoginFailure,
-  ChatGPTLoginOutcome,
-  ChatGPTUsageLimit,
+import { decideRedemption, Redemption, SignInEvent } from "./sign-in.js";
+import type { ChatGPTCredentialStore } from "./credential-store.js";
+import {
+  wireConnection,
+  wireLogin,
+  type ChatGPTAccess,
+  type ChatGPTConnectionView,
+  type ChatGPTLoginFailure,
+  type ChatGPTLoginOutcome,
 } from "./connection-view.js";
 
 const LOGIN_TTL_MS = 10 * 60 * 1000;
 
-const REFRESH_WINDOW_MS = 8 * 60 * 1000;
+type RefreshPhase = Data.TaggedEnum<{
+  Idle: object;
+  Refreshing: {
+    readonly from: ConnectedAccount;
+    readonly shared: Deferred.Deferred<ChatGPTAccount>;
+  };
+}>;
 
-type ConnectedCredential = Extract<StoredConnection, { state: "connected" }>;
+const RefreshPhase = Data.taggedEnum<RefreshPhase>();
 
 function loginFailure(failure: TokenFailure): ChatGPTLoginFailure {
   switch (failure) {
@@ -38,6 +54,30 @@ function loginFailure(failure: TokenFailure): ChatGPTLoginFailure {
     case "ambiguous":
     case "rejected":
       return "exchange-refused";
+    default: {
+      const exhaustive: never = failure;
+
+      return exhaustive;
+    }
+  }
+}
+
+function refreshRefusal(failure: TokenFailure, from: ConnectedAccount): AccountEvent | null {
+  switch (failure) {
+    case "rejected":
+      return AccountEvent.RefreshRefused({
+        accessToken: from.accessToken,
+        reason: "refresh-refused",
+      });
+    case "missing-scope":
+      return AccountEvent.RefreshRefused({
+        accessToken: from.accessToken,
+        reason: "missing-scope",
+      });
+    case "rate-limited":
+    case "temporary":
+    case "ambiguous":
+      return null;
     default: {
       const exhaustive: never = failure;
 
@@ -58,8 +98,7 @@ export class ChatGPTConnection {
   private readonly fetcher: ProviderFetch;
   private readonly model: string;
   private readonly clock: () => number;
-  private refreshing: Deferred.Deferred<ChatGPTAccess> | undefined;
-  private exchanging: string | undefined;
+  private phase: RefreshPhase = RefreshPhase.Idle();
 
   constructor(input: ChatGPTConnectionInput) {
     this.store = input.store;
@@ -69,30 +108,11 @@ export class ChatGPTConnection {
   }
 
   view(): ChatGPTConnectionView {
-    const stored = this.store.connection();
-    const login = this.store.login();
-
-    const usageLimit = this.currentUsageLimit();
-
-    const connection: ChatGPTConnectionStatus =
-      stored === undefined
-        ? { state: "disconnected" }
-        : stored.state === "needs-reconnect"
-          ? stored
-          : usageLimit === undefined
-            ? { state: "connected", expiresAt: stored.expiresAt }
-            : { state: "connected", expiresAt: stored.expiresAt, usageLimit };
+    const now = this.clock();
 
     return {
-      connection,
-      login:
-        login === undefined || login.expiresAt <= this.clock()
-          ? null
-          : {
-              attemptId: login.attemptId,
-              authorizeUrl: login.authorizeUrl,
-              expiresAt: login.expiresAt,
-            },
+      connection: wireConnection(this.store.account(), now),
+      login: wireLogin(this.store.signIn(), now),
       model: this.model,
     };
   }
@@ -103,14 +123,17 @@ export class ChatGPTConnection {
 
     return authorizeUrl({ state, verifier, agentHostId: this.store.agentHostId() }).pipe(
       Effect.map((url) => {
-        this.exchanging = undefined;
-        this.store.startLogin({
+        const now = this.clock();
+
+        const attempt = {
           attemptId: crypto.randomUUID(),
           state,
           verifier,
           authorizeUrl: url,
-          expiresAt: this.clock() + LOGIN_TTL_MS,
-        });
+          expiresAt: now + LOGIN_TTL_MS,
+        };
+
+        this.store.updateSignIn(SignInEvent.Started({ attempt }), now);
 
         return this.view();
       }),
@@ -130,57 +153,50 @@ export class ChatGPTConnection {
   }
 
   disconnect(): ChatGPTConnectionView {
-    this.exchanging = undefined;
-    this.store.disconnect();
+    this.store.updateSignIn(SignInEvent.Cancelled(), this.clock());
 
     return this.view();
   }
 
   access(rejected?: string): Effect.Effect<ChatGPTAccess> {
-    return Effect.suspend(() => {
-      if (this.refreshing !== undefined) return Deferred.await(this.refreshing);
+    return Effect.suspend(() =>
+      RefreshPhase.$match(this.phase, {
+        Refreshing: ({ from, shared }) => this.settled(Deferred.await(shared), from, rejected),
+        Idle: () => {
+          const now = this.clock();
+          const account = this.store.update(AccountEvent.LimitLapsed({ now }), now);
 
-      const stored = this.store.connection();
-
-      if (stored === undefined) return Effect.succeed({ kind: "not-connected" } as const);
-
-      if (stored.state === "needs-reconnect") {
-        return Effect.succeed({ kind: "reconnect-required" } as const);
-      }
-
-      const limitedUntil = this.currentUsageLimit()?.limitedUntil ?? null;
-
-      if (limitedUntil !== null) {
-        return Effect.succeed({ kind: "usage-limited", limitedUntil } as const);
-      }
-
-      this.store.clearUsageLimit();
-
-      const expiresSoon = stored.expiresAt - this.clock() < REFRESH_WINDOW_MS;
-
-      if (!expiresSoon && rejected !== stored.accessToken) {
-        return Effect.succeed({ kind: "ready", accessToken: stored.accessToken } as const);
-      }
-
-      return this.refreshOnce(stored, rejected === stored.accessToken);
-    });
+          return AccessStep.$match(decideAccess(account, now, rejected), {
+            Answer: ({ access }) => Effect.succeed(access),
+            Refresh: ({ from }) => this.settled(this.refreshOnce(from), from, rejected),
+          });
+        },
+      }),
+    );
   }
 
   markRefused(accessToken: string): void {
-    this.store.markNeedsReconnect(accessToken, "provider-refused", this.clock());
+    this.store.update(AccountEvent.ProviderRefused({ accessToken }), this.clock());
     logEvent("error", "chatgpt.provider-refused");
   }
 
   markUsageLimited(accessToken: string, limitedUntil: number | null): void {
-    this.store.markUsageLimited(accessToken, { reachedAt: this.clock(), limitedUntil });
+    const now = this.clock();
+
+    this.store.update(
+      AccountEvent.LimitReported({ accessToken, reachedAt: now, limitedUntil }),
+      now,
+    );
   }
 
-  private currentUsageLimit(): ChatGPTUsageLimit | undefined {
-    const limit = this.store.usageLimit();
-
-    if (limit === undefined || limit.limitedUntil === null) return limit;
-
-    return limit.limitedUntil > this.clock() ? limit : undefined;
+  private settled(
+    refreshed: Effect.Effect<ChatGPTAccount>,
+    from: ConnectedAccount,
+    rejected: string | undefined,
+  ): Effect.Effect<ChatGPTAccess> {
+    return refreshed.pipe(
+      Effect.map((after) => refreshAccess(after, from, this.clock(), rejected)),
+    );
   }
 
   private redeem(attemptId: string, callbackUrl: string): Effect.Effect<ChatGPTLoginOutcome> {
@@ -188,117 +204,91 @@ export class ChatGPTConnection {
       Effect.sync(() => ({ ok: false, problem: { code }, chatgpt: this.view() }) as const);
 
     return Effect.suspend(() => {
-      const login = this.store.login();
+      const now = this.clock();
 
-      if (login?.attemptId !== attemptId) return refused("no-sign-in");
+      return Redemption.$match(decideRedemption(this.store.signIn(), attemptId, now), {
+        Unknown: () => refused("no-sign-in"),
+        Expired: () => {
+          this.store.updateSignIn(SignInEvent.Lapsed({ attemptId }), now);
 
-      if (login.expiresAt <= this.clock()) {
-        this.store.clearLogin();
+          return refused("expired");
+        },
+        Redeem: ({ pending }) => {
+          const callback = parseCallback(callbackUrl, pending.state);
 
-        return refused("expired");
-      }
+          if (Result.isFailure(callback)) return refused(callback.failure);
+          this.store.updateSignIn(SignInEvent.Redeemed({ attemptId }), now);
 
-      const callback = parseCallback(callbackUrl, login.state);
+          return requestTokens(
+            this.fetcher,
+            exchangeFields(callback.success, pending.verifier),
+          ).pipe(
+            Effect.matchEffect({
+              onFailure: ({ failure }) => {
+                this.store.updateSignIn(SignInEvent.Failed({ attemptId }), this.clock());
 
-      if (Result.isFailure(callback)) return refused(callback.failure);
-      this.store.clearLogin();
-      this.exchanging = attemptId;
+                return refused(loginFailure(failure));
+              },
+              onSuccess: (grant): Effect.Effect<ChatGPTLoginOutcome> => {
+                const exchangedAt = this.clock();
 
-      return requestTokens(this.fetcher, exchangeFields(callback.success, login.verifier)).pipe(
-        Effect.matchEffect({
-          onFailure: ({ failure }) => refused(loginFailure(failure)),
-          onSuccess: (grant): Effect.Effect<ChatGPTLoginOutcome> => {
-            if (this.exchanging !== attemptId) return refused("no-sign-in");
-            this.exchanging = undefined;
+                const step = this.store.updateSignIn(
+                  SignInEvent.Exchanged({
+                    attemptId,
+                    grant: {
+                      accessToken: grant.accessToken,
+                      refreshToken: grant.refreshToken,
+                      expiresAt: exchangedAt + grant.expiresInMs,
+                      clientId: callback.success.clientId,
+                    },
+                  }),
+                  exchangedAt,
+                );
 
-            return Effect.sync(() => {
-              this.store.connect(
-                {
-                  accessToken: grant.accessToken,
-                  refreshToken: grant.refreshToken,
-                  expiresAt: this.clock() + grant.expiresInMs,
-                  clientId: callback.success.clientId,
-                },
-                this.clock(),
-              );
-
-              return { ok: true, chatgpt: this.view() } as const;
-            });
-          },
-        }),
-      );
+                return step.account === null
+                  ? refused("no-sign-in")
+                  : Effect.sync(() => ({ ok: true, chatgpt: this.view() }) as const);
+              },
+            }),
+          );
+        },
+      });
     });
   }
 
-  private refreshOnce(stored: ConnectedCredential, forced: boolean): Effect.Effect<ChatGPTAccess> {
-    const shared = Deferred.makeUnsafe<ChatGPTAccess>();
-    this.refreshing = shared;
+  private refreshOnce(from: ConnectedAccount): Effect.Effect<ChatGPTAccount> {
+    const shared = Deferred.makeUnsafe<ChatGPTAccount>();
+    this.phase = RefreshPhase.Refreshing({ from, shared });
 
-    return this.refresh(stored, forced).pipe(
+    return requestTokens(this.fetcher, refreshFields(from.clientId, from.refreshToken)).pipe(
+      Effect.match({
+        onFailure: ({ failure }) => {
+          logEvent(failure === "rejected" ? "error" : "warn", "chatgpt.refresh", {
+            outcome: failure,
+          });
+
+          return refreshRefusal(failure, from);
+        },
+        onSuccess: (grant) =>
+          AccountEvent.Refreshed({
+            redeemed: from.refreshToken,
+            grant: {
+              accessToken: grant.accessToken,
+              refreshToken: grant.refreshToken,
+              expiresAt: this.clock() + grant.expiresInMs,
+            },
+          }),
+      }),
+      Effect.map((event) =>
+        event === null ? this.store.account() : this.store.update(event, this.clock()),
+      ),
       Effect.onExit((exit) =>
         Effect.sync(() => {
-          this.refreshing = undefined;
+          this.phase = RefreshPhase.Idle();
           Deferred.doneUnsafe(shared, exit);
         }),
       ),
       Effect.uninterruptible,
     );
-  }
-
-  private refresh(stored: ConnectedCredential, forced: boolean): Effect.Effect<ChatGPTAccess> {
-    return requestTokens(this.fetcher, refreshFields(stored.clientId, stored.refreshToken)).pipe(
-      Effect.match({
-        onFailure: ({ failure }): ChatGPTAccess => {
-          logEvent(failure === "rejected" ? "error" : "warn", "chatgpt.refresh", {
-            outcome: failure,
-          });
-
-          if (failure === "rejected" || failure === "missing-scope") {
-            this.store.markNeedsReconnect(
-              stored.accessToken,
-              failure === "rejected" ? "refresh-refused" : "missing-scope",
-              this.clock(),
-            );
-
-            return this.storedAccess();
-          }
-
-          const current = this.store.connection();
-
-          if (current?.state !== "connected" || current.accessToken !== stored.accessToken) {
-            return this.storedAccess();
-          }
-
-          return !forced && stored.expiresAt > this.clock()
-            ? { kind: "ready", accessToken: stored.accessToken }
-            : { kind: "unavailable" };
-        },
-        onSuccess: (grant): ChatGPTAccess => {
-          const now = this.clock();
-
-          const replaced = this.store.replaceRefreshed(
-            stored.refreshToken,
-            {
-              accessToken: grant.accessToken,
-              refreshToken: grant.refreshToken,
-              expiresAt: now + grant.expiresInMs,
-            },
-            now,
-          );
-
-          return replaced ? { kind: "ready", accessToken: grant.accessToken } : this.storedAccess();
-        },
-      }),
-    );
-  }
-
-  private storedAccess(): ChatGPTAccess {
-    const stored = this.store.connection();
-
-    if (stored === undefined) return { kind: "not-connected" };
-
-    return stored.state === "connected"
-      ? { kind: "ready", accessToken: stored.accessToken }
-      : { kind: "reconnect-required" };
   }
 }

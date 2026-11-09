@@ -14,6 +14,7 @@ import {
   REFRESH_TWO,
 } from "./fixtures.js";
 import { access, connected, HOUR, withConnection } from "./connection-harness.js";
+import { AccountEvent } from "../../src/chatgpt/account.js";
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -45,12 +46,13 @@ test("concurrent callers near expiry share one refresh, and the rotated pair is 
       expect(refresh.get("client_id")).toBe(CLIENT_ID);
       expect(refresh.get("refresh_token")).toBe(REFRESH_ONE);
 
-      expect(harness.store.connection()).toEqual({
-        state: "connected",
+      expect(harness.store.account()).toEqual({
+        _tag: "connected",
         accessToken: ACCESS_TWO,
         refreshToken: REFRESH_TWO,
         expiresAt: harness.clock.now + HOUR,
         clientId: CLIENT_ID,
+        usageLimit: null,
       });
       await expect(access(harness.connection)).resolves.toEqual({
         kind: "ready",
@@ -62,7 +64,7 @@ test("concurrent callers near expiry share one refresh, and the rotated pair is 
 
   const rotated = await runInDurableObject(
     env.SUPERVISOR.getByName("chatgpt-refresh-race"),
-    (_instance, state) => new ChatGPTCredentialStore(state.storage).connection(),
+    (_instance, state) => new ChatGPTCredentialStore(state.storage).account(),
   );
 
   expect(rotated).toMatchObject({ refreshToken: REFRESH_TWO });
@@ -131,7 +133,7 @@ test("a busy token server keeps the stored pair and a still-valid token keeps wo
     () => Promise.resolve(new Response("busy", { status: 503 })),
     async (harness) => {
       connected(harness, 60_000);
-      const before = harness.store.connection();
+      const before = harness.store.account();
 
       await expect(access(harness.connection)).resolves.toEqual({
         kind: "ready",
@@ -142,7 +144,28 @@ test("a busy token server keeps the stored pair and a still-valid token keeps wo
       });
       harness.clock.now += 120_000;
       await expect(access(harness.connection)).resolves.toEqual({ kind: "unavailable" });
-      expect(harness.store.connection()).toEqual(before);
+      expect(harness.store.account()).toEqual(before);
+    },
+  );
+});
+
+test("a caller that joins a refresh with the token it rejected does not get that token back", async () => {
+  const held = heldReply();
+
+  await withConnection(
+    "chatgpt-refresh-joined-rejected",
+    () => held.reply,
+    async (harness) => {
+      connected(harness, 5 * 60 * 1000);
+
+      const starter = access(harness.connection);
+      const joiner = access(harness.connection, ACCESS_ONE);
+      await Promise.resolve();
+      held.release(new Response("busy", { status: 503 }));
+
+      await expect(starter).resolves.toEqual({ kind: "ready", accessToken: ACCESS_ONE });
+      await expect(joiner).resolves.toEqual({ kind: "unavailable" });
+      expect(harness.calls).toHaveLength(1);
     },
   );
 });
@@ -158,13 +181,15 @@ test("a sign-in that lands during a refresh wins over the refreshed pair", async
       const refreshing = access(harness.connection);
       await Promise.resolve();
 
-      harness.store.connect(
-        {
-          accessToken: "chatgpt-access-FAKE-new-sign-in",
-          refreshToken: "chatgpt-refresh-FAKE-new-sign-in",
-          expiresAt: harness.clock.now + HOUR,
-          clientId: CLIENT_ID,
-        },
+      harness.store.update(
+        AccountEvent.LoggedIn({
+          grant: {
+            accessToken: "chatgpt-access-FAKE-new-sign-in",
+            refreshToken: "chatgpt-refresh-FAKE-new-sign-in",
+            expiresAt: harness.clock.now + HOUR,
+            clientId: CLIENT_ID,
+          },
+        }),
         harness.clock.now,
       );
       held.release(grant(ACCESS_TWO, REFRESH_TWO));
@@ -173,7 +198,7 @@ test("a sign-in that lands during a refresh wins over the refreshed pair", async
         kind: "ready",
         accessToken: "chatgpt-access-FAKE-new-sign-in",
       });
-      expect(harness.store.connection()).toMatchObject({
+      expect(harness.store.account()).toMatchObject({
         refreshToken: "chatgpt-refresh-FAKE-new-sign-in",
       });
     },
@@ -235,13 +260,15 @@ test("an account that replaced the pair while the token server was busy is the o
         expect(harness.calls).toHaveLength(1);
       });
 
-      harness.store.connect(
-        {
-          accessToken: ACCESS_TWO,
-          refreshToken: REFRESH_TWO,
-          expiresAt: harness.clock.now + HOUR,
-          clientId: CLIENT_ID,
-        },
+      harness.store.update(
+        AccountEvent.LoggedIn({
+          grant: {
+            accessToken: ACCESS_TWO,
+            refreshToken: REFRESH_TWO,
+            expiresAt: harness.clock.now + HOUR,
+            clientId: CLIENT_ID,
+          },
+        }),
         harness.clock.now,
       );
       held.release(new Response("busy", { status: 503 }));
