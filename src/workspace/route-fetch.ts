@@ -20,7 +20,7 @@ export function gitForwardToken(kv: DurableObjectStorage["kv"]): string {
   return token;
 }
 
-const GIT_FORWARD_PATH = "/git";
+const GIT_FORWARD_PATH = "/api";
 
 type FetchRoutes = Readonly<{
   token: string | undefined;
@@ -58,8 +58,6 @@ function bearerOf(request: Request): string | null {
 }
 
 function forwardedGit(request: Request, routes: FetchRoutes): Effect.Effect<Response> {
-  if (request.method !== "POST") return refused("POST required", 405);
-
   return providerTokenMatches(routes.git.token, bearerOf(request)).pipe(
     Effect.flatMap((matches) =>
       matches
@@ -74,7 +72,8 @@ function forwardedGit(request: Request, routes: FetchRoutes): Effect.Effect<Resp
 export function routeFetch(request: Request, routes: FetchRoutes): Effect.Effect<Response> {
   const { pathname } = new URL(request.url);
 
-  if (pathname === GIT_FORWARD_PATH) return forwardedGit(request, routes);
+  if (pathname === GIT_FORWARD_PATH && request.method === "POST")
+    return forwardedGit(request, routes);
 
   if (pathname !== ORB_PROVIDER_PATH && pathname !== ORB_COMPUTERD_PATH)
     return Effect.promise(() => routes.container.handleFetch(request));

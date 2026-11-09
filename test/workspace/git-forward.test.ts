@@ -26,7 +26,7 @@ const SETUP = [
 ].join(" && ");
 
 function request(token: string | null, method: string, body: string): Request {
-  return new Request("http://computer.internal/git", {
+  return new Request("http://computer.internal/api", {
     method,
     body: method === "POST" ? body : null,
     headers: token === null ? {} : { authorization: `Bearer ${token}` },
@@ -36,7 +36,6 @@ function request(token: string | null, method: string, body: string): Request {
 test.each([
   ["no token", null, "POST", 401],
   ["a wrong token", "not-the-token", "POST", 401],
-  ["a GET", "token", "GET", 405],
 ])("the git route refuses %s", async (_name, token, method, status) => {
   const response = await runInDurableObject(
     env.WORKSPACE_HOST.getByName("git-route-refuse"),

@@ -36,7 +36,7 @@ const subcommand = process.env["CF_STUMBLE_GIT_SUB"] ?? "";
 
 const realGit = process.env["CF_STUMBLE_REAL_GIT"] ?? "/usr/bin/git";
 
-const endpoint = process.env["CF_STUMBLE_GIT_FORWARD_URL"] ?? "http://computer.internal/git";
+const endpoint = process.env["CF_STUMBLE_GIT_FORWARD_URL"] ?? "http://computer.internal/api";
 
 const waitMs = Number(process.env["CF_STUMBLE_GIT_WAIT_MS"] ?? "20000");
 

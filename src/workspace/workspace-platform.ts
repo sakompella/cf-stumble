@@ -72,7 +72,7 @@ export class WorkspacePlatform {
     this.#containerBackend = new ContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#cloudflareContainer() }),
       containerEnv: {
-        get CF_STUMBLE_GIT_TOKEN() {
+        get COMPUTER_VAR_CF_STUMBLE_GIT_TOKEN() {
           return gitToken();
         },
       },
