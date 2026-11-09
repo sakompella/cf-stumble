@@ -7,6 +7,7 @@ import {
 import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
 import * as Effect from "effect/Effect";
 import { WORKSPACE_CONTAINER_INSTANCE } from "../../infra/worker-settings.js";
+import { WORKSPACE_OUTPUT_OPTIONS } from "../../infra/worker-settings.js";
 import { logEvent } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore, type HostedBackend } from "./backend-sync-ignore.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
@@ -171,7 +172,7 @@ export class WorkspacePlatform {
       sessionId: this.#state.id.toString(),
       backends: [this.#workspaceBackend, this.#isolate.backend],
       git: this.#isolate.git,
-      output: false,
+      output: WORKSPACE_OUTPUT_OPTIONS,
     });
   }
 }

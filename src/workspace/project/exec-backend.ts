@@ -3,7 +3,7 @@ import type { ExecBackendChoice } from "./protocol.js";
 export type BackendExecEvent =
   | { name: "stdout"; data: Uint8Array }
   | { name: "stderr"; data: Uint8Array }
-  | { name: "exit"; exitCode: number };
+  | { name: "exit"; exitCode: number; fullOutputPaths?: readonly string[] | undefined };
 
 interface ExecBackendReader {
   read(): Promise<{ done: false; value: BackendExecEvent } | { done: true; value?: undefined }>;

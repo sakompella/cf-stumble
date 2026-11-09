@@ -8,7 +8,11 @@ import {
 import { shellQuote } from "../../shell-quote.js";
 import { MAX_EXEC_TIMEOUT_MS, type ExecEvent } from "../../workspace/project/protocol.js";
 import { NdjsonFrameReader } from "./execution-env-frame-reader.js";
-import { resolveInWorkspace, type ComputerWorkspace } from "./execution-env-paths.js";
+import {
+  resolveInWorkspace,
+  fromAddressed,
+  type ComputerWorkspace,
+} from "./execution-env-paths.js";
 import { OutputSpill } from "./execution-env-spill.js";
 
 type ExecResult = Result<ShellExecResult, ExecutionError>;
@@ -44,6 +48,14 @@ function scriptOf(command: string | readonly string[], options: ShellExecOptions
   return `exec ${[...env, ...argv].map((part) => shellQuote(part)).join(" ")}`;
 }
 
+function isSavedPaths(value: unknown): value is readonly string[] | undefined {
+  if (value === undefined) return true;
+
+  if (!Array.isArray(value)) return false;
+
+  return value.every((path): path is string => typeof path === "string");
+}
+
 function isExecEvent(value: unknown): value is ExecEvent {
   if (typeof value !== "object" || value === null) return false;
 
@@ -55,7 +67,11 @@ function isExecEvent(value: unknown): value is ExecEvent {
 
   if (value.kind !== "terminal" || !("outcome" in value)) return false;
 
-  if (value.outcome === "exited") return "exitCode" in value && typeof value.exitCode === "number";
+  if (value.outcome === "exited") {
+    const saved = "fullOutputPaths" in value ? value.fullOutputPaths : undefined;
+
+    return "exitCode" in value && typeof value.exitCode === "number" && isSavedPaths(saved);
+  }
 
   return value.outcome === "killed" || value.outcome === "timed-out" || value.outcome === "failed";
 }
@@ -74,6 +90,13 @@ async function nextEvent(frames: NdjsonFrameReader): Promise<ExecEvent | Executi
     : new ExecutionError("unknown", "the capability sent a malformed exec event");
 }
 
+function fullOutputPath(terminal: Terminal): string | undefined {
+  const paths = terminal.outcome === "exited" ? (terminal.fullOutputPaths ?? []) : [];
+  const absolute = paths.map((path) => fromAddressed(path).absolute);
+
+  return absolute.length === 0 ? undefined : absolute.join(", ");
+}
+
 function settledResult(
   terminal: Terminal,
   argv: boolean,
@@ -86,8 +109,9 @@ function settledResult(
     }
 
     const value: ShellExecResult = { exitCode: terminal.exitCode };
+    const reported = fullOutputPath(terminal) ?? spillPath;
 
-    if (spillPath !== undefined) value.spillPath = spillPath;
+    if (reported !== undefined) value.spillPath = reported;
 
     return { ok: true, value };
   }
@@ -151,11 +175,17 @@ async function settle(command: RunningCommand): Promise<ExecResult> {
     if (event instanceof ExecutionError) return stop(event);
 
     if (event.kind === "terminal") {
-      const spilled = await spill?.finish();
+      if (fullOutputPath(event) === undefined) {
+        const spilled = await spill?.finish();
 
-      if (spilled?.ok === false) return stop(spilled.error);
+        if (spilled?.ok === false) return stop(spilled.error);
 
-      return settledResult(event, command.argv, spilled?.value, context);
+        return settledResult(event, command.argv, spilled?.value, context);
+      }
+
+      spill?.discard();
+
+      return settledResult(event, command.argv, undefined, context);
     }
 
     if (event.data === "") continue;

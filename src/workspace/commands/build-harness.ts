@@ -60,11 +60,7 @@ function checkoutSource(
 function phaseStep(directory: string, phase: HarnessBuildPhase): HarnessBuildStep {
   return {
     name: phase.name,
-    source: [
-      "set -o pipefail",
-      `cd ${shellQuote(directory)}`,
-      `${phase.command} 2>&1 | tail -c 4000`,
-    ].join("\n"),
+    source: [`cd ${shellQuote(directory)}`, phase.command].join("\n"),
     cwd: WORKSPACE_ROOT,
   };
 }
