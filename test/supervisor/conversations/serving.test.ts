@@ -189,14 +189,18 @@ test("an active run keeps the recovery alarm armed and refuses a workspace reset
   );
 });
 
-test("a run the facet reports as failed settles as failed with the error code", async () => {
+test("a run the facet reports unanswered with a model error settles as unanswered with the error code", async () => {
   const control = await servingScripted("conversations-failed-run");
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
   await control.submitProjectMessage("sample-project-one", "fail the run", "r1");
 
   expect(log).toHaveBeenCalledWith(
-    expect.objectContaining({ event: "run.settled", outcome: "failed", errorCode: "model_error" }),
+    expect.objectContaining({
+      event: "run.settled",
+      outcome: "unanswered",
+      errorCode: "model_error",
+    }),
   );
 });
 
@@ -210,7 +214,11 @@ test("an abort while nothing runs does not mark the next run cancelled", async (
   await control.submitProjectMessage("sample-project-one", "fail the run", "r2");
 
   expect(log).toHaveBeenCalledWith(
-    expect.objectContaining({ event: "run.settled", outcome: "failed", errorCode: "model_error" }),
+    expect.objectContaining({
+      event: "run.settled",
+      outcome: "unanswered",
+      errorCode: "model_error",
+    }),
   );
 });
 

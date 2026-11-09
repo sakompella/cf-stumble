@@ -1,4 +1,5 @@
-import { reset } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   activateGeneration,
@@ -30,7 +31,20 @@ export class MainFacet extends DurableObject {
   async attach(host) { this.host ??= host.dup(); }
   async createConversation(cwd) { return "conversation:" + cwd; }
   async submit(conversationId, content) {
-    const failure = content === "fail" ? "model_error" : ${JSON.stringify(failure)};
+    if (content === "hold") {
+      await this.host.running([{ conversationId }]);
+      return 1;
+    }
+    if (content === "numbered") {
+      await this.host.running([{ conversationId }]);
+      await this.host.running([{ conversationId, run: 1 }]);
+      return 1;
+    }
+    if (content === "end") {
+      await this.host.running([], { [conversationId]: "faulted" });
+      return 1;
+    }
+    const failure = content === "fail" ? "model_error" : content === "crash" ? "faulted" : ${JSON.stringify(failure)};
     await this.host.running([{ conversationId }]);
     await this.host.running([], failure === null ? {} : { [conversationId]: failure });
     return 1;
@@ -91,11 +105,7 @@ async function provenThenActivated(name: string, harnessCommit: string, failure:
 }
 
 test("a generation whose first real turn fails is rolled back to the last generation that completed one", async () => {
-  const { control, working } = await provenThenActivated(
-    "probation-rollback",
-    BROKEN,
-    "storage_failed",
-  );
+  const { control, working } = await provenThenActivated("probation-rollback", BROKEN, "faulted");
 
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -107,7 +117,7 @@ test("a generation whose first real turn fails is rolled back to the last genera
     expect.objectContaining({
       event: "generation.probation-failed",
       fallback: working,
-      errorCode: "storage_failed",
+      errorCode: "faulted",
       refused: null,
     }),
   );
@@ -129,4 +139,49 @@ test("a completed turn ends probation, so a later failed turn keeps the generati
   await send(control, "r3", "fail");
 
   expect((await control.getActiveGeneration()).generation?.label).toBe(activated);
+});
+
+test("a model error on a generation's first turn keeps it on probation, and a later fault still rolls it back", async () => {
+  const { control, working } = await provenThenActivated("probation-model-error", SOUND, null);
+  const activated = (await control.getActiveGeneration()).generation?.label;
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  await send(control, "r2", "fail");
+  expect((await control.getActiveGeneration()).generation?.label).toBe(activated);
+
+  await send(control, "r3", "crash");
+  expect((await control.getActiveGeneration()).generation?.label).toBe(working);
+});
+
+async function activeLabel(control: DurableObjectStub<Supervisor>): Promise<number | undefined> {
+  return (await control.getActiveGeneration()).generation?.label;
+}
+
+test("an owner cancel survives a Supervisor restart, so the run's end does not roll back the generation on probation", async () => {
+  const name = "probation-cancel-restart";
+  const { control } = await provenThenActivated(name, SOUND, null);
+  const activated = await activeLabel(control);
+
+  await send(control, "r2", "hold");
+  await control.abortProjectRun("sample-project-one");
+  await expect(
+    runInDurableObject(control, (_instance, state) => {
+      state.abort("the platform reset the Supervisor");
+    }),
+  ).rejects.toThrow();
+
+  const restarted = env.SUPERVISOR.getByName(name);
+  await send(restarted, "r3", "end");
+
+  expect(await activeLabel(restarted)).toBe(activated);
+});
+
+test("a run reported first without its number and then with it stays one run, so it proves nothing early", async () => {
+  const { control, working } = await provenThenActivated("probation-run-number", SOUND, null);
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  await send(control, "r2", "numbered");
+  await send(control, "r3", "end");
+
+  expect(await activeLabel(control)).toBe(working);
 });

@@ -1,6 +1,6 @@
 import type { GenerationLabel } from "./generations.js";
 
-export type RunOutcome = "cancelled" | "interrupted" | "completed" | "failed";
+import type { RunOutcome } from "./conversations/index.js";
 
 const PROVEN_KEY = "generations.proven";
 
@@ -23,7 +23,8 @@ export class GenerationProbation {
   settled(label: GenerationLabel, outcome: RunOutcome): GenerationLabel | undefined {
     const onProbation = this.#kv.get<GenerationLabel>(PROBATION_KEY) === label;
 
-    if (outcome === "cancelled") return undefined;
+    if (outcome !== "completed" && outcome !== "failed" && outcome !== "interrupted")
+      return undefined;
 
     if (outcome === "completed") this.#kv.put(PROVEN_KEY, label);
 

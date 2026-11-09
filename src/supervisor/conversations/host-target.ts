@@ -181,6 +181,8 @@ export function servingHosts(
   return {
     host: new ConversationHostTarget({
       ...ports,
+      arm: (wake) => whileServing(serves, () => ports.arm(wake)),
+      running: (report) => whileServing(serves, () => ports.running(report)),
       workspace: (conversationId) => whileServing(serves, () => ports.workspace(conversationId)),
     }),
     generations: new GenerationHostTarget(generations, serves),

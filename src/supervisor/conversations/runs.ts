@@ -1,25 +1,34 @@
 import * as Effect from "effect/Effect";
 import type { Wake } from "@earendil-works/pi-durable";
-import type { RunningConversation } from "../../facet/index.js";
 import type { RunReport } from "./host-target.js";
 import { logEvent } from "../../diagnostics.js";
 import { PROJECT_RUN_DEADLINE_MS } from "../../turn-budget.js";
-import type { RunOutcome } from "../probation.js";
+import {
+  RunCommand,
+  RunEvent,
+  RunState,
+  transition,
+  type ActiveRun,
+  type RunEnding,
+  type RunOutcome,
+} from "./run-machine.js";
 
 const HEARTBEAT_MS = 60_000;
 
 const WAKE_KEY = "conversations.wake";
 
-type Run = Readonly<{ conversation_id: string; run: number | null; deadline: number }>;
+type RunRow = Readonly<{
+  conversation_id: string;
+  run: number | null;
+  deadline: number;
+  ending: RunEnding | null;
+  instance: number | null;
+}>;
 
-function continues(run: Run, reported: RunningConversation): boolean {
-  return (
-    reported.conversationId === run.conversation_id &&
-    (reported.run === undefined || reported.run === run.run)
-  );
-}
-
-type RunEnding = Extract<RunOutcome, "cancelled" | "interrupted">;
+const ADDED_COLUMNS = {
+  ending: "ending TEXT CHECK (ending IN ('cancelled', 'interrupted'))",
+  instance: "instance INTEGER",
+} as const;
 
 export type FacetReplacement = Readonly<{
   command: Readonly<{ kind: "activate" | "rollback"; label: number }>;
@@ -32,20 +41,40 @@ export type Settlement = Readonly<{
   errorCode: string | null;
 }>;
 
+function stateFromRow(row: RunRow): ActiveRun {
+  const fields = { run: row.run, deadline: row.deadline, instance: row.instance };
+
+  return row.ending === null
+    ? RunState.cases.Running.make(fields)
+    : RunState.cases.Ending.make({ ...fields, ending: row.ending });
+}
+
 export class ConversationRuns {
   readonly #storage: DurableObjectStorage;
 
-  readonly #endings = new Map<string, RunEnding>();
-
   constructor(storage: DurableObjectStorage) {
     this.#storage = storage;
-    storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS conversation_runs (
-        conversation_id TEXT PRIMARY KEY,
-        run INTEGER,
-        deadline INTEGER NOT NULL
-      );
-    `);
+    storage.transactionSync(() => {
+      storage.sql.exec(`
+        CREATE TABLE IF NOT EXISTS conversation_runs (
+          conversation_id TEXT PRIMARY KEY,
+          run INTEGER,
+          deadline INTEGER NOT NULL,
+          ${ADDED_COLUMNS.ending},
+          ${ADDED_COLUMNS.instance}
+        );
+      `);
+
+      for (const [column, definition] of Object.entries(ADDED_COLUMNS)) {
+        const present = storage.sql
+          .exec("SELECT 1 FROM pragma_table_info('conversation_runs') WHERE name = ?", column)
+          .toArray();
+
+        if (present.length === 0) {
+          storage.sql.exec(`ALTER TABLE conversation_runs ADD COLUMN ${definition}`);
+        }
+      }
+    });
   }
 
   cancelled(conversationId: string): string {
@@ -57,70 +86,65 @@ export class ConversationRuns {
   }
 
   #ends(conversationId: string, ending: RunEnding): string {
-    if (this.#runs().some((run) => run.conversation_id === conversationId))
-      this.#endings.set(conversationId, ending);
+    this.#storage.transactionSync(() => {
+      const state = this.#runs().get(conversationId) ?? RunState.cases.Idle.make({});
+
+      this.#write(conversationId, transition(state, RunEvent.Ended({ ending })).state);
+    });
 
     return conversationId;
   }
 
   running(now: number): boolean {
-    return this.#runs().some((run) => run.deadline > now);
+    return [...this.#runs().values()].some((run) => run.deadline > now);
   }
 
   remainingMs(conversationId: string, now: number): number | undefined {
-    const run = this.#runs().find((candidate) => candidate.conversation_id === conversationId);
+    const run = this.#runs().get(conversationId);
 
     return run !== undefined && run.deadline > now ? run.deadline - now : undefined;
   }
 
   expired(now: number): readonly string[] {
-    return this.#runs()
-      .filter((run) => run.deadline <= now)
-      .map((run) => run.conversation_id);
+    return [...this.#runs()].flatMap(([conversationId, run]) =>
+      run.deadline <= now ? [conversationId] : [],
+    );
   }
 
   reconcile(
     { running, failed }: RunReport,
     now: number,
+    instance: number,
     generation: number | null,
   ): readonly Settlement[] {
-    const runs = this.#runs();
-    const settled = runs.filter((run) => !running.some((reported) => continues(run, reported)));
-    const started = running.filter((reported) => !runs.some((run) => continues(run, reported)));
+    const steps = this.#storage.transactionSync(() => {
+      const runs = this.#runs();
 
-    const settlements = settled.map((run): Settlement => {
-      this.#storage.sql.exec(
-        "DELETE FROM conversation_runs WHERE conversation_id = ?",
-        run.conversation_id,
-      );
+      const conversations = new Set([
+        ...runs.keys(),
+        ...running.map((reported) => reported.conversationId),
+      ]);
 
-      const errorCode = failed[run.conversation_id] ?? null;
+      return [...conversations].map((conversationId) => {
+        const step = transition(
+          runs.get(conversationId) ?? RunState.cases.Idle.make({}),
+          RunEvent.Reported({
+            report: running.find((reported) => reported.conversationId === conversationId),
+            errorCode: failed[conversationId] ?? null,
+            instance,
+            now,
+          }),
+        );
 
-      const outcome =
-        this.#endings.get(run.conversation_id) ?? (errorCode === null ? "completed" : "failed");
+        this.#write(conversationId, step.state);
 
-      logEvent("info", "run.settled", {
-        totalMs: now - (run.deadline - PROJECT_RUN_DEADLINE_MS),
-        generation,
-        outcome,
-        errorCode,
+        return { conversationId, commands: step.commands };
       });
-      this.#endings.delete(run.conversation_id);
-
-      return { conversationId: run.conversation_id, outcome, errorCode };
     });
 
-    for (const { conversationId, run } of started) {
-      this.#storage.sql.exec(
-        "INSERT INTO conversation_runs (conversation_id, run, deadline) VALUES (?, ?, ?)",
-        conversationId,
-        run ?? null,
-        now + PROJECT_RUN_DEADLINE_MS,
-      );
-      logEvent("info", "run.started", { generation });
-    }
-
-    return settlements;
+    return steps.flatMap(({ conversationId, commands }) =>
+      commands.flatMap((command) => perform(command, conversationId, now, generation)),
+    );
   }
 
   arm(wake: Wake, now: number): Effect.Effect<void> {
@@ -141,9 +165,7 @@ export class ConversationRuns {
     const candidates = [
       wake?.active === true ? now + HEARTBEAT_MS : undefined,
       wake?.at,
-      ...this.#runs()
-        .map((run) => run.deadline)
-        .filter((deadline) => deadline > now),
+      ...[...this.#runs().values()].flatMap((run) => (run.deadline > now ? [run.deadline] : [])),
     ].filter((at) => at !== undefined);
 
     return Effect.promise(() =>
@@ -153,9 +175,63 @@ export class ConversationRuns {
     );
   }
 
-  #runs(): readonly Run[] {
-    return this.#storage.sql
-      .exec<Run>("SELECT conversation_id, run, deadline FROM conversation_runs")
-      .toArray();
+  #write(conversationId: string, state: RunState): void {
+    const { sql } = this.#storage;
+
+    const upsert = (run: ActiveRun, ending: RunEnding | null) =>
+      sql.exec(
+        `INSERT INTO conversation_runs (conversation_id, run, deadline, ending, instance)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (conversation_id) DO UPDATE SET
+           run = excluded.run, deadline = excluded.deadline,
+           ending = excluded.ending, instance = excluded.instance`,
+        conversationId,
+        run.run,
+        run.deadline,
+        ending,
+        run.instance,
+      );
+
+    RunState.match(state, {
+      Idle: () =>
+        sql.exec("DELETE FROM conversation_runs WHERE conversation_id = ?", conversationId),
+      Running: (run) => upsert(run, null),
+      Ending: (run) => upsert(run, run.ending),
+    });
   }
+
+  #runs(): ReadonlyMap<string, ActiveRun> {
+    const rows = this.#storage.sql
+      .exec<RunRow>(
+        "SELECT conversation_id, run, deadline, ending, instance FROM conversation_runs",
+      )
+      .toArray();
+
+    return new Map(rows.map((row) => [row.conversation_id, stateFromRow(row)] as const));
+  }
+}
+
+function perform(
+  command: RunCommand,
+  conversationId: string,
+  now: number,
+  generation: number | null,
+): readonly Settlement[] {
+  return RunCommand.$match(command, {
+    Started: () => {
+      logEvent("info", "run.started", { generation });
+
+      return [];
+    },
+    Settled: ({ outcome, errorCode, deadline }) => {
+      logEvent("info", "run.settled", {
+        totalMs: now - (deadline - PROJECT_RUN_DEADLINE_MS),
+        generation,
+        outcome,
+        errorCode,
+      });
+
+      return [{ conversationId, outcome, errorCode }];
+    },
+  });
 }

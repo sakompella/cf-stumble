@@ -8,7 +8,8 @@ import {
   type GenerationRow,
   type SelectionRow,
 } from "./generation-rows.js";
-import { GenerationProbation, type RunOutcome } from "./probation.js";
+import type { RunOutcome } from "./conversations/index.js";
+import { GenerationProbation } from "./probation.js";
 import type { GenerationChange } from "./history/commits.js";
 
 export type GenerationStatus = "candidate" | "ready" | "failed";
