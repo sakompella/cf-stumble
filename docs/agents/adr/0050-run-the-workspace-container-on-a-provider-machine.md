@@ -24,7 +24,8 @@ costs nothing. JSON frames (`src/orb-protocol.ts`) carry:
 
 - jobs from the Host: `start` (with the container's environment), `stop` (idle stop) and `delete`
   (reset). The provider runs the dispatch script once per job, with the job in environment
-  variables, and answers `job-done` or `failed`. `start` prints the address of the container's
+  variables, and answers `job-done` or `failed`. A `stop` or `delete` with no answer in 30 s
+  closes the provider's socket and counts as a disconnect. `start` prints the address of the container's
   port 8080.
 - `fetch` from the Host: the setup calls `ContainerBackend` makes to port 8080 (`/health`, the
   `/api` auth check, `POST /connect`, `/__computerd/info`), answered with `fetch-result`.
