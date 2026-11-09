@@ -108,18 +108,32 @@ function withMessage(args: string[], message: string): string[] {
   return [...kept, "-m", message];
 }
 
-function runHook(directory: string, name: string, cwd: string, hookArgs: string[]): void {
+function runHook(directory: string, name: string, cwd: string, hookArgs: string[]): number {
   const hook = join(directory, name);
 
   try {
     accessSync(hook, constants.X_OK);
   } catch {
-    return;
+    return 0;
   }
 
-  const ran = spawnSync(hook, hookArgs, { cwd, stdio: "inherit" });
+  return spawnSync(hook, hookArgs, { cwd, stdio: "inherit" }).status ?? 1;
+}
 
-  if (ran.status !== 0) fail(`${name} hook failed`);
+function editedMessage(directory: string, cwd: string, message: string): string | null {
+  const scratch = mkdtempSync(join(tmpdir(), "git-forward-"));
+
+  try {
+    const file = join(scratch, "COMMIT_EDITMSG");
+
+    writeFileSync(file, `${message}\n`);
+
+    return runHook(directory, "commit-msg", cwd, [file]) === 0
+      ? readFileSync(file, "utf8").replace(/\n$/u, "")
+      : null;
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 function commitArguments(): string[] {
@@ -136,21 +150,15 @@ function commitArguments(): string[] {
 
   const directory = resolvePath(top, hooks);
 
-  runHook(directory, "pre-commit", top, []);
+  if (runHook(directory, "pre-commit", top, []) !== 0) return fail("pre-commit hook failed");
 
   const message = messageOf(options);
 
   if (message === undefined) return argv;
 
-  const scratch = mkdtempSync(join(tmpdir(), "git-forward-"));
-  const file = join(scratch, "COMMIT_EDITMSG");
+  const edited = editedMessage(directory, top, message);
 
-  writeFileSync(file, `${message}\n`);
-  runHook(directory, "commit-msg", top, [file]);
-
-  const edited = readFileSync(file, "utf8").replace(/\n$/u, "");
-
-  rmSync(scratch, { recursive: true, force: true });
+  if (edited === null) return fail("commit-msg hook failed");
 
   return edited === message ? argv : [...leading, subcommand, ...withMessage(options, edited)];
 }

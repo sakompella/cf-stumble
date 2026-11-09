@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -278,6 +278,22 @@ test("a commit from a message file goes to the host without reading the file", a
 
   expect(ran.code).toBe(0);
   expect(seen[0]?.body.argv).toEqual(["-C", repository, "commit", "-F", join(root, "missing")]);
+});
+
+test("a rejected commit-msg hook leaves no scratch directory behind", async () => {
+  hook("commit-msg", "exit 1");
+
+  const scratch = mkdtempSync(join(tmpdir(), "cf-stumble-git-forward-tmp-"));
+
+  try {
+    const ran = await wrapped(["commit", "-m", "t"], { TMPDIR: scratch });
+
+    expect(ran.code).toBe(1);
+    expect(ran.stderr).toContain("commit-msg hook failed");
+    expect(readdirSync(scratch)).toEqual([]);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 test.each([["-am", "t"], ["-mt"], ["-amt"]])(
