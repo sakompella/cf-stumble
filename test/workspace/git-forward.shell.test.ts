@@ -271,6 +271,15 @@ test("a commit-msg hook can reject or rewrite the message", async () => {
   expect(seen).toEqual([]);
 });
 
+test("a commit from a message file goes to the host without reading the file", async () => {
+  hook("commit-msg", "exit 1");
+
+  const ran = await wrapped(["commit", "-F", join(root, "missing")]);
+
+  expect(ran.code).toBe(0);
+  expect(seen[0]?.body.argv).toEqual(["-C", repository, "commit", "-F", join(root, "missing")]);
+});
+
 test("hooks do not run for a write that is not a commit", async () => {
   hook("pre-commit", "exit 1");
 

@@ -63,7 +63,6 @@ function messageOf(args: string[]): string | undefined {
 
     if (arg === "-m" || arg === "--message") parts.push(args[(index += 1)] ?? "");
     else if (arg.startsWith("--message=")) parts.push(arg.slice("--message=".length));
-    else if (arg === "-F" || arg === "--file") return readFileSync(args[index + 1] ?? "", "utf8");
   }
 
   return parts.length === 0 ? undefined : parts.join("\n\n");
