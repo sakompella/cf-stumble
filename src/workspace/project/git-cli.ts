@@ -89,7 +89,7 @@ export async function gitCli(
     case "reset":
       return reportingFailure(() => resetCommand(client, cli, input));
     case "restore":
-      return reportingFailure(() => restoreCommand(client, cli, input));
+      return reportingFailure(() => restoreCommand(client, input));
     case "push":
       return cli(pushDelete(input));
     default:

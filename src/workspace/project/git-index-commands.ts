@@ -87,19 +87,61 @@ export async function resetCommand(
   return OK;
 }
 
-export async function restoreCommand(
-  client: GitClient,
-  cli: RunCli,
-  input: GitCliInput,
-): Promise<GitCliResult> {
-  const [, ...args] = input.argv;
-  const flags = args.filter((arg) => arg.startsWith("-") && arg !== "--");
-  const paths = without(args, ["--staged", "-S", "--"]);
+const RESTORE_UNSUPPORTED =
+  "error: restoring the working tree is not supported by this git; only --staged is\nusage: git restore --staged [--source <tree-ish>] [--] <pathspec>...\n";
 
-  if (flags.some((arg) => arg !== "--staged" && arg !== "-S") || paths.length === 0)
-    return cli(input);
+interface RestoreRequest {
+  readonly staged: boolean;
+  readonly source: string | undefined;
+  readonly paths: readonly string[];
+  readonly supported: boolean;
+}
 
-  await client.reset(paths.includes(".") ? { dir: root(input) } : { dir: root(input), paths });
+function restoreRequest(args: readonly string[]): RestoreRequest {
+  let staged = false;
+  let source: string | undefined;
+  let supported = true;
+  const paths: string[] = [];
+  let index = 0;
+
+  while (index < args.length) {
+    const arg = args[index++] ?? "";
+
+    if (arg === "--") {
+      paths.push(...args.slice(index));
+      return { staged, source, paths, supported };
+    }
+
+    if (arg === "--staged" || arg === "-S") staged = true;
+    else if (arg === "--source" || arg === "-s") source = args[index++];
+    else if (arg.startsWith("--source=")) source = arg.slice("--source=".length);
+    else if (arg.startsWith("-")) supported = false;
+    else paths.push(arg);
+  }
+
+  return { staged, source, paths, supported };
+}
+
+export async function restoreCommand(client: GitClient, input: GitCliInput): Promise<GitCliResult> {
+  const request = restoreRequest(input.argv.slice(1));
+  const dir = root(input);
+
+  if (!request.supported || !request.staged || request.paths.length === 0)
+    return { stdout: "", stderr: RESTORE_UNSUPPORTED, exitCode: 129 };
+
+  const oid =
+    request.source === undefined ? undefined : await resolves(client, dir, request.source);
+
+  if (request.source !== undefined && oid === undefined)
+    return failure(`fatal: ambiguous argument '${request.source}': unknown revision or path\n`);
+
+  const target = oid === undefined ? {} : { ref: oid };
+
+  await client.reset(
+    request.paths.includes(".")
+      ? { dir, ...target }
+      : { dir, paths: [...request.paths], ...target },
+  );
 
   return OK;
 }

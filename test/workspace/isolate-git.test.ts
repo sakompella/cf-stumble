@@ -211,6 +211,25 @@ test("git reset to an unknown revision fails with a message", async () => {
   expect(stderr).toContain("unknown revision");
 });
 
+test("git restore without --staged refuses instead of unstaging", async () => {
+  const { stdout, stderr } = await shell(
+    "isolate-git-restore-worktree",
+    `${SETUP} && echo x >> a.txt && git add a.txt && echo y >> a.txt && git restore a.txt; git status -s`,
+  );
+
+  expect(stderr).toContain("usage: git restore --staged");
+  expect(stdout).toBe("MM a.txt\n");
+});
+
+test("git restore --staged --source resets the index to the source revision", async () => {
+  const { stdout } = await shell(
+    "isolate-git-restore-source",
+    `${SETUP} && echo x >> a.txt && git commit -q -am second && echo y >> a.txt && git add a.txt && git restore --staged --source HEAD~1 a.txt && git status -s`,
+  );
+
+  expect(stdout).toBe("MM a.txt\n");
+});
+
 test("git push origin :branch deletes the remote branch", async () => {
   const { stderr } = await shell(
     "isolate-git-push-delete",
