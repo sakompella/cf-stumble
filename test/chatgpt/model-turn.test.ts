@@ -195,6 +195,30 @@ test("an error object without a type, then [DONE], keeps the text already stream
   expect(everythingLogged()).not.toContain("Read a.txt");
 });
 
+test("an error body past its byte bound is not drained", async () => {
+  const seen = { pulled: 0, cancelled: false };
+
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      seen.pulled += 1;
+      controller.enqueue(new TextEncoder().encode("x".repeat(2_048)));
+    },
+    cancel() {
+      seen.cancelled = true;
+    },
+  });
+
+  const { events } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
+    Promise.resolve(new Response(body, { status: 503 })),
+  );
+
+  expect(events).toEqual([
+    { type: "error", error: { code: "model-unavailable", detail: "503 unknown" } },
+  ]);
+  expect(seen.pulled).toBe(3);
+  expect(seen.cancelled).toBe(true);
+});
+
 test("a refused HTTP call ends with its status and code, and not its message", async () => {
   const { events } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
     Promise.resolve(
