@@ -51,6 +51,7 @@ const CONTROL_REFUSAL_STATUS = {
   "not-ready": 409,
   "not-previously-active": 409,
   "facet-compatibility-mismatch": 409,
+  "run-active": 409,
 } as const satisfies Record<ControlProblemCode, number>;
 
 function refusalResponse(

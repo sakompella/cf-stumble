@@ -52,7 +52,10 @@ Supervisor's alarm attaches the facet again, which resumes the run. The Supervis
 to its current conversation in its own `project_conversations` table, so it answers the project list
 without waking the facet. It hands a run a project capability through the host's `workspace`, ends
 every capability when the run settles, and aborts a run that passes `PROJECT_RUN_DEADLINE_MS`
-(`src/supervisor/conversations/`). A reset or a disconnect refuses with `run-active` while a run is
+(`src/supervisor/conversations/`). Each run row stores which serving instance started it and, once
+the owner cancels it or the deadline aborts it, how it is ending, so a restart does not forget a
+cancel. A replaced instance's `running` and `arm` calls are refused before they reach the Supervisor.
+A reset, a disconnect, or an owner activation or rollback refuses with `run-active` while a run is
 active.
 
 **The generation reaches nothing else.** Its model provider calls only the `MODEL` binding, and its

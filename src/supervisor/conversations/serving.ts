@@ -334,10 +334,8 @@ export class ServingConversations {
   async #running(report: RunReport, instance: number): Promise<void> {
     const now = Date.now();
 
-    for (const settlement of this.#runs.reconcile(report, now, this.#generationLabel())) {
+    for (const settlement of this.#runs.reconcile(report, now, instance, this.#generationLabel())) {
       this.#workspaces.end(settlement.conversationId);
-
-      if (!this.serves(instance)) continue;
 
       const rollback = this.#ports.selection.settled(settlement);
 

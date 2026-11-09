@@ -49,6 +49,20 @@ option. The code below it is interrupted and never reads the signal.
   requirement or authority for a generation under ADR-0003. The module map built from
   `src/facet/generation-1` contains no Effect code.
 
+**State machines (2026-11-09).** Host code whose state is persisted and changes in more than one
+step is written as a state machine. Its states are one closed union, defined with
+`Schema.TaggedUnion`, so the same definition gives the type, the decoder for stored rows, the
+constructors, and an exhaustive `match`. Each variant carries only the data that is valid in that
+state. One pure transition function per entry point takes the decoded state and the input and
+returns the next state and a list of commands, values of a `Data.TaggedEnum` union. The Durable
+Object method reads, decides and writes in one `transactionSync`, then runs the commands, such as a
+log, a history write, or a facet replacement, after the commit. A table keeps its columns and gains
+at most a column, and a codec maps rows to the union, so an older Worker can still read the rows
+after a rollback. A small machine that lives only in memory and holds live handles keeps one field
+of a `Data.TaggedEnum` union in place of several booleans, with no events or commands. The
+generation machine (`src/supervisor/generation-machine.ts`) and the conversation run machine
+(`src/supervisor/conversations/run-machine.ts`) follow this shape.
+
 **Imports and tests.** Code imports Effect by module path, such as `effect/Effect`, and oxlint
 forbids the `effect` index. The index re-exports every module and keeps some unused ones in the
 Worker bundle. The Vitest workers pool loads each module again in every test file's isolate, so

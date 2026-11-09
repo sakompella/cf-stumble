@@ -3,12 +3,8 @@ import type { MainFacetCapabilities } from "../../facet/index.js";
 import { FACET_COMPATIBILITY } from "../../facet/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
 import type { ProjectCapabilityStub } from "../../workspace/index.js";
-import type {
-  Generation,
-  GenerationLabel,
-  Generations,
-  PreparationRecord,
-} from "../generations.js";
+import type { PreparationReply } from "../generation-machine.js";
+import type { Generation, GenerationLabel, Generations } from "../generations.js";
 import {
   runStartupCheck,
   type StartupCheckDeadlines,
@@ -35,7 +31,7 @@ export type StartupCheckHost = Readonly<{
 export type StartupCheckOptions = Readonly<{ deadlines?: Partial<StartupCheckDeadlines> }>;
 
 type StartupCheckReport = StartupCheckOutcome &
-  Readonly<{ generation: Generation; effect: PreparationRecord["effect"] }>;
+  Readonly<{ generation: Generation; effect: PreparationReply["effect"] }>;
 
 type StartupCheckProblem =
   | { readonly code: "unknown-generation"; readonly label: number }
@@ -85,6 +81,6 @@ function checkLabeledStartup(
 
     if (recorded === undefined) return yield* Effect.fail(unknown);
 
-    return { ...outcome, generation: recorded.record.generation, effect: recorded.effect };
+    return { ...outcome, generation: recorded.generation, effect: recorded.effect };
   });
 }
