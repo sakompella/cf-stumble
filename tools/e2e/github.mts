@@ -13,6 +13,10 @@ const Refs = Schema.Array(Schema.Struct({ ref: Schema.String }));
 
 const Branch = Schema.Struct({ commit: Schema.Struct({ sha: Schema.String }) });
 
+const Sha = Schema.Struct({ sha: Schema.String });
+
+const Commits = Schema.Array(Sha);
+
 const Contents = Schema.Struct({ content: Schema.String });
 
 export class GitHub {
@@ -52,6 +56,12 @@ export class GitHub {
     if (main === undefined) throw new Error("the harness repository has no main branch");
 
     return main.commit.sha;
+  }
+
+  async mainCommits(count: number): Promise<readonly string[]> {
+    const commits = await this.#get(`/commits?sha=main&per_page=${count}`, Commits);
+
+    return (commits ?? []).map(({ sha }) => sha);
   }
 
   async fileAt(path: string, ref: string): Promise<string | undefined> {

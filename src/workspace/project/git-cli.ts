@@ -10,6 +10,7 @@ import {
   restoreCommand,
 } from "./git-index-commands.js";
 import type { ReadFile } from "./git-index-file.js";
+import { rmCommand, type RemoveFile } from "./git-rm-command.js";
 import { statusCommand } from "./git-status-command.js";
 
 export type RunCli = (input: GitCliInput) => Promise<GitCliResult>;
@@ -97,6 +98,7 @@ export async function gitCli(
   cli: RunCli,
   original: GitCliInput,
   readFile: ReadFile,
+  removeFile: RemoveFile,
 ): Promise<GitCliResult> {
   const resolved = resolveGlobalOptions(original);
 
@@ -124,6 +126,8 @@ export async function gitCli(
       return verboseBranches(client, cli, input, scope);
     case "add":
       return reportingFailure(() => addCommand(client, cli, input, scope, readFile));
+    case "rm":
+      return reportingFailure(() => rmCommand(client, input, scope, removeFile, readFile));
     case "reset":
       return reportingFailure(() => resetCommand(client, cli, input, scope, readFile));
     case "restore":

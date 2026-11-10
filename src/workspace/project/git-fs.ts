@@ -79,6 +79,21 @@ async function githubToken(provider: SQLiteWorkspaceProvider): Promise<string | 
   return githubTokenFromHosts(await readHosts(provider));
 }
 
+async function removeFile(
+  provider: SQLiteWorkspaceProvider,
+  path: string,
+  stop: string,
+): Promise<void> {
+  await provider.unlink(path);
+
+  let directory = path.slice(0, path.lastIndexOf("/"));
+
+  while (directory.length > stop.length && (await provider.readdir(directory)).length === 0) {
+    await provider.rmdir(directory);
+    directory = directory.slice(0, directory.lastIndexOf("/"));
+  }
+}
+
 export const workspaceGit: GitClientFactory = (options) => {
   const client = sqliteGit(options);
 
@@ -108,8 +123,12 @@ export const workspaceGit: GitClientFactory = (options) => {
     push: (input: Parameters<typeof push>[0]) => push({ onAuth, ...input }),
     pull: (input: Parameters<typeof pull>[0]) => pull({ onAuth, ...input }),
     cli: (input: GitCliInput): Promise<GitCliResult> =>
-      gitCli(client, cli, input, async (path) =>
-        Buffer.from(await options.ws.provider().readFile(path)),
+      gitCli(
+        client,
+        cli,
+        input,
+        async (path) => Buffer.from(await options.ws.provider().readFile(path)),
+        (path, stop) => removeFile(options.ws.provider(), path, stop),
       ),
   });
 };
