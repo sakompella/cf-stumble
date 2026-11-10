@@ -1,3 +1,4 @@
+import { differsFromTheContainer, mergesStderrIntoStdout } from "./isolate-differences.js";
 import { ISOLATE_PROGRAMS } from "./isolate-programs.js";
 import type { ExecBackendChoice } from "./protocol.js";
 
@@ -79,7 +80,9 @@ function segmentRunsInIsolate(words: readonly string[]): boolean {
 
   if (!ISOLATE_PROGRAMS.has(program)) return false;
 
-  return !rest.some((word) => EXECUTING_FIND_FLAGS.has(word));
+  if (rest.some((word) => EXECUTING_FIND_FLAGS.has(word))) return false;
+
+  return !differsFromTheContainer(program, rest) && !mergesStderrIntoStdout(rest);
 }
 
 const OUTSIDE_WORKSPACE_PREFIXES = [
