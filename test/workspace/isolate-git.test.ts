@@ -82,6 +82,15 @@ test("git status from a subdirectory shows paths relative to it", async () => {
   expect(stdout).toBe(" M ../a.txt\n?? ./\n");
 });
 
+test("git add of a file in an untracked directory stages only that file", async () => {
+  const { stdout } = await shell(
+    "isolate-git-add-nested-new",
+    `${SETUP} && mkdir -p d/e && echo x > d/e/x.txt && echo y > d/y.txt && git add d/e/x.txt && git status -s`,
+  );
+
+  expect(stdout).toBe("A  d/e/x.txt\n?? d/y.txt\n");
+});
+
 test("git add . from a subdirectory stages only the subtree", async () => {
   const { stdout } = await shell(
     "isolate-git-sub-add",
