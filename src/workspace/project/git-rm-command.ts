@@ -158,6 +158,7 @@ export async function rmCommand(
   const lines = (await statusLines(client, scope.dir, readFile)).filter((line) =>
     removed.has(line.path),
   );
+
   const refused = flags.has("force") ? "" : refusal(lines, flags.has("cached"));
 
   if (refused !== "") return { stdout: "", stderr: refused, exitCode: 1 };

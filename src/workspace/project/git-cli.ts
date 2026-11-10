@@ -4,11 +4,11 @@ import { checkoutWithMessages } from "./git-checkout-text.js";
 import { commitWithSummary } from "./git-commit-text.js";
 import {
   addCommand,
-  pushDelete,
   reportingFailure,
   resetCommand,
   restoreCommand,
 } from "./git-index-commands.js";
+import { pushDelete } from "./git-push-delete.js";
 import type { ReadFile } from "./git-index-file.js";
 import { rmCommand, type RemoveFile } from "./git-rm-command.js";
 import { statusCommand } from "./git-status-command.js";

@@ -382,19 +382,6 @@ export async function restoreCommand(
   return restoreWorktree(client, dir, source, matched, changed);
 }
 
-export function pushDelete(input: GitCliInput): GitCliInput {
-  const colon = input.argv.findIndex((arg, index) => index > 0 && /^:[^:]+$/u.test(arg));
-
-  if (colon === -1) return input;
-
-  return {
-    ...input,
-    argv: input.argv.flatMap((arg, index) =>
-      index === colon ? ["--delete", arg.slice(1)] : [arg],
-    ),
-  };
-}
-
 export async function reportingFailure(run: () => Promise<GitCliResult>): Promise<GitCliResult> {
   try {
     return await run();
