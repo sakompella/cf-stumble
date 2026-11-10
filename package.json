@@ -24,6 +24,7 @@
     "stumble": "tsx src/stumble-cli/orb/main.ts",
     "ops:check": "pnpm exec tsx tools/ops-check/run.mts --since 2h",
     "e2e": "pnpm exec tsx tools/e2e/run.mts",
+    "e2e:fuzz:git": "pnpm exec tsx tools/e2e/fuzz/git.mts",
     "test:browser": "pnpm build:page && playwright test -c tools/playwright/playwright.config.mts",
     "verify": "pnpm install:infra && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm knip && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:shell-modules && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
