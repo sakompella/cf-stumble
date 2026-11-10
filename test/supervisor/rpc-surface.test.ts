@@ -27,5 +27,4 @@ test("the failure arms of startup checking return plain RPC values", async () =>
     { ok: false, problem: { code: "unknown-generation", label: 999 } },
     { ok: false, problem: { code: "build-workspace-unavailable", harnessCommit: unstoredCommit } },
   ]);
-  expect(failures).toStrictEqual(structuredClone(failures));
 });

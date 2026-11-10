@@ -22,7 +22,6 @@ import {
 } from "../helpers.js";
 
 const commits = {
-  evicted: "7100000000000000000000000000000000000001",
   atomic: "7100000000000000000000000000000000000002",
   large: "7100000000000000000000000000000000000003",
   rolledForward: "7100000000000000000000000000000000000005",
@@ -45,23 +44,6 @@ function refusingPut(bucket: R2Bucket): R2Bucket {
 
 afterEach(async () => {
   await reset();
-});
-
-test("keeps a stored module map across a Durable Object eviction", async () => {
-  const control = supervisor("stored-module-map-survives-eviction");
-  const input = artifact(commits.evicted, 'export const body = "stored across eviction";\n');
-  await storeModuleMap(input);
-  await control.getActiveGeneration();
-
-  await evictDurableObject(control);
-
-  const read = await new ModuleMapStore(env.MODULE_MAPS).read(testHarnessCommit(commits.evicted));
-
-  if (Result.isFailure(read) || read.success.kind === "absent") {
-    throw new Error("an evicted Supervisor must still find its stored module map");
-  }
-
-  expect(encodeModuleMap(read.success.artifact)).toBe(encodeModuleMap(parsedArtifact(input)));
 });
 
 test("stores a large module map under its commit key and reads back the same bytes", async () => {

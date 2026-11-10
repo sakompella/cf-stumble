@@ -24,6 +24,12 @@ const NOISE = [
   "\n",
 ];
 
+const LATE = [
+  sseLine({ response: "after the end" }),
+  sseLine({ tool_calls: [{ index: 9, id: "call_late", function: { name: "late" } }] }),
+  sseLine({ error: "after the end" }),
+];
+
 type ToolCallModel = { id: string; name: string; fragments: string[] };
 
 function cutAt(bytes: Uint8Array, offsets: readonly number[]): Uint8Array[] {
@@ -73,7 +79,7 @@ function providerLines(
   return lines.join("");
 }
 
-test("the events of a provider stream do not depend on where its bytes are cut", async () => {
+test("the events of a provider stream do not depend on where its bytes are cut, and nothing after its end counts", async () => {
   await hegel.testAsync(
     async (tc) => {
       const deltas = tc.draw(gs.arrays(deltaText, { maxSize: 5 }));
@@ -84,7 +90,8 @@ test("the events of a provider stream do not depend on where its bytes are cut",
 
       const lines = providerLines(tc, deltas, calls);
       const unterminated = tc.draw(gs.booleans());
-      const bytes = new TextEncoder().encode(unterminated ? lines.slice(0, -1) : lines);
+      const late = tc.draw(gs.sampledFrom(["", ...LATE]));
+      const bytes = new TextEncoder().encode(unterminated ? lines.slice(0, -1) : lines + late);
 
       const offsets = tc.draw(
         gs.arrays(gs.integers({ minValue: 0, maxValue: 4_096 }), { maxSize: 8 }),

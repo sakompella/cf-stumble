@@ -6,8 +6,6 @@ import type { CommandOutput } from "../../../src/workspace/index.js";
 import type { WorkspaceCommandResult } from "../../../src/workspace/commands/command-result.js";
 import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
-export const WORKSPACE_OUTPUT_MAX_BYTES = 64 * 1024;
-
 export const BUILD_COMMIT = testHarnessCommit("6000000000000000000000000000000000000001");
 
 export const entryModule = { name: "main.js", source: "export default { fetch() {} };\n" };

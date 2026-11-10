@@ -152,12 +152,19 @@ test("treats an unreachable provider as unavailable rather than as an authorizat
   ).resolves.toEqual({ kind: "unavailable" });
 });
 
-test("refuses a device reply whose verification page is not GitHub over HTTPS", async () => {
+test.each([
+  "http://github.com/login/device",
+  "https://example.com/login/device",
+  "https://github.com.example.com/login/device",
+  "https://github.com@evil.example/login/device",
+  "https://owner:secret@github.com/login/device",
+  "https://github.com:8443/login/device",
+])("refuses an unsafe device verification page %s", async (verificationUri) => {
   const { fetcher } = provider([
     {
       device_code: "device-code-secret",
       user_code: "WDJB-MJHT",
-      verification_uri: "http://github.com/login/device",
+      verification_uri: verificationUri,
     },
   ]);
 

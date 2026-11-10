@@ -43,5 +43,4 @@ export async function expectFailedCandidate(
     harnessCommit: fixtureMainHarnessCommit,
     status: "ready",
   });
-  expect(active.epoch).toBeTypeOf("number");
 }

@@ -116,15 +116,16 @@ test("still attempts the clone without a credential, so a public repository re-c
     }),
   );
   workspace.credentialState = "missing";
-  const provisionsBeforeUse = workspace.provisionRequests.length;
+  workspace.loseClone();
   const withoutFallback = tenant("credential-required-before-use", { workspace });
 
   const used = await withoutFallback.connections((connections) =>
     connections.ensureProvisioned(projectIdOf("sample-repo-1")),
   );
 
-  expect(workspace.provisionRequests.length).toBeGreaterThan(provisionsBeforeUse);
-  expect(used.ok).toBe(true);
+  expect(used).toMatchObject({ ok: true, project: { id: "sample-repo-1" } });
+  expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBe("directory");
+  expect(workspace.credentialState).toBe("missing");
 });
 
 test("asks for a reconnection after a restart left the workspace without a credential", async () => {

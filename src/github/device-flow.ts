@@ -54,10 +54,18 @@ export type DeviceRedemption =
 
 const PositiveSeconds = Schema.Int.check(Schema.isGreaterThan(0));
 
+function isGitHubVerificationUri(value: string): boolean {
+  if (!URL.canParse(value)) return false;
+
+  const url = new URL(value);
+
+  return url.origin === "https://github.com" && url.username === "" && url.password === "";
+}
+
 const DeviceAuthorizationReply = Schema.Struct({
   device_code: Schema.NonEmptyString,
   user_code: Schema.NonEmptyString,
-  verification_uri: Schema.String.check(Schema.isStartingWith("https://")),
+  verification_uri: Schema.String.check(Schema.makeFilter(isGitHubVerificationUri)),
   expires_in: lenient(PositiveSeconds),
   interval: lenient(PositiveSeconds),
 });

@@ -23,7 +23,7 @@ async function readSseEvents<Chunk extends Uint8Array>(
 
   const parser = Sse.makeParser(
     (event) => {
-      if (Predicate.isTagged(event, "Event") && onEvent(event.data)) terminal = true;
+      if (!terminal && Predicate.isTagged(event, "Event") && onEvent(event.data)) terminal = true;
     },
     { maxEventSize: MAX_STREAM_EVENT_BYTES },
   );
