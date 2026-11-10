@@ -24,7 +24,8 @@ export function eventsFrom(params: URLSearchParams): number | null | undefined {
 export function parseEntriesRequest(params: URLSearchParams): EntriesRequest | undefined {
   const min = count(params, "min");
   const max = count(params, "max");
-  const limit = count(params, "limit") ?? DEFAULT_LIMIT;
+  const requestedLimit = count(params, "limit");
+  const limit = requestedLimit === undefined ? DEFAULT_LIMIT : requestedLimit;
   const order = params.get("order") ?? "descending";
 
   if (

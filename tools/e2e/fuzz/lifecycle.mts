@@ -2,12 +2,12 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { workerName } from "../../../infra/worker-settings.ts";
 import { accountFrom } from "../cloudflare.mts";
 import { Ledger, readStatus, submit } from "./lifecycle-actions.mts";
+import type { Finding, FuzzContext, Fuzzer } from "./context.mts";
 import { checkLogs } from "./lifecycle-oracles.mts";
 import { Probe, pollUntil } from "./lifecycle-probe.mts";
 import { createRng } from "./lifecycle-rng.mts";
 import { MAX_TURNS, playRound, type Aux, type RoundContext } from "./lifecycle-rounds.mts";
 import { HARNESS } from "./lifecycle-turns.mts";
-import type { FuzzRun } from "./stage.mts";
 
 async function finalTurn(probe: Probe, signal: AbortSignal) {
   const before = (await probe.owner.entries(HARNESS)).at(0)?.id ?? 0;
@@ -44,11 +44,11 @@ function pollStatus(probe: Probe, ledger: Ledger, stop: AbortSignal): Promise<vo
   })();
 }
 
-async function rounds(run: FuzzRun, context: RoundContext, startedMs: number) {
+async function rounds(run: FuzzContext, context: RoundContext) {
   let turns = 0;
   let round = 0;
 
-  while (Date.now() - startedMs < run.minutes * 60_000 && !run.signal.aborted) {
+  while (Date.now() < run.deadlineMs && !run.signal.aborted) {
     round += 1;
 
     const kind = context.rng.weighted([
@@ -72,7 +72,11 @@ async function rounds(run: FuzzRun, context: RoundContext, startedMs: number) {
   return { round, turns };
 }
 
-async function verdict(run: FuzzRun, probe: Probe, startedMs: number): Promise<boolean> {
+async function verdict(
+  run: FuzzContext,
+  probe: Probe,
+  startedMs: number,
+): Promise<readonly Finding[]> {
   await sleep(75_000);
 
   const account = accountFrom(process.env);
@@ -88,16 +92,21 @@ async function verdict(run: FuzzRun, probe: Probe, startedMs: number): Promise<b
     console.error(`fuzz: trace tail (seed ${run.seed})\n${probe.dump(80)}`);
   }
 
-  return probe.violations.length === 0;
+  return probe.violations.map((detail) => ({
+    area: run.area,
+    oracle: "lifecycle",
+    detail,
+    reproduction: `pnpm e2e:fuzz --area lifecycle --seed ${run.seed}`,
+  }));
 }
 
-export async function lifecycleFuzz(run: FuzzRun): Promise<boolean> {
+export const fuzz: Fuzzer = async (run) => {
   const probe = new Probe(run.owner);
   const ledger = new Ledger();
   const aux: Aux = { id: undefined };
   const stop = new AbortController();
   const startedMs = Date.now();
-  const commits = await run.github.mainCommits(8);
+  const commits = await run.target.github.mainCommits(8);
 
   const context: RoundContext = {
     probe,
@@ -117,7 +126,7 @@ export async function lifecycleFuzz(run: FuzzRun): Promise<boolean> {
   let played = { round: 0, turns: 0 };
 
   try {
-    played = await rounds(run, context, startedMs);
+    played = await rounds(run, context);
 
     if (probe.violations.length === 0) await finalTurn(probe, context.signal);
   } catch (cause) {
@@ -139,4 +148,4 @@ export async function lifecycleFuzz(run: FuzzRun): Promise<boolean> {
   if (aux.id !== undefined) await run.owner.disconnect(aux.id).catch(() => {});
 
   return verdict(run, probe, startedMs);
-}
+};
