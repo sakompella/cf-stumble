@@ -1,15 +1,12 @@
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
-import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
-import { view } from "../../../src/page/client/view.js";
-import { entryItem, followResolved, pageShowing, running, withChatGPT } from "./views.js";
-
-type Rendered = NonNullable<ReturnType<typeof view>>;
+import { findById, htmlOf, textOf, type Rendered } from "./rendered.js";
+import { entryItem, pageShowing, running, withChatGPT } from "./views.js";
 
 function renderedIds(node: Rendered | string): readonly string[] {
   if (Predicate.isString(node)) {
@@ -22,35 +19,10 @@ function renderedIds(node: Rendered | string): readonly string[] {
   return [...own, ...(node.children ?? []).flatMap((child) => renderedIds(child))];
 }
 
-function textOf(node: Rendered | string): string {
-  return Predicate.isString(node)
-    ? node
-    : (node.text ?? (node.children ?? []).map(textOf).join(""));
-}
-
-function findById(node: Rendered | string, id: string): Rendered | undefined {
-  if (Predicate.isString(node)) {
-    return undefined;
-  }
-
-  return node.data?.props?.["id"] === id
-    ? node
-    : (node.children ?? []).map((child) => findById(child, id)).find(Predicate.isNotUndefined);
-}
-
 function textsRendered(model: Model, ids: readonly string[]): readonly string[] {
-  let texts: readonly string[] = [];
+  const html = htmlOf(model);
 
-  Scene.scene(
-    { update, view },
-    Scene.given(model),
-    Scene.tap((simulation) => {
-      texts = ids.map((id) => textOf(findById(simulation.html, id) ?? ""));
-    }),
-    followResolved,
-  );
-
-  return texts;
+  return ids.map((id) => textOf(findById(html, id) ?? ""));
 }
 
 function shownWithDiagnostics(): Model {
@@ -66,18 +38,7 @@ function shownWithDiagnostics(): Model {
 }
 
 function idsRendered(model: Model): readonly string[] {
-  let ids: readonly string[] = [];
-
-  Scene.scene(
-    { update, view },
-    Scene.given(model),
-    Scene.tap((simulation) => {
-      ids = renderedIds(simulation.html);
-    }),
-    followResolved,
-  );
-
-  return ids;
+  return renderedIds(htmlOf(model));
 }
 
 test("the page renders every stable element id, and none twice", () => {
@@ -167,11 +128,7 @@ function modelShowingToolOutput(output: string): Model {
 }
 
 function diffLinesRendered(output: string): readonly (readonly [string, readonly string[]])[] {
-  const model = modelShowingToolOutput(output);
-
-  let lines: readonly (readonly [string, readonly string[]])[] = [];
-
-  const collect = (node: Rendered | string): typeof lines =>
+  const collect = (node: Rendered | string): readonly (readonly [string, readonly string[]])[] =>
     Predicate.isString(node)
       ? []
       : [
@@ -181,16 +138,7 @@ function diffLinesRendered(output: string): readonly (readonly [string, readonly
           ...(node.children ?? []).flatMap((child) => collect(child)),
         ];
 
-  Scene.scene(
-    { update, view },
-    Scene.given(model),
-    Scene.tap((simulation) => {
-      lines = collect(simulation.html);
-    }),
-    followResolved,
-  );
-
-  return lines;
+  return collect(htmlOf(modelShowingToolOutput(output)));
 }
 
 test("a tool's unified diff output shows headers, additions and removals in their own styles", () => {
