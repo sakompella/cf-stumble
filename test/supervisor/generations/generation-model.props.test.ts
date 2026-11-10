@@ -8,6 +8,7 @@ import {
   submission,
   type Step,
 } from "../../../src/supervisor/generation-machine.js";
+import type { RunOutcome } from "../../../src/supervisor/conversations/index.js";
 import type { PreparationOutcome } from "../../../src/supervisor/generations.js";
 import {
   Serving,
@@ -142,6 +143,20 @@ function controlStep(
   );
 }
 
+function settleStep(world: World, ended: RunOutcome, code: string | null): void {
+  const { serving } = world.selection;
+
+  const fallback = Serving.guards.Probation(serving)
+    ? world.store.get(serving.fallback)
+    : undefined;
+
+  check(
+    world,
+    settlement(world.selection, fallback, { outcome: ended, errorCode: code }, world.host),
+    settle(world.model, ended, code, world.host),
+  );
+}
+
 function usableLabels(world: World): number[] {
   return [...world.store.values()].flatMap((entry) =>
     entry.state._tag === "Ready" || entry.state._tag === "Served" ? [entry.label] : [],
@@ -160,7 +175,7 @@ const machine: hegel.stateful.StateMachine<World> = {
     },
     control: (tc, world) => {
       const usable = usableLabels(world);
-      const aimed = usable.length > 0 && tc.draw(gs.sampledFrom([true, true, true, false]));
+      const aimed = usable.length > 0 && tc.draw(gs.booleans());
       const target = tc.draw(gs.sampledFrom(aimed ? usable : [...world.store.keys(), LABELS]));
       const kind = tc.draw(gs.sampledFrom(["activate", "activate", "rollback"] as const));
 
@@ -176,18 +191,16 @@ const machine: hegel.stateful.StateMachine<World> = {
       controlStep(world, "activate", target, world.selection.epoch);
     },
     settled: (tc, world) => {
-      const ended = tc.draw(outcome);
-      const code = tc.draw(errorCode);
-      const { serving } = world.selection;
+      settleStep(world, tc.draw(outcome), tc.draw(errorCode));
+    },
+    failProbation: (tc, world) => {
+      tc.assume(Serving.guards.Probation(world.selection.serving));
 
-      const fallback = Serving.guards.Probation(serving)
-        ? world.store.get(serving.fallback)
-        : undefined;
-
-      check(
+      world.host = tc.draw(gs.sampledFrom(HOSTS));
+      settleStep(
         world,
-        settlement(world.selection, fallback, { outcome: ended, errorCode: code }, world.host),
-        settle(world.model, ended, code, world.host),
+        tc.draw(gs.sampledFrom(["failed", "interrupted"] as const)),
+        tc.draw(errorCode),
       );
     },
     upgradeHost: (tc, world) => {
