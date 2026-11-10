@@ -17,11 +17,9 @@ const LAST_CONTROL = 0x20;
 const DELETE = 0x7f;
 
 function validName(name: string): boolean {
-  const controlled = [...name].some((char) => {
-    const code = char.codePointAt(0) ?? 0;
-
-    return code <= LAST_CONTROL || code === DELETE;
-  });
+  const controlled = Array.from({ length: name.length }, (_, at) => name.codePointAt(at) ?? 0).some(
+    (code) => code <= LAST_CONTROL || code === DELETE,
+  );
 
   return !controlled && !INVALID_NAME.test(name) && name !== "HEAD";
 }

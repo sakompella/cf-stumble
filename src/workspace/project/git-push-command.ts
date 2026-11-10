@@ -71,7 +71,7 @@ async function trackUpstream(
   const current = await client.currentBranch({ dir });
   const parsed = refspec === undefined ? { src: "HEAD", dst: current ?? "" } : split(refspec);
   const { src } = parsed;
-  const dst = src === "HEAD" && !refspec?.includes(":") ? (current ?? "") : parsed.dst;
+  const dst = src === "HEAD" && refspec?.includes(":") !== true ? (current ?? "") : parsed.dst;
   const branch = src === "HEAD" ? current : src;
 
   if (branch === undefined || dst === "" || !(await client.branchList({ dir })).includes(branch))
