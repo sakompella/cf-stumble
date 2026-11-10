@@ -6,7 +6,7 @@ import { commitWithSummary } from "./git-commit-text.js";
 import { indexCommand } from "./git-index-dispatch.js";
 import type { WorkFiles } from "./git-index-file.js";
 import { pushDelete } from "./git-push-delete.js";
-import { statusCommand } from "./git-status-command.js";
+import { readCommand } from "./git-read-dispatch.js";
 
 export function dispatchGit(
   command: string,
@@ -17,8 +17,6 @@ export function dispatchGit(
   files: WorkFiles,
 ): Promise<GitCliResult> {
   switch (command) {
-    case "status":
-      return statusCommand(client, cli, input, scope, files.read);
     case "commit":
       return commitWithSummary(client, cli, input, scope, files.read);
     case "checkout":
@@ -29,6 +27,10 @@ export function dispatchGit(
     case "push":
       return cli(pushDelete(input));
     default:
-      return indexCommand(command, client, cli, input, scope, files) ?? cli(input);
+      return (
+        indexCommand(command, client, cli, input, scope, files) ??
+        readCommand(command, client, cli, input, scope, files) ??
+        cli(input)
+      );
   }
 }

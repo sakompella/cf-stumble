@@ -3,7 +3,7 @@ import { without } from "./git-args.js";
 import type { GitScope, RunCli } from "./git-cli.js";
 import type { ReadFile } from "./git-index-file.js";
 import { failure, OK } from "./git-result.js";
-import { resolves } from "./git-revision.js";
+import { AMBIGUOUS, resolves } from "./git-revision.js";
 import { statusLines } from "./git-status.js";
 
 async function moveHead(client: GitClient, dir: string, oid: string): Promise<void> {
@@ -39,9 +39,6 @@ async function resetReport(
 }
 
 const REVISION_SYNTAX = /[~^@]/u;
-
-const AMBIGUOUS = (target: string): string =>
-  `fatal: ambiguous argument '${target}': unknown revision or path not in the working tree.\nUse '--' to separate paths from revisions, like this:\n'git <command> [<revision>...] -- [<file>...]'\n`;
 
 async function resetWithoutReport(
   client: GitClient,
