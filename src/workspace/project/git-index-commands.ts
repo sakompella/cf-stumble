@@ -4,7 +4,7 @@ import { fileStatusLines, statusLines, type StatusLine } from "./git-status.js";
 
 const OK: GitCliResult = { stdout: "", stderr: "", exitCode: 0 };
 
-function failure(stderr: string): GitCliResult {
+export function failure(stderr: string): GitCliResult {
   return { stdout: "", stderr, exitCode: 128 };
 }
 
@@ -12,7 +12,7 @@ function without(argv: readonly string[], flags: readonly string[]): string[] {
   return argv.filter((arg) => !flags.includes(arg));
 }
 
-function rooted(path: string, prefix: string): string | undefined {
+export function rooted(path: string, prefix: string): string | undefined {
   const parts = prefix.split("/").filter((part) => part !== "");
   let rest = path.startsWith("./") ? path.slice(2) : path;
 
@@ -33,7 +33,7 @@ function rooted(path: string, prefix: string): string | undefined {
   return parts.length === 0 ? "." : parts.join("/");
 }
 
-function under(path: string, spec: string): boolean {
+export function under(path: string, spec: string): boolean {
   const bare = spec.replace(/\/$/u, "");
 
   return bare === "." || path === bare || path.startsWith(`${bare}/`) || path === `${bare}/`;
