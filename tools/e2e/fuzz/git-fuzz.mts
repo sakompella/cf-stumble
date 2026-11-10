@@ -3,7 +3,7 @@ import type { GitHub } from "../github.mts";
 import type { Owner } from "../owner-api.mts";
 import { parseBash } from "./bash-result.mts";
 import { Generator } from "./git-cases.mts";
-import { signature, type Case } from "./git-data.mts";
+import { KNOWN, signature, type Case } from "./git-data.mts";
 import { classify, describe, matches, normalize, type Divergence } from "./git-compare.mts";
 import { Oracle, probe, WORKSPACE_DIRECTORY, type Outcome } from "./git-oracle.mts";
 import { branchTree } from "./github-tree.mts";
@@ -90,13 +90,15 @@ async function checkRemote(
 }
 
 function known(item: Case): string {
+  if (item.kind === "fs" && item.command.includes(">>")) return "fs:append";
+
   return `${item.kind}:${signature(item.command)}`;
 }
 
 class Session {
   readonly divergences: Divergence[] = [];
   readonly classes = new Map<string, number>();
-  readonly #seen = new Set<string>();
+  readonly #seen = new Set<string>(KNOWN);
   readonly #options: FuzzOptions;
   readonly #salt = randomBytes(2).toString("hex");
   steps = 0;

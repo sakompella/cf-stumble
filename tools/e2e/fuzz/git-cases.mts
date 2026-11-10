@@ -319,7 +319,6 @@ export class Generator {
       () => this.#git("fetch", `fetch origin ${old()}`),
       () => this.#git("fetch", `fetch origin ${old()}:refs/remotes/origin/${old().slice(4)}`),
       () => this.#git("fetch", `fetch origin refs/heads/${old()}`),
-      () => this.#git("fetch", `fetch origin e2e/${this.#runId}-missing`),
     ])();
   }
 }
