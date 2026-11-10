@@ -20,7 +20,10 @@
     "src/workspace/project/git-rename.ts",
     "src/workspace/project/git-rename-similarity.ts",
     "src/github/redaction.ts",
-    "src/model-route-stream-parse.ts"
+    "src/model-route-stream-parse.ts",
+    "src/facet/generation-1/route-events.ts",
+    "src/project-catalog.ts",
+    "src/github/device-flow.ts"
   ],
   "coverageAnalysis": "perTest",
   "reporters": ["clear-text", "progress", "html", "json"],
