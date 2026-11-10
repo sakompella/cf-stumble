@@ -54,10 +54,12 @@ test("holds a project's turns during its own provision only, until a reset clear
 
   const admitted = (projectId: typeof sampleProjectOne.id) =>
     Effect.runPromise(
-      fence.wait(projectId).pipe(
-        Effect.as(true),
-        Effect.timeoutOrElse({ duration: 50, orElse: () => Effect.succeed(false) }),
-      ),
+      fence
+        .wait(projectId)
+        .pipe(
+          Effect.as(true),
+          Effect.timeoutOrElse({ duration: 50, orElse: () => Effect.succeed(false) }),
+        ),
     );
 
   const provisioning = runToResult(

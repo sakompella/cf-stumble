@@ -6,10 +6,12 @@ import { sampleProjectOne } from "../project-fixtures.js";
 
 const admitted = (fence: ProvisionFence) =>
   Effect.runPromise(
-    fence.wait(sampleProjectOne.id).pipe(
-      Effect.as(true),
-      Effect.timeoutOrElse({ duration: 50, orElse: () => Effect.succeed(false) }),
-    ),
+    fence
+      .wait(sampleProjectOne.id)
+      .pipe(
+        Effect.as(true),
+        Effect.timeoutOrElse({ duration: 50, orElse: () => Effect.succeed(false) }),
+      ),
   );
 
 test("a provision in one fence does not hold the same project in another fence", async () => {

@@ -48,9 +48,7 @@ test("an interrupted plan keeps the exclusion until its RPC settles", async () =
   const interrupted = Effect.runPromise(Fiber.interrupt(plan));
   let admitted = false;
 
-  const turn = Effect.runPromise(
-    fence.wait(sampleProjectOne.id),
-  ).then(() => {
+  const turn = Effect.runPromise(fence.wait(sampleProjectOne.id)).then(() => {
     admitted = true;
   });
 
