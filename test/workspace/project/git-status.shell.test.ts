@@ -40,3 +40,22 @@ test("git status --porcelain prints paths from the repository root even inside a
   expect(await expectSame(dir, "d/e", ["--porcelain", "-s"])).toBe("A  c\n?? b\n");
 });
 
+test("git status from a subdirectory shortens a path that shares directories with it", async () => {
+  const dir = repository(["d/x", "d/e/y", "f/z"]);
+  put(dir, "d/x", "changed\n");
+  put(dir, "d/e/y", "changed\n");
+  put(dir, "d/w", "new\n");
+  put(dir, "n/m", "new\n");
+
+  expect(await expectSame(dir, "d/e", ["-s"])).toBe(" M y\n M ../x\n?? ../w\n?? ../../n/\n");
+
+  await expectSame(dir, "d/e", []);
+});
+
+test("git status shows an untracked directory above the working directory as ../", async () => {
+  const dir = repository([]);
+  put(dir, "d/e/b", "new\n");
+
+  expect(await expectSame(dir, "d/e", ["-s"])).toBe("?? ../\n");
+  await expectSame(dir, "d/e", []);
+});

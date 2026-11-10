@@ -45,13 +45,20 @@ function parseOptions(args: readonly string[]): StatusOptions | undefined {
 function displayPath(path: string, prefix: string): string {
   if (prefix === "") return path;
 
-  if (path === prefix || path.startsWith(`${prefix}/`)) {
-    const suffix = path.slice(prefix.length).replace(/^\//u, "");
+  const directories = prefix.split("/");
+  const parts = path.split("/");
+  let shared = 0;
 
-    return suffix === "" ? "./" : suffix;
-  }
+  while (
+    shared < directories.length &&
+    shared < parts.length - 1 &&
+    parts[shared] === directories[shared]
+  )
+    shared += 1;
 
-  return `${"../".repeat(prefix.split("/").length)}${path}`;
+  const shown = `${"../".repeat(directories.length - shared)}${parts.slice(shared).join("/")}`;
+
+  return shown === "" ? "./" : shown;
 }
 
 async function render(
