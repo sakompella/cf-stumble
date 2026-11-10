@@ -66,6 +66,6 @@ export async function fetchCommand(
   if (command !== "fetch" || ref === undefined || result.exitCode === 0) return result;
 
   return LOST_REF.test(result.stderr) && (await isRepository(client, dir))
-    ? failure(`fatal: couldn't find remote ref ${ref}\n`)
+    ? failure(`fatal: couldn't find remote ref ${ref.split(":")[0] ?? ref}\n`)
     : result;
 }

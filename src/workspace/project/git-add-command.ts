@@ -82,12 +82,15 @@ export async function addCommand(
 
   const unmatched = missed.find((spec) => !ignored.includes(spec));
 
-  if (unmatched !== undefined)
+  if (unmatched !== undefined) {
+    const typed = request.paths[specs.indexOf(unmatched)] ?? unmatched;
+
     return failure(
       update && (await exists(files, scope.dir, unmatched))
-        ? `error: pathspec '${unmatched}' did not match any file(s) known to git\n`
-        : `fatal: pathspec '${unmatched}' did not match any files\n`,
+        ? `error: pathspec '${typed}' did not match any file(s) known to git\n`
+        : `fatal: pathspec '${typed}' did not match any files\n`,
     );
+  }
 
   const selection = changeSelection(live, specs);
 

@@ -95,11 +95,14 @@ const LOST = (): Promise<GitCliResult> =>
     exitCode: 1,
   });
 
-test("git fetch origin <missing ref> exits 128 with git's text", async () => {
-  const both = remotePair();
+test.each(["nope", "nope:refs/remotes/origin/nope"])(
+  "git fetch origin %s exits 128 with git's text",
+  async (ref) => {
+    const both = remotePair();
 
-  const real = normalisedResult(realGit(both.real, ["fetch", "origin", "nope"]), both.real);
-  const isolate = await isolateGitWith(LOST, both.isolate, ["fetch", "origin", "nope"]);
+    const real = normalisedResult(realGit(both.real, ["fetch", "origin", ref]), both.real);
+    const isolate = await isolateGitWith(LOST, both.isolate, ["fetch", "origin", ref]);
 
-  expect(isolate).toEqual(real);
-});
+    expect(isolate).toEqual(real);
+  },
+);

@@ -1,5 +1,5 @@
 import type { GitClient } from "@cloudflare/computer/git";
-import { shownPath, type StatusLine } from "./git-status.js";
+import { quotePath, shownPath, type StatusLine } from "./git-status.js";
 import { branchTracking, type Tracking, trackingCounts, trackingLines } from "./git-tracking.js";
 
 const LABELS = new Map([
@@ -33,10 +33,11 @@ function section(title: string, hints: readonly string[], lines: readonly string
   return lines.length === 0 ? [] : [title, ...hints, ...lines.map((line) => `\t${line}`), ""];
 }
 
-function headLines(head: HeadState): string[] {
+function headLines(head: HeadState, committing: boolean): string[] {
   if (head.branch === undefined) return [`HEAD detached at ${(head.oid ?? "").slice(0, 7)}`];
 
-  if (head.oid === undefined) return [`On branch ${head.branch}`, "", "No commits yet", ""];
+  if (head.oid === undefined)
+    return [`On branch ${head.branch}`, "", committing ? "Initial commit" : "No commits yet", ""];
 
   if (head.tracking === undefined) return [`On branch ${head.branch}`];
 
@@ -63,7 +64,11 @@ function closingLine(
   ];
 }
 
-export function longStatus(head: HeadState, lines: readonly StatusLine[]): string {
+export function longStatus(
+  head: HeadState,
+  lines: readonly StatusLine[],
+  committing = false,
+): string {
   const unborn = head.oid === undefined;
 
   const staged = lines.flatMap((line) =>
@@ -71,12 +76,17 @@ export function longStatus(head: HeadState, lines: readonly StatusLine[]): strin
   );
 
   const unstagedLines = lines.filter((line) => line.y !== " " && line.y !== "?");
-  const unstaged = unstagedLines.map((line) => `${LABELS.get(line.y) ?? ""}${line.path}`);
-  const untracked = lines.flatMap((line) => (line.x === "?" ? [line.path] : []));
+
+  const unstaged = unstagedLines.map(
+    (line) => `${LABELS.get(line.y) ?? ""}${quotePath(line.path)}`,
+  );
+
+  const untracked = lines.flatMap((line) => (line.x === "?" ? [quotePath(line.path)] : []));
+
   const addHint = unstagedLines.some((line) => line.y === "D") ? "add/rm" : "add";
 
   const text = [
-    ...headLines(head),
+    ...headLines(head, committing),
     ...section(
       "Changes to be committed:",
       [

@@ -13,6 +13,12 @@ import { headState, longStatus } from "./git-status-text.js";
 
 const IGNORED = new Set(["--no-verify", "-n", "--no-edit"]);
 
+const ALLOW_EMPTY_UNSUPPORTED: GitCliResult = {
+  stdout: "",
+  stderr: "git commit: --allow-empty is not supported\n",
+  exitCode: 129,
+};
+
 const QUIET = new Set(["-q", "--quiet"]);
 
 const CLUSTER = /^-[aqnm]+$/u;
@@ -231,6 +237,9 @@ export async function commitWithSummary(
   readFile: ReadFile,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
+
+  if (args.includes("--allow-empty")) return ALLOW_EMPTY_UNSUPPORTED;
+
   const flags = scanCommit(args);
   const dir = scope.dir;
   const amend = flags.amend;
@@ -255,7 +264,11 @@ export async function commitWithSummary(
   const paths = committedPaths(lines, all);
 
   if (paths.length === 0 && !amend)
-    return { stdout: longStatus(await headState(client, dir), lines), stderr: "", exitCode: 1 };
+    return {
+      stdout: longStatus(await headState(client, dir), lines, true),
+      stderr: "",
+      exitCode: 1,
+    };
 
   if (all) await stageTracked(client, dir, lines);
 

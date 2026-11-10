@@ -53,6 +53,26 @@ async function switchMessages(
   };
 }
 
+const NO_SUCH_TARGET = /Could not find origin\/(.+)\.\n?$/u;
+
+const PREVIOUS_BRANCH: GitCliResult = {
+  stdout: "",
+  stderr: "git checkout: '-' is not supported\n",
+  exitCode: 129,
+};
+
+function unknownTarget(result: GitCliResult): GitCliResult {
+  const named = NO_SUCH_TARGET.exec(result.stderr)?.[1];
+
+  return named === undefined
+    ? result
+    : {
+        stdout: "",
+        stderr: `error: pathspec '${named}' did not match any file(s) known to git\n`,
+        exitCode: 1,
+      };
+}
+
 export async function checkoutWithMessages(
   client: GitClient,
   cli: RunCli,
@@ -67,6 +87,8 @@ export async function checkoutWithMessages(
 
   const args = input.argv.slice(1);
   const separator = args.indexOf("--");
+
+  if (args.length === 1 && args[0] === "-") return PREVIOUS_BRANCH;
 
   if (input.argv[0] === "checkout" && separator === 0)
     return reportingFailure(() =>
@@ -85,7 +107,9 @@ export async function checkoutWithMessages(
       ? await createBranch(client, dir, target)
       : await cli({ ...input, cwd: dir });
 
-  if (result.exitCode !== 0 || target === undefined) return result;
+  if (result.exitCode !== 0) return unknownTarget(result);
+
+  if (target === undefined) return result;
 
   return switchMessages(client, dir, target, created, before).catch(() => result);
 }

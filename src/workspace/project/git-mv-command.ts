@@ -70,8 +70,11 @@ function plan(
   const existingDirectory = exists(destination) && !present.includes(destination);
   const [only] = sources;
 
-  if (sources.length === 1 && only !== undefined && !present.includes(only) && !existingDirectory)
+  if (sources.length === 1 && only !== undefined && !present.includes(only) && !existingDirectory) {
+    if (trailing && !exists(only)) return refusal(only, `${destination}/`, "bad source");
+
     return renameDirectory(tracked, present, only, destination);
+  }
 
   const directory = trailing || existingDirectory;
 
