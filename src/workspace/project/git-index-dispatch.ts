@@ -2,6 +2,7 @@ import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/
 import { addCommand } from "./git-add-command.js";
 import type { GitScope, RunCli } from "./git-cli.js";
 import type { WorkFiles } from "./git-index-file.js";
+import { mvCommand } from "./git-mv-command.js";
 import { resetCommand } from "./git-reset-command.js";
 import { restoreCommand } from "./git-restore-command.js";
 import { reportingFailure } from "./git-result.js";
@@ -20,6 +21,8 @@ export function indexCommand(
       return reportingFailure(() => addCommand(client, cli, input, scope, files));
     case "rm":
       return reportingFailure(() => rmCommand(client, input, scope, files.remove, files.read));
+    case "mv":
+      return reportingFailure(() => mvCommand(client, input, scope, files));
     case "reset":
       return reportingFailure(() => resetCommand(client, cli, input, scope, files.read));
     case "restore":

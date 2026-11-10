@@ -23,7 +23,7 @@ export type RemoveFile = (path: string, stop: string) => Promise<void>;
 export interface WorkFiles {
   readonly read: ReadFile;
   readonly remove: RemoveFile;
-  readonly rename: (from: string, to: string) => Promise<void>;
+  readonly rename: (from: string, to: string, stop: string) => Promise<void>;
   readonly list: (dir: string) => Promise<readonly string[]>;
 }
 

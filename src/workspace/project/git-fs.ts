@@ -112,16 +112,24 @@ async function moveFile(
   provider: SQLiteWorkspaceProvider,
   from: string,
   to: string,
+  stop: string,
 ): Promise<void> {
   await provider.mkdir(to.slice(0, to.lastIndexOf("/")), { recursive: true });
   await provider.rename(from, to);
+
+  let directory = from.slice(0, from.lastIndexOf("/"));
+
+  while (directory.length > stop.length && (await provider.readdir(directory)).length === 0) {
+    await provider.rmdir(directory);
+    directory = directory.slice(0, directory.lastIndexOf("/"));
+  }
 }
 
 function workFiles(provider: SQLiteWorkspaceProvider): WorkFiles {
   return {
     read: async (path) => Buffer.from(await provider.readFile(path)),
     remove: (path, stop) => removeFile(provider, path, stop),
-    rename: (from, to) => moveFile(provider, from, to),
+    rename: (from, to, stop) => moveFile(provider, from, to, stop),
     list: (root) => Promise.resolve(listFiles(provider, root)),
   };
 }
