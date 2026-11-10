@@ -10,7 +10,7 @@ import type {
   WorkspaceHostNamespace,
   WorkspaceHostRpc,
 } from "../../workspace/index.js";
-import { provisionInWorkspace } from "./provision-fence.js";
+import type { ProvisionFence } from "./provision-fence.js";
 
 export class ProvisionFailed extends Data.TaggedError("ProvisionFailed")<{
   readonly exitCode: number;
@@ -62,16 +62,16 @@ function instructionsStep(
 export function provisionProjectWorkspace(
   input: Readonly<{
     workspaceName: string;
+    fence: ProvisionFence;
     project: Project;
     namespace: WorkspaceHostNamespace<"provision" | "ensureManagedInstructions">;
   }>,
 ): Effect.Effect<void, ProvisionProblem> {
   const { project } = input;
 
-  return provisionInWorkspace({
-    workspaceName: input.workspaceName,
-    projectId: project.id,
-    run: Effect.gen(function* () {
+  return input.fence.provision(
+    project.id,
+    Effect.gen(function* () {
       const host = input.namespace.getByName(input.workspaceName);
 
       yield* commandStep(`project-provision.clone (${project.id})`, () =>
@@ -84,12 +84,13 @@ export function provisionProjectWorkspace(
 
       yield* instructionsStep(`project-provision.instructions (${project.id})`, host);
     }),
-  });
+  );
 }
 
 export function provisionHarnessWorkspace(
   input: Readonly<{
     workspaceName: string;
+    fence: ProvisionFence;
     projectId: ProjectId;
     harnessCommit: HarnessCommit;
     namespace: WorkspaceHostNamespace<"build" | "ensureManagedInstructions">;
@@ -97,10 +98,9 @@ export function provisionHarnessWorkspace(
 ): Effect.Effect<void, ProvisionProblem> {
   const { harnessCommit } = input;
 
-  return provisionInWorkspace({
-    workspaceName: input.workspaceName,
-    projectId: input.projectId,
-    run: Effect.gen(function* () {
+  return input.fence.provision(
+    input.projectId,
+    Effect.gen(function* () {
       const host = input.namespace.getByName(input.workspaceName);
 
       yield* commandStep("harness-provision.provision", () =>
@@ -109,5 +109,5 @@ export function provisionHarnessWorkspace(
 
       yield* instructionsStep("harness-provision.instructions", host);
     }),
-  });
+  );
 }

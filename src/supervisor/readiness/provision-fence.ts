@@ -2,37 +2,18 @@ import * as Effect from "effect/Effect";
 import { KeyedLock } from "../../keyed-lock.js";
 import type { ProjectId } from "../../project-catalog.js";
 
-const fences = new Map<string, KeyedLock<ProjectId>>();
+export class ProvisionFence {
+  #locks = new KeyedLock<ProjectId>();
 
-function fence(workspaceName: string): KeyedLock<ProjectId> {
-  const existing = fences.get(workspaceName);
+  provision<A, E>(projectId: ProjectId, run: Effect.Effect<A, E>): Effect.Effect<A, E> {
+    return Effect.suspend(() => this.#locks.withLock(projectId, run));
+  }
 
-  if (existing !== undefined) return existing;
+  wait(projectId: ProjectId): Effect.Effect<void> {
+    return this.provision(projectId, Effect.void);
+  }
 
-  const created = new KeyedLock<ProjectId>();
-
-  fences.set(workspaceName, created);
-
-  return created;
-}
-
-export function clearWorkspaceProvision(workspaceName: string): void {
-  fences.delete(workspaceName);
-}
-
-export function provisionInWorkspace<A, E>(
-  input: Readonly<{
-    workspaceName: string;
-    projectId: ProjectId;
-    run: Effect.Effect<A, E>;
-  }>,
-): Effect.Effect<A, E> {
-  return Effect.suspend(() => fence(input.workspaceName).withLock(input.projectId, input.run));
-}
-
-export function waitForWorkspaceProvision(
-  workspaceName: string,
-  projectId: ProjectId,
-): Effect.Effect<void> {
-  return Effect.suspend(() => fence(workspaceName).withLock(projectId, Effect.void));
+  clear(): void {
+    this.#locks = new KeyedLock<ProjectId>();
+  }
 }

@@ -10,6 +10,7 @@ import {
   planProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
+import { ProvisionFence } from "../../src/supervisor/readiness/provision-fence.js";
 import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
@@ -141,12 +142,13 @@ export const TENANT_WORKSPACE = tenantWorkspaceName("supervisor-name-of-tenant-1
 
 export function provisionerFor(host: WorkspaceHostRpc<"provision" | "ensureManagedInstructions">) {
   const namespace = namespaceFor(host);
+  const fence = new ProvisionFence();
 
   return {
     namespace,
     provision: (project: Project = sampleProjectOne) =>
       runToResult(
-        provisionProjectWorkspace({ workspaceName: TENANT_WORKSPACE, project, namespace }),
+        provisionProjectWorkspace({ workspaceName: TENANT_WORKSPACE, fence, project, namespace }),
       ),
   };
 }
