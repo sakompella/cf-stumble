@@ -85,6 +85,8 @@ function isPlatformStreamNoise(error: { message?: string; VITEST_TEST_PATH?: str
 export default defineConfig({
   test: {
     silent: "passed-only",
+    restoreMocks: true,
+    unstubGlobals: true,
     onUnhandledError: (error) => !isPlatformStreamNoise(error),
     projects: [
       {
