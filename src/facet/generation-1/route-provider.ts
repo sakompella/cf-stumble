@@ -6,8 +6,9 @@ import type {
   StreamOptions,
   TranscriptContext,
 } from "@earendil-works/pi-ai";
-import { isModelStreamEvent } from "../../model-route-wire/events.js";
+import { isModelStreamEvent, MAX_STREAM_EVENT_BYTES } from "../../model-route-wire/events.js";
 import type { ModelCapability } from "./capabilities.js";
+import { LineReader } from "./line-reader.js";
 import { transcriptToRouteRequest } from "./route-request.js";
 import { ReplyAssembler } from "./route-reply.js";
 
@@ -44,14 +45,13 @@ async function pump(
     return;
   }
 
-  const reader = route.pipeThrough(new TextDecoderStream()).getReader();
+  const reader = new LineReader(route.getReader(), MAX_STREAM_EVENT_BYTES);
 
   const cancel = () => {
-    reader.cancel().catch(() => {});
+    reader.cancel();
   };
 
   signal?.addEventListener("abort", cancel, { once: true });
-  let buffer = "";
 
   try {
     if (aborted(signal)) {
@@ -61,7 +61,7 @@ async function pump(
     }
 
     for (;;) {
-      const next = await reader.read();
+      const line = await reader.next();
 
       if (aborted(signal)) {
         reply.fail("aborted", CANCELLED);
@@ -69,23 +69,26 @@ async function pump(
         return;
       }
 
-      if (next.done) {
+      if (line.kind === "eof" || line.kind === "truncated") {
         reply.fail("error", "the model route ended its stream without a result");
 
         return;
       }
 
-      const lines = (buffer + next.value).split("\n");
-      buffer = lines.pop() ?? "";
+      if (line.kind !== "line") {
+        reply.fail("error", "the model route did not answer");
 
-      for (const line of lines.filter((candidate) => candidate !== "")) {
-        const event: unknown = JSON.parse(line);
-
-        if (!isModelStreamEvent(event)) throw new Error("the model route wrote an unknown event");
-        reply.apply(event);
-
-        if (event.type === "done" || event.type === "error") return;
+        return;
       }
+
+      if (line.text === "") continue;
+
+      const event: unknown = JSON.parse(line.text);
+
+      if (!isModelStreamEvent(event)) throw new Error("the model route wrote an unknown event");
+      reply.apply(event);
+
+      if (event.type === "done" || event.type === "error") return;
     }
   } finally {
     signal?.removeEventListener("abort", cancel);
