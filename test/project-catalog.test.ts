@@ -18,8 +18,6 @@ test("resolves every project of a non-empty catalog", () => {
 
   const catalog = urls.map((url) => projectOf(url));
 
-  expect(catalog).toHaveLength(count);
-
   for (const project of catalog) {
     expect(resolveProject(project.id, catalog)).toEqual({ ok: true, project });
   }

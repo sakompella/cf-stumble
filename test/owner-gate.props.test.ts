@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import { beforeAll, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { ownerGateRefusal } from "../src/owner-gate.js";
 import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH } from "../src/orb-protocol.js";
 
@@ -15,6 +15,11 @@ beforeAll(() => {
       timingSafeEqual(new Uint8Array(a), new Uint8Array(b)),
   });
   vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+
+afterAll(() => {
+  Reflect.deleteProperty(crypto.subtle, "timingSafeEqual");
+  vi.restoreAllMocks();
 });
 
 function basic(username: string, password: string): string {
