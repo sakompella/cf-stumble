@@ -80,7 +80,12 @@ function expectSameState({ expected, actual }: RepoPair): void {
 }
 
 function restore(dir: string, args: readonly string[]) {
-  return restoreCommand(client, { argv: ["restore", ...args], cwd: dir }, { dir, prefix: "" });
+  return restoreCommand(
+    client,
+    { argv: ["restore", ...args], cwd: dir },
+    { dir, prefix: "" },
+    (path) => fsp.readFile(path),
+  );
 }
 
 test("git restore writes the index version of a modified tracked file", async () => {

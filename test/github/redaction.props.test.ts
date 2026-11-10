@@ -106,7 +106,7 @@ test("redacts generated HTTPS URL userinfo credentials", () => {
   });
 });
 
-test("text with no token shape in it is returned unchanged", () => {
+test("text with no token shape in it is returned unchanged, also when the known token is empty", () => {
   hegel.test((tc) => {
     const pieces = tc.draw(gs.arrays(nearMiss, { minSize: 1, maxSize: 6 }));
 
@@ -119,6 +119,7 @@ test("text with no token shape in it is returned unchanged", () => {
       .join("");
 
     expect(redactCredentials(text)).toBe(text);
+    expect(redactCredentials(text, "")).toBe(text);
     expect(containsCredential(text)).toBe(false);
   });
 });

@@ -99,7 +99,7 @@ export function projectIdForRepository(repositoryUrl: string): ProjectId | undef
   const [owner, repository] = segments.map((segment) => segment.toLowerCase());
 
   if (
-    url.hostname !== "github.com" ||
+    url.host !== "github.com" ||
     segments.length !== 2 ||
     owner === undefined ||
     repository === undefined ||

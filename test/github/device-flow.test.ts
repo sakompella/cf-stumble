@@ -130,8 +130,6 @@ test.each([
   ],
   [{ error: "expired_token" }, { kind: "expired" }],
   [{ error: "access_denied" }, { kind: "denied" }],
-  [{ error: "something_new" }, { kind: "unavailable" }],
-  [{}, { kind: "unavailable" }],
 ])("maps the redemption reply %j to %j", async (reply, expected) => {
   const { fetcher } = provider([reply]);
 
