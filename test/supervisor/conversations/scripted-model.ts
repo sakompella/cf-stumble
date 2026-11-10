@@ -42,19 +42,15 @@ export const calls =
     );
 
 export function held() {
-  let released: Answer | undefined;
+  const gate = { release: (_answer: Answer): void => {} };
 
-  const respond: Answer = async () => {
-    const answer = await vi.waitUntil(() => released, { timeout: 15_000, interval: 10 });
-
-    return answer();
-  };
+  const promise = new Promise<Answer>((resolve) => {
+    gate.release = resolve;
+  });
 
   return {
-    respond,
-    release: (answer: Answer) => {
-      released = answer;
-    },
+    respond: async () => (await promise)(),
+    release: gate.release,
   };
 }
 

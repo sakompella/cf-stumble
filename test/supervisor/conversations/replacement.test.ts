@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { GENERATION_REPLACED } from "../../../src/generation-replaced.js";
 import {
   GenerationHostTarget,
@@ -7,6 +7,11 @@ import {
 } from "../../../src/supervisor/conversations/host-target.js";
 import { HeldWorkspaces } from "../../../src/supervisor/conversations/held-workspaces.js";
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 function trackedWorkspaces() {
   const released: boolean[] = [];
@@ -36,15 +41,17 @@ test("a retirement ends the leases held when it began, not ones taken before it 
   const { held, aborted } = trackedWorkspaces();
   const abortFacet = vi.fn<() => void>();
 
-  hold(held, "old");
-  held.retire(abortFacet);
-  hold(held, "new");
-  await vi.runAllTimersAsync();
+  try {
+    hold(held, "old");
+    held.retire(abortFacet);
+    hold(held, "new");
+    await vi.runAllTimersAsync();
 
-  expect(abortFacet).toHaveBeenCalledTimes(1);
-  expect(aborted()).toEqual([true, false]);
-
-  vi.useRealTimers();
+    expect(abortFacet).toHaveBeenCalledTimes(1);
+    expect(aborted()).toEqual([true, false]);
+  } finally {
+    held.endAll();
+  }
 });
 
 test("a retirement runs at once, and only once, when the next mount flushes it", () => {
@@ -59,8 +66,6 @@ test("a retirement runs at once, and only once, when the next mount flushes it",
 
   vi.runAllTimers();
   expect(abortFacet).toHaveBeenCalledTimes(1);
-
-  vi.useRealTimers();
 });
 
 test("a replaced serving instance's generation host refuses every call without reaching the Supervisor", async () => {

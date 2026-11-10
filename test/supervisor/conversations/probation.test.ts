@@ -14,6 +14,7 @@ import {
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await reset();
 });
 
