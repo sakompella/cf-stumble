@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { chosenExecBackend, routedBackend } from "../../../src/workspace/project/exec-selection.js";
+import { routedBackend } from "../../../src/workspace/project/exec-routing.js";
+import { chosenExecBackend } from "../../../src/workspace/project/exec-selection.js";
 
 const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefined, string]> = [
   ["ls -la", undefined, "isolate"],

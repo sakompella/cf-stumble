@@ -10,6 +10,7 @@ import type { Finding, Fuzzer } from "./context.mts";
 
 const AREAS = new Map<string, () => Promise<Fuzzer>>([
   ["http", async () => (await import("./http.mts")).fuzz],
+  ["exec", async () => (await import("./exec.mts")).fuzz],
 ]);
 
 const { values } = parseArgs({
@@ -21,6 +22,7 @@ const { values } = parseArgs({
     "run-id": { type: "string" },
     keep: { type: "boolean", default: false },
     cleanup: { type: "boolean", default: false },
+    command: { type: "string", multiple: true },
     "ops-check": { type: "boolean", default: false },
   },
 });
@@ -91,6 +93,7 @@ async function fuzz(owner: Owner): Promise<void> {
           password,
           target,
           secrets,
+          commands: values.command ?? [],
           log: (line) => {
             console.error(`fuzz ${name}: ${line}`);
           },

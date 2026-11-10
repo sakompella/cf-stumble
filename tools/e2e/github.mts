@@ -3,7 +3,9 @@ import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.ts";
 
 export const HARNESS_REMOTE = HARNESS_BUILD_CONFIGURATION.harnessGitRemote;
 
-const REPOSITORY = new URL(HARNESS_REMOTE).pathname.replace(/^\//u, "").replace(/\.git$/u, "");
+export const REPOSITORY = new URL(HARNESS_REMOTE).pathname
+  .replace(/^\//u, "")
+  .replace(/\.git$/u, "");
 
 export const REPOSITORY_URL = `https://github.com/${REPOSITORY}`;
 
