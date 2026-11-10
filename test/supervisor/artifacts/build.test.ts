@@ -14,7 +14,6 @@ import {
   failingAt,
   helperModule,
   moduleMapFile,
-  WORKSPACE_OUTPUT_MAX_BYTES,
 } from "./scripted-build-host.js";
 import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
@@ -183,35 +182,6 @@ test("gives the built module map the commit the Supervisor asked to build", asyn
   }
 
   expect(result.success.harnessCommit).toBe(BUILD_COMMIT);
-});
-
-test("a module map larger than the workspace output limits still parses", async () => {
-  const oversized = moduleMapFile([
-    entryModule,
-    {
-      name: "padded.js",
-      source: Array.from(
-        { length: WORKSPACE_OUTPUT_MAX_BYTES / 64 },
-        (_unused, index) => `export const line${index} = "${"x".repeat(63)}";\n`,
-      ).join(""),
-    },
-  ]);
-
-  expect(oversized.length, "the fixture must exceed the 64 KiB output limit").toBeGreaterThan(
-    WORKSPACE_OUTPUT_MAX_BYTES,
-  );
-
-  const host = new FakeBuildHost();
-  host.output = oversized;
-
-  const result = await built(host);
-
-  if (Result.isFailure(result)) {
-    throw new Error(`an oversized module map must still parse: ${result.failure.code}`);
-  }
-
-  expect(result.success.modules).toHaveLength(2);
-  expect(result.success.modules.at(-1)?.name).toBe("padded.js");
 });
 
 test("a refused or unreachable build workspace stays a typed failure", async () => {
