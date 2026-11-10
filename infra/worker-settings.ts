@@ -6,9 +6,19 @@ export function workerName(stage: string): string {
   return stage === PRODUCTION_STAGE ? PRODUCTION_WORKER : `${PRODUCTION_WORKER}-${stage}`;
 }
 
+const TEST_RUNNER_FEATURES = [
+  "enable_nodejs_fs_module",
+  "enable_nodejs_http_modules",
+  "enable_nodejs_perf_hooks_module",
+  "enable_nodejs_process_v2",
+  "enable_nodejs_tty_module",
+  "enable_nodejs_v8_module",
+  "enable_weak_ref",
+];
+
 export const compatibility = {
   date: "2025-01-01",
-  flags: ["enable_ctx_exports", "legacy_module_registry", "nodejs_compat"],
+  flags: ["enable_ctx_exports", "legacy_module_registry", "nodejs_compat", ...TEST_RUNNER_FEATURES],
 };
 
 export const durableObjectClasses = {
