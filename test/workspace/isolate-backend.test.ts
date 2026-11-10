@@ -61,6 +61,19 @@ test("a command that writes to /dev/null runs in the isolate and discards the ou
   ]);
 });
 
+test("appending to a file that does not exist creates it", async () => {
+  const lines = await runIn(
+    "isolate-append-new",
+    "isolate",
+    "echo hi >> fresh.txt && cat fresh.txt",
+  );
+
+  expect(lines).toEqual([
+    JSON.stringify({ kind: "stdout", seq: 0, data: "hi\n" }),
+    JSON.stringify({ kind: "terminal", seq: 1, outcome: "exited", exitCode: 0 }),
+  ]);
+});
+
 test("a holder of the WORKSPACE_HOST binding cannot get the workspace without the isolate's token", async () => {
   const outcome = await runInDurableObject(env.WORKSPACE_HOST.getByName("isolate-gate"), (host) =>
     host.openIsolateWorkspace("guess").then(() => "opened", String),
