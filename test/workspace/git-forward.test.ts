@@ -39,11 +39,7 @@ test.each([
 ])("the git route refuses %s", async (_name, token, method, status) => {
   const response = await runInDurableObject(
     env.WORKSPACE_HOST.getByName("git-route-refuse"),
-    (host, state) => {
-      const presented = token === "token" ? gitForwardToken(state.storage.kv) : token;
-
-      return host.fetch(request(presented, method, "{}"));
-    },
+    (host) => host.fetch(request(token, method, "{}")),
   );
 
   expect(response.status).toBe(status);
