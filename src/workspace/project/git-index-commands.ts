@@ -1,6 +1,6 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
-import { statusLines, type StatusLine } from "./git-status.js";
+import { fileStatusLines, statusLines, type StatusLine } from "./git-status.js";
 
 const OK: GitCliResult = { stdout: "", stderr: "", exitCode: 0 };
 
@@ -74,14 +74,12 @@ export async function addCommand(
       specs.push(at);
     }
 
-    const lines = await statusLines(client, scope.dir);
+    const lines = await fileStatusLines(client, scope.dir);
     const matched = lines.filter((line) => specs.some((spec) => under(line.path, spec)));
+    const missed = specs.find((spec) => !matched.some((line) => under(line.path, spec)));
 
-    if (matched.length < specs.length) {
-      const missed = specs.filter((spec) => !matched.some((line) => under(line.path, spec)));
-
-      return failure(`fatal: pathspec '${missed[0]}' did not match any files\n`);
-    }
+    if (missed !== undefined)
+      return failure(`fatal: pathspec '${missed}' did not match any files\n`);
 
     await stage(client, scope.dir, matched);
 

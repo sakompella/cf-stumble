@@ -326,6 +326,52 @@ connects. Delete the secret to turn the feature off.
 The provider receives the whole workspace, including the GitHub credential. Give the token only to
 a machine you trust with that.
 
+## End-to-end run
+
+`pnpm e2e` (`tools/e2e/run.mts`) checks a real deployment. It deploys a fresh stage
+`e2e-<run id>` from the checkout, sets its secrets, and submits and activates a generation from the
+tip of `main`. It sets `OWNER_PASSWORD` last and then deploys the stage again with
+`--force`: the first deploy starts the Durable Objects without the secrets, and the Supervisor did
+not see `GH_TOKEN` until a new version replaced it, so every push answered 401. Harness provisioning fetches only the default branch, so the facet code of an
+unmerged branch does not run in the first generation. Then it runs three workflows, each with a time limit:
+
+1. Page: a Playwright spec opens the owner page, sends a message, waits for the streamed answer,
+   reloads and finds the turn again, then sends a turn that runs `sleep 300` and cancels it. The run
+   must settle as `aborted`.
+2. Product loop: the script connects `sakompella/cf-stumble` as a project. The agent commits a
+   marker file and pushes the branch `e2e/<run id>`, and the script reads the file back through the
+   GitHub API.
+3. Self-modification: the agent commits a marker file to the harness, pushes it, runs
+   `stumble gen prepare` and activates the generation. The script waits for a new active generation
+   in `/api/status` whose commit holds the marker, then checks that the next turn gets an answer.
+
+Cleanup always runs, also after a failure or Ctrl-C. It runs `ops:check` for the stage, deletes the
+run's `e2e/` branches and any `self-modify/` branch that holds the run's marker, destroys the stage,
+deletes its container images, and checks that no Worker, container application, Durable Object
+namespace, bucket or image of the stage is left. The script prints a pass or fail line per step and
+exits 1 when any step failed.
+
+The script needs `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `GH_TOKEN` (contents write on
+the harness repository) in the environment. On a machine with only podman it puts a `docker` shim
+first in `PATH`. Set `CHROMIUM_PATH` where Playwright's own Chromium does not run, as on NixOS.
+
+- `--keep` skips the cleanup and writes the owner password to a file in the temporary directory.
+  `pnpm e2e --run-id <id> --cleanup` cleans up a kept run later.
+- `--stage <stage>` or `--url <url>` runs the workflows against an existing instance. The script
+  then does not deploy or destroy; it disconnects the project and rolls back to the generation that
+  was active before. Set `E2E_OWNER_PASSWORD` to that instance's password.
+
+A run takes about 5 minutes, 3 of them deploying. It uses about 4 container instance-minutes and 10
+to 16 Workers AI calls. When Workers AI answers `3040: Capacity temporarily exceeded`, a turn stops
+with `model_error`, and that workflow fails.
+
+Prefer a fresh stage. On an existing instance, a turn that failed in an earlier run stays in the
+harness conversation, and the agent can carry out its steps in the next turn, which then delays the
+page turn. If a run was killed before cleanup finished, `pnpm e2e --run-id <id> --cleanup` finishes
+it; the run id is in the first output line. `.github/workflows/e2e.yml` runs it by hand (workflow_dispatch) and every Monday. It reads the
+`CLOUDFLARE_API_TOKEN` secret, the `CLOUDFLARE_ACCOUNT_ID` variable and an `E2E_GH_TOKEN` secret,
+and runs `--cleanup` again when the job is cancelled.
+
 ## Cost and cleanup
 
 Workers Paid, Container time, and Workers AI requests can cost money. The Workspace Host stops the container ten minutes after the last work (ADR-0043), so an unused instance costs little. A client that keeps calling a route that touches the workspace keeps the container running, and `pnpm ops:check` counts each call as work, so it does not report it (`docs/agents/incident-2026-09-container-cost.md`).

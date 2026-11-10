@@ -7,6 +7,7 @@
     "src/stumble-cli/orb/main.ts!",
     "tools/*.mts!",
     "tools/ops-check/run.mts!",
+    "tools/e2e/run.mts!",
     "infra/alchemy.run.ts!"
   ],
   "project": ["src/**/*.ts!", "tools/**/*.{ts,mts}!", "infra/**/*.ts!"],

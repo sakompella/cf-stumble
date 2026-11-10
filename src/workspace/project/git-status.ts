@@ -60,12 +60,20 @@ function collapseUntracked(lines: readonly StatusLine[], tracked: readonly strin
   });
 }
 
+function trackedFirst(lines: readonly StatusLine[]): StatusLine[] {
+  return [...lines.filter((line) => line.x !== "?"), ...lines.filter((line) => line.x === "?")];
+}
+
+export async function fileStatusLines(client: GitClient, dir: string): Promise<StatusLine[]> {
+  return trackedFirst(correctedLines(await client.status({ dir })));
+}
+
 export async function statusLines(client: GitClient, dir: string): Promise<StatusLine[]> {
   const corrected = correctedLines(await client.status({ dir }));
   const nested = corrected.some((line) => line.x === "?" && line.path.includes("/"));
   const lines = nested ? collapseUntracked(corrected, await client.lsFiles({ dir })) : corrected;
 
-  return [...lines.filter((line) => line.x !== "?"), ...lines.filter((line) => line.x === "?")];
+  return trackedFirst(lines);
 }
 
 export function shortStatus(lines: readonly StatusLine[]): string {
