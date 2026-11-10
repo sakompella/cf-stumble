@@ -12,9 +12,7 @@ function without(argv: readonly string[], flags: readonly string[]): string[] {
   return argv.filter((arg) => !flags.includes(arg));
 }
 
-export function rooted(path: string, prefix: string): string | undefined {
-  if (prefix === "") return path;
-
+function rooted(path: string, prefix: string): string | undefined {
   const parts = prefix.split("/").filter((part) => part !== "");
   let rest = path.startsWith("./") ? path.slice(2) : path;
 
@@ -38,7 +36,7 @@ export function rooted(path: string, prefix: string): string | undefined {
 function under(path: string, spec: string): boolean {
   const bare = spec.replace(/\/$/u, "");
 
-  return path === bare || path.startsWith(`${bare}/`) || path === `${bare}/`;
+  return bare === "." || path === bare || path.startsWith(`${bare}/`) || path === `${bare}/`;
 }
 
 async function stage(
@@ -64,7 +62,7 @@ export async function addCommand(
   const rest = without(args, ["-u", "--update"]);
 
   if (rest.length === args.length || rest.some((arg) => arg !== ".")) {
-    if (scope.prefix === "" || args.some((arg) => arg.startsWith("-"))) return cli(input);
+    if (args.some((arg) => arg.startsWith("-"))) return cli(input);
 
     const specs: string[] = [];
 
@@ -118,16 +116,32 @@ async function resolves(client: GitClient, dir: string, ref: string): Promise<st
   }
 }
 
-export async function resetCommand(
+async function resetReport(client: GitClient, dir: string, hard: boolean): Promise<string> {
+  if (hard) {
+    const head = await client.show({ dir, ref: "HEAD" });
+
+    return `HEAD is now at ${head.oid.slice(0, 7)} ${head.message.split("\n")[0] ?? ""}\n`;
+  }
+
+  const unstaged = (await statusLines(client, dir)).filter(
+    (line) => line.x !== "?" && line.y !== " ",
+  );
+
+  return unstaged.length === 0
+    ? ""
+    : `Unstaged changes after reset:\n${unstaged.map((line) => `${line.y}\t${line.path}\n`).join("")}`;
+}
+
+async function resetWithoutReport(
   client: GitClient,
   cli: RunCli,
   input: GitCliInput,
   scope: GitScope,
+  args: readonly string[],
 ): Promise<GitCliResult> {
-  const args = input.argv.slice(1);
   const soft = args.includes("--soft");
   const mixed = args.includes("--mixed");
-  const rest = without(args, ["--soft", "--mixed"]);
+  const rest = without(args, ["--soft", "--mixed", "-q", "--quiet"]);
   const dir = scope.dir;
 
   if (args.includes("--hard") || rest.includes("--"))
@@ -149,6 +163,21 @@ export async function resetCommand(
   if (!soft) await client.reset({ dir, ref: oid });
 
   return OK;
+}
+
+export async function resetCommand(
+  client: GitClient,
+  cli: RunCli,
+  input: GitCliInput,
+  scope: GitScope,
+): Promise<GitCliResult> {
+  const args = input.argv.slice(1);
+  const result = await resetWithoutReport(client, cli, input, scope, args);
+  const quiet = args.includes("-q") || args.includes("--quiet") || args.includes("--soft");
+
+  if (result.exitCode !== 0 || quiet) return result;
+
+  return { ...result, stdout: await resetReport(client, scope.dir, args.includes("--hard")) };
 }
 
 const RESTORE_USAGE =
@@ -201,14 +230,9 @@ function pathspecError(missed: readonly string[]): GitCliResult {
 }
 
 function restoreSelection(candidates: readonly string[], specs: readonly string[]) {
-  const matched = candidates.filter((path) =>
-    specs.some((spec) => spec === "." || under(path, spec)),
-  );
+  const matched = candidates.filter((path) => specs.some((spec) => under(path, spec)));
 
-  return {
-    matched,
-    missed: specs.filter((spec) => spec !== "." && !matched.some((path) => under(path, spec))),
-  };
+  return { matched, missed: specs.filter((spec) => !matched.some((path) => under(path, spec))) };
 }
 
 async function restoreIndex(
