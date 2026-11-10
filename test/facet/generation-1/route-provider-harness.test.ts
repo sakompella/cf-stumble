@@ -14,20 +14,6 @@ import type { ModelCapability } from "../../../src/facet/generation-1/capabiliti
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
 import { NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
 
-class StrongRef<T extends object> {
-  readonly #target: T;
-
-  constructor(target: T) {
-    this.#target = target;
-  }
-
-  deref(): T {
-    return this.#target;
-  }
-}
-
-if (!("WeakRef" in globalThis)) Object.defineProperty(globalThis, "WeakRef", { value: StrongRef });
-
 const echo = defineTool({
   name: "echo",
   description: "Echo text back",
