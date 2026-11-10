@@ -12,6 +12,7 @@ import {
   plainTextBindings,
   PRODUCTION_STAGE,
   productionRoute,
+  STACK_NAME,
   workerEntrypoint,
   workerName,
   shellModulesAssetDirectory,
@@ -19,7 +20,7 @@ import {
 import { workspaceImage } from "./workspace-image/image.js";
 
 export default Alchemy.Stack(
-  "cf-stumble",
+  STACK_NAME,
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const { stage } = yield* Stack;

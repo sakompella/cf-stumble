@@ -48,6 +48,7 @@
     "cf": "1.0.0-beta.27",
     "foldkit": "0.170.0",
     "knip": "6.44.1",
+    "miniflare": "5.20261103.0-beta",
     "oxfmt": "^0.75.0",
     "oxlint": "^1.90.0",
     "oxlint-tsgolint": "^7.0.2005",
