@@ -4,7 +4,7 @@ import { type ReadFile, withRenames } from "./git-rename.js";
 import { shortStatus, statusLines, type StatusLine } from "./git-status.js";
 import { branchHeader, headState, longStatus } from "./git-status-text.js";
 
-type Format = "long" | "short" | "v2";
+type Format = "long" | "short" | "porcelain" | "v2";
 
 const PORCELAIN_V2_UNSUPPORTED = "error: --porcelain=v2 is not implemented by the workspace git\n";
 
@@ -17,9 +17,9 @@ const FORMATS = new Map<string, Format>([
   ["--long", "long"],
   ["-s", "short"],
   ["--short", "short"],
-  ["--porcelain", "short"],
-  ["--porcelain=1", "short"],
-  ["--porcelain=v1", "short"],
+  ["--porcelain", "porcelain"],
+  ["--porcelain=1", "porcelain"],
+  ["--porcelain=v1", "porcelain"],
   ["--porcelain=2", "v2"],
   ["--porcelain=v2", "v2"],
 ]);
@@ -67,12 +67,14 @@ async function render(
     statusLines(client, scope.dir).then((found) => withRenames(client, scope.dir, readFile, found)),
   ]);
 
+  const prefix = options.format === "porcelain" ? "" : scope.prefix;
+
   const shown = lines.map((line): StatusLine => {
-    const path = displayPath(line.path, scope.prefix);
+    const path = displayPath(line.path, prefix);
 
     if (line.from === undefined) return { ...line, path };
 
-    return { ...line, path, from: displayPath(line.from, scope.prefix) };
+    return { ...line, path, from: displayPath(line.from, prefix) };
   });
 
   if (options.format === "long" && head !== undefined) return longStatus(head, shown);
