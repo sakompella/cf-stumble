@@ -9,6 +9,7 @@ import {
   resetCommand,
   restoreCommand,
 } from "./git-index-commands.js";
+import type { ReadFile } from "./git-rename.js";
 import { statusCommand } from "./git-status-command.js";
 
 export type RunCli = (input: GitCliInput) => Promise<GitCliResult>;
@@ -95,6 +96,7 @@ export async function gitCli(
   client: GitClient,
   cli: RunCli,
   original: GitCliInput,
+  readFile: ReadFile,
 ): Promise<GitCliResult> {
   const resolved = resolveGlobalOptions(original);
 
@@ -106,7 +108,7 @@ export async function gitCli(
 
   switch (command ?? "") {
     case "status":
-      return statusCommand(client, cli, input, scope);
+      return statusCommand(client, cli, input, scope, readFile);
     case "commit":
       return commitWithSummary(
         client,

@@ -1,11 +1,12 @@
 import type { GitClient } from "@cloudflare/computer/git";
-import type { StatusLine } from "./git-status.js";
+import { shownPath, type StatusLine } from "./git-status.js";
 import { branchTracking, type Tracking, trackingCounts, trackingLines } from "./git-tracking.js";
 
 const LABELS = new Map([
   ["A", "new file:   "],
   ["M", "modified:   "],
   ["D", "deleted:    "],
+  ["R", "renamed:    "],
 ]);
 
 export interface HeadState {
@@ -66,7 +67,7 @@ export function longStatus(head: HeadState, lines: readonly StatusLine[]): strin
   const unborn = head.oid === undefined;
 
   const staged = lines.flatMap((line) =>
-    line.x === " " || line.x === "?" ? [] : [`${LABELS.get(line.x) ?? ""}${line.path}`],
+    line.x === " " || line.x === "?" ? [] : [`${LABELS.get(line.x) ?? ""}${shownPath(line)}`],
   );
 
   const unstagedLines = lines.filter((line) => line.y !== " " && line.y !== "?");

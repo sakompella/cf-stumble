@@ -10,7 +10,7 @@ test.each([
   ["deleted", "rm a.txt", " D a.txt\n"],
   ["deleted and staged", "rm a.txt && git add -A", "D  a.txt\n"],
   ["added and modified", "echo x > n.txt && git add n.txt && echo y >> n.txt", "AM n.txt\n"],
-  ["renamed", "mv a.txt z.txt && git add -A", "D  a.txt\nA  z.txt\n"],
+  ["renamed", "mv a.txt z.txt && git add -A", "R  a.txt -> z.txt\n"],
 ])("git status -s shows %s files the way real git does", async (name, change, expected) => {
   const { stdout } = await shell(`isolate-git-${name}`, `${SETUP} && ${change} && git status -s`);
 
@@ -80,6 +80,15 @@ test("git status from a subdirectory shows paths relative to it", async () => {
   );
 
   expect(stdout).toBe(" M ../a.txt\n?? ./\n");
+});
+
+test("git status from a subdirectory shows a rename with paths relative to it", async () => {
+  const { stdout } = await shell(
+    "isolate-git-sub-rename",
+    `${SETUP} && mkdir sub && mv a.txt sub/a.txt && git add -A && cd sub && git status -s`,
+  );
+
+  expect(stdout).toBe("R  ../a.txt -> a.txt\n");
 });
 
 test("git add . from a subdirectory stages only the subtree", async () => {
