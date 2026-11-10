@@ -12,6 +12,7 @@ const noModelRun: ModelCapability = {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   await reset();
 });
 
@@ -58,7 +59,9 @@ test("an attach after a failed open opens the session and arms the host", async 
   );
 });
 
-test("a reader that stops consuming holds the watch back, and cancelling stops the keepalive", async () => {
+test("an idle events stream beats every two seconds, and cancelling it leaves no timer running", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+
   const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
     arm: () => Promise.resolve(),
     log: () => Promise.resolve(),
@@ -75,20 +78,18 @@ test("a reader that stops consuming holds the watch back, and cancelling stops t
       await facet.attach(host);
 
       const id = await facet.createConversation("/workspace");
-      const events = await facet.events(id);
-      const reader = events.getReader();
-      const cleared = vi.spyOn(globalThis, "clearInterval");
+      const reader = (await facet.events(id)).getReader();
 
       await reader.read();
+      expect(vi.getTimerCount()).toBe(1);
 
-      for (let turn = 0; turn < 5; turn += 1) {
-        await facet.submit(id, `message ${turn}`, `r${turn}`);
-      }
+      const beat = reader.read();
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(new TextDecoder().decode((await beat).value)).toBe("\n");
 
       await reader.cancel();
-      await vi.waitFor(() => {
-        expect(cleared).toHaveBeenCalled();
-      });
+      expect(vi.getTimerCount()).toBe(0);
     },
   );
 });
