@@ -1,13 +1,12 @@
 import * as Effect from "effect/Effect";
-import { logEvent } from "../../diagnostics.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import { parseProjectId, type ProjectId } from "../../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
 import { shellQuote } from "../../shell-quote.js";
-import { projectDirectory } from "../../workspace-layout.js";
-import { type WorkspaceEffects, type WorkspaceFault } from "../operations.js";
+import { type WorkspaceEffects } from "../operations.js";
 import { holdProvisionLock } from "./clone-script.js";
 import { projectProvisionLockPath } from "./provision-project.js";
+import { removedDirectories, removedFromStore } from "./remove-project-store.js";
 import {
   answerDurableFailures,
   commandResult,
@@ -38,12 +37,6 @@ export function parseProjectRemovalRequest(
     : { kind: "remove-project", projectId };
 }
 
-function removedDirectories(projectId: ProjectId): readonly [string, string] {
-  const root = projectDirectory(projectId);
-
-  return [root, `${root}.provisioning`];
-}
-
 export function planProjectRemovalRequest(
   request: ParsedProjectRemovalRequest,
 ): Extract<WorkspacePlan, { kind: "run-command" }> {
@@ -60,40 +53,6 @@ export function planProjectRemovalRequest(
     cwd: "/",
     timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
   };
-}
-
-function remainingDirectories(
-  operations: WorkspaceEffects,
-  projectId: ProjectId,
-): Effect.Effect<readonly string[], WorkspaceFault> {
-  return Effect.gen(function* () {
-    const remaining: string[] = [];
-
-    for (const directory of removedDirectories(projectId)) {
-      if ((yield* operations.lstat(directory)) !== undefined) remaining.push(directory);
-    }
-
-    return remaining;
-  });
-}
-
-function removedFromStore(
-  operations: WorkspaceEffects,
-  projectId: ProjectId,
-): Effect.Effect<boolean, WorkspaceFault> {
-  return Effect.gen(function* () {
-    const unsynced = yield* remainingDirectories(operations, projectId);
-
-    if (unsynced.length === 0) return true;
-
-    logEvent("warn", "workspace.project-removal.store-kept-directories", {
-      directories: unsynced.join(" "),
-    });
-
-    for (const directory of unsynced) yield* operations.removeTree(directory);
-
-    return (yield* remainingDirectories(operations, projectId)).length === 0;
-  });
 }
 
 export function executeProjectRemovalRequest(
