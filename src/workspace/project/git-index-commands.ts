@@ -76,7 +76,10 @@ export async function addCommand(
 
     const lines = await fileStatusLines(client, scope.dir);
     const matched = lines.filter((line) => specs.some((spec) => under(line.path, spec)));
-    const missed = specs.find((spec) => !matched.some((line) => under(line.path, spec)));
+
+    const missed = specs.find(
+      (spec) => spec !== "." && !matched.some((line) => under(line.path, spec)),
+    );
 
     if (missed !== undefined)
       return failure(`fatal: pathspec '${missed}' did not match any files\n`);
@@ -130,6 +133,11 @@ async function resetReport(client: GitClient, dir: string, hard: boolean): Promi
     : `Unstaged changes after reset:\n${unstaged.map((line) => `${line.y}\t${line.path}\n`).join("")}`;
 }
 
+const REVISION_SYNTAX = /[~^@]/u;
+
+const AMBIGUOUS = (target: string): string =>
+  `fatal: ambiguous argument '${target}': unknown revision or path not in the working tree.\nUse '--' to separate paths from revisions, like this:\n'git <command> [<revision>...] -- [<file>...]'\n`;
+
 async function resetWithoutReport(
   client: GitClient,
   cli: RunCli,
@@ -150,8 +158,13 @@ async function resetWithoutReport(
   const oid =
     target === undefined || others.length > 0 ? undefined : await resolves(client, dir, target);
 
-  if (oid === undefined && target !== undefined && (soft || mixed) && others.length === 0)
-    return failure(`fatal: ambiguous argument '${target}': unknown revision or path\n`);
+  if (
+    oid === undefined &&
+    target !== undefined &&
+    others.length === 0 &&
+    (soft || mixed || REVISION_SYNTAX.test(target))
+  )
+    return failure(AMBIGUOUS(target));
 
   if (oid === undefined || (!soft && !mixed && target === "HEAD"))
     return soft ? OK : cli({ ...input, argv: ["reset", ...rest] });
