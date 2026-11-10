@@ -142,3 +142,90 @@ test("keeps the earlier id of every owner without a hyphen and name without dots
     expect(projectIdForRepository(`https://github.com/${owner}/${name}`)).toBe(earlier);
   });
 });
+
+const separatorOf = new Map([
+  ["s", "/"],
+  ["h", "-"],
+  ["d", "."],
+  ["u", "_"],
+]);
+
+function nameOfId(id: string): string {
+  const [slug = "", key = ""] = id.split("--");
+  const words = slug.split("-");
+  const written = new Map<number, string>();
+
+  for (const [, position, codes] of key.matchAll(/(\d+)([dhsu]+)/gu)) {
+    written.set(
+      Number(position),
+      (codes ?? "")
+        .split("")
+        .map((code) => separatorOf.get(code) ?? "?")
+        .join(""),
+    );
+  }
+
+  return words
+    .map((word, index) => {
+      const position = index + 1;
+      const usual = position === words.length ? "" : position === 1 ? "/" : "-";
+
+      return `${word}${written.get(position) ?? usual}`;
+    })
+    .join("");
+}
+
+const roundTripOwner = gs.text({ alphabet: "aZ0-", minSize: 1, maxSize: 12 });
+
+const nameEdge = gs.text({ alphabet: "-._", maxSize: 2 });
+
+const nameStep = gs.tuples(
+  gs.sampledFrom(["-", ".", "_", "--", ".-", "_."]),
+  gs.text({ alphabet: "aZ0", minSize: 1, maxSize: 2 }),
+);
+
+const roundTripName = gs.composite((tc) => {
+  const first = `${tc.draw(nameEdge)}${tc.draw(gs.text({ alphabet: "aZ0", minSize: 1, maxSize: 2 }))}`;
+  const rest = tc.draw(gs.arrays(nameStep, { maxSize: 14 }));
+
+  return `${first}${rest.map(([separator, word]) => `${separator}${word}`).join("")}${tc.draw(nameEdge)}`;
+});
+
+test("an id names the repository it came from, so no two repositories share one", () => {
+  hegel.test((tc) => {
+    const owner = `${tc.draw(ownerHead)}${tc.draw(roundTripOwner)}`;
+    const name = tc.draw(roundTripName);
+    const id = projectIdForRepository(`https://github.com/${owner}/${name}`);
+
+    if (name === "." || name === "..") {
+      expect(id).toBeUndefined();
+
+      return;
+    }
+
+    expect(id).toBeDefined();
+    expect(nameOfId(id ?? "")).toBe(`${owner}/${name}`.toLowerCase());
+  });
+});
+
+function recased(tc: hegel.TestCase, text: string): string {
+  return text
+    .split("")
+    .map((character) => (tc.draw(gs.booleans()) ? character.toUpperCase() : character))
+    .join("");
+}
+
+test("every spelling of one repository derives the same id", () => {
+  hegel.test((tc) => {
+    const owner = `${tc.draw(ownerHead)}${tc.draw(ownerTail)}`;
+    const repository = drawSegment(tc);
+    const plain = projectIdForRepository(`https://github.com/${owner}/${repository}`.toLowerCase());
+    const host = tc.draw(gs.sampledFrom(["github.com", "GitHub.COM", "github.com:443"]));
+    const suffix = ".git".repeat(tc.draw(gs.integers({ minValue: 0, maxValue: 3 })));
+    const slashes = "/".repeat(tc.draw(gs.integers({ minValue: 0, maxValue: 2 })));
+    const spelling = `https://${host}/${recased(tc, owner)}/${recased(tc, repository)}${suffix}${slashes}`;
+
+    expect(plain).toBeDefined();
+    expect(projectIdForRepository(spelling)).toBe(plain);
+  });
+});
