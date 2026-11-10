@@ -4,15 +4,14 @@ import { Sse } from "effect/encoding";
 import * as Predicate from "effect/Predicate";
 import { redactedExcerpt } from "./diagnostics.js";
 import type { AssistantMessage } from "./model-route-wire/request.js";
-import type {
-  ModelRouteErrorCode,
-  ModelStreamEvent,
-  ModelUsage,
+import {
+  MAX_STREAM_EVENT_BYTES,
+  type ModelRouteErrorCode,
+  type ModelStreamEvent,
+  type ModelUsage,
 } from "./model-route-wire/events.js";
 import { runResponseBody } from "./run-entry-point.js";
 import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";
-
-const MAX_STREAM_EVENT_BYTES = 8_388_608;
 
 async function readSseEvents<Chunk extends Uint8Array>(
   reader: ReadableStreamDefaultReader<Chunk>,

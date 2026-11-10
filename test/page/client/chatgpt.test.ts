@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
-import { chatGPTConnection } from "../../../src/page/client/api.js";
+import { chatGPTConnection } from "../../../src/page/client/chatgpt.js";
 import { ChatGPT, chatGPTWording, pendingLogin } from "../../../src/page/client/chatgpt.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";

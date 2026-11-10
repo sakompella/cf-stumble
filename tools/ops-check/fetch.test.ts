@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { JsonRecord, JsonValue } from "../json.mts";
-import { parseInvocations, parseModelCalls, parseSessionFailures, parseUsage } from "./fetch.mts";
+import { parseUsage } from "./fetch.mts";
+import { parseInvocations, parseModelCalls, parseSessionFailures } from "./telemetry.mts";
 
 const MEMORY_BYTES = 8 * 1024 ** 3;
 

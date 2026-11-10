@@ -2,15 +2,12 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import { ChatGPT, UsageLimit, type PendingLogin } from "./chatgpt.js";
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
 import { GitHubReport, type GenerationReading, type Project } from "./model.js";
 
 export function transportDetail(cause: unknown): string {
   return Predicate.isError(cause) ? cause.message : String(cause);
 }
-
-export type Wire = Schema.Json | undefined;
 
 export type JsonBody = Readonly<Record<string, string | number>>;
 
@@ -47,112 +44,161 @@ export function answerOf(response: Response): Effect.Effect<Answer> {
   );
 }
 
-export function requestJson(
+const RefusalPayload = Schema.Struct({
+  ok: Schema.Literal(false),
+  problem: Schema.optional(Schema.Struct({ code: Schema.String })),
+  error: Schema.optional(Schema.Struct({ code: Schema.String })),
+});
+
+type Refusal = typeof RefusalPayload.Type;
+
+const decodeRefusal = Schema.decodeUnknownOption(RefusalPayload);
+
+export function refusalText(refusal: Refusal, status: number): string {
+  const problem = refusal.problem;
+
+  if (problem !== undefined) {
+    return `rejected: ${problem.code}`;
+  }
+
+  const error = refusal.error;
+
+  return error === undefined ? `error: HTTP ${status}` : `error: ${error.code}`;
+}
+
+export function problemText(answer: Answer): string {
+  const refusal = Option.getOrUndefined(decodeRefusal(answer.payload));
+
+  return refusal === undefined
+    ? `error: HTTP ${answer.status}`
+    : refusalText(refusal, answer.status);
+}
+
+export type Answered<A> = Readonly<{
+  status: number;
+  maybeAnswer: Option.Option<A>;
+  maybeRefusal: Option.Option<Refusal>;
+}>;
+
+export function requestJson<S extends Schema.ConstraintDecoder<unknown>>(
   method: "GET" | "POST",
   path: string,
   maybeBody: Option.Option<JsonBody>,
-): Effect.Effect<Answer, string> {
+  schema: S,
+): Effect.Effect<Answered<S["Type"]>, string> {
   return fetchEffect(path, { method, accept: "application/json", maybeBody }).pipe(
     Effect.flatMap(answerOf),
+    Effect.map(({ status, payload }) => {
+      const maybeAnswer = Schema.decodeUnknownOption(schema)(payload);
+
+      return {
+        status,
+        maybeAnswer,
+        maybeRefusal: Option.isNone(maybeAnswer) ? decodeRefusal(payload) : Option.none(),
+      };
+    }),
   );
 }
 
-export function projectPath(projectId: string, suffix: string): string {
-  return `/api/projects/${encodeURIComponent(projectId)}${suffix}`;
-}
-
-function isJsonObject(value: Wire): value is Schema.JsonObject {
-  return Predicate.isObject(value) && !Array.isArray(value);
-}
-
-function isJsonArray(value: Wire): value is Schema.JsonArray {
-  return Array.isArray(value);
-}
-
-export function field(value: Wire, ...path: readonly string[]): Wire {
-  return path.reduce<Wire>(
-    (current, key) => (isJsonObject(current) ? current[key] : undefined),
-    value,
-  );
-}
-
-export function text(value: Wire): string {
-  return Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value)
-    ? String(value)
-    : "";
-}
-
-export function numberField(value: Wire, ...path: readonly string[]): Option.Option<number> {
-  const found = field(value, ...path);
-
-  return Predicate.isNumber(found) ? Option.some(found) : Option.none();
-}
-
-export function generationReading(payload: Wire): Option.Option<GenerationReading> {
-  const active = field(payload, "activeGeneration");
-  const generation = field(active, "generation");
-
-  return Option.all({
-    epoch: numberField(active, "epoch"),
-    maybeActive: truthy(generation)
-      ? Option.map(numberField(generation, "label"), (label) =>
-          Option.some({
-            label,
-            harnessCommit: text(field(generation, "harnessCommit")),
-            status: text(field(generation, "status")),
-          }),
-        )
-      : Option.some(Option.none()),
+export function refusalWording(
+  answered: Readonly<Pick<Answered<unknown>, "status" | "maybeRefusal">>,
+): string {
+  return Option.match(answered.maybeRefusal, {
+    onNone: () => `error: HTTP ${answered.status}`,
+    onSome: (refusal) => refusalText(refusal, answered.status),
   });
 }
 
-export function isOk(payload: Wire): boolean {
-  return field(payload, "ok") === true;
-}
+export function sendRefusalText(
+  answered: Readonly<Pick<Answered<unknown>, "status" | "maybeRefusal">>,
+): string {
+  const refusal = Option.getOrUndefined(answered.maybeRefusal);
+  const code = refusal?.problem?.code;
 
-export const truthy = Boolean;
-
-export function problemText(answer: Answer): string {
-  const problemCode = field(answer.payload, "problem", "code");
-
-  if (truthy(problemCode)) {
-    return `rejected: ${text(problemCode)}`;
+  if (code === "no-active-generation") {
+    return "no active generation: activate one in the generation controls";
   }
 
-  const errorCode = field(answer.payload, "error", "code");
-
-  return truthy(errorCode) ? `error: ${text(errorCode)}` : `error: HTTP ${answer.status}`;
-}
-
-export function submitRejection(answer: Answer): string {
-  const recorded = numberField(answer.payload, "recorded", "label");
-
-  return Option.match(recorded, {
-    onNone: () => problemText(answer),
-    onSome: (label) =>
-      `label ${label} recorded (commit ${text(field(answer.payload, "recorded", "harnessCommit"))}), preparation failed: ${problemText(answer)}`,
-  });
-}
-
-function connectionDetail(status: Wire, state: string): string {
-  switch (state) {
-    case "connected":
-      return `${text(field(status, "login"))} (${text(field(status, "source"))})`;
-    case "awaiting-authorization":
-      return `enter code ${text(field(status, "userCode"))} at GitHub`;
-    case "reconnect-required":
-      return text(field(status, "reason"));
-    case "tooling-missing":
-      return "the workspace has no gh command";
-    default:
-      return "";
+  if (code === "workspace-busy") {
+    return "busy: the workspace is resetting; send again once it finishes";
   }
+
+  return refusal === undefined
+    ? `error: HTTP ${answered.status}`
+    : refusalText(refusal, answered.status);
+}
+
+const GenerationView = Schema.Struct({
+  label: Schema.Number,
+  harnessCommit: Schema.String,
+  status: Schema.String,
+});
+
+export const StatusAnswer = Schema.Struct({
+  activeGeneration: Schema.Struct({
+    generation: Schema.NullOr(GenerationView),
+    epoch: Schema.Number,
+  }),
+});
+
+export type StatusAnswer = typeof StatusAnswer.Type;
+
+export const decodeStatusAnswer = Schema.decodeUnknownOption(StatusAnswer);
+
+export function generationReading(answer: StatusAnswer): GenerationReading {
+  const { generation, epoch } = answer.activeGeneration;
+
+  return {
+    epoch,
+    maybeActive: generation === null ? Option.none() : Option.some(generation),
+  };
+}
+
+export const GitHubStatus = Schema.NullOr(
+  Schema.Union([
+    Schema.Struct({ state: Schema.Literal("disconnected") }),
+    Schema.Struct({ state: Schema.Literal("tooling-missing") }),
+    Schema.Struct({
+      state: Schema.Literal("connected"),
+      login: Schema.String,
+      source: Schema.String,
+    }),
+    Schema.Struct({ state: Schema.Literal("reconnect-required"), reason: Schema.String }),
+    Schema.Struct({
+      state: Schema.Literal("awaiting-authorization"),
+      verificationUri: Schema.String,
+      userCode: Schema.String,
+      expiresAt: Schema.Number,
+    }),
+  ]),
+);
+
+export type GitHubStatusView = typeof GitHubStatus.Type;
+
+function connectionDetail(status: Exclude<GitHubStatusView, null>): string {
+  if (status.state === "connected") {
+    return `${status.login} (${status.source})`;
+  }
+
+  if (status.state === "awaiting-authorization") {
+    return `enter code ${status.userCode} at GitHub`;
+  }
+
+  if (status.state === "reconnect-required") {
+    return status.reason;
+  }
+
+  if (status.state === "tooling-missing") {
+    return "the workspace has no gh command";
+  }
+
+  return "";
 }
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
-export function checkedWording(checkedAt: Wire, now: number): string {
-  if (!Predicate.isNumber(checkedAt) || !Number.isFinite(checkedAt)) {
+export function checkedWording(checkedAt: number | null, now: number): string {
+  if (checkedAt === null || !Number.isFinite(checkedAt)) {
     return "";
   }
 
@@ -164,113 +210,88 @@ export function checkedWording(checkedAt: Wire, now: number): string {
     : `${then.getFullYear()}-${pad2(then.getMonth() + 1)}-${pad2(then.getDate())} ${clock}`;
 }
 
-export function gitHubReport(status: Wire, checkedAt: Wire, now: number): GitHubReport {
-  const state = field(status, "state");
+export function gitHubReport(
+  status: GitHubStatusView,
+  checkedAt: number | null,
+  now: number,
+): GitHubReport {
+  if (status === null) return GitHubReport.Unknown();
 
-  if (!truthy(status) || !Predicate.isString(state)) {
-    return GitHubReport.Unknown();
-  }
-
-  const isPending = state === "awaiting-authorization";
+  const isPending = status.state === "awaiting-authorization";
 
   return GitHubReport.Known({
     connection: {
-      state,
-      detail: connectionDetail(status, state),
-      verificationUri: isPending ? text(field(status, "verificationUri")) : "",
+      state: status.state,
+      detail: connectionDetail(status),
+      verificationUri: isPending ? status.verificationUri : "",
       checked: isPending ? "" : checkedWording(checkedAt, now),
     },
   });
 }
 
-function chatGPTLogin(login: Wire): Option.Option<PendingLogin> {
-  const attemptId = text(field(login, "attemptId"));
-  const authorizeUrl = text(field(login, "authorizeUrl"));
+const ProjectEntry = Schema.Struct({
+  kind: Schema.Literals(["harness", "repository"]),
+  id: Schema.String,
+  displayName: Schema.String,
+  repositoryUrl: Schema.optional(Schema.String),
+});
 
-  return attemptId === "" || authorizeUrl === ""
-    ? Option.none()
-    : Option.some({ attemptId, authorizeUrl, address: "" });
+export const ProjectsAnswer = Schema.Struct({
+  ok: Schema.Literal(true),
+  projects: Schema.Array(ProjectEntry),
+});
+
+export function projectsOf(answer: typeof ProjectsAnswer.Type): readonly Project[] {
+  return answer.projects.map((entry) => ({
+    id: entry.id,
+    displayName: entry.displayName,
+    isHarness: entry.kind === "harness",
+    location: entry.kind === "harness" ? HARNESS_DIRECTORY : (entry.repositoryUrl ?? ""),
+  }));
 }
 
-function usageLimit(limit: Wire): UsageLimit {
-  const limitedUntil = field(limit, "limitedUntil");
+const PreparationDiagnostics = Schema.Struct({
+  stderrTail: Schema.optional(Schema.String),
+  stdoutTail: Schema.optional(Schema.String),
+  truncated: Schema.optional(Schema.Boolean),
+});
 
-  if (limitedUntil === undefined) {
-    return UsageLimit.Clear();
-  }
+const PreparationProblem = Schema.Struct({
+  code: Schema.String,
+  diagnostics: Schema.optional(PreparationDiagnostics),
+});
 
-  return UsageLimit.Limited({
-    maybeUntil: Predicate.isNumber(limitedUntil) ? Option.some(limitedUntil) : Option.none(),
-  });
+export const Preparation = Schema.Union([
+  Schema.Struct({
+    ok: Schema.Literal(true),
+    report: Schema.Struct({ stage: Schema.String, reason: Schema.optional(Schema.String) }),
+  }),
+  Schema.Struct({ ok: Schema.Literal(false), problem: PreparationProblem }),
+]);
+
+export type Preparation = typeof Preparation.Type;
+
+export function preparationText(preparation: Preparation): string {
+  return preparation.ok
+    ? `${preparation.report.stage}: ${preparation.report.reason ?? ""}`
+    : `rejected: ${preparation.problem.code}`;
 }
 
-export function chatGPTConnection(view: Wire): ChatGPT {
-  const connection = field(view, "connection");
-  const maybeLogin = chatGPTLogin(field(view, "login"));
+export function diagnosticsText(preparation: Preparation): Option.Option<string> {
+  if (preparation.ok) return Option.none();
 
-  switch (text(field(connection, "state"))) {
-    case "disconnected":
-      return ChatGPT.Disconnected({ maybeLogin });
-    case "connected":
-      return ChatGPT.Connected({
-        model: text(field(view, "model")),
-        usageLimit: usageLimit(field(connection, "usageLimit")),
-      });
-    case "needs-reconnect":
-      return ChatGPT.NeedsReconnect({ reason: text(field(connection, "reason")), maybeLogin });
-    default:
-      return ChatGPT.Unknown();
-  }
-}
+  const diagnostics = preparation.problem.diagnostics;
 
-function project(entry: Wire): Project {
-  const isHarness = field(entry, "kind") === "harness";
-
-  return {
-    id: text(field(entry, "id")),
-    displayName: text(field(entry, "displayName")),
-    isHarness,
-    location: isHarness ? HARNESS_DIRECTORY : text(field(entry, "repositoryUrl")),
-  };
-}
-
-export function projects(payload: Wire): Option.Option<readonly Project[]> {
-  const entries = field(payload, "projects");
-
-  return isOk(payload) && isJsonArray(entries)
-    ? Option.some(entries.map((entry) => project(entry)))
-    : Option.none();
-}
-
-export function preparationText(preparation: Wire): string {
-  if (!truthy(preparation)) {
-    return "";
-  }
-
-  if (field(preparation, "ok") === true) {
-    return `${text(field(preparation, "report", "stage"))}: ${text(field(preparation, "report", "reason"))}`;
-  }
-
-  return `rejected: ${text(field(preparation, "problem", "code"))}`;
-}
-
-export function diagnosticsText(preparation: Wire): Option.Option<string> {
-  const diagnostics =
-    truthy(preparation) && field(preparation, "ok") === false
-      ? field(preparation, "problem", "diagnostics")
-      : undefined;
-
-  if (!truthy(diagnostics)) {
-    return Option.none();
-  }
-
-  const stderrTail = field(diagnostics, "stderrTail");
-  const stdoutTail = field(diagnostics, "stdoutTail");
+  if (diagnostics === undefined) return Option.none();
 
   const parts = [
-    ...(truthy(stderrTail) ? [`stderr:\n${text(stderrTail)}`] : []),
-    ...(truthy(stdoutTail) ? [`stdout:\n${text(stdoutTail)}`] : []),
-    ...(field(diagnostics, "truncated") === true
+    ...(diagnostics.stderrTail !== undefined && diagnostics.stderrTail !== ""
+      ? [`stderr:\n${diagnostics.stderrTail}`]
+      : []),
+    ...(diagnostics.stdoutTail !== undefined && diagnostics.stdoutTail !== ""
+      ? [`stdout:\n${diagnostics.stdoutTail}`]
+      : []),
+    ...(diagnostics.truncated === true
       ? ["(output truncated to the last part of each stream)"]
       : []),
   ];
@@ -278,13 +299,22 @@ export function diagnosticsText(preparation: Wire): Option.Option<string> {
   return Option.some(parts.join("\n\n"));
 }
 
-export function sendRefusalText(answer: Answer): string {
-  switch (text(field(answer.payload, "problem", "code"))) {
-    case "no-active-generation":
-      return "no active generation: activate one in the generation controls";
-    case "workspace-busy":
-      return "busy: the workspace is resetting; send again once it finishes";
-    default:
-      return problemText(answer);
-  }
+export const SubmitRefusal = Schema.Struct({
+  ok: Schema.Literal(false),
+  error: Schema.Struct({ code: Schema.String }),
+  recorded: Schema.optional(Schema.Struct({ label: Schema.Number, harnessCommit: Schema.String })),
+});
+
+export type SubmitRefusal = typeof SubmitRefusal.Type;
+
+export function submitRejection(refusal: SubmitRefusal): string {
+  const recorded = refusal.recorded;
+
+  return recorded === undefined
+    ? `error: ${refusal.error.code}`
+    : `label ${recorded.label} recorded (commit ${recorded.harnessCommit}), preparation failed: error: ${refusal.error.code}`;
+}
+
+export function projectPath(projectId: string, suffix: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}${suffix}`;
 }

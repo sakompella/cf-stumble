@@ -2,8 +2,9 @@ import { type Cursor, type EntryLoader, type EntryRecord } from "@earendil-works
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { encodeEntriesRequest } from "../../entries-request.js";
-import { answerOf, fetchEffect, field, projectPath } from "./api.js";
+import { answerOf, fetchEffect, projectPath } from "./api.js";
 
 function isEntryRecord(value: unknown): value is EntryRecord {
   return (
@@ -20,6 +21,13 @@ function isEntryRecord(value: unknown): value is EntryRecord {
 function isCursor(value: unknown): value is Cursor {
   return Predicate.isObject(value) && !Array.isArray(value);
 }
+
+const EntriesPage = Schema.Struct({
+  items: Schema.Array(Schema.declare(isEntryRecord)),
+  next: Schema.optional(Schema.declare(isCursor)),
+});
+
+const decodeEntriesPage = Schema.decodeUnknownOption(EntriesPage);
 
 function entriesPath(projectId: string, query: Parameters<EntryLoader>[0], limit: number) {
   const params = encodeEntriesRequest({
@@ -42,13 +50,15 @@ export function loaderFor(projectId: string): EntryLoader {
       }).pipe(
         Effect.flatMap(answerOf),
         Effect.flatMap(({ payload }) => {
-          const items = field(payload, "items");
+          const page = Option.getOrUndefined(decodeEntriesPage(payload));
 
-          const next = field(payload, "next");
+          if (page === undefined) {
+            return Effect.fail("the Worker answered entries the page cannot read");
+          }
 
-          return Array.isArray(items) && items.every(isEntryRecord)
-            ? Effect.succeed(isCursor(next) ? { items, next } : { items })
-            : Effect.fail("the Worker answered entries the page cannot read");
+          const { items, next } = page;
+
+          return Effect.succeed(next === undefined ? { items } : { items, next });
         }),
       ),
     );

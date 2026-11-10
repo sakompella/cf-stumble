@@ -1,5 +1,6 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
+import * as Result from "effect/Result";
 import { posix } from "node:path";
 import { expect, test } from "vitest";
 import { addressedPathOf, parseAddressedPath } from "../../../src/workspace/project/resolve.js";
@@ -29,9 +30,9 @@ test("parseAddressedPath accepts exactly clean absolute normalized paths", () =>
       const parsed = parseAddressedPath(input);
       const expected = isAcceptedByOracle(input);
 
-      expect(parsed.ok).toBe(expected);
+      expect(Result.isSuccess(parsed)).toBe(expected);
 
-      if (parsed.ok) expect(addressedPathOf(parsed.value)).toBe(input);
+      if (Result.isSuccess(parsed)) expect(addressedPathOf(parsed.success)).toBe(input);
     },
     { testCases: 100 },
   );

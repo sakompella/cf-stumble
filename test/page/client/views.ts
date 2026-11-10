@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import { Scene } from "foldkit/test";
-import { chatGPTConnection } from "../../../src/page/client/api.js";
+import { chatGPTConnection } from "../../../src/page/client/chatgpt.js";
 import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";

@@ -11,17 +11,14 @@ import {
   type ModelCalls,
   type TimeWindow,
 } from "./check.mts";
+import { fetchUsage, readToken, resolveAccount, ApiFailure } from "./fetch.mts";
 import {
   fetchInvocations,
   fetchModelCalls,
   fetchRunSettlements,
   fetchRunStarts,
   fetchSessionFailures,
-  fetchUsage,
-  readToken,
-  resolveAccount,
-  ApiFailure,
-} from "./fetch.mts";
+} from "./telemetry.mts";
 
 const USAGE = "usage: ops-check [--worker <name>] --since <90m|2h|1d>";
 

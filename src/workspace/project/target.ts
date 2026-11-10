@@ -1,8 +1,14 @@
+import * as Result from "effect/Result";
 import { RpcTarget } from "cloudflare:workers";
 import type { ExecBackend } from "./exec-backend.js";
 import { startExecOperation, type ExecOperation, type TerminalEvent } from "./exec-operation.js";
 import type { ProjectActivity } from "../idle-controller.js";
-import { lstatProjectPath, readProjectFile, writeProjectFile } from "./file-operations.js";
+import {
+  lstatProjectPath,
+  projectResultOf,
+  readProjectFile,
+  writeProjectFile,
+} from "./file-operations.js";
 import {
   mapProviderError,
   type ProjectFilesystemProvider,
@@ -10,10 +16,12 @@ import {
 } from "./provider.js";
 import { addressedPathOf, resolveAddressedPath } from "./resolve.js";
 import {
+  failureDetail,
   fail,
   MAX_CONCURRENT_EXECS,
   ok,
   type ProjectFailure,
+  type ProjectFailureDetail,
   type ProjectLstatInfo,
   type ProjectResult,
   type ProjectRpcTargetContract,
@@ -95,16 +103,16 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   }
 
   lstat(path: string): Promise<ProjectResult<ProjectLstatInfo>> {
-    return this.#whileTurnLasts(() => lstatProjectPath(this.#provider, path));
+    return this.#whileTurnLasts(() => projectResultOf(lstatProjectPath(this.#provider, path)));
   }
 
   readFile(path: string): Promise<ProjectResult<Uint8Array>> {
-    return this.#whileTurnLasts(() => readProjectFile(this.#provider, path));
+    return this.#whileTurnLasts(() => projectResultOf(readProjectFile(this.#provider, path)));
   }
 
   writeFile(path: string, bytes: Uint8Array, mode: WriteMode): Promise<ProjectResult<null>> {
     return this.#whileTurnLasts(() =>
-      writeProjectFile(this.#provider, this.#transactions, { path, bytes, mode }),
+      projectResultOf(writeProjectFile(this.#provider, this.#transactions, { path, bytes, mode })),
     );
   }
 
@@ -120,67 +128,65 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     return projectResult<StartedExec>(() => {
       const parsed = parseStartExecInput(input);
 
-      if (!parsed.ok) {
-        return parsed;
-      }
-
-      return this.#startExec(parsed.value);
+      return parsed.ok ? projectResultOf(this.#startExec(parsed.value)) : parsed;
     });
   }
 
-  #startExec(input: ParsedStartExecInput): ProjectResult<StartedExec> {
-    if (this.#containerWasReplaced()) {
-      this.#acknowledgeRestart();
+  #startExec(input: ParsedStartExecInput): Result.Result<StartedExec, ProjectFailureDetail> {
+    return Result.gen(this, function* () {
+      if (this.#containerWasReplaced()) {
+        this.#acknowledgeRestart();
 
-      return fail("container-restarted");
-    }
+        return yield* Result.fail(failureDetail("container-restarted"));
+      }
 
-    if (this.#operations.size >= MAX_CONCURRENT_EXECS) {
-      return fail("too-many-operations");
-    }
+      if (this.#operations.size >= MAX_CONCURRENT_EXECS) {
+        return yield* Result.fail(failureDetail("too-many-operations"));
+      }
 
-    const cwdOutcome = resolveAddressedPath(this.#provider, input.cwdSegments, {
-      followFinalSymlink: true,
-      createMissingDirs: false,
+      const cwd = yield* resolveAddressedPath(this.#provider, input.cwdSegments, {
+        followFinalSymlink: true,
+        createMissingDirs: false,
+      });
+
+      if (cwd.kind === "missing") {
+        return yield* Result.fail(failureDetail("not-found", addressedPathOf(input.cwdSegments)));
+      }
+
+      if (!cwd.stat.isDirectory()) {
+        return yield* Result.fail(
+          failureDetail("not-directory", addressedPathOf(input.cwdSegments)),
+        );
+      }
+
+      const remainingMs =
+        this.#turnEndsAt === undefined ? undefined : Math.max(0, this.#turnEndsAt - Date.now());
+
+      if (remainingMs !== undefined && remainingMs <= 0) {
+        void this.endTurn();
+
+        return yield* Result.fail(failureDetail("turn-ended"));
+      }
+
+      const { timeoutMs, timeoutEndsTurn } = capAtBudget(input.timeoutMs, remainingMs);
+
+      const operationId = `${this.#nonce}:${this.#nextOperationSequence++}`;
+
+      const endActivity = this.#activity?.begin();
+
+      const operation = this.#startOperation(
+        operationId,
+        cwd.path,
+        input,
+        timeoutMs,
+        timeoutEndsTurn,
+        endActivity,
+      );
+
+      this.#operations.set(operationId, operation);
+
+      return { operationId, events: operation.events };
     });
-
-    if (!cwdOutcome.ok) return cwdOutcome;
-
-    if (cwdOutcome.value.kind === "missing") {
-      return fail("not-found", addressedPathOf(input.cwdSegments));
-    }
-
-    if (!cwdOutcome.value.stat.isDirectory()) {
-      return fail("not-directory", addressedPathOf(input.cwdSegments));
-    }
-
-    const remainingMs =
-      this.#turnEndsAt === undefined ? undefined : Math.max(0, this.#turnEndsAt - Date.now());
-
-    if (remainingMs !== undefined && remainingMs <= 0) {
-      void this.endTurn();
-
-      return fail("turn-ended");
-    }
-
-    const { timeoutMs, timeoutEndsTurn } = capAtBudget(input.timeoutMs, remainingMs);
-
-    const operationId = `${this.#nonce}:${this.#nextOperationSequence++}`;
-
-    const endActivity = this.#activity?.begin();
-
-    const operation = this.#startOperation(
-      operationId,
-      cwdOutcome.value.path,
-      input,
-      timeoutMs,
-      timeoutEndsTurn,
-      endActivity,
-    );
-
-    this.#operations.set(operationId, operation);
-
-    return ok({ operationId, events: operation.events });
   }
 
   #startOperation(

@@ -4,11 +4,15 @@ import type { HarnessModule, MainHarnessArtifact } from "./artifact.js";
 import type { ConversationFacet } from "./conversation-protocol.js";
 import { FACET_RUNTIME } from "./runtime-contract.js";
 
-export { MainHarnessArtifact } from "./artifact.js";
+export {
+  ModuleMapSchema,
+  parseMainHarnessArtifact,
+  parseMainHarnessArtifactJson,
+} from "./artifact.js";
 
 export { FACET_COMPATIBILITY } from "./runtime-contract.js";
 
-export type { HarnessModule, MainHarnessArtifactProblem } from "./artifact.js";
+export type { HarnessModule, MainHarnessArtifact, MainHarnessArtifactProblem } from "./artifact.js";
 
 export type { EntriesRequest } from "../entries-request.js";
 

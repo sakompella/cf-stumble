@@ -1,3 +1,4 @@
+import * as Result from "effect/Result";
 import {
   mapProviderError,
   type ProjectFilesystemProvider,
@@ -12,9 +13,10 @@ import {
   resolveCanonicalPath,
 } from "./resolve.js";
 import {
-  fail,
-  MAX_FILE_BYTES,
+  failureDetail,
   ok,
+  MAX_FILE_BYTES,
+  type ProjectFailureDetail,
   type ProjectLstatInfo,
   type ProjectResult,
   type WriteFileWire,
@@ -22,106 +24,108 @@ import {
 } from "./protocol.js";
 import { parseWriteFileInput } from "./start-exec-input.js";
 
+export function projectResultOf<T>(
+  result: Result.Result<T, ProjectFailureDetail>,
+): ProjectResult<T> {
+  return Result.match(result, {
+    onFailure: (error): ProjectResult<T> => ({ ok: false, error }),
+    onSuccess: (value) => ok(value),
+  });
+}
+
 export function lstatProjectPath(
   provider: ProjectFilesystemProvider,
   path: string,
-): ProjectResult<ProjectLstatInfo> {
-  const segments = parseAddressedPath(path);
+): Result.Result<ProjectLstatInfo, ProjectFailureDetail> {
+  return Result.gen(function* () {
+    const segments = yield* parseAddressedPath(path);
 
-  if (!segments.ok) return segments;
+    const outcome = yield* resolveAddressedPath(provider, segments, {
+      followFinalSymlink: false,
+      createMissingDirs: false,
+    });
 
-  const outcome = resolveAddressedPath(provider, segments.value, {
-    followFinalSymlink: false,
-    createMissingDirs: false,
+    if (outcome.kind === "missing") {
+      return yield* Result.fail(failureDetail("not-found", addressedPathOf(segments)));
+    }
+
+    const name = segments.at(-1) ?? "/";
+
+    const info = fileInfoOf(provider, name, addressedPathOf(segments), outcome.path, outcome.stat);
+
+    return { ...info, canonicalPath: projectResultOf(resolveCanonicalPath(provider, segments)) };
   });
-
-  if (!outcome.ok) return outcome;
-
-  if (outcome.value.kind === "missing") return fail("not-found", addressedPathOf(segments.value));
-
-  const name = segments.value.at(-1) ?? "/";
-
-  const info = fileInfoOf(
-    provider,
-    name,
-    addressedPathOf(segments.value),
-    outcome.value.path,
-    outcome.value.stat,
-  );
-
-  const canonicalPath = resolveCanonicalPath(provider, segments.value);
-
-  return ok({ ...info, canonicalPath });
 }
 
 export function readProjectFile(
   provider: ProjectFilesystemProvider,
   path: string,
-): ProjectResult<Uint8Array> {
-  const segments = parseAddressedPath(path);
+): Result.Result<Uint8Array, ProjectFailureDetail> {
+  return Result.gen(function* () {
+    const segments = yield* parseAddressedPath(path);
 
-  if (!segments.ok) return segments;
+    const outcome = yield* resolveAddressedPath(provider, segments, {
+      followFinalSymlink: true,
+      createMissingDirs: false,
+    });
 
-  const outcome = resolveAddressedPath(provider, segments.value, {
-    followFinalSymlink: true,
-    createMissingDirs: false,
+    const addressed = addressedPathOf(segments);
+
+    if (outcome.kind === "missing") {
+      return yield* Result.fail(failureDetail("not-found", addressed));
+    }
+
+    if (outcome.stat.isDirectory()) {
+      return yield* Result.fail(failureDetail("is-directory", addressed));
+    }
+
+    if (outcome.stat.size > MAX_FILE_BYTES) {
+      return yield* Result.fail(failureDetail("content-too-large", addressed));
+    }
+
+    try {
+      return provider.readFileSync(outcome.path);
+    } catch (cause) {
+      return yield* Result.fail(failureDetail(mapProviderError(cause), addressed));
+    }
   });
-
-  if (!outcome.ok) return outcome;
-
-  if (outcome.value.kind === "missing") return fail("not-found", addressedPathOf(segments.value));
-
-  if (outcome.value.stat.isDirectory()) {
-    return fail("is-directory", addressedPathOf(segments.value));
-  }
-
-  if (outcome.value.stat.size > MAX_FILE_BYTES) {
-    return fail("content-too-large", addressedPathOf(segments.value));
-  }
-
-  try {
-    return ok(provider.readFileSync(outcome.value.path));
-  } catch (cause) {
-    return fail(mapProviderError(cause), addressedPathOf(segments.value));
-  }
 }
 
 function resolveWriteTarget(
   provider: ProjectFilesystemProvider,
   segments: readonly string[],
   mode: WriteMode,
-): ProjectResult<{ path: string; flag: "w" | "a" | "wx" }> {
-  const addressed = addressedPathOf(segments);
+): Result.Result<{ path: string; flag: "w" | "a" | "wx" }, ProjectFailureDetail> {
+  return Result.gen(function* () {
+    const addressed = addressedPathOf(segments);
 
-  if (mode === "create-exclusive") {
-    const outcome = resolveAddressedPath(provider, segments, {
-      followFinalSymlink: false,
+    if (mode === "create-exclusive") {
+      const outcome = yield* resolveAddressedPath(provider, segments, {
+        followFinalSymlink: false,
+        createMissingDirs: true,
+      });
+
+      if (outcome.kind === "resolved") {
+        return yield* Result.fail(failureDetail("already-exists", addressed));
+      }
+
+      return { path: joinOne(outcome.parentPath, outcome.name), flag: "wx" };
+    }
+
+    const outcome = yield* resolveAddressedPath(provider, segments, {
+      followFinalSymlink: true,
       createMissingDirs: true,
     });
 
-    if (!outcome.ok) return outcome;
+    if (outcome.kind === "resolved") {
+      if (outcome.stat.isDirectory()) {
+        return yield* Result.fail(failureDetail("is-directory", addressed));
+      }
 
-    if (outcome.value.kind === "resolved") return fail("already-exists", addressed);
+      return { path: outcome.path, flag: mode === "append" ? "a" : "w" };
+    }
 
-    return ok({ path: joinOne(outcome.value.parentPath, outcome.value.name), flag: "wx" });
-  }
-
-  const outcome = resolveAddressedPath(provider, segments, {
-    followFinalSymlink: true,
-    createMissingDirs: true,
-  });
-
-  if (!outcome.ok) return outcome;
-
-  if (outcome.value.kind === "resolved") {
-    if (outcome.value.stat.isDirectory()) return fail("is-directory", addressed);
-
-    return ok({ path: outcome.value.path, flag: mode === "append" ? "a" : "w" });
-  }
-
-  return ok({
-    path: joinOne(outcome.value.parentPath, outcome.value.name),
-    flag: mode === "append" ? "a" : "w",
+    return { path: joinOne(outcome.parentPath, outcome.name), flag: mode === "append" ? "a" : "w" };
   });
 }
 
@@ -129,37 +133,33 @@ export function writeProjectFile(
   provider: ProjectFilesystemProvider,
   transactions: ProjectTransactions,
   input: WriteFileWire,
-): ProjectResult<null> {
-  const parsed = parseWriteFileInput(input);
+): Result.Result<null, ProjectFailureDetail> {
+  return Result.gen(function* () {
+    const parsed = yield* parseWriteFileInput(input);
+    const { bytes, mode } = parsed;
+    const segments = yield* parseAddressedPath(parsed.path);
+    const addressed = addressedPathOf(segments);
 
-  if (!parsed.ok) return parsed;
+    if (bytes.byteLength > MAX_FILE_BYTES) {
+      return yield* Result.fail(failureDetail("content-too-large", addressed));
+    }
 
-  const { bytes, mode } = parsed.value;
-  const segments = parseAddressedPath(parsed.value.path);
+    const target = yield* resolveWriteTarget(provider, segments, mode);
 
-  if (!segments.ok) return segments;
+    try {
+      transactions.transactionSync(() => {
+        const fd = provider.openSync(target.path, target.flag);
 
-  const addressed = addressedPathOf(segments.value);
+        try {
+          provider.writeSync(fd, bytes);
+        } finally {
+          provider.closeSync(fd);
+        }
+      });
 
-  if (bytes.byteLength > MAX_FILE_BYTES) return fail("content-too-large", addressed);
-
-  const target = resolveWriteTarget(provider, segments.value, mode);
-
-  if (!target.ok) return target;
-
-  try {
-    transactions.transactionSync(() => {
-      const fd = provider.openSync(target.value.path, target.value.flag);
-
-      try {
-        provider.writeSync(fd, bytes);
-      } finally {
-        provider.closeSync(fd);
-      }
-    });
-
-    return ok(null);
-  } catch (cause) {
-    return fail(mapProviderError(cause), addressed);
-  }
+      return null;
+    } catch (cause) {
+      return yield* Result.fail(failureDetail(mapProviderError(cause), addressed));
+    }
+  });
 }

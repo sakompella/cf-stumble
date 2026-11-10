@@ -3,11 +3,10 @@ import * as Schema from "effect/Schema";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import { mapProviderError, type ProjectFilesystemProvider, type ProjectStat } from "./provider.js";
 import {
-  fail,
-  ok,
+  failureDetail,
+  type ProjectFailureDetail,
   type ProjectFileInfo,
   type ProjectFileKind,
-  type ProjectResult,
 } from "./protocol.js";
 
 const MAX_SYMLINK_FOLLOWS = 40;
@@ -24,12 +23,14 @@ export function segmentsOfAddressedPath(path: string): readonly string[] {
   return path === "/" ? [] : path.slice(1).split("/");
 }
 
-export function parseAddressedPath(path: string): ProjectResult<readonly string[]> {
+export function parseAddressedPath(
+  path: string,
+): Result.Result<readonly string[], ProjectFailureDetail> {
   const decoded = decodeAddressedPathText(path);
 
-  return Result.isFailure(decoded)
-    ? fail("invalid-request")
-    : ok(segmentsOfAddressedPath(decoded.success));
+  return Result.isSuccess(decoded)
+    ? Result.succeed(segmentsOfAddressedPath(decoded.success))
+    : Result.fail(failureDetail("invalid-request"));
 }
 
 export function addressedPathOf(segments: readonly string[]): string {
@@ -61,134 +62,84 @@ interface ResolveOptions {
   createMissingDirs: boolean;
 }
 
-type SegmentStep =
-  | { kind: "continue"; resolved: string }
-  | { kind: "settle"; result: ProjectResult<ResolveOutcome> };
-
-function stepPastMissing(
-  provider: ProjectFilesystemProvider,
-  options: ResolveOptions,
-  place: { resolved: string; candidate: string; segment: string; isLast: boolean },
-  addressed: string,
-): SegmentStep {
-  if (!place.isLast) {
-    if (!options.createMissingDirs) return { kind: "settle", result: fail("not-found", addressed) };
-    provider.mkdirSync(place.candidate);
-
-    return { kind: "continue", resolved: place.candidate };
-  }
-
-  return {
-    kind: "settle",
-    result: ok({ kind: "missing", parentPath: place.resolved, name: place.segment }),
-  };
-}
-
-function stepPastSymlink(
-  provider: ProjectFilesystemProvider,
-  queue: string[],
-  place: { resolved: string; candidate: string },
-  linkFollows: number,
-  addressed: string,
-): SegmentStep {
-  if (linkFollows > MAX_SYMLINK_FOLLOWS)
-    return { kind: "settle", result: fail("symlink-loop", addressed) };
-  const target = provider.readlinkSync(place.candidate);
-  queue.unshift(...splitTarget(target));
-
-  return { kind: "continue", resolved: target.startsWith("/") ? "/" : place.resolved };
-}
-
-function stepPastNode(
-  provider: ProjectFilesystemProvider,
-  options: ResolveOptions,
-  queue: string[],
-  place: { resolved: string; candidate: string; stat: ProjectStat; isLast: boolean },
-  linkFollows: number,
-  addressed: string,
-): SegmentStep {
-  if (place.stat.isSymbolicLink() && (!place.isLast || options.followFinalSymlink)) {
-    return stepPastSymlink(provider, queue, place, linkFollows, addressed);
-  }
-
-  if (place.isLast)
-    return {
-      kind: "settle",
-      result: ok({ kind: "resolved", path: place.candidate, stat: place.stat }),
-    };
-
-  if (!place.stat.isDirectory())
-    return { kind: "settle", result: fail("not-directory", addressed) };
-
-  return { kind: "continue", resolved: place.candidate };
-}
-
-function stepOneSegment(
-  provider: ProjectFilesystemProvider,
-  options: ResolveOptions,
-  queue: string[],
-  place: { resolved: string; candidate: string; segment: string; isLast: boolean },
-  linkFollows: number,
-  addressed: string,
-): SegmentStep {
-  try {
-    const stat = provider.lstatSync(place.candidate);
-
-    return stepPastNode(provider, options, queue, { ...place, stat }, linkFollows + 1, addressed);
-  } catch (cause) {
-    const code = mapProviderError(cause);
-
-    if (code !== "not-found") return { kind: "settle", result: fail(code, addressed) };
-
-    return stepPastMissing(provider, options, place, addressed);
-  }
-}
-
 export function resolveAddressedPath(
   provider: ProjectFilesystemProvider,
   segments: readonly string[],
   options: ResolveOptions,
-): ProjectResult<ResolveOutcome> {
+): Result.Result<ResolveOutcome, ProjectFailureDetail> {
   if (segments.length === 0) return statAt(provider, WORKSPACE_ROOT, "/");
 
   const addressed = addressedPathOf(segments);
+
+  return walkSegments(provider, options, [...segments], addressed);
+}
+
+function walkSegments(
+  provider: ProjectFilesystemProvider,
+  options: ResolveOptions,
+  queue: string[],
+  addressed: string,
+): Result.Result<ResolveOutcome, ProjectFailureDetail> {
   let resolved = WORKSPACE_ROOT;
-  const queue: string[] = [...segments];
   let linkFollows = 0;
 
-  while (queue.length > 0) {
-    const segment = queue.shift()!;
-
+  for (let segment = queue.shift(); segment !== undefined; segment = queue.shift()) {
     if (segment === ".") continue;
 
     if (segment === "..") {
       resolved = resolved === "/" ? "/" : resolved.slice(0, resolved.lastIndexOf("/")) || "/";
 
-      if (!isWithinRoot(resolved)) return fail("path-outside-root", addressed);
+      if (!isWithinRoot(resolved))
+        return Result.fail(failureDetail("path-outside-root", addressed));
       continue;
     }
 
     const candidate = joinOne(resolved, segment);
 
-    if (!isWithinRoot(candidate)) return fail("path-outside-root", addressed);
+    if (!isWithinRoot(candidate)) return Result.fail(failureDetail("path-outside-root", addressed));
+
     const isLast = queue.length === 0;
+    let stat: ProjectStat;
 
-    const step = stepOneSegment(
-      provider,
-      options,
-      queue,
-      { resolved, candidate, segment, isLast },
-      linkFollows,
-      addressed,
-    );
+    try {
+      stat = provider.lstatSync(candidate);
+    } catch (cause) {
+      const code = mapProviderError(cause);
 
-    if (step.kind === "settle") return step.result;
+      if (code !== "not-found") return Result.fail(failureDetail(code, addressed));
 
-    if (step.resolved !== candidate) linkFollows += 1;
-    resolved = step.resolved;
+      if (!isLast) {
+        if (!options.createMissingDirs) return Result.fail(failureDetail("not-found", addressed));
+        provider.mkdirSync(candidate);
+        resolved = candidate;
+
+        continue;
+      }
+
+      return Result.succeed({ kind: "missing", parentPath: resolved, name: segment });
+    }
+
+    if (stat.isSymbolicLink() && (!isLast || options.followFinalSymlink)) {
+      if (linkFollows >= MAX_SYMLINK_FOLLOWS) {
+        return Result.fail(failureDetail("symlink-loop", addressed));
+      }
+
+      const target = provider.readlinkSync(candidate);
+      queue.unshift(...splitTarget(target));
+      linkFollows += 1;
+      resolved = target.startsWith("/") ? "/" : resolved;
+
+      continue;
+    }
+
+    if (isLast) return Result.succeed({ kind: "resolved", path: candidate, stat });
+
+    if (!stat.isDirectory()) return Result.fail(failureDetail("not-directory", addressed));
+
+    resolved = candidate;
   }
 
-  if (!isWithinRoot(resolved)) return fail("path-outside-root", addressed);
+  if (!isWithinRoot(resolved)) return Result.fail(failureDetail("path-outside-root", addressed));
 
   return statAt(provider, resolved, addressed);
 }
@@ -197,11 +148,11 @@ function statAt(
   provider: ProjectFilesystemProvider,
   path: string,
   addressed: string,
-): ProjectResult<ResolveOutcome> {
+): Result.Result<ResolveOutcome, ProjectFailureDetail> {
   try {
-    return ok({ kind: "resolved", path, stat: provider.lstatSync(path) });
+    return Result.succeed({ kind: "resolved", path, stat: provider.lstatSync(path) });
   } catch (cause) {
-    return fail(mapProviderError(cause), addressed);
+    return Result.fail(failureDetail(mapProviderError(cause), addressed));
   }
 }
 
@@ -240,17 +191,17 @@ export function fileInfoOf(
 export function resolveCanonicalPath(
   provider: ProjectFilesystemProvider,
   segments: readonly string[],
-): ProjectResult<string> {
-  const outcome = resolveAddressedPath(provider, segments, {
-    followFinalSymlink: true,
-    createMissingDirs: false,
-  });
-
-  if (!outcome.ok) return outcome;
-
-  if (outcome.value.kind === "missing") return fail("not-found", addressedPathOf(segments));
-
-  return ok(addressedFromProviderPath(outcome.value.path));
+): Result.Result<string, ProjectFailureDetail> {
+  return Result.flatMap(
+    resolveAddressedPath(provider, segments, {
+      followFinalSymlink: true,
+      createMissingDirs: false,
+    }),
+    (outcome) =>
+      outcome.kind === "missing"
+        ? Result.fail(failureDetail("not-found", addressedPathOf(segments)))
+        : Result.succeed(addressedFromProviderPath(outcome.path)),
+  );
 }
 
 export { joinOne };

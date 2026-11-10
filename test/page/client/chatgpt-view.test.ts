@@ -1,7 +1,7 @@
 import * as Predicate from "effect/Predicate";
 import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
-import { chatGPTConnection } from "../../../src/page/client/api.js";
+import { chatGPTConnection } from "../../../src/page/client/chatgpt.js";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";

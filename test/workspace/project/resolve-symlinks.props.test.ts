@@ -1,5 +1,6 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
+import * as Result from "effect/Result";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
@@ -75,12 +76,12 @@ test("resolving any path through any symlink graph touches and returns only path
 
       expect(touched.filter((path) => !isInsideRoot(path))).toEqual([]);
 
-      if (!outcome.ok) {
-        expect(ERROR_CODES).toContain(outcome.error.code);
-      } else if (outcome.value.kind === "resolved") {
-        expect(isInsideRoot(outcome.value.path)).toBe(true);
+      if (Result.isFailure(outcome)) {
+        expect(ERROR_CODES).toContain(outcome.failure.code);
+      } else if (outcome.success.kind === "resolved") {
+        expect(isInsideRoot(outcome.success.path)).toBe(true);
       } else {
-        expect(isInsideRoot(outcome.value.parentPath)).toBe(true);
+        expect(isInsideRoot(outcome.success.parentPath)).toBe(true);
       }
     },
     { testCases: 500 },
@@ -134,7 +135,9 @@ test("a path resolves exactly when the kernel resolves it inside the workspace, 
         });
 
         const resolved =
-          outcome.ok && outcome.value.kind === "resolved" ? outcome.value.path : undefined;
+          Result.isSuccess(outcome) && outcome.success.kind === "resolved"
+            ? outcome.success.path
+            : undefined;
 
         expect(resolved).toBe(realPathInside(root, `/workspace/${segments.join("/")}`));
       } finally {
