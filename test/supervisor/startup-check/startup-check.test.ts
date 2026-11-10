@@ -278,15 +278,15 @@ test("remounts a checked generation instead of reusing its warm candidate instan
     commits.fresh,
     servingFacetSource(
       "fresh",
-      `constructor(ctx, env) {
-    super(ctx, env);
-    ctx.storage.kv.put("constructions", (ctx.storage.kv.get("constructions") ?? 0) + 1);
-  }
-  compatibility() {
-    const calls = (this.ctx.storage.kv.get("calls") ?? 0) + 1;
-    this.ctx.storage.kv.put("calls", calls);
-    const fresh = this.ctx.storage.kv.get("constructions") === calls;
-    return fresh ? ${JSON.stringify(FACET_COMPATIBILITY)} : "a reused instance";
+      `compatibility() {
+    this.checked = true;
+    return ${JSON.stringify(FACET_COMPATIBILITY)};
+  }`,
+    ).replace(
+      "async submit() { return 1; }",
+      `async submit() {
+    if (this.checked) throw new Error("the compatibility instance must not run conversations");
+    return 1;
   }`,
     ),
   );

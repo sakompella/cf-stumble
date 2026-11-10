@@ -107,6 +107,9 @@ export const workspaceGit: GitClientFactory = (options) => {
     fetch: (input: Parameters<typeof fetch>[0]) => fetch({ onAuth, ...input }),
     push: (input: Parameters<typeof push>[0]) => push({ onAuth, ...input }),
     pull: (input: Parameters<typeof pull>[0]) => pull({ onAuth, ...input }),
-    cli: (input: GitCliInput): Promise<GitCliResult> => gitCli(client, cli, input),
+    cli: (input: GitCliInput): Promise<GitCliResult> =>
+      gitCli(client, cli, input, async (path) =>
+        Buffer.from(await options.ws.provider().readFile(path)),
+      ),
   });
 };

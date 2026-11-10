@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { capturedEvents, named } from "./log-capture.js";
 import type { ModelRouteRequest } from "../src/model-route-wire/request.js";
 import type {
@@ -15,6 +15,10 @@ import {
 } from "./model-route-provider-stream.js";
 
 const encoder = new TextEncoder();
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function fakeStreamInference(providerStream: ReadableStream<Uint8Array>): ModelStreamInference {
   return {

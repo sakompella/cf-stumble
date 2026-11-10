@@ -155,7 +155,7 @@ test("the env names the saved runtime file when it spilled nothing of its own", 
   );
 });
 
-test("the env spills output to its own file when the runtime cut nothing", async () => {
+test("the env spills output to a file it can read back when the runtime cut nothing", async () => {
   const env = createComputerEnv({
     cwd: "/workspace/project",
     target: streamingTarget([
@@ -169,7 +169,9 @@ test("the env spills output to its own file when the runtime cut nothing", async
   );
 
   expect(result.exitCode).toBe(0);
-  expect(result.spillPath?.startsWith("/workspace/.cf-stumble/tmp/")).toBe(true);
+  expect(getOrThrow(await env.readTextFile(result.spillPath ?? "", BACKGROUND_CONTEXT))).toBe(
+    "abc\n",
+  );
 });
 
 test("the env reports no spill for output that fits and the runtime did not cut", async () => {

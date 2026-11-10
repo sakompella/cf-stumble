@@ -39,7 +39,10 @@ test("a command asked to run in the isolate runs there against the workspace fil
 test("a command with no backend and only isolate programs runs in the isolate", async () => {
   const lines = await runIn("isolate-routing-auto");
 
-  expect(lines.at(-1)).toContain('"outcome":"exited"');
+  expect(lines).toEqual([
+    JSON.stringify({ kind: "stdout", seq: 0, data: "two\n" }),
+    JSON.stringify({ kind: "terminal", seq: 1, outcome: "exited", exitCode: 0 }),
+  ]);
 });
 
 test("git runs in the isolate and prints status the way real git does", async () => {

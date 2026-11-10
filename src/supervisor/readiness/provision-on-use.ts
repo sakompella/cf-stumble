@@ -11,6 +11,7 @@ import {
   type WorkspaceHostNamespace,
 } from "../../workspace/index.js";
 import type { GitHubConnection } from "../projects/index.js";
+import type { ProvisionFence } from "./provision-fence.js";
 import { provisionProjectWorkspace, ProvisionFailed } from "./provisioning.js";
 
 type ProjectUseProblem = Readonly<{
@@ -27,6 +28,7 @@ export type ProjectUseResult =
 
 export type ProvisionSources = Readonly<{
   workspaceName: string;
+  fence: ProvisionFence;
   namespace: WorkspaceHostNamespace<"provision" | "ensureManagedInstructions">;
   github: GitHubConnection;
   catalog: () => ProjectCatalog;
@@ -42,7 +44,7 @@ export function provisionOnUse(
   sources: ProvisionSources,
   projectId: ProjectId,
 ): Effect.Effect<ProjectUseResult> {
-  const { workspaceName, namespace, github } = sources;
+  const { workspaceName, fence, namespace, github } = sources;
 
   return Effect.gen(function* () {
     const resolved = resolveProject(projectId, sources.catalog());
@@ -53,6 +55,7 @@ export function provisionOnUse(
 
     const provision = provisionProjectWorkspace({
       workspaceName,
+      fence,
       project: resolved.project,
       namespace,
     });

@@ -1,4 +1,3 @@
-import * as Predicate from "effect/Predicate";
 import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
@@ -6,19 +5,8 @@ import { Message } from "../../../src/page/client/message.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
+import { findById, type Rendered } from "./rendered.js";
 import { entryItem, received, running, streaming, viewing } from "./views.js";
-
-type Rendered = NonNullable<ReturnType<typeof view>>;
-
-function findById(node: Rendered | string, id: string): Rendered | undefined {
-  if (Predicate.isString(node)) {
-    return undefined;
-  }
-
-  return node.data?.props?.["id"] === id
-    ? node
-    : (node.children ?? []).map((child) => findById(child, id)).find(Predicate.isNotUndefined);
-}
 
 const listed = update(
   init().model,

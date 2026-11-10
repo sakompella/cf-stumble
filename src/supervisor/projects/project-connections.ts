@@ -14,7 +14,7 @@ import {
 } from "../../project-catalog.js";
 import { selectableCatalog, type SelectableCatalog } from "../../selectable-projects.js";
 import { checkRepositoryAccess, type WorkspaceHostNamespace } from "../../workspace/index.js";
-import { provisionOnUse } from "../readiness/index.js";
+import { provisionOnUse, type ProvisionFence } from "../readiness/index.js";
 import { removeProjectDirectories } from "./project-removal.js";
 
 export type DisconnectRepositoryResult =
@@ -65,6 +65,7 @@ type ConnectionsNamespace = WorkspaceHostNamespace<
 interface ProjectConnectionsInput {
   readonly storage: DurableObjectStorage;
   readonly workspaceName: string;
+  readonly fence: ProvisionFence;
   readonly namespace: ConnectionsNamespace;
   readonly github: GitHubConnection;
 }
@@ -74,11 +75,13 @@ export class ProjectConnections {
   private readonly lifecycle = new KeyedLock<ProjectId>();
   private readonly github: GitHubConnection;
   private readonly workspaceName: string;
+  private readonly fence: ProvisionFence;
   private readonly namespace: ConnectionsNamespace;
 
   constructor(input: ProjectConnectionsInput) {
     this.projects = new ConnectedProjects(input.storage);
     this.workspaceName = input.workspaceName;
+    this.fence = input.fence;
     this.namespace = input.namespace;
     this.github = input.github;
   }
@@ -242,6 +245,7 @@ export class ProjectConnections {
     return provisionOnUse(
       {
         workspaceName: this.workspaceName,
+        fence: this.fence,
         namespace: this.namespace,
         github: this.github,
         catalog,

@@ -1,11 +1,16 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
+import { ProvisionFence } from "../../src/supervisor/readiness/provision-fence.js";
 import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import { delayedProvisionHost, NeverSettlingProvisionHost } from "./provisioning-fakes.js";
 import { runInterruptible } from "./workspace-results.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 test("an interrupted provision finishes its running step and starts no next step", async () => {
   const delayed = delayedProvisionHost();
@@ -13,6 +18,7 @@ test("an interrupted provision finishes its running step and starts no next step
   const provisioning = runInterruptible(
     provisionProjectWorkspace({
       workspaceName: tenantWorkspaceName("provisioning-interrupted-at-boundary"),
+      fence: new ProvisionFence(),
       project: sampleProjectOne,
       namespace: namespaceFor(delayed.host),
     }),
@@ -32,6 +38,7 @@ test("an interrupted provision waits for a lost RPC no longer than the RPC timeo
   const provisioning = runInterruptible(
     provisionProjectWorkspace({
       workspaceName: tenantWorkspaceName("provisioning-interrupt-bounded"),
+      fence: new ProvisionFence(),
       project: sampleProjectOne,
       namespace: namespaceFor(new NeverSettlingProvisionHost()),
     }),
@@ -49,5 +56,4 @@ test("an interrupted provision waits for a lost RPC no longer than the RPC timeo
 
   await vi.advanceTimersByTimeAsync(WORKSPACE_RPC_TIMEOUT_MS);
   expect(settled).toBe(true);
-  vi.useRealTimers();
 });

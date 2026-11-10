@@ -1,15 +1,14 @@
 import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
-  WorkspacePlan,
 } from "../../src/workspace/commands/command-result.js";
 import type { Project } from "../../src/project-catalog.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   parseProjectProvisionRequest,
-  planProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
+import { ProvisionFence } from "../../src/supervisor/readiness/provision-fence.js";
 import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
@@ -99,7 +98,6 @@ export class NeverSettlingProvisionHost extends FakeProvisionHost {
 }
 
 export class ScriptedProvisionHost extends FakeProvisionHost {
-  readonly plans: WorkspacePlan[] = [];
   failingStep: "clone" | "instructions" | undefined;
 
   override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
@@ -109,8 +107,6 @@ export class ScriptedProvisionHost extends FakeProvisionHost {
     if ("ok" in parsed) {
       return Promise.resolve(parsed);
     }
-
-    this.plans.push(planProjectProvisionRequest(parsed));
 
     return Promise.resolve({
       ok: true,
@@ -141,12 +137,13 @@ export const TENANT_WORKSPACE = tenantWorkspaceName("supervisor-name-of-tenant-1
 
 export function provisionerFor(host: WorkspaceHostRpc<"provision" | "ensureManagedInstructions">) {
   const namespace = namespaceFor(host);
+  const fence = new ProvisionFence();
 
   return {
     namespace,
     provision: (project: Project = sampleProjectOne) =>
       runToResult(
-        provisionProjectWorkspace({ workspaceName: TENANT_WORKSPACE, project, namespace }),
+        provisionProjectWorkspace({ workspaceName: TENANT_WORKSPACE, fence, project, namespace }),
       ),
   };
 }

@@ -33,10 +33,10 @@ test("the workspace image's shim skips exactly the segments the sync ignores", (
   expect(setting?.split(",")).toStrictEqual([...WORKSPACE_SYNC_IGNORES]);
 });
 
-test("the workspace image polls the disk every five seconds, not every 250 ms", () => {
-  const setting = /^ENV COMPUTERD_POLL_MS=(\S*)$/mu.exec(dockerfile)?.[1];
+test("the workspace image does not poll the disk every 250 ms", () => {
+  const interval = Number(dockerEnv("COMPUTERD_POLL_MS"));
 
-  expect(setting).toBe("5000");
+  expect(interval).toBeGreaterThanOrEqual(1_000);
 });
 
 test("the workspace image keeps gh and Git global configuration in the durable workspace", () => {

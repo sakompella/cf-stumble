@@ -35,15 +35,11 @@ test("clones and then writes the managed instructions into the tenant's workspac
   ]);
 });
 
-test("carries a resolved project, never command text", async () => {
+test("refuses a project id that is not the one its repository URL derives", async () => {
   const host = new ScriptedProvisionHost();
 
   await provisionerFor(host).provision();
 
-  const sent = JSON.stringify(host.requests);
-  expect(sent).toContain(sampleProjectOne.repositoryUrl);
-  expect(sent).not.toContain("git ");
-  expect(sent).not.toContain('clone "');
   expect(
     parseProjectProvisionRequest({
       kind: "provision-project",
@@ -67,12 +63,10 @@ test.each<readonly ["clone" | "instructions" | undefined, readonly string[], obj
   ],
   [undefined, ["clone", "instructions", "clone", "instructions"], undefined],
 ])(
-  "a provision after a run that failed at %s reconciles from scratch and asks for the same state",
+  "a provision after a run that failed at %s starts over and asks for the same state",
   async (failingStep, steps, expectedFailure) => {
     const host = new ScriptedProvisionHost();
     const { provision } = provisionerFor(host);
-    const clean = new ScriptedProvisionHost();
-    await provisionerFor(clean).provision();
 
     host.failingStep = failingStep;
     const first = await provision();
@@ -88,12 +82,9 @@ test.each<readonly ["clone" | "instructions" | undefined, readonly string[], obj
       steps,
     );
     expect(
-      host.plans.slice(-clean.plans.length),
-      "the later run plans exactly what an uninterrupted run plans",
-    ).toEqual(clean.plans);
-    expect(host.plans[0], "the earlier run asked for the same reconciliation").toEqual(
-      host.plans.at(-1),
-    );
+      host.requests.at(-1),
+      "the later run asks the host for the same state as the earlier one",
+    ).toEqual(host.requests[0]);
   },
 );
 

@@ -4,10 +4,7 @@ import { expect, test } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { projectIdOf, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import {
-  clearWorkspaceProvision,
-  waitForWorkspaceProvision,
-} from "../../src/supervisor/readiness/provision-fence.js";
+import { ProvisionFence } from "../../src/supervisor/readiness/provision-fence.js";
 import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
 import { delayedProvisionHost, NeverSettlingProvisionHost } from "./provisioning-fakes.js";
 import { runInterruptible, runToResult } from "./workspace-results.js";
@@ -16,10 +13,12 @@ test("provisions different projects in one shared workspace side by side", async
   const delayed = delayedProvisionHost();
   const namespace = namespaceFor(delayed.host);
   const sharedWorkspace = tenantWorkspaceName("different-projects-shared-workspace");
+  const fence = new ProvisionFence();
 
   const first = runToResult(
     provisionProjectWorkspace({
       workspaceName: sharedWorkspace,
+      fence,
       project: sampleProjectOne,
       namespace,
     }),
@@ -30,6 +29,7 @@ test("provisions different projects in one shared workspace side by side", async
   const second = await runToResult(
     provisionProjectWorkspace({
       workspaceName: sharedWorkspace,
+      fence,
       project: sampleProjectTwo,
       namespace,
     }),
@@ -50,18 +50,22 @@ test("provisions different projects in one shared workspace side by side", async
 test("holds a project's turns during its own provision only, until a reset clears them all", async () => {
   const delayed = delayedProvisionHost();
   const workspaceName = tenantWorkspaceName("provision-holds-its-project");
+  const fence = new ProvisionFence();
 
   const admitted = (projectId: typeof sampleProjectOne.id) =>
-    Effect.runPromise(
-      waitForWorkspaceProvision(workspaceName, projectId).pipe(
-        Effect.as(true),
-        Effect.timeoutOrElse({ duration: 50, orElse: () => Effect.succeed(false) }),
-      ),
-    );
+    Promise.race([
+      Effect.runPromise(fence.wait(projectId)).then(() => true),
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => {
+          resolve(false);
+        }, 0);
+      }),
+    ]);
 
   const provisioning = runToResult(
     provisionProjectWorkspace({
       workspaceName,
+      fence,
       project: sampleProjectOne,
       namespace: namespaceFor(delayed.host),
     }),
@@ -73,7 +77,7 @@ test("holds a project's turns during its own provision only, until a reset clear
   expect(await admitted(projectIdOf("harness"))).toBe(true);
   expect(await admitted(sampleProjectOne.id)).toBe(false);
 
-  clearWorkspaceProvision(workspaceName);
+  fence.clear();
 
   expect(await admitted(sampleProjectOne.id)).toBe(true);
 
@@ -84,10 +88,12 @@ test("holds a project's turns during its own provision only, until a reset clear
 test("serializes replacement provisioning until an interrupted run has finished", async () => {
   const delayed = delayedProvisionHost();
   const workspaceName = tenantWorkspaceName("provisioning-serializes-replacement");
+  const fence = new ProvisionFence();
 
   const first = runInterruptible(
     provisionProjectWorkspace({
       workspaceName,
+      fence,
       project: sampleProjectOne,
       namespace: namespaceFor(delayed.host),
     }),
@@ -99,6 +105,7 @@ test("serializes replacement provisioning until an interrupted run has finished"
   const replacement = runToResult(
     provisionProjectWorkspace({
       workspaceName,
+      fence,
       project: sampleProjectOne,
       namespace: namespaceFor(delayed.host),
     }),
@@ -121,10 +128,12 @@ test("serializes replacement provisioning until an interrupted run has finished"
 test("does not queue retries behind a never-settling provision RPC", async () => {
   const host = new NeverSettlingProvisionHost();
   const namespace = namespaceFor(host);
+  const fence = new ProvisionFence();
 
   const first = runToResult(
     provisionProjectWorkspace({
       workspaceName: tenantWorkspaceName("never-settling-original"),
+      fence,
       project: sampleProjectOne,
       namespace,
     }),
@@ -136,6 +145,7 @@ test("does not queue retries behind a never-settling provision RPC", async () =>
     const retry = runInterruptible(
       provisionProjectWorkspace({
         workspaceName: tenantWorkspaceName("never-settling-original"),
+        fence,
         project: sampleProjectOne,
         namespace,
       }),

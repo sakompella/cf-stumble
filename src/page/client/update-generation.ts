@@ -16,14 +16,13 @@ import {
   type UpdateReturn,
 } from "./update-shared.js";
 
-function wholeNumber(value: number): Option.Option<number> {
-  return Number.isSafeInteger(value) && value >= 0 ? Option.some(value) : Option.none();
-}
+const DIGITS = /^\d+$/u;
 
 export function controlLabel(raw: string): Option.Option<number> {
   const trimmed = raw.trim();
+  const value = Number(trimmed);
 
-  return trimmed === "" ? Option.none() : wholeNumber(Number(trimmed));
+  return DIGITS.test(trimmed) && Number.isSafeInteger(value) ? Option.some(value) : Option.none();
 }
 
 function withPanel(model: Model, kind: ControlKind, change: Partial<ControlPanel>): Model {

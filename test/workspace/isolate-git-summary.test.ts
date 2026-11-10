@@ -3,7 +3,6 @@ import { SETUP, shell } from "./isolate-git-shell.js";
 
 test("git commit in the isolate lists created and deleted files the way real git does", async () => {
   const { stdout } = await shell(
-    "isolate-git-commit-modes",
     `${SETUP} && echo n > n.txt && git add n.txt && rm b.txt && git add -A && git commit -m second`,
   );
 
@@ -14,7 +13,6 @@ test("git commit in the isolate lists created and deleted files the way real git
 
 test("git branch on a detached HEAD lists the detached commit first", async () => {
   const { stdout, stderr } = await shell(
-    "isolate-git-branch-detached",
     `${SETUP} && git log --format=%H -1 > .git/HEAD && git branch && git branch -v`,
   );
 
@@ -27,7 +25,6 @@ test("git branch on a detached HEAD lists the detached commit first", async () =
 
 test("git reset --hard reports the new HEAD", async () => {
   const { stdout } = await shell(
-    "isolate-git-reset-hard",
     `${SETUP} && echo x >> a.txt && git add a.txt && git reset --hard && git status -s`,
   );
 

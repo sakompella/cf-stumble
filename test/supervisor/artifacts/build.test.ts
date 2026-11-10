@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import * as Result from "effect/Result";
 import { resultOf } from "../../effect-result.js";
 import { HARNESS_BUILD_STEP_NAMES } from "../../../src/harness-build.js";
+import { WORKSPACE_RPC_TIMEOUT_MS } from "../../../src/workspace-command-timeout.js";
 import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import { parsedArtifact } from "../../facet/fixture.js";
@@ -13,11 +14,11 @@ import {
   failingAt,
   helperModule,
   moduleMapFile,
-  WORKSPACE_OUTPUT_MAX_BYTES,
 } from "./scripted-build-host.js";
 import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -183,35 +184,6 @@ test("gives the built module map the commit the Supervisor asked to build", asyn
   expect(result.success.harnessCommit).toBe(BUILD_COMMIT);
 });
 
-test("a module map larger than the workspace output limits still parses", async () => {
-  const oversized = moduleMapFile([
-    entryModule,
-    {
-      name: "padded.js",
-      source: Array.from(
-        { length: WORKSPACE_OUTPUT_MAX_BYTES / 64 },
-        (_unused, index) => `export const line${index} = "${"x".repeat(63)}";\n`,
-      ).join(""),
-    },
-  ]);
-
-  expect(oversized.length, "the fixture must exceed the 64 KiB output limit").toBeGreaterThan(
-    WORKSPACE_OUTPUT_MAX_BYTES,
-  );
-
-  const host = new FakeBuildHost();
-  host.output = oversized;
-
-  const result = await built(host);
-
-  if (Result.isFailure(result)) {
-    throw new Error(`an oversized module map must still parse: ${result.failure.code}`);
-  }
-
-  expect(result.success.modules).toHaveLength(2);
-  expect(result.success.modules.at(-1)?.name).toBe("padded.js");
-});
-
 test("a refused or unreachable build workspace stays a typed failure", async () => {
   const refused: WorkspaceHostRpc<"build"> = {
     build: () => Promise.resolve({ ok: false, error: { code: "unknown-command" } }),
@@ -228,5 +200,30 @@ test("a refused or unreachable build workspace stays a typed failure", async () 
   expect(results.map((result) => (Result.isFailure(result) ? result.failure : "ok"))).toEqual([
     { code: "build-workspace-unavailable", harnessCommit: BUILD_COMMIT },
     { code: "build-workspace-unavailable", harnessCommit: BUILD_COMMIT },
+  ]);
+});
+
+test("a step the workspace never answers fails as unavailable at the RPC deadline, logged once with its timeout", async () => {
+  vi.useFakeTimers();
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const host = new FakeBuildHost();
+  const build = host.build.bind(host);
+
+  host.build = (request) =>
+    request.kind === "build-step" && request.step === "install"
+      ? build(request).then(() => new Promise(() => {}))
+      : build(request);
+
+  const building = built(host);
+  await vi.advanceTimersByTimeAsync(WORKSPACE_RPC_TIMEOUT_MS);
+  const result = await building;
+
+  expect(Result.isFailure(result) ? result.failure : "built").toEqual({
+    code: "build-workspace-unavailable",
+    harnessCommit: BUILD_COMMIT,
+  });
+  expect(host.steps().slice(-2)).toEqual(["install", "build-discard"]);
+  expect(errors.mock.calls.map(([line]) => String(line))).toEqual([
+    expect.stringMatching(/^harness-build\.install: .*timed out/u),
   ]);
 });

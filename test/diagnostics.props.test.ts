@@ -1,8 +1,12 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import * as Schema from "effect/Schema";
 import { logEvent, logRedactedCause, type LogFields } from "../src/diagnostics.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const githubToken = gs
   .text({

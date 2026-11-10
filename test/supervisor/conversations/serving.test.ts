@@ -13,6 +13,7 @@ import {
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await reset();
 });
 
@@ -30,7 +31,7 @@ function eventsMethod(harnessCommit: string): string {
     let beat;
     return new ReadableStream({
       start(c) {
-        c.enqueue(new TextEncoder().encode("${harnessCommit}"));
+        c.enqueue(new TextEncoder().encode("${harnessCommit}|" + conversationId));
         if (!held) c.close();
         else beat = setInterval(() => c.enqueue(new TextEncoder().encode("\\n")), 20);
       },
@@ -126,20 +127,15 @@ async function admitted(
   return result.submissionId;
 }
 
-function conversationOf(
+async function conversationOf(
   control: DurableObjectStub<Supervisor>,
   projectId: string,
 ): Promise<string | undefined> {
-  return runInDurableObject(
-    control,
-    (_instance, state) =>
-      state.storage.sql
-        .exec<{ conversation_id: string }>(
-          "SELECT conversation_id FROM project_conversations WHERE project_id = ?",
-          projectId,
-        )
-        .toArray()[0]?.conversation_id,
-  );
+  const result = await control.projectEvents(projectId);
+
+  if (!result.ok) throw new Error(`the events must open: ${result.problem.code}`);
+
+  return (await new Response(result.events).text()).split("|")[1];
 }
 
 async function servingCommit(
@@ -150,7 +146,7 @@ async function servingCommit(
 
   if (!result.ok) throw new Error(`the events must open: ${result.problem.code}`);
 
-  return new Response(result.events).text();
+  return (await new Response(result.events).text()).split("|")[0] ?? "";
 }
 
 test("a project's first message creates its conversation in the project directory, and later ones reuse it", async () => {
@@ -296,7 +292,7 @@ test("a message that was checked before its project was disconnected does not gi
 
   expect((await disconnecting).ok).toBe(true);
   expect(await submitting).toEqual({ ok: false, problem: { code: "unknown-project-id" } });
-  expect(await conversationOf(control, "sample-project-one")).toBeUndefined();
+  expect(await conversationOf(control, "harness")).toBe("conversation:/workspace/harness:1");
 });
 
 test("an events stream the facet closes ends once its chunks are read, without cancelling the facet's stream", async () => {

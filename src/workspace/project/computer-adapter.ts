@@ -72,7 +72,7 @@ export function durableObjectTransactions(storage: DurableObjectStorage): Projec
   return { transactionSync: (closure) => storage.transactionSync(closure) };
 }
 
-export function processGroupCommand(command: string): string {
+function processGroupCommand(command: string): string {
   const body = `trap 'kill -s KILL 0' TERM INT HUP; /bin/sh -c ${shellQuote(command)} & wait $!`;
 
   return `exec setsid /bin/sh -c ${shellQuote(body)}`;

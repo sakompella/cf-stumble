@@ -10,16 +10,15 @@ test.each([
   ["deleted", "rm a.txt", " D a.txt\n"],
   ["deleted and staged", "rm a.txt && git add -A", "D  a.txt\n"],
   ["added and modified", "echo x > n.txt && git add n.txt && echo y >> n.txt", "AM n.txt\n"],
-  ["renamed", "mv a.txt z.txt && git add -A", "D  a.txt\nA  z.txt\n"],
-])("git status -s shows %s files the way real git does", async (name, change, expected) => {
-  const { stdout } = await shell(`isolate-git-${name}`, `${SETUP} && ${change} && git status -s`);
+  ["renamed", "mv a.txt z.txt && git add -A", "R  a.txt -> z.txt\n"],
+])("git status -s shows %s files the way real git does", async (_name, change, expected) => {
+  const { stdout } = await shell(`${SETUP} && ${change} && git status -s`);
 
   expect(stdout).toBe(expected);
 });
 
 test("git status in the isolate prints the long format of real git", async () => {
   const { stdout } = await shell(
-    "isolate-git-long",
     `${SETUP} && echo x >> a.txt && git add a.txt && rm b.txt && echo x > c.txt && git status`,
   );
 
@@ -46,7 +45,6 @@ test("git status in the isolate prints the long format of real git", async () =>
 
 test("git commit treats a flag-looking message value as the message", async () => {
   const { stdout } = await shell(
-    "isolate-git-commit-message-value",
     `${SETUP} && echo x >> a.txt && git add a.txt && git commit -m -q && git log -1 --format=%s`,
   );
 
@@ -55,7 +53,6 @@ test("git commit treats a flag-looking message value as the message", async () =
 
 test("git -c rejects a setting the adapter does not support", async () => {
   const { stdout, stderr } = await shell(
-    "isolate-git-c-unsupported",
     `${SETUP} && git -c core.fileMode=false status -s && echo ok`,
   );
 
@@ -65,7 +62,6 @@ test("git -c rejects a setting the adapter does not support", async () => {
 
 test("git status --porcelain=v2 is refused instead of approximated", async () => {
   const { stdout, stderr } = await shell(
-    "isolate-git-porcelain-v2",
     `${SETUP} && echo x >> a.txt && git status --porcelain=v2 && echo ok`,
   );
 
@@ -75,7 +71,6 @@ test("git status --porcelain=v2 is refused instead of approximated", async () =>
 
 test("git status from a subdirectory shows paths relative to it", async () => {
   const { stdout } = await shell(
-    "isolate-git-sub-status",
     `${SETUP} && mkdir sub && echo x >> a.txt && cd sub && echo n > n.txt && git status -s`,
   );
 
@@ -84,16 +79,22 @@ test("git status from a subdirectory shows paths relative to it", async () => {
 
 test("git add of a file in an untracked directory stages only that file", async () => {
   const { stdout } = await shell(
-    "isolate-git-add-nested-new",
     `${SETUP} && mkdir -p d/e && echo x > d/e/x.txt && echo y > d/y.txt && git add d/e/x.txt && git status -s`,
   );
 
   expect(stdout).toBe("A  d/e/x.txt\n?? d/y.txt\n");
 });
 
+test("git status from a subdirectory shows a rename with paths relative to it", async () => {
+  const { stdout } = await shell(
+    `${SETUP} && mkdir sub && mv a.txt sub/a.txt && git add -A && cd sub && git status -s`,
+  );
+
+  expect(stdout).toBe("R  ../a.txt -> a.txt\n");
+});
+
 test("git add . from a subdirectory stages only the subtree", async () => {
   const { stdout } = await shell(
-    "isolate-git-sub-add",
     `${SETUP} && mkdir sub && echo x >> a.txt && cd sub && echo n > n.txt && git add . && cd .. && git status -s`,
   );
 
@@ -102,7 +103,6 @@ test("git add . from a subdirectory stages only the subtree", async () => {
 
 test("git add -u from a subdirectory stages the whole tree", async () => {
   const { stdout } = await shell(
-    "isolate-git-sub-add-u",
     `${SETUP} && mkdir sub && cd sub && echo x >> ../a.txt && git add -u && cd .. && git status -s`,
   );
 
@@ -111,7 +111,6 @@ test("git add -u from a subdirectory stages the whole tree", async () => {
 
 test("git restore --staged from a subdirectory unstages the rooted path", async () => {
   const { stdout } = await shell(
-    "isolate-git-sub-restore",
     `${SETUP} && mkdir sub && cd sub && echo x >> ../a.txt && git add ../a.txt && git status -s && git restore --staged ../a.txt && git status -s`,
   );
 
@@ -120,7 +119,6 @@ test("git restore --staged from a subdirectory unstages the rooted path", async 
 
 test("git commit from a subdirectory commits the staged tree", async () => {
   const { stdout } = await shell(
-    "isolate-git-sub-commit",
     `${SETUP} && mkdir sub && cd sub && echo n > n.txt && git add . && git commit -q -m from-sub && cd .. && git log -1 --format=%s`,
   );
 
@@ -129,7 +127,6 @@ test("git commit from a subdirectory commits the staged tree", async () => {
 
 test("git commit with a pathspec from a subdirectory is refused", async () => {
   const { stdout, stderr } = await shell(
-    "isolate-git-sub-commit-pathspec",
     `${SETUP} && mkdir sub && cd sub && git commit -q -m x ../a.txt && echo ok`,
   );
 
@@ -139,7 +136,6 @@ test("git commit with a pathspec from a subdirectory is refused", async () => {
 
 test("git commit in the isolate prints the summary of real git", async () => {
   const { stdout } = await shell(
-    "isolate-git-commit",
     `${SETUP} && printf 'x\\ny\\n' >> a.txt && git commit --no-verify -a -m second && git status -sb`,
   );
 
@@ -150,7 +146,6 @@ test("git commit in the isolate prints the summary of real git", async () => {
 
 test("the first commit in the isolate is a root commit", async () => {
   const { stdout } = await shell(
-    "isolate-git-root-commit",
     "git init && git config user.name T && git config user.email t@example.com && echo one > a.txt && git add a.txt && git commit -m first",
   );
 
@@ -161,7 +156,6 @@ test("the first commit in the isolate is a root commit", async () => {
 
 test("git status in the isolate reports the upstream branch", async () => {
   const { stdout } = await shell(
-    "isolate-git-upstream",
     `${SETUP} && git update-ref refs/remotes/origin/main HEAD && git config branch.main.remote origin && git config branch.main.merge refs/heads/main && echo x >> a.txt && git commit -q -am second && git status -sb && git status && git branch -vv`,
   );
 
@@ -183,7 +177,6 @@ test("git status in the isolate reports the upstream branch", async () => {
 
 test("git checkout in the isolate prints the messages of real git", async () => {
   const { stdout, stderr } = await shell(
-    "isolate-git-checkout",
     `${SETUP} && git checkout -b topic && git switch main && git checkout main && echo x >> a.txt && git checkout -- a.txt && git status -s && git -c user.name=Other --no-pager branch -v`,
   );
 
@@ -197,7 +190,6 @@ test("git checkout in the isolate prints the messages of real git", async () => 
 
 test("git checkout -b in the isolate keeps local changes and commit refuses an empty index", async () => {
   const { stdout, stderr } = await shell(
-    "isolate-git-dirty-branch",
     `${SETUP} && echo x >> a.txt && git checkout -b topic && git status -s && git commit -m nothing; git commit -am kept`,
   );
 
@@ -209,7 +201,6 @@ test("git checkout -b in the isolate keeps local changes and commit refuses an e
 
 test("git add -u stages changes and deletions of tracked files only", async () => {
   const { stdout } = await shell(
-    "isolate-git-add-u",
     `${SETUP} && echo x >> a.txt && rm b.txt && echo y > c.txt && git add -u && git status -s`,
   );
 
@@ -218,7 +209,6 @@ test("git add -u stages changes and deletions of tracked files only", async () =
 
 test("git add -u stages a file modified again after staging", async () => {
   const { stdout } = await shell(
-    "isolate-git-add-u-restage",
     `${SETUP} && echo x >> a.txt && git add a.txt && echo y >> a.txt && git add -u && git status -s`,
   );
 
@@ -227,7 +217,6 @@ test("git add -u stages a file modified again after staging", async () => {
 
 test("git add -u stages a staged new file modified again", async () => {
   const { stdout } = await shell(
-    "isolate-git-add-u-staged-new",
     `${SETUP} && echo x > n.txt && git add n.txt && echo y >> n.txt && git add -u && git status -s`,
   );
 
@@ -236,7 +225,6 @@ test("git add -u stages a staged new file modified again", async () => {
 
 test("git add . stages new files and deletions", async () => {
   const { stdout } = await shell(
-    "isolate-git-add-dot",
     `${SETUP} && echo y > c.txt && rm b.txt && git add . && git status -s`,
   );
 
@@ -245,7 +233,6 @@ test("git add . stages new files and deletions", async () => {
 
 test("git reset --soft moves the branch and keeps the index", async () => {
   const { stdout } = await shell(
-    "isolate-git-reset-soft",
     `${SETUP} && echo x >> a.txt && git commit -q -am second && git reset --soft HEAD~1 && git status -s && git log --oneline | wc -l`,
   );
 
@@ -254,7 +241,6 @@ test("git reset --soft moves the branch and keeps the index", async () => {
 
 test("git reset and git reset --mixed unstage and move the branch", async () => {
   const { stdout } = await shell(
-    "isolate-git-reset-mixed",
     `${SETUP} && echo x >> a.txt && git add a.txt && git reset && git status -s && git add a.txt && git commit -q -m second && git reset --mixed HEAD~1 && git status -s && git log --oneline | wc -l`,
   );
 
@@ -265,7 +251,6 @@ test("git reset and git reset --mixed unstage and move the branch", async () => 
 
 test("git reset <paths> and git restore --staged unstage only those paths", async () => {
   const { stdout } = await shell(
-    "isolate-git-unstage-paths",
     `${SETUP} && echo x >> a.txt && echo x >> b.txt && git add -A && git reset a.txt && git status -s && git restore --staged b.txt && git status -s`,
   );
 
@@ -275,14 +260,13 @@ test("git reset <paths> and git restore --staged unstage only those paths", asyn
 });
 
 test("git reset to an unknown revision fails with a message", async () => {
-  const { stderr } = await shell("isolate-git-reset-unknown", `${SETUP} && git reset --soft nope`);
+  const { stderr } = await shell(`${SETUP} && git reset --soft nope`);
 
   expect(stderr).toContain("unknown revision");
 });
 
 test("git restore of a staged path refuses instead of unstaging", async () => {
   const { stdout, stderr } = await shell(
-    "isolate-git-restore-worktree",
     `${SETUP} && echo x >> a.txt && git add a.txt && echo y >> a.txt && git restore a.txt; git status -s`,
   );
 
@@ -292,7 +276,6 @@ test("git restore of a staged path refuses instead of unstaging", async () => {
 
 test("git restore discards working-tree changes of tracked files", async () => {
   const { stdout, stderr } = await shell(
-    "isolate-git-restore-discard",
     `${SETUP} && echo x >> a.txt && rm b.txt && git restore . && git status -s && cat a.txt && cat b.txt`,
   );
 
@@ -302,7 +285,6 @@ test("git restore discards working-tree changes of tracked files", async () => {
 
 test("git restore --staged --source resets the index to the source revision", async () => {
   const { stdout } = await shell(
-    "isolate-git-restore-source",
     `${SETUP} && echo x >> a.txt && git commit -q -am second && echo y >> a.txt && git add a.txt && git restore --staged --source HEAD~1 a.txt && git status -s`,
   );
 

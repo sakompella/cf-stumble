@@ -148,7 +148,7 @@ test.each([
       workspace.commandSync = "incomplete";
     },
   },
-])("removes the project row and reports the clone as failed when $outcome", async (row) => {
+])("unlists the project and reports the clone as failed when $outcome", async (row) => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 
   const subject = tenant(`disconnect-${row.outcome.replaceAll(" ", "-")}`, {

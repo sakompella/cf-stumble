@@ -11,7 +11,7 @@ import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, type MainFacetCapabilities } from "./artifacts/index.js";
 import { ServingConversations } from "./conversations/index.js";
-import { WorkspaceReadiness } from "./readiness/index.js";
+import { ProvisionFence, WorkspaceReadiness } from "./readiness/index.js";
 import { supervisorNames, type SupervisorEnv } from "./supervisor-env.js";
 
 export type SupervisorParts = ReturnType<typeof supervisorParts>;
@@ -35,15 +35,19 @@ function projectParts(
     environment,
   });
 
+  const fence = new ProvisionFence();
+
   const connections = new ProjectConnections({
     storage,
     workspaceName,
+    fence,
     namespace: env.WORKSPACE_HOST,
     github,
   });
 
   const readiness = new WorkspaceReadiness({
     workspaceName,
+    fence,
     namespace: env.WORKSPACE_HOST,
     generations,
     github,
@@ -92,7 +96,7 @@ export function supervisorParts(
     serving: new ServingConversations({
       ctx,
       mount: (instance) =>
-        artifacts.mount(generations.active(), env.LOADER, ctx.facets, modelRoute(instance)),
+        artifacts.mount(generations.active(), env.LOADER, ctx.facets, modelRoute, instance),
       catalog: () => projects.connections.catalog(),
       resetting,
       obtainWorkspace: (project, remainingMs) => projects.readiness.obtain(project, remainingMs),

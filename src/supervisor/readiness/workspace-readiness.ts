@@ -5,7 +5,7 @@ import type { GitHubConnection } from "../projects/index.js";
 import type { ProjectId } from "../../project-catalog.js";
 import type { SelectableProject } from "../../selectable-projects.js";
 import type { ProjectCapabilityStub, WorkspaceHostNamespace } from "../../workspace/index.js";
-import { clearWorkspaceProvision, waitForWorkspaceProvision } from "./provision-fence.js";
+import type { ProvisionFence } from "./provision-fence.js";
 import type { ProjectUseResult } from "./provision-on-use.js";
 import { provisionHarnessWorkspace } from "./provisioning.js";
 
@@ -15,6 +15,7 @@ type EnsureProvisioned = (projectId: ProjectId) => Effect.Effect<ProjectUseResul
 
 interface WorkspaceReadinessInput {
   readonly workspaceName: string;
+  readonly fence: ProvisionFence;
   readonly namespace: ReadinessNamespace;
   readonly generations: Generations;
   readonly github: GitHubConnection;
@@ -23,6 +24,7 @@ interface WorkspaceReadinessInput {
 
 export class WorkspaceReadiness {
   private readonly workspaceName: string;
+  private readonly fence: ProvisionFence;
   private readonly namespace: ReadinessNamespace;
   private readonly generations: Generations;
   private readonly github: GitHubConnection;
@@ -30,6 +32,7 @@ export class WorkspaceReadiness {
 
   constructor(input: WorkspaceReadinessInput) {
     this.workspaceName = input.workspaceName;
+    this.fence = input.fence;
     this.namespace = input.namespace;
     this.generations = input.generations;
     this.github = input.github;
@@ -43,7 +46,7 @@ export class WorkspaceReadiness {
     if (project === null) return this.capability(remainingMs);
 
     return Effect.gen({ self: this }, function* () {
-      yield* waitForWorkspaceProvision(this.workspaceName, project.id);
+      yield* this.fence.wait(project.id);
 
       if (!(yield* this.provision(project))) return null;
 
@@ -52,7 +55,7 @@ export class WorkspaceReadiness {
   }
 
   forget(): void {
-    clearWorkspaceProvision(this.workspaceName);
+    this.fence.clear();
     this.github.resetWorkspace();
   }
 
@@ -67,6 +70,7 @@ export class WorkspaceReadiness {
 
     return provisionHarnessWorkspace({
       workspaceName: this.workspaceName,
+      fence: this.fence,
       projectId: project.id,
       harnessCommit: generation.harnessCommit,
       namespace: this.namespace,
