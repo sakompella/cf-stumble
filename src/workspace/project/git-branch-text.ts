@@ -1,5 +1,7 @@
 import type { CommitView, GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
+import { createBranch, creationRequest } from "./git-branch-create.js";
 import type { GitScope, RunCli } from "./git-cli.js";
+import { reportingFailure } from "./git-result.js";
 import { branchTracking, trackingCounts, type Tracking } from "./git-tracking.js";
 
 const VERBOSITY = new Map([
@@ -80,6 +82,11 @@ export function verboseBranches(
   scope: GitScope,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
+  const creation = creationRequest(args);
+
+  if (creation !== undefined)
+    return reportingFailure(() => createBranch(client, scope.dir, creation));
+
   const verbosity = args.reduce((total, arg) => total + (VERBOSITY.get(arg) ?? Number.NaN), 0);
 
   if (Number.isNaN(verbosity)) return cli({ ...input, cwd: scope.dir });
