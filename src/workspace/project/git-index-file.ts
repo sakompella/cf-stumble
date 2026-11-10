@@ -16,6 +16,8 @@ const OID_OFFSET = 40;
 
 const MODE_OFFSET = 24;
 
+export type ReadFile = (path: string) => Promise<Uint8Array>;
+
 export interface IndexEntry {
   readonly oid: string;
   readonly mode: string;

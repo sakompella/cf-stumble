@@ -6,6 +6,7 @@ import type {
   GitDiffOptions,
 } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
+import type { ReadFile } from "./git-index-file.js";
 import { statusLines, type StatusLine } from "./git-status.js";
 import { headState, longStatus } from "./git-status-text.js";
 
@@ -234,6 +235,7 @@ export async function commitWithSummary(
   cli: RunCli,
   input: GitCliInput,
   scope: GitScope,
+  readFile: ReadFile,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
   const flags = scanCommit(args);
@@ -248,7 +250,7 @@ export async function commitWithSummary(
       exitCode: 128,
     };
 
-  const lines = await statusLines(client, dir);
+  const lines = await statusLines(client, dir, readFile);
   const paths = committedPaths(lines, all);
 
   if (paths.length === 0 && !amend)

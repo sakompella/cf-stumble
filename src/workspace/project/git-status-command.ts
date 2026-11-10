@@ -1,6 +1,7 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
-import { type ReadFile, withRenames } from "./git-rename.js";
+import type { ReadFile } from "./git-index-file.js";
+import { withRenames } from "./git-rename.js";
 import { shortStatus, statusLines, type StatusLine } from "./git-status.js";
 import { branchHeader, headState, longStatus } from "./git-status-text.js";
 
@@ -71,7 +72,9 @@ async function render(
 
   const [head, lines] = await Promise.all([
     needsHead ? headState(client, scope.dir) : undefined,
-    statusLines(client, scope.dir).then((found) => withRenames(client, scope.dir, readFile, found)),
+    statusLines(client, scope.dir, readFile).then((found) =>
+      withRenames(client, scope.dir, readFile, found),
+    ),
   ]);
 
   const prefix = options.format === "porcelain" ? "" : scope.prefix;

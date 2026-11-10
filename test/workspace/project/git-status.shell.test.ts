@@ -59,3 +59,18 @@ test("git status shows an untracked directory above the working directory as ../
   expect(await expectSame(dir, "d/e", ["-s"])).toBe("?? ../\n");
   await expectSame(dir, "d/e", []);
 });
+
+test("git status lists a file removed from the index only as deleted and untracked", async () => {
+  const dir = repository(["a", "keep"]);
+  realGit(dir, ["rm", "-q", "--cached", "a"]);
+
+  expect(await expectSame(dir, "", ["-s"])).toBe("D  a\n?? a\n");
+  await expectSame(dir, "", []);
+});
+
+test("git status folds a file removed from the index into its untracked directory", async () => {
+  const dir = repository(["d/a"]);
+  realGit(dir, ["rm", "-q", "--cached", "d/a"]);
+
+  expect(await expectSame(dir, "", ["-s"])).toBe("D  d/a\n?? d/\n");
+});
