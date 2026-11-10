@@ -3,7 +3,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 import * as Result from "effect/Result";
 
-import { MainHarnessArtifact } from "../../../src/facet/index.js";
+import { parseMainHarnessArtifactJson } from "../../../src/facet/index.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import { parsedArtifact } from "../../facet/fixture.js";
 
@@ -83,7 +83,7 @@ test("keeps the canonical encoding stable when its own bytes are parsed again", 
     const entryModule = modules[0]?.name ?? "";
 
     const once = parsedArtifact({ harnessCommit, entryModule, modules });
-    const twice = MainHarnessArtifact.parseJson(encodeModuleMap(once));
+    const twice = parseMainHarnessArtifactJson(encodeModuleMap(once));
 
     if (Result.isFailure(twice)) throw new Error(`the encoding must parse: ${twice.failure.code}`);
 

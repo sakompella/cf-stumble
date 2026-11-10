@@ -3,7 +3,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import {
-  MainHarnessArtifact,
+  parseMainHarnessArtifact,
   type MainHarnessArtifactInput,
   type MainHarnessArtifactProblem,
 } from "../../src/facet/artifact.js";
@@ -51,7 +51,7 @@ test("an artifact parses exactly when its module map is sound and its commit is 
         modules: tc.draw(modules),
       };
 
-      const parsed = MainHarnessArtifact.parse(input);
+      const parsed = parseMainHarnessArtifact(input);
       const problem = expectedProblem(input);
 
       if (problem === undefined) {

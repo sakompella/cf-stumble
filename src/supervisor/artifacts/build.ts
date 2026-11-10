@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { logRedactedCause, redactLogText } from "../../diagnostics.js";
-import { MainHarnessArtifact } from "../../facet/index.js";
-import type { MainHarnessArtifactProblem } from "../../facet/index.js";
+import { ModuleMapSchema, parseMainHarnessArtifact } from "../../facet/index.js";
+import type { MainHarnessArtifact, MainHarnessArtifactProblem } from "../../facet/index.js";
 import { HARNESS_BUILD_STEP_NAMES } from "../../harness-build.js";
 import type { HarnessBuildRequest, HarnessBuildStepName } from "../../harness-build.js";
 import type { HarnessCommit } from "../../harness-commit.js";
@@ -33,14 +33,7 @@ export type HarnessBuildProblem =
       readonly reason: MainHarnessArtifactProblem["code"];
     };
 
-const decodeBuiltModuleMap = Schema.decodeUnknownResult(
-  Schema.fromJsonString(
-    Schema.Struct({
-      entryModule: Schema.String,
-      modules: Schema.Array(Schema.Struct({ name: Schema.String, source: Schema.String })),
-    }),
-  ),
-);
+const decodeBuiltModuleMap = Schema.decodeUnknownResult(Schema.fromJsonString(ModuleMapSchema));
 
 export function buildModuleMap(
   workspace: () => WorkspaceHostRpc<"build">,
@@ -205,7 +198,7 @@ function parsedOutput(
 
   const parsed = Result.isFailure(output)
     ? Result.fail<MainHarnessArtifactProblem>({ code: "invalid-artifact" })
-    : MainHarnessArtifact.parse({ harnessCommit, ...output.success });
+    : parseMainHarnessArtifact({ harnessCommit, ...output.success });
 
   return Result.mapError(parsed, (problem) => ({
     code: "build-output-invalid",

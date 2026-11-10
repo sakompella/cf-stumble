@@ -1,6 +1,7 @@
 import * as Result from "effect/Result";
 import { logRedactedCause } from "../../diagnostics.js";
-import { MainHarnessArtifact } from "../../facet/index.js";
+import { parseMainHarnessArtifactJson } from "../../facet/index.js";
+import type { MainHarnessArtifact } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { encodeModuleMap } from "./module-map.js";
 
@@ -81,7 +82,7 @@ export class ModuleMapStore {
 }
 
 function decoded(text: string, harnessCommit: HarnessCommit): StoredModuleMapResult {
-  const parsed = MainHarnessArtifact.parseJson(text);
+  const parsed = parseMainHarnessArtifactJson(text);
 
   if (Result.isFailure(parsed) || parsed.success.harnessCommit !== harnessCommit) {
     return Result.fail({ code: "corrupt-artifact", harnessCommit });

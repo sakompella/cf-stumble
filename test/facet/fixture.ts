@@ -1,12 +1,13 @@
 import * as Result from "effect/Result";
-import { MainHarnessArtifact } from "../../src/facet/index.js";
+import { parseMainHarnessArtifact } from "../../src/facet/index.js";
+import type { MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/artifact.js";
 import { FACET_COMPATIBILITY } from "../../src/facet/runtime-contract.js";
 import { STARTUP_CHECK_REPLY } from "../../src/startup-check-script.js";
 import { WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 
 export function parsedArtifact(input: MainHarnessArtifactInput): MainHarnessArtifact {
-  const parsed = MainHarnessArtifact.parse(input);
+  const parsed = parseMainHarnessArtifact(input);
 
   if (Result.isFailure(parsed)) {
     throw new Error(`a test artifact must parse: ${parsed.failure.code}`);
