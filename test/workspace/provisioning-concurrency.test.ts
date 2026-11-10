@@ -53,14 +53,14 @@ test("holds a project's turns during its own provision only, until a reset clear
   const fence = new ProvisionFence();
 
   const admitted = (projectId: typeof sampleProjectOne.id) =>
-    Effect.runPromise(
-      fence
-        .wait(projectId)
-        .pipe(
-          Effect.as(true),
-          Effect.timeoutOrElse({ duration: 50, orElse: () => Effect.succeed(false) }),
-        ),
-    );
+    Promise.race([
+      Effect.runPromise(fence.wait(projectId)).then(() => true),
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => {
+          resolve(false);
+        }, 0);
+      }),
+    ]);
 
   const provisioning = runToResult(
     provisionProjectWorkspace({
