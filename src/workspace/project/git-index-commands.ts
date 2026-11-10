@@ -44,8 +44,13 @@ async function stage(
   dir: string,
   lines: readonly { readonly path: string; readonly y: string }[],
 ): Promise<void> {
-  const changed = lines.flatMap((line) => (line.y === "D" ? [] : [line.path.replace(/\/$/u, "")]));
-  const deleted = lines.flatMap((line) => (line.y === "D" ? [line.path] : []));
+  const pending = lines.filter((line) => line.y !== " ");
+
+  const changed = pending.flatMap((line) =>
+    line.y === "D" ? [] : [line.path.replace(/\/$/u, "")],
+  );
+
+  const deleted = pending.flatMap((line) => (line.y === "D" ? [line.path] : []));
 
   if (changed.length > 0) await client.add({ dir, paths: changed });
 

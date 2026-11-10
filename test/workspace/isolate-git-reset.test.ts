@@ -16,3 +16,12 @@ test("git add . in a repository with no files succeeds silently", async () => {
   expect(stderr).toBe("");
   expect(stdout).toBe("0\n");
 });
+
+test("git add . after git rm of a committed file succeeds and leaves the deletion staged", async () => {
+  const { stdout, stderr } = await shell(
+    `${SETUP} && git rm -q a.txt && git add . ; echo $? && git status -s`,
+  );
+
+  expect(stderr).toBe("");
+  expect(stdout).toBe("0\nD  a.txt\n");
+});
