@@ -5,7 +5,12 @@ import type {
   ChatGPTLoginFailure,
   ChatGPTLoginOutcome,
 } from "../chatgpt/index.js";
-import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
+import {
+  callSupervisor,
+  decodeRequestBody,
+  invalidRequestBody,
+  type SupervisorCallFailed,
+} from "./json.js";
 
 export type ChatGPTApiSupervisor = {
   readonly getChatGPTConnection: () => Promise<ChatGPTConnectionView>;
@@ -23,22 +28,20 @@ function loginStatus(code: ChatGPTLoginFailure): number {
 
 const CompleteBody = Schema.Struct({ attemptId: Schema.String, callbackUrl: Schema.String });
 
-const completeResponse = Effect.fnUntraced(
-  function* (request: Request, supervisor: ChatGPTApiSupervisor) {
-    const body = yield* decodeRequestBody(request, CompleteBody);
+const completeResponse = Effect.fnUntraced(function* (
+  request: Request,
+  supervisor: ChatGPTApiSupervisor,
+) {
+  const body = yield* decodeRequestBody(request, CompleteBody);
 
-    const outcome = yield* callSupervisor(() =>
-      supervisor.completeChatGPTLogin(body.attemptId, body.callbackUrl),
-    );
+  const outcome = yield* callSupervisor(() =>
+    supervisor.completeChatGPTLogin(body.attemptId, body.callbackUrl),
+  );
 
-    return outcome.ok
-      ? Response.json(outcome)
-      : Response.json(outcome, { status: loginStatus(outcome.problem.code) });
-  },
-  Effect.catchTag("InvalidRequestBody", () =>
-    Effect.succeed(jsonError(400, "invalid-chatgpt-request")),
-  ),
-);
+  return outcome.ok
+    ? Response.json(outcome)
+    : Response.json(outcome, { status: loginStatus(outcome.problem.code) });
+}, invalidRequestBody("invalid-chatgpt-request"));
 
 function viewResponse(
   read: () => Promise<ChatGPTConnectionView>,

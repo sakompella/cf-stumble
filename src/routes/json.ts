@@ -35,6 +35,15 @@ export function decodeRequestBody<S extends Schema.ConstraintDecoder<unknown>>(
   );
 }
 
+export function invalidRequestBody(
+  code: ApiErrorCode,
+): (
+  handled: Effect.Effect<Response, InvalidRequestBody | SupervisorCallFailed>,
+) => Effect.Effect<Response, SupervisorCallFailed> {
+  return (handled) =>
+    Effect.catchTag(handled, "InvalidRequestBody", () => Effect.succeed(jsonError(400, code)));
+}
+
 export class SupervisorCallFailed extends Data.TaggedError("SupervisorCallFailed")<{
   readonly cause: unknown;
 }> {}
