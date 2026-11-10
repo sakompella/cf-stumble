@@ -69,3 +69,19 @@ test("git rm from a subdirectory removes the file relative to it", async () => {
 
   expect(stdout).toBe("rm 'sub/z'\nD  z\n");
 });
+
+test("git rm expands a wildcard pathspec over tracked files, with -r not needed", async () => {
+  const { stdout, stderr } = await shell(
+    `${SETUP} && mkdir d && echo x > d/c.txt && echo y > d/c.md && git add d && git commit -q -m d && git rm -q '*.txt' && git ls-files`,
+  );
+
+  expect(stderr).toBe("");
+  expect(stdout).toBe("d/c.md\n");
+});
+
+test("git rm with a wildcard that matches nothing fails with exit 128", async () => {
+  const { stdout, stderr } = await shell(`${SETUP} && git rm '*.rs'; echo $?`);
+
+  expect(stderr).toBe("fatal: pathspec '*.rs' did not match any files\n");
+  expect(stdout).toBe("128\n");
+});

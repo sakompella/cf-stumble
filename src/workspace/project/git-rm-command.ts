@@ -97,6 +97,26 @@ function refusal(lines: readonly StatusLine[], cached: boolean): string {
   ].join("");
 }
 
+const WILDCARD = /[*?[]/u;
+
+function wildcard(pattern: string): RegExp {
+  const body = pattern
+    .replaceAll(/[.+^${}()|\\]/gu, String.raw`\$&`)
+    .replaceAll("*", ".*")
+    .replaceAll("?", ".")
+    .replaceAll("[!", "[^");
+
+  return new RegExp(`^${body}$`, "u");
+}
+
+function matching(tracked: readonly string[], at: string): readonly string[] {
+  if (!WILDCARD.test(at)) return tracked.filter((file) => under(file, at));
+
+  const pattern = wildcard(at);
+
+  return tracked.filter((file) => pattern.test(file));
+}
+
 export async function rmCommand(
   client: GitClient,
   input: GitCliInput,
@@ -123,11 +143,11 @@ export async function rmCommand(
 
     if (at === undefined) return failure(`fatal: '${path}' is outside repository\n`);
 
-    const matches = tracked.filter((file) => under(file, at));
+    const matches = matching(tracked, at);
 
     if (matches.length === 0) return failure(`fatal: pathspec '${path}' did not match any files\n`);
 
-    if (!flags.has("recursive") && matches.some((file) => file !== at))
+    if (!flags.has("recursive") && !WILDCARD.test(at) && matches.some((file) => file !== at))
       return failure(`fatal: not removing '${path}' recursively without -r\n`);
 
     for (const file of matches) removed.add(file);
