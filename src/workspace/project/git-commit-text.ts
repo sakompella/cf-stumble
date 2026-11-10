@@ -9,7 +9,7 @@ import type { GitScope, RunCli } from "./git-cli.js";
 import { statusLines, type StatusLine } from "./git-status.js";
 import { headState, longStatus } from "./git-status-text.js";
 
-const IGNORED = new Set(["--no-verify", "-n"]);
+const IGNORED = new Set(["--no-verify", "-n", "--no-edit"]);
 
 const QUIET = new Set(["-q", "--quiet"]);
 
@@ -108,6 +108,7 @@ interface CommitFlags {
   readonly quiet: boolean;
   readonly amend: boolean;
   readonly all: boolean;
+  readonly message: boolean;
   readonly pathspecs: readonly string[];
 }
 
@@ -133,6 +134,7 @@ function scanCommit(args: readonly string[]): CommitFlags {
   let quiet = false;
   let amend = false;
   let all = false;
+  let message = false;
   const pathspecs: string[] = [];
   let index = 0;
 
@@ -145,11 +147,15 @@ function scanCommit(args: readonly string[]): CommitFlags {
     }
 
     if (arg === "-m" || arg === "--message") {
+      message = true;
       index += 1;
       continue;
     }
 
-    if (arg.startsWith("--message=")) continue;
+    if (arg.startsWith("--message=")) {
+      message = true;
+      continue;
+    }
 
     if (arg === "--quiet" || arg === "-q") {
       quiet = true;
@@ -179,13 +185,15 @@ function scanCommit(args: readonly string[]): CommitFlags {
 
       if (flags.value) index += 1;
 
+      message = message || arg.includes("m");
+
       continue;
     }
 
     pathspecs.push(arg);
   }
 
-  return { quiet, amend, all, pathspecs };
+  return { quiet, amend, all, message, pathspecs };
 }
 
 function forwardedArgv(args: readonly string[]): string[] {
@@ -229,6 +237,20 @@ function forwardedArgv(args: readonly string[]): string[] {
   return forwarded;
 }
 
+const NOTHING_TO_AMEND: GitCliResult = {
+  stdout: "",
+  stderr: "fatal: You have nothing to amend.\n",
+  exitCode: 128,
+};
+
+async function headMessage(client: GitClient, dir: string): Promise<string | undefined> {
+  try {
+    return (await client.show({ dir, ref: "HEAD" })).message.replace(/\n$/u, "");
+  } catch {
+    return undefined;
+  }
+}
+
 export async function commitWithSummary(
   client: GitClient,
   cli: RunCli,
@@ -256,7 +278,18 @@ export async function commitWithSummary(
 
   if (all) await stageTracked(client, dir, lines);
 
-  const result = await cli({ ...input, cwd: dir, argv: ["commit", ...forwardedArgv(args)] });
+  const reuse = amend && !flags.message;
+  const previous = reuse ? await headMessage(client, dir) : undefined;
+
+  if (reuse && previous === undefined) return NOTHING_TO_AMEND;
+
+  const argv = [
+    "commit",
+    ...forwardedArgv(args),
+    ...(previous === undefined ? [] : ["-m", previous]),
+  ];
+
+  const result = await cli({ ...input, cwd: dir, argv });
 
   if (result.exitCode !== 0) return result;
 
