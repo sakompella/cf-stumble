@@ -23,6 +23,7 @@ export type TargetOptions = Readonly<{
   runId: string;
   url: string | undefined;
   stage: string | undefined;
+  stagePrefix?: string;
   password: string;
   env: NodeJS.ProcessEnv;
 }>;
@@ -41,7 +42,9 @@ export class Target {
     this.#options = options;
     this.runId = options.runId;
     this.fresh = options.url === undefined && options.stage === undefined;
-    this.stage = options.stage ?? (this.fresh ? `e2e-${options.runId}` : undefined);
+    this.stage =
+      options.stage ??
+      (this.fresh ? `${options.stagePrefix ?? "e2e"}-${options.runId}` : undefined);
     this.github = new GitHub(options.env["GH_TOKEN"] ?? "");
   }
 
