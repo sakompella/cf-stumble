@@ -50,3 +50,19 @@ export function differsFromTheContainer(program: string, rest: readonly string[]
 export function mergesStderrIntoStdout(words: readonly string[]): boolean {
   return words.some((word) => /^\d*>&/u.test(word));
 }
+
+export function hasUnquotedPatternCharacter(command: string): boolean {
+  let quote: string | undefined;
+
+  for (const char of command) {
+    if (quote !== undefined) {
+      if (char === quote) quote = undefined;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === "?" || char === "[") {
+      return true;
+    }
+  }
+
+  return false;
+}

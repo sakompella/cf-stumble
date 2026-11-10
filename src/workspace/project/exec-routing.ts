@@ -1,4 +1,8 @@
-import { differsFromTheContainer, mergesStderrIntoStdout } from "./isolate-differences.js";
+import {
+  differsFromTheContainer,
+  hasUnquotedPatternCharacter,
+  mergesStderrIntoStdout,
+} from "./isolate-differences.js";
 import { ISOLATE_PROGRAMS } from "./isolate-programs.js";
 import type { ExecBackendChoice } from "./protocol.js";
 
@@ -129,7 +133,12 @@ function touchesPathOutsideWorkspace(command: string): boolean {
 function isolateCanRun(command: string): boolean {
   const segments = firstWords(command);
 
-  return segments !== undefined && segments.length > 0 && segments.every(segmentRunsInIsolate);
+  return (
+    segments !== undefined &&
+    segments.length > 0 &&
+    segments.every(segmentRunsInIsolate) &&
+    !hasUnquotedPatternCharacter(command)
+  );
 }
 
 export function routedBackend(command: string, requested?: ExecBackendChoice): ExecBackendChoice {

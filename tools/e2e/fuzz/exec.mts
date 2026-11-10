@@ -1,6 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { routedBackend } from "../../../src/workspace/project/exec-routing.ts";
 import { Rng, generateCase, type Case } from "./exec-gen.mts";
+import { leakProblems } from "./exec-leak.mts";
 import { judge, stepsFor, type CaseSteps } from "./exec-oracle.mts";
 import { freshThread, installFuzzGeneration, runSteps } from "./exec-session.mts";
 import type { FuzzContext as FuzzRun, Fuzzer } from "./context.mts";
@@ -73,7 +74,11 @@ async function fuzzCases(run: FuzzRun): Promise<boolean> {
 
   const rng = new Rng(run.seed);
 
-  let failed = 0;
+  const leaks = await leakProblems(run);
+
+  for (const problem of leaks) console.error(`fuzz: FAIL leak: ${problem}`);
+
+  let failed = leaks.length;
   let cases = 0;
 
   while (Date.now() < run.deadlineMs && !run.signal.aborted) {

@@ -13,6 +13,8 @@ const FILES = {
   "sub/x.txt": "x\n",
   "csv.txt": "a,b\nc\n",
   "dup.txt": "a\na\nb\n",
+  "ü.txt": "u\n",
+  "é/x": "e\n",
 };
 
 const COMMANDS = [
@@ -47,6 +49,15 @@ const COMMANDS = [
   "sed -n 1p a.txt",
   "find . -type f | sort | wc -w",
   "tr a-z A-Z < a.txt",
+  "echo *.txt",
+  "echo ??.txt",
+  "echo ?.txt",
+  "echo [a-z].txt",
+  "echo [ü].txt",
+  "echo ?/x",
+  "grep '[a-z]*' a.txt",
+  "ls ü.txt",
+  "cat ü.txt",
 ];
 
 function fixtureDirectory(): string {
@@ -62,7 +73,12 @@ function fixtureDirectory(): string {
 
 function dashOutput(command: string) {
   const directory = fixtureDirectory();
-  const run = spawnSync("dash", ["-c", command], { cwd: directory, encoding: "utf8" });
+
+  const run = spawnSync("dash", ["-c", command], {
+    cwd: directory,
+    encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
+  });
 
   rmSync(directory, { recursive: true, force: true });
 
@@ -101,6 +117,11 @@ describe("a command that the router sends to the isolate prints what dash and GN
         "grep -rn hello .",
         "grep -r hello",
         "du -a sub",
+        "echo ??.txt",
+        "echo ?.txt",
+        "echo [a-z].txt",
+        "echo [ü].txt",
+        "echo ?/x",
       ],
     );
   });
