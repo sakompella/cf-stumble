@@ -186,13 +186,65 @@ test("exit 129 after output is not rerun", async () => {
   expect(text).toContain("usage");
 });
 
-test("an isolate stream that ends without an exit still delivers its stderr", async () => {
+test("an isolate stream that ends without an exit before any output reruns the command in the container", async () => {
   vi.spyOn(console, "log").mockImplementation(() => {});
 
-  const { text, containerRuns } = await run([err("partial failure\n")], []);
+  const { text, containerRuns, handle } = await run(
+    [err("partial failure\n")],
+    [out("done\n"), exit(0)],
+  );
+
+  expect(containerRuns).toHaveLength(1);
+  expect(text).toContain("done");
+  expect(text).not.toContain("partial failure");
+  expect(handle.fellBackFrom).toBe("isolate");
+});
+
+test("an isolate stream that breaks before any output reruns the command in the container", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const container = new ScriptedBackend("container", [out("100000\n"), exit(0)]);
+  const broken = new ScriptedBackend("isolate", []);
+
+  const isolate: ExecBackend = {
+    exec: async (input) => {
+      const handle = await broken.exec(input);
+
+      return {
+        ...handle,
+        reader: { ...handle.reader, read: () => Promise.reject(new Error("CPU time limit")) },
+      };
+    },
+  };
+
+  const handle = await isolateWithContainerFallback(isolate, container).exec({
+    command: "awk 'BEGIN{for(;;)}'",
+    cwd: "/",
+    timeoutMs: 1_000,
+  });
+
+  const text = await drain(
+    startExecOperation(
+      { exec: () => Promise.resolve(handle) },
+      { command: "awk", cwd: "/", timeoutMs: 1_000 },
+      () => {},
+    ).events,
+  );
+
+  expect(container.seen).toHaveLength(1);
+  expect(text).toContain("100000");
+  expect(handle.fellBackFrom).toBe("isolate");
+  expect(broken.killed).toBe(1);
+});
+
+test("an isolate stream that breaks after output is not rerun", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const { text, containerRuns } = await run([out("a\n")], [out("never\n"), exit(0)]);
 
   expect(containerRuns).toEqual([]);
-  expect(text).toContain("partial failure");
+  expect(text).toContain('"data":"a');
+  expect(text).toContain("backend-unavailable");
 });
 
 test("a kill while the container fallback starts kills that container once it exists", async () => {
