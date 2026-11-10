@@ -50,7 +50,7 @@ export class HarnessArtifacts {
     active: ActiveGeneration,
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
-    modelRoute: MainFacetCapabilities["MODEL"],
+    modelRoute: (instance: number) => MainFacetCapabilities["MODEL"],
     instance: number,
   ): Effect.Effect<MountedFacet, MainFacetMountProblem> {
     return this.load(active).pipe(
@@ -58,7 +58,7 @@ export class HarnessArtifacts {
         const { facetClass } = loadMainFacet(
           loader,
           artifact,
-          { MODEL: modelRoute },
+          { MODEL: modelRoute(instance) },
           servingLoaderName(artifact.harnessCommit, instance),
         );
 

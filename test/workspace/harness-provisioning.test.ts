@@ -2,7 +2,6 @@ import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
-import type { HarnessBuildRequest } from "../../src/harness-build.js";
 import { projectIdOf, sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import { ProvisionFence } from "../../src/supervisor/readiness/provision-fence.js";
@@ -12,6 +11,8 @@ import {
 } from "../../src/supervisor/readiness/provisioning.js";
 import type { WorkspaceCommandResult, WorkspaceHostRpc } from "../../src/workspace/index.js";
 import { runToResult } from "./workspace-results.js";
+
+type BuildRequest = Parameters<WorkspaceHostRpc<"build">["build"]>[0];
 
 type InstructionsWrite = ReturnType<
   WorkspaceHostRpc<"ensureManagedInstructions">["ensureManagedInstructions"]
@@ -28,10 +29,10 @@ const harnessCommit: HarnessCommit = parsedHarnessCommit;
 const harnessProjectId = projectIdOf("harness");
 
 class FakeHarnessHost implements WorkspaceHostRpc<"build" | "ensureManagedInstructions"> {
-  readonly builds: HarnessBuildRequest[] = [];
+  readonly builds: BuildRequest[] = [];
   instructions = 0;
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
+  build(request: BuildRequest): Promise<WorkspaceCommandResult> {
     this.builds.push(request);
 
     return Promise.resolve({

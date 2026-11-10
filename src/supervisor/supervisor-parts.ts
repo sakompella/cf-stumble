@@ -96,13 +96,7 @@ export function supervisorParts(
     serving: new ServingConversations({
       ctx,
       mount: (instance) =>
-        artifacts.mount(
-          generations.active(),
-          env.LOADER,
-          ctx.facets,
-          modelRoute(instance),
-          instance,
-        ),
+        artifacts.mount(generations.active(), env.LOADER, ctx.facets, modelRoute, instance),
       catalog: () => projects.connections.catalog(),
       resetting,
       obtainWorkspace: (project, remainingMs) => projects.readiness.obtain(project, remainingMs),
