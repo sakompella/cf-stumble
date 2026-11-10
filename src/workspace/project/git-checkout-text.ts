@@ -1,4 +1,5 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
+import { branchSwitch } from "./git-checkout-branch.js";
 import { restoreCommand } from "./git-restore-command.js";
 import { reportingFailure } from "./git-result.js";
 import type { GitScope, RunCli } from "./git-cli.js";
@@ -59,6 +60,11 @@ export async function checkoutWithMessages(
   scope: GitScope,
   readFile: ReadFile,
 ): Promise<GitCliResult> {
+  const switching = branchSwitch(client, input, scope);
+  const switched = switching === undefined ? undefined : await reportingFailure(() => switching);
+
+  if (switched !== undefined) return switched;
+
   const args = input.argv.slice(1);
   const separator = args.indexOf("--");
 

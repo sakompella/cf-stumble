@@ -16,7 +16,9 @@ export function pathspecError(missed: readonly string[]): GitCliResult {
   };
 }
 
-export async function reportingFailure(run: () => Promise<GitCliResult>): Promise<GitCliResult> {
+export async function reportingFailure<Result extends GitCliResult | undefined>(
+  run: () => Promise<Result>,
+): Promise<Result | GitCliResult> {
   try {
     return await run();
   } catch (cause) {

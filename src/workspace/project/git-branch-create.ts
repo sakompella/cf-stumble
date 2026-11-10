@@ -29,6 +29,12 @@ function validName(name: string): boolean {
 const REF_SYNTAX_HINT =
   "hint: See 'git help check-ref-format'\nhint: Disable this message with \"git config set advice.refSyntax false\"\n";
 
+export function invalidName(name: string): GitCliResult | undefined {
+  return validName(name)
+    ? undefined
+    : failure(`fatal: '${name}' is not a valid branch name\n${REF_SYNTAX_HINT}`);
+}
+
 export function creationRequest(args: readonly string[]): BranchCreation | undefined {
   const force = args.some((arg) => FORCE.has(arg));
   const words = args.filter((arg) => !FORCE.has(arg));
@@ -46,8 +52,9 @@ export async function createBranch(
 ): Promise<GitCliResult> {
   const { name, start, force } = request;
 
-  if (!validName(name))
-    return failure(`fatal: '${name}' is not a valid branch name\n${REF_SYNTAX_HINT}`);
+  const invalid = invalidName(name);
+
+  if (invalid !== undefined) return invalid;
 
   const existing = (await client.branchList({ dir })).includes(name);
 
