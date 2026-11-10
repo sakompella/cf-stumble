@@ -6,6 +6,7 @@
   "scripts": {
     "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run",
     "test:tools": "node --import tsx --test 'tools/**/*.test.ts'",
+    "test:mutation": "stryker run",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",
     "typecheck": "tsrs --noEmit && tsrs --noEmit -p src/page/client && tsrs --noEmit -p src/stumble-cli/orb && tsrs --noEmit -p test/stumble-cli/orb && tsrs --noEmit -p test/page/client && tsrs --noEmit -p infra",
     "typecheck:tools": "tsrs --noEmit -p tools",
@@ -45,6 +46,8 @@
     "@hegeldev/hegel": "0.4.12",
     "@oxlint/plugins": "^1.90.0",
     "@playwright/test": "1.64.1",
+    "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/vitest-runner": "10.1.1",
     "@types/node": "22.20.5",
     "cf": "1.0.0-beta.27",
     "foldkit": "0.170.0",
