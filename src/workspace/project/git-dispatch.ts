@@ -5,7 +5,7 @@ import type { GitScope, RunCli } from "./git-cli.js";
 import { commitWithSummary } from "./git-commit-text.js";
 import { indexCommand } from "./git-index-dispatch.js";
 import type { WorkFiles } from "./git-index-file.js";
-import { pushDelete } from "./git-push-delete.js";
+import { remoteCommand } from "./git-remote-dispatch.js";
 import { unbornCommand } from "./git-unborn.js";
 import { readCommand } from "./git-read-dispatch.js";
 
@@ -29,12 +29,11 @@ export async function dispatchGit(
       return checkoutWithMessages(client, cli, input, scope, files.read);
     case "branch":
       return verboseBranches(client, cli, input, scope);
-    case "push":
-      return cli(pushDelete(input));
     default:
       return (
         indexCommand(command, client, cli, input, scope, files) ??
         readCommand(command, client, cli, input, scope, files) ??
+        remoteCommand(command, client, cli, input, scope) ??
         cli(input)
       );
   }

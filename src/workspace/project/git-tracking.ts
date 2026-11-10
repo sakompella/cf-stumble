@@ -22,6 +22,14 @@ async function configString(
   return Array.isArray(value) ? value[0] : value;
 }
 
+export async function hasUpstream(
+  client: TrackingClient,
+  dir: string,
+  branch: string,
+): Promise<boolean> {
+  return (await configString(client, dir, `branch.${branch}.remote`)) !== undefined;
+}
+
 async function oids(
   client: TrackingClient,
   dir: string,

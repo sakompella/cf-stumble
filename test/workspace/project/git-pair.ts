@@ -13,7 +13,7 @@ import * as fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Workspace } from "@cloudflare/computer";
-import { createGitClient, type GitCliResult } from "@cloudflare/computer/git";
+import { createGitClient, type GitCliInput, type GitCliResult } from "@cloudflare/computer/git";
 import { afterEach } from "vitest";
 import type { WorkFiles } from "../../../src/workspace/project/git-index-file.js";
 import { gitCli } from "../../../src/workspace/project/git-cli.js";
@@ -35,10 +35,15 @@ export const client = createGitClient({ adapter: () => Promise.resolve({ promise
   ws: { provider: () => workspace.provider() },
 });
 
+const FIXED_DATE = "2026-01-02T03:04:05Z";
+
 const IDENTITY = ["-c", "user.name=T", "-c", "user.email=t@e"];
 
 export function realGit(dir: string, args: readonly string[]): GitCliResult {
-  const ran = spawnSync("git", ["-C", dir, ...IDENTITY, ...args], { encoding: "utf8" });
+  const ran = spawnSync("git", ["-C", dir, ...IDENTITY, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, GIT_AUTHOR_DATE: FIXED_DATE, GIT_COMMITTER_DATE: FIXED_DATE },
+  });
 
   return { stdout: ran.stdout, stderr: ran.stderr, exitCode: ran.status ?? -1 };
 }
@@ -76,8 +81,16 @@ const FILES: WorkFiles = {
   list: (root) => Promise.resolve(listFiles(root)),
 };
 
+export function isolateGitWith(
+  cli: (input: GitCliInput) => Promise<GitCliResult>,
+  dir: string,
+  args: readonly string[],
+): Promise<GitCliResult> {
+  return gitCli(client, cli, { argv: [...IDENTITY, ...args], cwd: dir }, FILES);
+}
+
 export function isolateGit(dir: string, args: readonly string[]): Promise<GitCliResult> {
-  return gitCli(client, client.cli.bind(client), { argv: [...IDENTITY, ...args], cwd: dir }, FILES);
+  return isolateGitWith(client.cli.bind(client), dir, args);
 }
 
 export type Files = Readonly<Record<string, string>>;
