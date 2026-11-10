@@ -33,7 +33,6 @@
     "src/workspace/computer-operations.ts": ["exports"],
     "src/workspace/managed-instructions.ts": ["exports"],
     "src/workspace/project/computer-adapter.ts": ["exports"],
-    "src/workspace/project/exec-selection.ts": ["exports"],
     "src/workspace/project/isolate-egress.ts": ["exports"],
     "src/workspace/workspace-platform.ts": ["exports"],
     "src/page/client/sent-message.ts": ["exports"],
