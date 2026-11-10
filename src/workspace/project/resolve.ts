@@ -61,89 +61,6 @@ interface ResolveOptions {
   createMissingDirs: boolean;
 }
 
-type SegmentStep =
-  | { kind: "continue"; resolved: string }
-  | { kind: "settle"; result: ProjectResult<ResolveOutcome> };
-
-function stepPastMissing(
-  provider: ProjectFilesystemProvider,
-  options: ResolveOptions,
-  place: { resolved: string; candidate: string; segment: string; isLast: boolean },
-  addressed: string,
-): SegmentStep {
-  if (!place.isLast) {
-    if (!options.createMissingDirs) return { kind: "settle", result: fail("not-found", addressed) };
-    provider.mkdirSync(place.candidate);
-
-    return { kind: "continue", resolved: place.candidate };
-  }
-
-  return {
-    kind: "settle",
-    result: ok({ kind: "missing", parentPath: place.resolved, name: place.segment }),
-  };
-}
-
-function stepPastSymlink(
-  provider: ProjectFilesystemProvider,
-  queue: string[],
-  place: { resolved: string; candidate: string },
-  linkFollows: number,
-  addressed: string,
-): SegmentStep {
-  if (linkFollows > MAX_SYMLINK_FOLLOWS)
-    return { kind: "settle", result: fail("symlink-loop", addressed) };
-  const target = provider.readlinkSync(place.candidate);
-  queue.unshift(...splitTarget(target));
-
-  return { kind: "continue", resolved: target.startsWith("/") ? "/" : place.resolved };
-}
-
-function stepPastNode(
-  provider: ProjectFilesystemProvider,
-  options: ResolveOptions,
-  queue: string[],
-  place: { resolved: string; candidate: string; stat: ProjectStat; isLast: boolean },
-  linkFollows: number,
-  addressed: string,
-): SegmentStep {
-  if (place.stat.isSymbolicLink() && (!place.isLast || options.followFinalSymlink)) {
-    return stepPastSymlink(provider, queue, place, linkFollows, addressed);
-  }
-
-  if (place.isLast)
-    return {
-      kind: "settle",
-      result: ok({ kind: "resolved", path: place.candidate, stat: place.stat }),
-    };
-
-  if (!place.stat.isDirectory())
-    return { kind: "settle", result: fail("not-directory", addressed) };
-
-  return { kind: "continue", resolved: place.candidate };
-}
-
-function stepOneSegment(
-  provider: ProjectFilesystemProvider,
-  options: ResolveOptions,
-  queue: string[],
-  place: { resolved: string; candidate: string; segment: string; isLast: boolean },
-  linkFollows: number,
-  addressed: string,
-): SegmentStep {
-  try {
-    const stat = provider.lstatSync(place.candidate);
-
-    return stepPastNode(provider, options, queue, { ...place, stat }, linkFollows + 1, addressed);
-  } catch (cause) {
-    const code = mapProviderError(cause);
-
-    if (code !== "not-found") return { kind: "settle", result: fail(code, addressed) };
-
-    return stepPastMissing(provider, options, place, addressed);
-  }
-}
-
 export function resolveAddressedPath(
   provider: ProjectFilesystemProvider,
   segments: readonly string[],
@@ -156,9 +73,7 @@ export function resolveAddressedPath(
   const queue: string[] = [...segments];
   let linkFollows = 0;
 
-  while (queue.length > 0) {
-    const segment = queue.shift()!;
-
+  for (let segment = queue.shift(); segment !== undefined; segment = queue.shift()) {
     if (segment === ".") continue;
 
     if (segment === "..") {
@@ -171,21 +86,44 @@ export function resolveAddressedPath(
     const candidate = joinOne(resolved, segment);
 
     if (!isWithinRoot(candidate)) return fail("path-outside-root", addressed);
+
     const isLast = queue.length === 0;
+    let stat: ProjectStat;
 
-    const step = stepOneSegment(
-      provider,
-      options,
-      queue,
-      { resolved, candidate, segment, isLast },
-      linkFollows,
-      addressed,
-    );
+    try {
+      stat = provider.lstatSync(candidate);
+    } catch (cause) {
+      const code = mapProviderError(cause);
 
-    if (step.kind === "settle") return step.result;
+      if (code !== "not-found") return fail(code, addressed);
 
-    if (step.resolved !== candidate) linkFollows += 1;
-    resolved = step.resolved;
+      if (!isLast) {
+        if (!options.createMissingDirs) return fail("not-found", addressed);
+        provider.mkdirSync(candidate);
+        resolved = candidate;
+
+        continue;
+      }
+
+      return ok({ kind: "missing", parentPath: resolved, name: segment });
+    }
+
+    if (stat.isSymbolicLink() && (!isLast || options.followFinalSymlink)) {
+      if (linkFollows >= MAX_SYMLINK_FOLLOWS) return fail("symlink-loop", addressed);
+
+      const target = provider.readlinkSync(candidate);
+      queue.unshift(...splitTarget(target));
+      linkFollows += 1;
+      resolved = target.startsWith("/") ? "/" : resolved;
+
+      continue;
+    }
+
+    if (isLast) return ok({ kind: "resolved", path: candidate, stat });
+
+    if (!stat.isDirectory()) return fail("not-directory", addressed);
+
+    resolved = candidate;
   }
 
   if (!isWithinRoot(resolved)) return fail("path-outside-root", addressed);
