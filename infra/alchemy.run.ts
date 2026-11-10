@@ -41,6 +41,7 @@ export default Alchemy.Stack(
         : [],
       assets: { directory: shellModulesAssetDirectory, config: assetsConfig },
       cache,
+      codeUpdateStrategy: { mode: "immediate" },
       observability: observability(isProduction),
       env: {
         ...plainTextBindings,

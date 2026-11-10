@@ -60,7 +60,7 @@ export type Source<T> =
   | { readonly status: "unavailable"; readonly reason: string };
 
 export interface Finding {
-  readonly rule: "ran-past-idle" | "facet.session-failed" | "unknown";
+  readonly rule: "ran-past-idle" | "facet.session-failed" | "do-version-skew" | "unknown";
   readonly detail: string;
   readonly evidence: readonly string[];
 }

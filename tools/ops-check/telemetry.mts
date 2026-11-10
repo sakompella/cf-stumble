@@ -12,7 +12,7 @@ import type {
   TimeWindow,
 } from "./check.mts";
 
-const TELEMETRY_ROW_LIMIT = 2000;
+export const TELEMETRY_ROW_LIMIT = 2000;
 
 const RUN_STARTED_EVENT = "run.started";
 
@@ -63,7 +63,7 @@ const ModelCallRow = Schema.Struct({
 
 const decodeOption = Schema.decodeUnknownOption;
 
-function eventRows(response: JsonValue): readonly JsonValue[] {
+export function eventRows(response: JsonValue): readonly JsonValue[] {
   const rows = decodeOption(TelemetryEnvelope)(response);
 
   if (Option.isNone(rows)) {
@@ -74,7 +74,7 @@ function eventRows(response: JsonValue): readonly JsonValue[] {
 
   if (events.length >= TELEMETRY_ROW_LIMIT) {
     throw new ApiFailure(
-      `telemetry returned ${TELEMETRY_ROW_LIMIT} rows, the most it gives; use a shorter --since`,
+      `telemetry returned ${TELEMETRY_ROW_LIMIT} rows, the most it gives; narrow the window`,
     );
   }
 

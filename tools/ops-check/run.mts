@@ -19,6 +19,7 @@ import {
   fetchRunStarts,
   fetchSessionFailures,
 } from "./telemetry.mts";
+import { gatherVersions, versionFindings } from "./versions.mts";
 
 const USAGE = "usage: ops-check [--worker <name>] --since <90m|2h|1d>";
 
@@ -118,7 +119,10 @@ try {
 
 const input = await gather(options, nowMs);
 
-const findings = runChecks(input);
+const findings = [
+  ...runChecks(input),
+  ...versionFindings(await gatherVersions(options.worker, nowMs, process.env)),
+];
 
 const modelCalls = input.activity.status === "ok" ? await readModelCalls(options) : null;
 
