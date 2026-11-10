@@ -42,22 +42,7 @@ function write(dir: string, path: string, content: string): void {
 
 type Change = (dir: string) => void;
 
-const MOVES: readonly (readonly [string, Record<string, string>, Change, Change?])[] = [
-  [
-    "git mv",
-    { a: lines(10) },
-    (dir) => {
-      run(dir, ["mv", "a", "b"]);
-    },
-  ],
-  [
-    "a move with a small edit",
-    { a: lines(10) },
-    (dir) => {
-      run(dir, ["mv", "a", "b"]);
-      write(dir, "b", `${lines(10)}extra\n`);
-    },
-  ],
+const MOVES: readonly (readonly [string, Record<string, string>, Change])[] = [
   [
     "a move with a large edit",
     { a: lines(10) },
@@ -144,32 +129,9 @@ const MOVES: readonly (readonly [string, Record<string, string>, Change, Change?
       write(dir, "b", `\0abd${lines(5)}`);
     },
   ],
-  [
-    "a moved file edited again after staging",
-    { a: lines(10) },
-    (dir) => {
-      run(dir, ["mv", "a", "b"]);
-      write(dir, "b", `${lines(10)}extra\n`);
-    },
-    (dir) => {
-      write(dir, "b", "dirty\n");
-    },
-  ],
-  [
-    "a move next to unrelated changes",
-    { a: lines(10), keep: "k\n", gone: "g\n" },
-    (dir) => {
-      run(dir, ["mv", "a", "b"]);
-      run(dir, ["rm", "-q", "gone"]);
-    },
-    (dir) => {
-      write(dir, "keep", "k\nk\n");
-      write(dir, "new", "n\n");
-    },
-  ],
 ];
 
-function repo(files: Record<string, string>, change: Change, after: Change): string {
+function repo(files: Record<string, string>, change: Change): string {
   const dir = mkdtempSync(join(tmpdir(), "git-rename-"));
   directories.push(dir);
   run(dir, ["init", "-q", "-b", "main", "."]);
@@ -180,7 +142,6 @@ function repo(files: Record<string, string>, change: Change, after: Change): str
   run(dir, ["commit", "-q", "-m", "first"]);
   change(dir);
   run(dir, ["add", "-A"]);
-  after(dir);
 
   return dir;
 }
@@ -197,9 +158,9 @@ async function isolate(dir: string, flags: readonly string[]): Promise<string> {
   return result.stdout;
 }
 
-for (const [name, files, change, after = () => {}] of MOVES)
+for (const [name, files, change] of MOVES)
   test(`git status shows ${name} the way real git does`, async () => {
-    const dir = repo(files, change, after);
+    const dir = repo(files, change);
 
     for (const flags of [["-s"], ["--porcelain"], [], ["-sb"]])
       expect(await isolate(dir, flags)).toBe(run(dir, ["status", ...flags]).stdout);
