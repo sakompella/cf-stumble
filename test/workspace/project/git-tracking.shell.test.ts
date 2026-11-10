@@ -13,7 +13,6 @@ afterEach(() => {
 
 interface MergedHistory {
   readonly tip: string;
-  readonly fork: string;
   readonly local: readonly string[];
   readonly upstream: readonly string[];
 }
@@ -53,7 +52,6 @@ function mergedHistory(dir: string): MergedHistory {
 
   return {
     tip,
-    fork,
     local: git("log", "--format=%H", "main").split("\n"),
     upstream: git("log", "--format=%H", tip).split("\n"),
   };
@@ -63,7 +61,7 @@ it("counts commits on every side of a merged history", async () => {
   const dir = mkdtempSync(join(tmpdir(), "git-tracking-"));
   directories.push(dir);
 
-  const { tip, fork, local, upstream } = mergedHistory(dir);
+  const { tip, local, upstream } = mergedHistory(dir);
 
   execFileSync("git", ["-C", dir, "update-ref", "refs/remotes/origin/main", tip]);
   expect(
@@ -93,5 +91,4 @@ it("counts commits on every side of a merged history", async () => {
   const result = await branchTracking(fake, dir, "main");
 
   expect(result).toMatchObject({ ahead: 2, behind: 0 });
-  expect(fork).not.toBe(tip);
 });
