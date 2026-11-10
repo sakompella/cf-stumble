@@ -1,5 +1,5 @@
 import type * as Schema from "effect/Schema";
-import { isModelStreamEvent } from "../src/model-route-wire/events.js";
+import { isModelStreamEvent } from "../src/facet/generation-1/route-events.js";
 import type { ModelRouteRequest } from "../src/model-route-wire/request.js";
 import type { ModelStreamInference, ModelStreamEvent } from "../src/model-route-wire/events.js";
 import { workersAiTurn } from "../src/model-route-stream.js";

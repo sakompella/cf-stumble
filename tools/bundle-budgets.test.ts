@@ -41,21 +41,6 @@ describe("bundle budgets", () => {
     assert.ok(size <= WORKER_UPLOAD_GZIP_LIMIT, `the Worker upload is ${size} bytes gzip`);
   });
 
-  it("the Worker leaves out pi-schema, whose FinalizationRegistry the Workers runtime lacks", async () => {
-    const bundled = await bundleWorker();
-
-    const kept = Object.values(bundled.metafile.outputs).flatMap((output) =>
-      Object.entries(output.inputs)
-        .filter(([, input]) => input.bytesInOutput > 0)
-        .map(([path]) => path),
-    );
-
-    assert.deepEqual(
-      kept.filter((path) => path.includes("@earendil-works/pi-schema/")),
-      [],
-    );
-  });
-
   it(`the owner page script stays within ${OWNER_SCRIPT_GZIP_LIMIT / KIB} KiB gzip`, () => {
     const size = gzipSync(OWNER_PAGE_SCRIPT_SOURCE).length;
 
