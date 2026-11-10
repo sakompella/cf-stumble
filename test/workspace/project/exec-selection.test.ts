@@ -52,6 +52,10 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
   ["echo hi > /dev/stderr", undefined, "container"],
   ["cat /dev/zero", undefined, "container"],
   ["ls /dev", undefined, "container"],
+  ["echo >/bin", undefined, "container"],
+  ["echo hi>/tmp/x", undefined, "container"],
+  ["cat </etc/hosts", undefined, "container"],
+  [">ls node", undefined, "container"],
 ];
 
 describe("routedBackend", () => {
