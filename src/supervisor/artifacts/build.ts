@@ -2,7 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { logRedactedCause, redactLogText } from "../../diagnostics.js";
+import { isTimeoutFailure, logRedactedCause, redactLogText } from "../../diagnostics.js";
 import { ModuleMapSchema, parseMainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifact, MainHarnessArtifactProblem } from "../../facet/index.js";
 import { HARNESS_BUILD_STEP_NAMES } from "../../harness-build.js";
@@ -141,18 +141,9 @@ function runStep(
     { kind: "build-step", harnessCommit, step },
     `the ${step} step`,
   ).pipe(
-    Effect.catchTag("TimeoutError", (error) =>
-      Effect.suspend(() => {
-        logRedactedCause(`harness-build.${step}: timeout`, error);
-
-        return Effect.fail<HarnessBuildProblem>({
-          code: "build-workspace-unavailable",
-          harnessCommit,
-        });
-      }),
-    ),
     Effect.mapError((error): HarnessBuildProblem => {
-      logRedactedCause(`harness-build.${step}: build-workspace-unavailable`, error);
+      const reason = isTimeoutFailure(error) ? "timeout" : "build-workspace-unavailable";
+      logRedactedCause(`harness-build.${step}: ${reason}`, error);
 
       return { code: "build-workspace-unavailable", harnessCommit };
     }),

@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import * as Result from "effect/Result";
 import { resultOf } from "../../effect-result.js";
 import { HARNESS_BUILD_STEP_NAMES } from "../../../src/harness-build.js";
+import { WORKSPACE_RPC_TIMEOUT_MS } from "../../../src/workspace-command-timeout.js";
 import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import { parsedArtifact } from "../../facet/fixture.js";
@@ -18,6 +19,7 @@ import {
 import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -228,5 +230,30 @@ test("a refused or unreachable build workspace stays a typed failure", async () 
   expect(results.map((result) => (Result.isFailure(result) ? result.failure : "ok"))).toEqual([
     { code: "build-workspace-unavailable", harnessCommit: BUILD_COMMIT },
     { code: "build-workspace-unavailable", harnessCommit: BUILD_COMMIT },
+  ]);
+});
+
+test("a step the workspace never answers fails as unavailable at the RPC deadline, logged once with its timeout", async () => {
+  vi.useFakeTimers();
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const host = new FakeBuildHost();
+  const build = host.build.bind(host);
+
+  host.build = (request) =>
+    request.kind === "build-step" && request.step === "install"
+      ? build(request).then(() => new Promise(() => {}))
+      : build(request);
+
+  const building = built(host);
+  await vi.advanceTimersByTimeAsync(WORKSPACE_RPC_TIMEOUT_MS);
+  const result = await building;
+
+  expect(Result.isFailure(result) ? result.failure : "built").toEqual({
+    code: "build-workspace-unavailable",
+    harnessCommit: BUILD_COMMIT,
+  });
+  expect(host.steps().slice(-2)).toEqual(["install", "build-discard"]);
+  expect(errors.mock.calls.map(([line]) => String(line))).toEqual([
+    expect.stringMatching(/^harness-build\.install: .*timed out/u),
   ]);
 });
