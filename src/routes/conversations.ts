@@ -50,24 +50,22 @@ function problemResponse(problem: ConversationProblem): Response {
   return Response.json({ ok: false, problem }, { status: PROBLEM_STATUS[problem.code] });
 }
 
-function eventsResponse(events: ReadableStream<Uint8Array>): Response {
-  return new Response(events, {
+function noStoreResponse(body: ReadableStream<Uint8Array> | string, contentType: string): Response {
+  return new Response(body, {
     headers: {
-      "content-type": "application/x-ndjson; charset=utf-8",
+      "content-type": contentType,
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
     },
   });
 }
 
+function eventsResponse(events: ReadableStream<Uint8Array>): Response {
+  return noStoreResponse(events, "application/x-ndjson; charset=utf-8");
+}
+
 function entriesPageResponse(page: string): Response {
-  return new Response(page, {
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-      "x-content-type-options": "nosniff",
-    },
-  });
+  return noStoreResponse(page, "application/json; charset=utf-8");
 }
 
 function answer<T extends object>(
