@@ -73,6 +73,10 @@ const PLATFORM_STREAM_REJECTIONS = [
     file: "test/supervisor/conversations/generation-1.test.ts",
     message: "ReadableStream received over RPC disconnected prematurely.",
   },
+  {
+    file: "test/supervisor/conversations/generation-reactivation.test.ts",
+    message: "ReadableStream received over RPC disconnected prematurely.",
+  },
 ] as const;
 
 function isPlatformStreamNoise(error: { message?: string; VITEST_TEST_PATH?: string }): boolean {

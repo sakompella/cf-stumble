@@ -60,7 +60,7 @@ A generation must also speak the Supervisor's current facet-to-Supervisor protoc
 
 ## Harness execution
 
-The harness source is TypeScript, while Dynamic Workers need Worker-executable modules. Computer builds a canonical module map for a labeled harness commit. The Supervisor validates it and stores it in R2 under that commit, so nothing rebuilds to serve or roll back. ADR-0028 defines the artifact. The Supervisor uses the commit ID as the Worker Loader name, because Loader names are cached and a changed commit must not reuse old code.
+The harness source is TypeScript, while Dynamic Workers need Worker-executable modules. Computer builds a canonical module map for a labeled harness commit. The Supervisor validates it and stores it in R2 under that commit, so nothing rebuilds to serve or roll back. ADR-0028 defines the artifact. The Supervisor names the serving Worker Loader entry by the commit ID and the serving instance (ADR-0027), because Loader names are cached with their `env`, and a changed commit or a replaced instance must not reuse an old entry.
 
 ### Build isolation
 

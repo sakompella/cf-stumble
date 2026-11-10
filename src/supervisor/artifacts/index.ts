@@ -9,7 +9,7 @@ import type { HarnessCommit } from "../../harness-commit.js";
 import { ModuleMapStore } from "./store.js";
 import type { StoredModuleMapProblem } from "./store.js";
 import { buildModuleMap, type HarnessBuildProblem } from "./build.js";
-import { SERVING_FACET_NAME } from "./facet-name.js";
+import { SERVING_FACET_NAME, servingLoaderName } from "./facet-name.js";
 import type { ActiveGeneration } from "../generations.js";
 import type { WorkspaceHostRpc } from "../../workspace/index.js";
 
@@ -51,10 +51,16 @@ export class HarnessArtifacts {
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
     modelRoute: MainFacetCapabilities["MODEL"],
+    instance: number,
   ): Effect.Effect<MountedFacet, MainFacetMountProblem> {
     return this.load(active).pipe(
       Effect.map((artifact) => {
-        const { facetClass } = loadMainFacet(loader, artifact, { MODEL: modelRoute });
+        const { facetClass } = loadMainFacet(
+          loader,
+          artifact,
+          { MODEL: modelRoute },
+          servingLoaderName(artifact.harnessCommit, instance),
+        );
 
         return facets.get<MainFacetTarget>(SERVING_FACET_NAME, () => ({ class: facetClass }));
       }),
