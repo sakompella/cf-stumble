@@ -78,11 +78,9 @@ test("reports the recorded label with a preparation failure, without echoing the
   );
 
   expect(response.status).toBe(500);
-  expect(await response.text()).toBe(
-    JSON.stringify({
-      ok: false,
-      error: { code: "preparation-failed" },
-      recorded: { label: generationLabel(1), harnessCommit },
-    }),
-  );
+  await expect(response.json()).resolves.toEqual({
+    ok: false,
+    error: { code: "preparation-failed" },
+    recorded: { label: generationLabel(1), harnessCommit },
+  });
 });
