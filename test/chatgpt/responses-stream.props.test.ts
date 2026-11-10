@@ -1,29 +1,55 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
+import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
-import { ResponsesStreamReader } from "../../src/chatgpt/responses.js";
-import { ProviderStreamAccumulator } from "../../src/model-route-stream.js";
+import { chatgptTurn } from "../../src/chatgpt/index.js";
+import { modelEventStream } from "../../src/model-route-turn.js";
+import { collectEvents } from "../model-route-provider-stream.js";
+import { ACCESS_ONE, fakeCredential, ready, recordingFetch, sseResponse } from "./fixtures.js";
 
 function streamed(events: readonly object[]) {
-  const accumulator = new ProviderStreamAccumulator(() => {});
-  const reader = new ResponsesStreamReader(accumulator);
-  const ended = events.map((event) => reader.handleEvent(JSON.stringify(event)));
+  const { fetcher } = recordingFetch(() =>
+    Promise.resolve(sseResponse(events.map((event) => `data: ${JSON.stringify(event)}\n\n`))),
+  );
 
-  return { accumulator, reader, ended };
+  const turn = chatgptTurn(
+    { credential: fakeCredential([ready(ACCESS_ONE)]), fetcher, model: "gpt-test" },
+    { messages: [{ role: "user", content: "hi" }] },
+  );
+
+  return collectEvents(
+    modelEventStream((emit) =>
+      turn(emit).pipe(
+        Effect.catchTag(["ChatGPTNotConnected", "ChatGPTUsageLimited"], () =>
+          Effect.die(new Error("this test expects a connected credential with no usage limit")),
+        ),
+      ),
+    ),
+  );
 }
 
 const delta = gs.text({ minSize: 1, maxSize: 20 });
+
+const USAGE_LIMIT_CODES = new Set([
+  "rate_limit_exceeded",
+  "rate_limit_error",
+  "insufficient_quota",
+]);
+
+const incompleteReason = gs
+  .oneOf(gs.sampledFrom(["max_output_tokens", "content_filter"]), gs.fromRegex("[a-z_]{1,20}"))
+  .filter((reason) => !USAGE_LIMIT_CODES.has(reason));
 
 const usage = gs
   .tuples(gs.integers({ minValue: 0, maxValue: 1e6 }), gs.integers({ minValue: 0, maxValue: 1e6 }))
   .map(([inputTokens, outputTokens]) => ({ inputTokens, outputTokens }));
 
-test("a refusal reaches the answer as text, in stream order with any output text", () => {
-  hegel.test((tc) => {
+test("a refusal reaches the answer as text, in stream order with any output text", async () => {
+  await hegel.testAsync(async (tc) => {
     const parts = tc.draw(gs.arrays(gs.tuples(gs.booleans(), delta), { maxSize: 6 }));
     const refusal = parts.flatMap(([refused, text]) => (refused ? [text] : [])).join("");
 
-    const { accumulator, reader } = streamed([
+    const events = await streamed([
       ...parts.map(([refused, text]) => ({
         type: refused ? "response.refusal.delta" : "response.output_text.delta",
         delta: text,
@@ -32,23 +58,23 @@ test("a refusal reaches the answer as text, in stream order with any output text
       { type: "response.completed", response: {} },
     ]);
 
-    expect(reader.failure).toBeUndefined();
-    expect(accumulator.result().content).toBe(
-      parts.length === 0 ? null : parts.map(([, text]) => text).join(""),
+    expect(events.flatMap((event) => (event.type === "text-delta" ? [event.delta] : []))).toEqual(
+      parts.map(([, text]) => text),
     );
+    expect(events.at(-1)).toMatchObject({
+      type: "done",
+      message: { content: parts.length === 0 ? null : parts.map(([, text]) => text).join("") },
+    });
   });
 });
 
-test("an incomplete response ends the turn truncated with its usage only when the output limit stopped it", () => {
-  hegel.test((tc) => {
-    const reason = tc.draw(
-      gs.oneOf(gs.sampledFrom(["max_output_tokens", "content_filter"]), gs.text({ maxSize: 20 })),
-    );
-
+test("an incomplete response ends the turn truncated with its usage only when the output limit stopped it", async () => {
+  await hegel.testAsync(async (tc) => {
+    const reason = tc.draw(incompleteReason);
     const text = tc.draw(delta);
     const reported = tc.draw(usage);
 
-    const { accumulator, reader, ended } = streamed([
+    const events = await streamed([
       { type: "response.output_text.delta", delta: text },
       {
         type: "response.incomplete",
@@ -57,14 +83,19 @@ test("an incomplete response ends the turn truncated with its usage only when th
           usage: { input_tokens: reported.inputTokens, output_tokens: reported.outputTokens },
         },
       },
+      { type: "response.output_text.delta", delta: "after the end" },
     ]);
 
-    const lengthStop = reason === "max_output_tokens";
-
-    expect(ended).toEqual([false, true]);
-    expect(reader.failure === undefined).toBe(lengthStop);
-    expect(accumulator.truncated).toBe(lengthStop);
-    expect(accumulator.usage()).toEqual(lengthStop ? reported : undefined);
-    expect(accumulator.result().content).toBe(text);
+    expect(events).toEqual([
+      { type: "text-delta", delta: text },
+      reason === "max_output_tokens"
+        ? {
+            type: "done",
+            message: { role: "assistant", content: text, tool_calls: [] },
+            usage: { ...reported, estimated: false },
+            truncated: true,
+          }
+        : { type: "error", error: { code: "model-unavailable", detail: reason } },
+    ]);
   });
 });
