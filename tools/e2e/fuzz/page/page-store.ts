@@ -42,8 +42,11 @@ export function postLog(window: Window): readonly string[] {
   return lines(window, POSTS_KEY);
 }
 
-export function recordPost(window: Window, body: string): void {
-  append(window, POSTS_KEY, body.replaceAll("\n", " ").slice(0, 400));
+export function recordPost(window: Window, body: string, mode: string): void {
+  const requestId = /"requestId":"([^"]*)"/u.exec(body)?.[1] ?? "";
+  const content = body.replaceAll("\n", " ").slice(0, 300);
+
+  append(window, POSTS_KEY, [String(Date.now()), mode, requestId, content].join(" "));
 }
 
 export function auditedCount(window: Window): number {
