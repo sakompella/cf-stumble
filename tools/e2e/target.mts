@@ -23,6 +23,7 @@ export type TargetOptions = Readonly<{
   runId: string;
   url: string | undefined;
   stage: string | undefined;
+  prefix?: string;
   password: string;
   env: NodeJS.ProcessEnv;
 }>;
@@ -41,7 +42,8 @@ export class Target {
     this.#options = options;
     this.runId = options.runId;
     this.fresh = options.url === undefined && options.stage === undefined;
-    this.stage = options.stage ?? (this.fresh ? `e2e-${options.runId}` : undefined);
+    this.stage =
+      options.stage ?? (this.fresh ? `${options.prefix ?? "e2e"}-${options.runId}` : undefined);
     this.github = new GitHub(options.env["GH_TOKEN"] ?? "");
   }
 
@@ -109,7 +111,7 @@ export class Target {
     });
   }
 
-  async deleteBranches(): Promise<void> {
+  async #runBranches(): Promise<readonly string[]> {
     const marker = markerPath(this.runId, "-gen");
     const selfModify = await this.github.branches("self-modify/");
 
@@ -119,9 +121,15 @@ export class Target {
       ),
     );
 
-    for (const branch of [...(await this.github.branches(`e2e/${this.runId}`)), ...marked.flat()]) {
-      await this.github.deleteBranch(branch);
-    }
+    return [...(await this.github.branches(`e2e/${this.runId}`)), ...marked.flat()];
+  }
+
+  async deleteBranches(): Promise<void> {
+    for (const branch of await this.#runBranches()) await this.github.deleteBranch(branch);
+
+    const left = await this.#runBranches();
+
+    if (left.length > 0) throw new Error(`branches left on GitHub: ${left.join(", ")}`);
   }
 
   async restore(): Promise<void> {
