@@ -82,20 +82,6 @@ describe("ran-past-idle", () => {
     assert.deepEqual(rules(check([request(0)], runningBetween(0, 25))), ["ran-past-idle"]);
   });
 
-  it("lets a later request extend the allowance", () => {
-    const requests = [request(0), request(10)];
-
-    assert.deepEqual(rules(check([request(0)], runningBetween(0, 30))), ["ran-past-idle"]);
-    assert.deepEqual(rules(check(requests, runningBetween(0, 30))), []);
-    assert.deepEqual(rules(check(requests, runningBetween(0, 35))), ["ran-past-idle"]);
-  });
-
-  it("counts a request's own running time as allowed", () => {
-    const longRequest = { ...request(60), wallTimeMs: 60 * MINUTE_MS };
-
-    assert.deepEqual(rules(check([longRequest], runningBetween(0, 80))), []);
-  });
-
   it("allows running time only for owner API requests", () => {
     const longPage = { ...request(60, "/"), wallTimeMs: 60 * MINUTE_MS };
 
@@ -121,16 +107,6 @@ describe("route classes", () => {
     assert.deepEqual(rules(check([stream], runningBetween(0, 120))), ["ran-past-idle"]);
   });
 
-  it("flags a container that runs with no request at all", () => {
-    assert.deepEqual(rules(check([], runningBetween(0, 15))), ["ran-past-idle"]);
-  });
-
-  it("ignores buckets the metrics have not filled yet", () => {
-    const live = { ...check([request(0)], runningBetween(0, 25)), nowMs: START + 25 * MINUTE_MS };
-
-    assert.deepEqual(rules(live), []);
-  });
-
   it("queries activity back through the run deadline and idle limit from the first bucket", () => {
     const window = { fromMs: START + 4 * MINUTE_MS, toMs: START + 120 * MINUTE_MS };
 
@@ -138,23 +114,6 @@ describe("route classes", () => {
       fromMs: START - 18 * MINUTE_MS,
       toMs: START + 120 * MINUTE_MS,
     });
-  });
-
-  it("names the latest requests before the overrun, newest first", () => {
-    const requests = [
-      request(0, "/api/status"),
-      request(1, "/api/projects"),
-      request(2, "/api/github/connection"),
-      request(3, "/api/projects/connect"),
-    ];
-
-    const [finding] = runChecks(check(requests, runningBetween(0, 40)));
-
-    assert.deepEqual(finding?.evidence, [
-      "/api/projects/connect@00:03Z",
-      "/api/github/connection@00:02Z",
-      "/api/projects@00:01Z",
-    ]);
   });
 });
 

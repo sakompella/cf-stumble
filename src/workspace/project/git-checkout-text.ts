@@ -1,6 +1,7 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import { reportingFailure, restoreCommand } from "./git-index-commands.js";
 import type { GitScope, RunCli } from "./git-cli.js";
+import type { ReadFile } from "./git-index-file.js";
 import { branchTracking, trackingLines } from "./git-tracking.js";
 
 const CREATE = new Set(["-b", "-c"]);
@@ -55,13 +56,14 @@ export async function checkoutWithMessages(
   cli: RunCli,
   input: GitCliInput,
   scope: GitScope,
+  readFile: ReadFile,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
   const separator = args.indexOf("--");
 
   if (input.argv[0] === "checkout" && separator === 0)
     return reportingFailure(() =>
-      restoreCommand(client, { ...input, argv: ["restore", ...args] }, scope),
+      restoreCommand(client, { ...input, argv: ["restore", ...args] }, scope, readFile),
     );
 
   if (separator !== -1) return cli(input);

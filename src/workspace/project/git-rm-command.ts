@@ -1,6 +1,7 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope } from "./git-cli.js";
 import { failure, rooted, under } from "./git-index-commands.js";
+import type { ReadFile } from "./git-index-file.js";
 import { statusLines, type StatusLine } from "./git-status.js";
 
 export type RemoveFile = (path: string, stop: string) => Promise<void>;
@@ -122,6 +123,7 @@ export async function rmCommand(
   input: GitCliInput,
   scope: GitScope,
   removeFile: RemoveFile,
+  readFile: ReadFile,
 ): Promise<GitCliResult> {
   const request = rmRequest(input.argv.slice(1));
   const { flags } = request;
@@ -153,7 +155,10 @@ export async function rmCommand(
     for (const file of matches) removed.add(file);
   }
 
-  const lines = (await statusLines(client, scope.dir)).filter((line) => removed.has(line.path));
+  const lines = (await statusLines(client, scope.dir, readFile)).filter((line) =>
+    removed.has(line.path),
+  );
+
   const refused = flags.has("force") ? "" : refusal(lines, flags.has("cached"));
 
   if (refused !== "") return { stdout: "", stderr: refused, exitCode: 1 };

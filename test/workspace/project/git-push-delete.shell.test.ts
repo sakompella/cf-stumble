@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { pushDelete } from "../../../src/workspace/project/git-index-commands.js";
+import { pushDelete } from "../../../src/workspace/project/git-push-delete.js";
 
 const directories: string[] = [];
 

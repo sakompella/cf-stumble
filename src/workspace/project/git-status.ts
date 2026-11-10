@@ -1,4 +1,5 @@
 import type { GitClient, StatusEntry } from "@cloudflare/computer/git";
+import type { ReadFile } from "./git-index-file.js";
 
 export interface StatusLine {
   readonly path: string;
@@ -16,22 +17,39 @@ const SWAPPED = new Map([
   ["M", " "],
 ]);
 
-function correctedLines(entries: readonly StatusEntry[]): StatusLine[] {
-  return entries.flatMap((entry): StatusLine[] => {
-    const { path, index, worktree } = entry;
+async function exists(readFile: ReadFile, dir: string, path: string): Promise<boolean> {
+  try {
+    await readFile(`${dir.replace(/\/$/u, "")}/${path}`);
 
-    if (worktree === "?") return [{ path, x: "?", y: "?" }];
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-    if (index === "D" && worktree === "M")
-      return [
-        { path, x: "D", y: " " },
-        { path, x: "?", y: "?" },
-      ];
+async function correctedLines(
+  entries: readonly StatusEntry[],
+  present: (path: string) => Promise<boolean>,
+): Promise<StatusLine[]> {
+  const lines = await Promise.all(
+    entries.map(async (entry): Promise<StatusLine[]> => {
+      const { path, index, worktree } = entry;
 
-    const y = index === "A" || index === "M" ? SWAPPED.get(worktree) : undefined;
+      if (worktree === "?") return [{ path, x: "?", y: "?" }];
 
-    return [{ path, x: index, y: y ?? worktree }];
-  });
+      if (index === "D" && (worktree === "M" || (worktree === " " && (await present(path)))))
+        return [
+          { path, x: "D", y: " " },
+          { path, x: "?", y: "?" },
+        ];
+
+      const y = index === "A" || index === "M" ? SWAPPED.get(worktree) : undefined;
+
+      return [{ path, x: index, y: y ?? worktree }];
+    }),
+  );
+
+  return lines.flat();
 }
 
 function parentDirectories(path: string): string[] {
@@ -64,12 +82,23 @@ function trackedFirst(lines: readonly StatusLine[]): StatusLine[] {
   return [...lines.filter((line) => line.x !== "?"), ...lines.filter((line) => line.x === "?")];
 }
 
-export async function fileStatusLines(client: GitClient, dir: string): Promise<StatusLine[]> {
-  return trackedFirst(correctedLines(await client.status({ dir })));
+export async function fileStatusLines(
+  client: GitClient,
+  dir: string,
+  readFile: ReadFile,
+): Promise<StatusLine[]> {
+  const entries = await client.status({ dir });
+
+  return trackedFirst(await correctedLines(entries, (path) => exists(readFile, dir, path)));
 }
 
-export async function statusLines(client: GitClient, dir: string): Promise<StatusLine[]> {
-  const corrected = correctedLines(await client.status({ dir }));
+export async function statusLines(
+  client: GitClient,
+  dir: string,
+  readFile: ReadFile,
+): Promise<StatusLine[]> {
+  const entries = await client.status({ dir });
+  const corrected = await correctedLines(entries, (path) => exists(readFile, dir, path));
   const nested = corrected.some((line) => line.x === "?" && line.path.includes("/"));
   const lines = nested ? collapseUntracked(corrected, await client.lsFiles({ dir })) : corrected;
 

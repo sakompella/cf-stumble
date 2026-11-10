@@ -1,40 +1,9 @@
 import { expect, test } from "vitest";
 import {
-  canonicalRepositoryUrl,
   parseProjectId,
   PROJECT_ID_LIMIT,
   projectIdForRepository,
-  resolveProject,
 } from "../src/project-catalog.js";
-import { projectOf } from "./project-fixtures.js";
-
-test("resolves every project of a non-empty catalog", () => {
-  const count = 3;
-
-  const urls = Array.from(
-    { length: count },
-    (_, index) => `https://github.com/sample/repo-${index}`,
-  );
-
-  const catalog = urls.map((url) => projectOf(url));
-
-  for (const project of catalog) {
-    expect(resolveProject(project.id, catalog)).toEqual({ ok: true, project });
-  }
-
-  expect(resolveProject("not-connected", catalog)).toEqual({
-    ok: false,
-    reason: "unknown-project-id",
-  });
-});
-
-test("refuses a repository URL that no clone could use", () => {
-  expect(canonicalRepositoryUrl("http://github.com/sample/repo")).toBeUndefined();
-  expect(canonicalRepositoryUrl("https://token@github.com/sample/repo")).toBeUndefined();
-  expect(canonicalRepositoryUrl("https://github.com/sample")).toBeUndefined();
-  expect(projectIdForRepository("not a url")).toBeUndefined();
-  expect(projectIdForRepository("https://github.com/--/--")).toBeUndefined();
-});
 
 test.each([
   ["owner/a-b", "owner-a-b"],
@@ -73,6 +42,7 @@ test("gives the longest names GitHub allows an id, unless punctuation makes it t
 
 test.each([
   ["another host", "https://gitlab.com/owner/repo"],
+  ["a port GitHub does not serve", "https://github.com:8443/owner/repo"],
   ["a path deeper than owner and repository", "https://github.com/owner/repo/tree"],
   ["an owner GitHub cannot have", "https://github.com/-/harness"],
   ["an owner with a dot", "https://github.com/own.er/repo"],

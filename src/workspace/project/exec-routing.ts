@@ -42,6 +42,9 @@ function firstWords(command: string): string[][] | undefined {
       quote = char;
     } else if (REFUSED_OUTSIDE_QUOTES.has(char) || (char === "<" && next === "<")) {
       return undefined;
+    } else if (char === "<" || char === ">") {
+      endWord();
+      words.push(char);
     } else if (char === "&" && command.charAt(index - 1) === ">") {
       word += char;
     } else if (SEGMENT_BREAKS.has(char)) {

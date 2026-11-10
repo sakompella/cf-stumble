@@ -4,12 +4,12 @@ import { checkoutWithMessages } from "./git-checkout-text.js";
 import { commitWithSummary } from "./git-commit-text.js";
 import {
   addCommand,
-  pushDelete,
   reportingFailure,
   resetCommand,
   restoreCommand,
 } from "./git-index-commands.js";
-import type { ReadFile } from "./git-rename.js";
+import { pushDelete } from "./git-push-delete.js";
+import type { ReadFile } from "./git-index-file.js";
 import { rmCommand, type RemoveFile } from "./git-rm-command.js";
 import { statusCommand } from "./git-status-command.js";
 
@@ -117,20 +117,21 @@ export async function gitCli(
         cli,
         await withConfiguredIdentity(client, input, scope.dir),
         scope,
+        readFile,
       );
     case "checkout":
     case "switch":
-      return checkoutWithMessages(client, cli, input, scope);
+      return checkoutWithMessages(client, cli, input, scope, readFile);
     case "branch":
       return verboseBranches(client, cli, input, scope);
     case "add":
-      return reportingFailure(() => addCommand(client, cli, input, scope));
+      return reportingFailure(() => addCommand(client, cli, input, scope, readFile));
     case "rm":
-      return reportingFailure(() => rmCommand(client, input, scope, removeFile));
+      return reportingFailure(() => rmCommand(client, input, scope, removeFile, readFile));
     case "reset":
-      return reportingFailure(() => resetCommand(client, cli, input, scope));
+      return reportingFailure(() => resetCommand(client, cli, input, scope, readFile));
     case "restore":
-      return reportingFailure(() => restoreCommand(client, input, scope));
+      return reportingFailure(() => restoreCommand(client, input, scope, readFile));
     case "push":
       return cli(pushDelete(input));
     default:

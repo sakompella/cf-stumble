@@ -1,9 +1,7 @@
 import type { GitClient } from "@cloudflare/computer/git";
-import { parseIndex, type IndexEntry } from "./git-index-file.js";
+import { parseIndex, type IndexEntry, type ReadFile } from "./git-index-file.js";
 import { MINIMUM_SCORE, similarity } from "./git-rename-similarity.js";
 import type { StatusLine } from "./git-status.js";
-
-export type ReadFile = (path: string) => Promise<Uint8Array>;
 
 const RENAME_LIMIT = 1000;
 

@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "vitest": {
+    "configFile": "vitest.mutation.config.ts"
+  },
+  "tsconfigFile": "",
+  "mutate": [
+    "src/supervisor/conversations/run-machine.ts",
+    "src/supervisor/generation-machine.ts",
+    "src/supervisor/projects/project-lifecycle-machine.ts",
+    "src/supervisor/projects/github-connection-machine.ts",
+    "src/workspace/container-lifecycle.ts",
+    "src/workspace/project/exec-routing.ts",
+    "src/workspace/project/exec-selection.ts",
+    "src/workspace/project/start-exec-input.ts",
+    "src/workspace/project/git-status.ts",
+    "src/workspace/project/git-status-text.ts",
+    "src/workspace/project/git-status-command.ts",
+    "src/workspace/project/git-rename.ts",
+    "src/workspace/project/git-rename-similarity.ts",
+    "src/github/redaction.ts",
+    "src/model-route-stream-parse.ts",
+    "src/facet/generation-1/route-events.ts",
+    "src/project-catalog.ts",
+    "src/github/device-flow.ts"
+  ],
+  "coverageAnalysis": "perTest",
+  "reporters": ["clear-text", "progress", "html", "json"],
+  "htmlReporter": {
+    "fileName": "build/mutation/index.html"
+  },
+  "jsonReporter": {
+    "fileName": "build/mutation/report.json"
+  },
+  "tempDirName": "build/stryker-tmp"
+}

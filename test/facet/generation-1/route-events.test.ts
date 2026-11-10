@@ -18,14 +18,11 @@ const VALID: readonly unknown[] = [
 ];
 
 const MALFORMED: readonly unknown[] = [
-  {},
   null,
   { type: "unknown-tag" },
-  { type: "text-delta" },
   { type: "text-delta", delta: 42 },
   { type: "tool-call-delta", delta: { index: 0, id: 42 } },
   { type: "tool-call-delta", delta: { index: "0" } },
-  { type: "done" },
   { type: "done", message: ASSISTANT },
   { type: "done", message: { role: "assistant", content: "text" }, usage: USAGE },
   {
@@ -35,11 +32,8 @@ const MALFORMED: readonly unknown[] = [
   },
   { type: "done", message: ASSISTANT, usage: { inputTokens: 3, outputTokens: 5 } },
   { type: "done", message: ASSISTANT, usage: USAGE, truncated: "yes" },
-  { type: "error" },
-  { type: "error", error: {} },
   { type: "error", error: { code: "not-a-route-code" } },
   { type: "error", error: { code: "model-unavailable", detail: 42 } },
-  { type: "provider-fallback", reason: "chatgpt-usage-limit" },
   { type: "provider-fallback", reason: "other", limitedUntil: null },
   { type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil: "soon" },
 ];

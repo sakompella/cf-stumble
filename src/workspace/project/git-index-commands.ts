@@ -1,5 +1,6 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
+import type { ReadFile } from "./git-index-file.js";
 import { fileStatusLines, statusLines, type StatusLine } from "./git-status.js";
 
 const OK: GitCliResult = { stdout: "", stderr: "", exitCode: 0 };
@@ -62,6 +63,7 @@ export async function addCommand(
   cli: RunCli,
   input: GitCliInput,
   scope: GitScope,
+  readFile: ReadFile,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
   const rest = without(args, ["-u", "--update"]);
@@ -79,7 +81,7 @@ export async function addCommand(
       specs.push(at);
     }
 
-    const lines = await fileStatusLines(client, scope.dir);
+    const lines = await fileStatusLines(client, scope.dir, readFile);
     const matched = lines.filter((line) => specs.some((spec) => under(line.path, spec)));
 
     const missed = specs.find(
@@ -94,7 +96,7 @@ export async function addCommand(
     return OK;
   }
 
-  const tracked = (await statusLines(client, scope.dir)).filter(
+  const tracked = (await statusLines(client, scope.dir, readFile)).filter(
     (line) => line.x !== "?" && line.y !== " ",
   );
 
@@ -122,14 +124,19 @@ async function resolves(client: GitClient, dir: string, ref: string): Promise<st
   }
 }
 
-async function resetReport(client: GitClient, dir: string, hard: boolean): Promise<string> {
+async function resetReport(
+  client: GitClient,
+  dir: string,
+  hard: boolean,
+  readFile: ReadFile,
+): Promise<string> {
   if (hard) {
     const head = await client.show({ dir, ref: "HEAD" });
 
     return `HEAD is now at ${head.oid.slice(0, 7)} ${head.message.split("\n")[0] ?? ""}\n`;
   }
 
-  const unstaged = (await statusLines(client, dir)).filter(
+  const unstaged = (await statusLines(client, dir, readFile)).filter(
     (line) => line.x !== "?" && line.y !== " ",
   );
 
@@ -186,6 +193,7 @@ export async function resetCommand(
   cli: RunCli,
   input: GitCliInput,
   scope: GitScope,
+  readFile: ReadFile,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
   const result = await resetWithoutReport(client, cli, input, scope, args);
@@ -193,7 +201,10 @@ export async function resetCommand(
 
   if (result.exitCode !== 0 || quiet) return result;
 
-  return { ...result, stdout: await resetReport(client, scope.dir, args.includes("--hard")) };
+  return {
+    ...result,
+    stdout: await resetReport(client, scope.dir, args.includes("--hard"), readFile),
+  };
 }
 
 const RESTORE_USAGE =
@@ -309,6 +320,7 @@ export async function restoreCommand(
   client: GitClient,
   input: GitCliInput,
   scope: GitScope,
+  readFile: ReadFile,
 ): Promise<GitCliResult> {
   const request = restoreRequest(input.argv.slice(1));
   const dir = scope.dir;
@@ -340,7 +352,7 @@ export async function restoreCommand(
 
   const tracked = await client.lsFiles({ dir });
 
-  const changed = (await statusLines(client, dir)).filter(
+  const changed = (await statusLines(client, dir, readFile)).filter(
     (line) => line.x !== " " && line.x !== "?",
   );
 
@@ -368,19 +380,6 @@ export async function restoreCommand(
   }
 
   return restoreWorktree(client, dir, source, matched, changed);
-}
-
-export function pushDelete(input: GitCliInput): GitCliInput {
-  const colon = input.argv.findIndex((arg, index) => index > 0 && /^:[^:]+$/u.test(arg));
-
-  if (colon === -1) return input;
-
-  return {
-    ...input,
-    argv: input.argv.flatMap((arg, index) =>
-      index === colon ? ["--delete", arg.slice(1)] : [arg],
-    ),
-  };
 }
 
 export async function reportingFailure(run: () => Promise<GitCliResult>): Promise<GitCliResult> {
