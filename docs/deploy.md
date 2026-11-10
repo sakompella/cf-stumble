@@ -82,7 +82,7 @@ A request that changes state (any method but `GET` and `HEAD`) must also come fr
 GitHub Actions deploys production. Two workflows in `.github/workflows/` do the work:
 
 - `verify.yml` runs `pnpm verify` on Ubuntu for every push and every pull request.
-- `deploy.yml` runs `pnpm run deploy prod --yes` when Verify passes on a push to `main`. It checks out the commit that Verify tested. A concurrency group per stage lets only one deploy of a stage run at a time; a second deploy waits for the first to finish.
+- `deploy.yml` runs `pnpm run deploy prod --yes` when Verify passes on a push to `main`. It checks out the commit that Verify tested. When that commit is no longer the tip of `main`, the run skips its image and deploy jobs, because the newer commit deploys on its own run. A concurrency group per stage lets only one deploy of a stage run at a time; a second deploy waits for the first to finish.
 
 The normal deploy path is therefore a push or merge to `main`. The runner has Docker, so it pulls the Container image that CI published and pushes it to the account's registry. Pushing that image from the Mac through OrbStack failed with "use of closed network connection" during the staging rehearsal, which is why deploys moved to CI.
 
