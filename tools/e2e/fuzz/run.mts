@@ -22,6 +22,7 @@ const { values } = parseArgs({
     "run-id": { type: "string" },
     keep: { type: "boolean", default: false },
     cleanup: { type: "boolean", default: false },
+    "ops-check": { type: "boolean", default: false },
   },
 });
 
@@ -123,7 +124,9 @@ async function main(): Promise<void> {
 
   steps.startCleanup();
 
-  if (!values.cleanup) await steps.run("ops:check", 5 * MINUTE_MS, () => target.checkOps());
+  if (values["ops-check"]) {
+    await steps.run("ops:check", 5 * MINUTE_MS, () => target.checkOps());
+  }
 
   if (values.keep) {
     const file = join(tmpdir(), `cf-stumble-e2e-${target.runId}-password`);
