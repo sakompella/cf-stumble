@@ -21,6 +21,27 @@ const SCRIPTED_COMMITS = [
   "d0d0000000000000000000000000000000000002",
 ] as const;
 
+function eventsMethod(harnessCommit: string): string {
+  return `
+  async events(conversationId) {
+    ${ANSWER_STARTUP_CHECK}
+    const held = this.ctx.storage.kv.get("hold-events") === 1;
+    const host = this.host;
+    let beat;
+    return new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode("${harnessCommit}"));
+        if (!held) c.close();
+        else beat = setInterval(() => c.enqueue(new TextEncoder().encode("\\n")), 20);
+      },
+      cancel() {
+        clearInterval(beat);
+        return host.log("info", "events-cancelled", {});
+      },
+    });
+  }`;
+}
+
 function scriptedFacet(harnessCommit: string, attachDelayMs = 0): string {
   return `
 import { DurableObject } from "cloudflare:workers";
@@ -43,6 +64,7 @@ export class MainFacet extends DurableObject {
   }
   async submit(conversationId, content) {
     if (content === "refuse the next attach") this.ctx.storage.kv.put("refuse-attach", 1);
+    if (content === "hold the events open") this.ctx.storage.kv.put("hold-events", 1);
     await this.host.running([{ conversationId }]);
     if (content === "fail the run") await this.host.running([], { [conversationId]: "model_error" });
     await this.host.arm({ active: true });
@@ -54,15 +76,7 @@ export class MainFacet extends DurableObject {
     await this.host.running([]);
     await this.host.arm({ active: false });
   }
-  async events(conversationId) {
-    ${ANSWER_STARTUP_CHECK}
-    return new ReadableStream({
-      start(c) {
-        c.enqueue(new TextEncoder().encode("${harnessCommit}"));
-        c.close();
-      },
-    });
-  }
+  ${eventsMethod(harnessCommit)}
 }
 `;
 }
@@ -283,4 +297,31 @@ test("a message that was checked before its project was disconnected does not gi
   expect((await disconnecting).ok).toBe(true);
   expect(await submitting).toEqual({ ok: false, problem: { code: "unknown-project-id" } });
   expect(await conversationOf(control, "sample-project-one")).toBeUndefined();
+});
+
+test("an events stream the facet closes ends once its chunks are read, without cancelling the facet's stream", async () => {
+  const control = await servingScripted("conversations-events-end");
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  expect(await servingCommit(control, "sample-project-one")).toBe(SCRIPTED_COMMITS[0]);
+  expect(log).not.toHaveBeenCalledWith(
+    expect.objectContaining({ event: "facet.events-cancelled" }),
+  );
+});
+
+test("a reader that cancels its events stream cancels the facet's stream", async () => {
+  const control = await servingScripted("conversations-events-cancel");
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  await admitted(control, "sample-project-one", "hold the events open", "r1");
+  const result = await control.projectEvents("sample-project-one");
+
+  if (!result.ok) throw new Error(`the events must open: ${result.problem.code}`);
+  const reader = result.events.getReader();
+  await reader.read();
+  await reader.cancel();
+
+  await vi.waitFor(() => {
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: "facet.events-cancelled" }));
+  });
 });

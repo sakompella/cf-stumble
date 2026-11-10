@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { EventsEndings } from "./events-endings.js";
 import { KeyedLock } from "../../keyed-lock.js";
 import type { ConversationProblem } from "./conversation-result.js";
 import { ProjectConversations } from "./project-conversations.js";
@@ -8,6 +9,7 @@ type ResolveProject = (projectId: string) => Effect.Effect<SelectableProject, Co
 
 export class ProjectThreads {
   readonly #pointers: ProjectConversations;
+  readonly #endings = new EventsEndings();
   readonly #queue = new KeyedLock<SelectableProject["id"]>();
   readonly #resolve: ResolveProject;
 
@@ -22,6 +24,10 @@ export class ProjectThreads {
 
   projectOf(conversationId: string): string | undefined {
     return this.#pointers.projectOf(conversationId);
+  }
+
+  relayed(projectId: string, events: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+    return this.#endings.relayed(projectId, events);
   }
 
   point(projectId: string, conversationId: string): void {
@@ -62,10 +68,7 @@ export class ProjectThreads {
     project: SelectableProject,
     retire: (previous: string) => Effect.Effect<void, ConversationProblem>,
     create: Effect.Effect<string, ConversationProblem>,
-  ): Effect.Effect<
-    Readonly<{ conversationId: string; previous: string | undefined }>,
-    ConversationProblem
-  > {
+  ): Effect.Effect<string, ConversationProblem> {
     return this.exclusive(project, (current) =>
       Effect.gen({ self: this }, function* () {
         const previous = this.#pointers.conversationOf(current.id);
@@ -75,8 +78,9 @@ export class ProjectThreads {
         const conversationId = yield* create;
 
         this.#pointers.point(current.id, conversationId);
+        this.#endings.end(current.id);
 
-        return { conversationId, previous };
+        return conversationId;
       }),
     );
   }

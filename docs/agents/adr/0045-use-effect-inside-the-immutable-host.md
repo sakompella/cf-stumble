@@ -41,7 +41,10 @@ option. The code below it is interrupted and never reads the signal.
 - A streamed response body outlives the program that returned its headers. The body owns its own
   lifetime until its stream ends or is cancelled. Its `start` runs the body's program with
   `runResponseBody` in `src/run-entry-point.ts`, and its `cancel` interrupts that program, as the
-  model route's stream does (`src/model-route-turn.ts`).
+  model route's stream does (`src/model-route-turn.ts`). A body that only relays another
+  `ReadableStream` is an Effect `Stream` converted with `Stream.toReadableStream`, which forks and
+  interrupts its own fiber the same way (the Supervisor's events stream in
+  `src/supervisor/conversations/serving.ts`).
 - Durable state and platform alarms stay authoritative across Durable Object eviction. A fiber or
   a finalizer does not replace them, because eviction runs neither.
 - The mutable harness, Pi Durable, and vendored Computer do not use the host's Effect. A
