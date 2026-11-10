@@ -1,6 +1,6 @@
-import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
+import type { CommitView, GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
-import { branchTracking, trackingCounts } from "./git-tracking.js";
+import { branchTracking, trackingCounts, type Tracking } from "./git-tracking.js";
 
 const VERBOSITY = new Map([
   ["-v", 1],
@@ -8,50 +8,67 @@ const VERBOSITY = new Map([
   ["-vv", 2],
 ]);
 
-async function branchLine(
-  client: GitClient,
-  dir: string,
-  name: string,
-  width: number,
-  verbosity: number,
-): Promise<string> {
-  const [commit, tracking] = await Promise.all([
-    client.show({ dir, ref: `refs/heads/${name}` }),
-    branchTracking(client, dir, name),
-  ]);
-
-  const counts = tracking === undefined ? "" : trackingCounts(tracking);
-
-  const upstream =
-    tracking === undefined
-      ? ""
-      : verbosity > 1
-        ? `[${tracking.upstream}${counts === "" ? "" : `: ${counts}`}] `
-        : counts === ""
-          ? ""
-          : `[${counts}] `;
-
-  const subject = commit.message.split("\n")[0] ?? "";
-
-  return `${name.padEnd(width)} ${commit.oid.slice(0, 7)} ${upstream}${subject}`;
+interface Row {
+  readonly name: string;
+  readonly current: boolean;
+  readonly details: () => Promise<[CommitView, Tracking | undefined]>;
 }
 
-async function listVerbose(client: GitClient, dir: string, verbosity: number): Promise<string> {
+function upstreamText(tracking: Tracking | undefined, verbosity: number): string {
+  if (tracking === undefined) return "";
+
+  const counts = trackingCounts(tracking);
+
+  if (verbosity > 1) return `[${tracking.upstream}${counts === "" ? "" : `: ${counts}`}] `;
+
+  return counts === "" ? "" : `[${counts}] `;
+}
+
+async function rowLine(row: Row, width: number, verbosity: number): Promise<string> {
+  const marker = row.current ? "*" : " ";
+
+  if (verbosity === 0) return `${marker} ${row.name}\n`;
+
+  const [commit, tracking] = await row.details();
+  const subject = commit.message.split("\n")[0] ?? "";
+
+  return `${marker} ${row.name.padEnd(width)} ${commit.oid.slice(0, 7)} ${upstreamText(tracking, verbosity)}${subject}\n`;
+}
+
+async function listBranches(client: GitClient, dir: string, verbosity: number): Promise<string> {
   const [branches, current] = await Promise.all([
     client.branchList({ dir }),
     client.currentBranch({ dir }),
   ]);
 
-  const sorted = branches.toSorted();
-  const width = Math.max(0, ...sorted.map((name) => name.length));
+  const head = current === undefined ? await client.show({ dir, ref: "HEAD" }) : undefined;
 
-  const lines = await Promise.all(
-    sorted.map(async (name) => {
-      const line = await branchLine(client, dir, name, width, verbosity);
+  const detached: Row[] =
+    head === undefined
+      ? []
+      : [
+          {
+            name: `(HEAD detached at ${head.oid.slice(0, 7)})`,
+            current: true,
+            details: () => Promise.resolve([head, undefined]),
+          },
+        ];
 
-      return `${name === current ? "*" : " "} ${line}\n`;
-    }),
-  );
+  const rows = [
+    ...detached,
+    ...branches.toSorted().map((name): Row => ({
+      name,
+      current: name === current,
+      details: () =>
+        Promise.all([
+          client.show({ dir, ref: `refs/heads/${name}` }),
+          branchTracking(client, dir, name),
+        ]),
+    })),
+  ];
+
+  const width = Math.max(0, ...rows.map((row) => row.name.length));
+  const lines = await Promise.all(rows.map((row) => rowLine(row, width, verbosity)));
 
   return lines.join("");
 }
@@ -65,9 +82,9 @@ export function verboseBranches(
   const args = input.argv.slice(1);
   const verbosity = args.reduce((total, arg) => total + (VERBOSITY.get(arg) ?? Number.NaN), 0);
 
-  if (args.length === 0 || Number.isNaN(verbosity)) return cli({ ...input, cwd: scope.dir });
+  if (Number.isNaN(verbosity)) return cli({ ...input, cwd: scope.dir });
 
-  return listVerbose(client, scope.dir, verbosity).then(
+  return listBranches(client, scope.dir, verbosity).then(
     (stdout) => ({ stdout, stderr: "", exitCode: 0 }),
     () => cli({ ...input, cwd: scope.dir }),
   );

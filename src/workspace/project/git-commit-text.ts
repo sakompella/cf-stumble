@@ -56,9 +56,36 @@ async function summary(
   const entries = await client.diffSummary(options);
   const where = [branch ?? "detached HEAD", ...(parent === undefined ? ["(root-commit)"] : [])];
 
+  const modes = await Promise.all(
+    entries.map((entry) =>
+      modeLine(client, dir, entry, entry.status === "D" ? parent : commit.oid),
+    ),
+  );
+
   const subject = commit.message.split("\n")[0] ?? "";
 
-  return `[${where.join(" ")} ${commit.oid.slice(0, 7)}] ${subject}\n${changeLine(entries)}\n`;
+  return `[${where.join(" ")} ${commit.oid.slice(0, 7)}] ${subject}\n${changeLine(entries)}\n${modes.join("")}`;
+}
+
+async function modeLine(
+  client: GitClient,
+  dir: string,
+  entry: DiffSummaryEntry,
+  ref: string | undefined,
+): Promise<string> {
+  if (entry.status === "M" || ref === undefined) return "";
+
+  const slash = entry.path.lastIndexOf("/");
+
+  const tree = await client.lsTree(
+    slash === -1 ? { dir, ref } : { dir, ref, path: entry.path.slice(0, slash) },
+  );
+
+  const item = tree.find((candidate) => candidate.path === entry.path.slice(slash + 1));
+
+  return item === undefined
+    ? ""
+    : ` ${entry.status === "A" ? "create" : "delete"} mode ${item.mode} ${entry.path}\n`;
 }
 
 function committedPaths(lines: readonly StatusLine[], all: boolean): string[] {

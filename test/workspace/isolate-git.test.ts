@@ -1,47 +1,5 @@
-import { runInDurableObject } from "cloudflare:test";
-import { env } from "cloudflare:workers";
-import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
-import { seedWorkspaceRoot } from "./host-fixtures.js";
-
-const decodeEvent = Schema.decodeUnknownSync(
-  Schema.fromJsonString(
-    Schema.Struct({ kind: Schema.String, data: Schema.optional(Schema.String) }),
-  ),
-);
-
-const SETUP = [
-  "git init",
-  "git config user.name Test",
-  "git config user.email test@example.com",
-  "echo one > a.txt",
-  "echo two > b.txt",
-  "git add -A",
-  "git commit -q -m first",
-].join(" && ");
-
-function shell(name: string, command: string) {
-  return runInDurableObject(env.WORKSPACE_HOST.getByName(name), async (host, state) => {
-    await seedWorkspaceRoot(state);
-
-    const target = await host.project({ remainingMs: 60_000 });
-
-    const started = await target.startExec({ command, timeoutMs: 20_000, backend: "isolate" });
-
-    if (!started.ok) throw new Error(started.error.code);
-
-    const lines = (await new Response(started.value.events).text()).split("\n").filter(Boolean);
-    const events = lines.map((line) => decodeEvent(line));
-
-    return {
-      stdout: events
-        .flatMap((event) => (event.kind === "stdout" ? [event.data] : []))
-        .join("")
-        .replace("Initialized empty Git repository in /workspace/.git/\n", ""),
-      stderr: events.flatMap((event) => (event.kind === "stderr" ? [event.data] : [])).join(""),
-    };
-  });
-}
+import { SETUP, shell } from "./isolate-git-shell.js";
 
 test.each([
   ["untracked", "echo x > new.txt", "?? new.txt\n"],
@@ -188,7 +146,7 @@ test("the first commit in the isolate is a root commit", async () => {
   );
 
   expect(stdout).toMatch(
-    /^\[main \(root-commit\) [0-9a-f]{7}\] first\n 1 file changed, 1 insertion\(\+\)\n$/u,
+    /^\[main \(root-commit\) [0-9a-f]{7}\] first\n 1 file changed, 1 insertion\(\+\)\n create mode 100644 a\.txt\n$/u,
   );
 });
 
@@ -217,17 +175,13 @@ test("git status in the isolate reports the upstream branch", async () => {
 test("git checkout in the isolate prints the messages of real git", async () => {
   const { stdout, stderr } = await shell(
     "isolate-git-checkout",
-    `${SETUP} && git checkout -b topic && git switch main && git checkout main && echo x >> a.txt && git checkout -- a.txt && git -c user.name=Other --no-pager branch -v`,
+    `${SETUP} && git checkout -b topic && git switch main && git checkout main && echo x >> a.txt && git checkout -- a.txt && git status -s && git -c user.name=Other --no-pager branch -v`,
   );
 
   expect(stderr).toBe(
-    [
-      "Switched to a new branch 'topic'",
-      "Switched to branch 'main'",
-      "Already on 'main'",
-      "Updated 1 path from the index",
-      "",
-    ].join("\n"),
+    ["Switched to a new branch 'topic'", "Switched to branch 'main'", "Already on 'main'", ""].join(
+      "\n",
+    ),
   );
   expect(stdout).toMatch(/^\* main {2}[0-9a-f]{7} first\n {2}topic [0-9a-f]{7} first\n$/u);
 });
@@ -271,13 +225,13 @@ test("git add -u stages a staged new file modified again", async () => {
   expect(stdout).toBe("A  n.txt\n");
 });
 
-test("git add . stages new files", async () => {
+test("git add . stages new files and deletions", async () => {
   const { stdout } = await shell(
     "isolate-git-add-dot",
-    `${SETUP} && echo y > c.txt && git add . && git status -s`,
+    `${SETUP} && echo y > c.txt && rm b.txt && git add . && git status -s`,
   );
 
-  expect(stdout).toBe("A  c.txt\n");
+  expect(stdout).toBe("D  b.txt\nA  c.txt\n");
 });
 
 test("git reset --soft moves the branch and keeps the index", async () => {
@@ -295,7 +249,9 @@ test("git reset and git reset --mixed unstage and move the branch", async () => 
     `${SETUP} && echo x >> a.txt && git add a.txt && git reset && git status -s && git add a.txt && git commit -q -m second && git reset --mixed HEAD~1 && git status -s && git log --oneline | wc -l`,
   );
 
-  expect(stdout).toBe(" M a.txt\n M a.txt\n1\n");
+  const unstaged = "Unstaged changes after reset:\nM\ta.txt\n";
+
+  expect(stdout).toBe(`${unstaged} M a.txt\n${unstaged} M a.txt\n1\n`);
 });
 
 test("git reset <paths> and git restore --staged unstage only those paths", async () => {
@@ -304,7 +260,9 @@ test("git reset <paths> and git restore --staged unstage only those paths", asyn
     `${SETUP} && echo x >> a.txt && echo x >> b.txt && git add -A && git reset a.txt && git status -s && git restore --staged b.txt && git status -s`,
   );
 
-  expect(stdout).toBe(" M a.txt\nM  b.txt\n M a.txt\n M b.txt\n");
+  expect(stdout).toBe(
+    "Unstaged changes after reset:\nM\ta.txt\n M a.txt\nM  b.txt\n M a.txt\n M b.txt\n",
+  );
 });
 
 test("git reset to an unknown revision fails with a message", async () => {

@@ -1,57 +1,9 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
-import { rooted } from "./git-index-commands.js";
+import { reportingFailure, restoreCommand } from "./git-index-commands.js";
 import type { GitScope, RunCli } from "./git-cli.js";
-import { statusLines } from "./git-status.js";
 import { branchTracking, trackingLines } from "./git-tracking.js";
 
 const CREATE = new Set(["-b", "-c"]);
-
-function underPaths(path: string, paths: readonly string[]): boolean {
-  return paths.some(
-    (spec) => spec === "." || path === spec || path.startsWith(`${spec.replace(/\/$/u, "")}/`),
-  );
-}
-
-const OUTSIDE = "fatal: pathspec is outside repository\n";
-
-async function restorePaths(
-  client: GitClient,
-  cli: RunCli,
-  input: GitCliInput,
-  scope: GitScope,
-  paths: readonly string[],
-): Promise<GitCliResult> {
-  const specs: string[] = [];
-
-  for (const path of paths) {
-    const at = rooted(path, scope.prefix);
-
-    if (at === undefined) return { stdout: "", stderr: OUTSIDE, exitCode: 128 };
-
-    specs.push(at);
-  }
-
-  const touched = (await statusLines(client, scope.dir)).filter(
-    (line) => line.x !== "?" && underPaths(line.path, specs),
-  );
-
-  if (touched.some((line) => line.x !== " ")) return cli(input);
-
-  const result = await cli({
-    ...input,
-    cwd: scope.dir,
-    argv: ["checkout", "HEAD", "--", ...specs],
-  });
-
-  const count = touched.length;
-
-  return result.exitCode === 0
-    ? {
-        ...result,
-        stderr: `Updated ${String(count)} path${count === 1 ? "" : "s"} from the index\n`,
-      }
-    : result;
-}
 
 function createBranch(client: GitClient, dir: string, name: string): Promise<GitCliResult> {
   return client.branch({ dir, name, checkout: true }).then(
@@ -108,7 +60,9 @@ export async function checkoutWithMessages(
   const separator = args.indexOf("--");
 
   if (input.argv[0] === "checkout" && separator === 0)
-    return restorePaths(client, cli, input, scope, args.slice(1));
+    return reportingFailure(() =>
+      restoreCommand(client, { ...input, argv: ["restore", ...args] }, scope),
+    );
 
   if (separator !== -1) return cli(input);
 
