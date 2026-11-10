@@ -17,6 +17,7 @@ export type FuzzContext = Readonly<{
   password: string;
   target: Target;
   secrets: readonly string[];
+  commands: readonly string[];
   log: (line: string) => void;
 }>;
 
