@@ -1,5 +1,6 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
+import * as Result from "effect/Result";
 import { posix } from "node:path";
 import { expect, test } from "vitest";
 
@@ -58,6 +59,6 @@ test("addressed paths round-trip and remain valid project addresses", () => {
     const { addressed } = resolved.value;
 
     expect(fromAddressed(addressed)).toEqual(resolved.value);
-    expect(parseAddressedPath(addressed).ok).toBe(true);
+    expect(Result.isSuccess(parseAddressedPath(addressed))).toBe(true);
   });
 });

@@ -1,3 +1,4 @@
+import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import { resolveInWorkspace } from "../../src/facet/generation-1/execution-env-paths.js";
 import { parseAddressedPath } from "../../src/workspace/project/resolve.js";
@@ -30,7 +31,7 @@ test("the facet guard and the addressed-path space share one root", () => {
 
     expect(resolved.value.absolute).toBe(path);
     expect(
-      parseAddressedPath(resolved.value.addressed).ok,
+      Result.isSuccess(parseAddressedPath(resolved.value.addressed)),
       "what the guard admits, the target must be able to address",
     ).toBe(true);
   }

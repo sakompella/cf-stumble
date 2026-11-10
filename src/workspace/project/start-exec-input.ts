@@ -7,6 +7,7 @@ import {
   MAX_EXEC_TIMEOUT_MS,
   ok,
   type ExecBackendChoice,
+  type ProjectFailureDetail,
   type ProjectResult,
   type StartExecWire,
   type WriteFileWire,
@@ -29,10 +30,14 @@ const WriteFileInput = Schema.Struct({
 
 const decodeWriteFileInput = Schema.decodeResult(WriteFileInput);
 
-export function parseWriteFileInput(input: WriteFileWire): ProjectResult<WriteFileWire> {
+export function parseWriteFileInput(
+  input: WriteFileWire,
+): Result.Result<WriteFileWire, ProjectFailureDetail> {
   const decoded = decodeWriteFileInput(input);
 
-  return Result.isFailure(decoded) ? fail("invalid-request") : ok(decoded.success);
+  return Result.isSuccess(decoded)
+    ? Result.succeed(decoded.success)
+    : Result.fail({ code: "invalid-request" });
 }
 
 const OperationIdText = Schema.String.check(Schema.isPattern(OPERATION_ID_PATTERN));

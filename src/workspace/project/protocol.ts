@@ -25,6 +25,8 @@ export type ProjectErrorCode =
 
 export type ProjectFailure = { ok: false; error: { code: ProjectErrorCode; path?: string } };
 
+export type ProjectFailureDetail = ProjectFailure["error"];
+
 export type ProjectResult<T> = { ok: true; value: T } | ProjectFailure;
 
 export type ProjectFileKind = "file" | "directory" | "symlink";
@@ -85,6 +87,10 @@ export function ok<T>(value: T): ProjectResult<T> {
   return { ok: true, value };
 }
 
+export function failureDetail(code: ProjectErrorCode, path?: string): ProjectFailureDetail {
+  return path === undefined ? { code } : { code, path };
+}
+
 export function fail<T>(code: ProjectErrorCode, path?: string): ProjectResult<T> {
-  return path === undefined ? { ok: false, error: { code } } : { ok: false, error: { code, path } };
+  return { ok: false, error: failureDetail(code, path) };
 }
