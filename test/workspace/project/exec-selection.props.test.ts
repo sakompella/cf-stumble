@@ -27,6 +27,24 @@ const SYSTEM_DIRECTORIES = [
 
 const WORKSPACE_PATHS = ["/", "/workspace", "/workspace/src/a.ts", "/tmpx", "/devices"];
 
+const PROGRAMS_WITH_CONTAINER_ONLY_FORMS = [
+  "ls",
+  "cut",
+  "chmod",
+  "du",
+  "echo",
+  "wc",
+  "uniq",
+  "awk",
+  "grep",
+];
+
+const PLAIN_ISOLATE_PROGRAMS = [...ISOLATE_PROGRAMS].filter(
+  (program) => !PROGRAMS_WITH_CONTAINER_ONLY_FORMS.includes(program),
+);
+
+const MERGING_REDIRECTS = ["2>&1", ">&2", "1>&2"];
+
 const CONTAINER_PROGRAMS = ["node", "pnpm", "npx", "python3", "./run.sh", "xargs", "env", "for"];
 
 const SAFE_NAMES = ["FOO", "A1", "_x", "lower", "ENVIRONMENT", "XLD_PATH", "PATHS"];
@@ -68,6 +86,7 @@ interface Word {
   readonly text: string;
   readonly path: string | undefined;
   readonly flag: boolean;
+  readonly merges: boolean;
 }
 
 interface Segment {
@@ -111,29 +130,38 @@ function drawPath(tc: hegel.TestCase, clean: boolean): string {
 }
 
 function drawArgument(tc: hegel.TestCase, clean: boolean): Word {
-  const kind = pick(tc, clean, ["text", "assignment", "fd", "path", "redirect"], ["flag"]);
+  const usual = clean
+    ? ["text", "assignment", "path", "redirect"]
+    : ["text", "assignment", "fd", "path", "redirect"];
+
+  const kind = pick(tc, clean, usual, ["flag"]);
 
   if (kind === "flag") {
-    return { text: quoted(tc, tc.draw(gs.sampledFrom(FIND_FLAGS))), path: undefined, flag: true };
+    return {
+      text: quoted(tc, tc.draw(gs.sampledFrom(FIND_FLAGS))),
+      path: undefined,
+      flag: true,
+      merges: false,
+    };
   }
 
   if (kind === "path" || kind === "redirect") {
     const path = drawPath(tc, clean);
     const operator = kind === "path" ? "" : tc.draw(gs.sampledFrom([">", ">>", "<", "2>", "1> "]));
 
-    return { text: `${operator}${quoted(tc, path)}`, path, flag: false };
+    return { text: `${operator}${quoted(tc, path)}`, path, flag: false, merges: false };
   }
 
   const text =
     kind === "assignment"
       ? `${tc.draw(gs.sampledFrom(UNSAFE_NAMES))}=x`
       : kind === "fd"
-        ? tc.draw(gs.sampledFrom(["2>&1", ">&2", "1>&2"]))
+        ? tc.draw(gs.sampledFrom(MERGING_REDIRECTS))
         : tc
             .draw(gs.arrays(gs.oneOf(unquotedText, quotedText), { minSize: 1, maxSize: 3 }))
             .join("");
 
-  return { text, path: undefined, flag: false };
+  return { text, path: undefined, flag: false, merges: MERGING_REDIRECTS.includes(text) };
 }
 
 function drawSegment(tc: hegel.TestCase, clean: boolean): Segment {
@@ -141,7 +169,7 @@ function drawSegment(tc: hegel.TestCase, clean: boolean): Segment {
     .draw(gs.arrays(gs.just(0), { maxSize: 2 }))
     .map(() => pick(tc, clean, SAFE_NAMES, UNSAFE_NAMES));
 
-  const program = pick(tc, clean, [...ISOLATE_PROGRAMS], CONTAINER_PROGRAMS);
+  const program = pick(tc, clean, PLAIN_ISOLATE_PROGRAMS, CONTAINER_PROGRAMS);
   const args = tc.draw(gs.arrays(gs.just(0), { maxSize: 3 })).map(() => drawArgument(tc, clean));
 
   return {
@@ -153,7 +181,7 @@ function drawSegment(tc: hegel.TestCase, clean: boolean): Segment {
     isolate:
       ISOLATE_PROGRAMS.has(program) &&
       names.every((name) => SAFE_NAMES.includes(name)) &&
-      args.every((arg) => !arg.flag),
+      args.every((arg) => !arg.flag && !arg.merges),
     outside: args.some((arg) => arg.path !== undefined && isSystemPath(arg.path)),
   };
 }
@@ -235,7 +263,31 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
   ["echo hi > /dev/null", undefined, "isolate"],
   ["curl -s -o /dev/null -w '%{http_code}' https://github.com/owner/repo", undefined, "isolate"],
   ["echo hi > /dev/stdout", undefined, "container"],
-  ["grep 'a|b; c' file > out.txt 2>&1", undefined, "isolate"],
+  ["grep 'a|b; c' file > out.txt 2>&1", undefined, "container"],
+  ["cat a.txt | sort | uniq -c", undefined, "container"],
+  ["ls a b", undefined, "container"],
+  ["ls -la src", undefined, "isolate"],
+  ["cut -d, -f2 a.csv", undefined, "container"],
+  ["cut -c1-3 a.txt", undefined, "isolate"],
+  ["chmod +x run.sh", undefined, "container"],
+  ["echo -e 'a\\tb'", undefined, "container"],
+  ["echo hello", undefined, "isolate"],
+  ["wc -l a.txt", undefined, "isolate"],
+  ["cat a.txt | wc -l", undefined, "isolate"],
+  ["wc -l < a.txt", undefined, "isolate"],
+  ["cat a.txt | wc", undefined, "container"],
+  ["grep -rn foo .", undefined, "container"],
+  ["grep -n foo a.txt", undefined, "isolate"],
+  ["cat a b > out 2>&1", undefined, "container"],
+  ["cat a 2>/dev/null", undefined, "isolate"],
+  ["ls ?.txt", undefined, "container"],
+  ["awk 'BEGIN{for(i=0;i<100000;i++)printf \"%d\\n\",i}' | wc -l", undefined, "container"],
+  ["awk '{print $1}' a.txt", undefined, "isolate"],
+  ["awk '{while(i<3)i++}' a.txt", undefined, "container"],
+  ["cat [ab].txt", undefined, "container"],
+  ["grep 'a?[b]' a.txt", undefined, "isolate"],
+  ["cat *.txt", undefined, "isolate"],
+  ["grep 'a|b; c' file > out.txt", undefined, "isolate"],
   ["ls", "container", "container"],
   ["node -e 1 | cat", "isolate", "container"],
 ];

@@ -22,6 +22,7 @@ const Phase = Data.taggedEnum<Phase>();
 
 type FallbackEvent = Data.TaggedEnum<{
   IsolateRead: { readonly read: BackendRead };
+  IsolateBroke: object;
   ContainerStarted: { readonly handle: ExecBackendHandle };
   Abandon: object;
 }>;
@@ -69,6 +70,14 @@ function isolateLimitExceeded(held: readonly StderrEvent[], exitCode: number): b
   return exitCode === ISOLATE_DEADLINE_EXIT_CODE && ISOLATE_DEADLINE_MARKER.test(stderr);
 }
 
+function startingContainer(isolate: ExecBackendHandle): Step {
+  return step(
+    Phase.StartingContainer(),
+    FallbackCommand.StartContainer(),
+    FallbackCommand.Stop({ handle: isolate }),
+  );
+}
+
 function holdingRead(
   isolate: ExecBackendHandle,
   held: readonly StderrEvent[],
@@ -77,7 +86,7 @@ function holdingRead(
   const passing = (events: readonly BackendExecEvent[]) =>
     step(Phase.Passing({ handle: isolate, fellBack: false }), FallbackCommand.Deliver({ events }));
 
-  if (read.done) return passing(held);
+  if (read.done) return startingContainer(isolate);
 
   const event = read.value;
 
@@ -103,6 +112,7 @@ function transition(phase: Phase, event: FallbackEvent): Step {
     Holding: ({ isolate, held }) =>
       FallbackEvent.$match(event, {
         IsolateRead: ({ read }) => holdingRead(isolate, held, read),
+        IsolateBroke: () => startingContainer(isolate),
         ContainerStarted: ({ handle }) => stopLate(handle),
         Abandon: () =>
           step(
@@ -113,12 +123,14 @@ function transition(phase: Phase, event: FallbackEvent): Step {
     StartingContainer: () =>
       FallbackEvent.$match(event, {
         IsolateRead: () => stay,
+        IsolateBroke: () => stay,
         ContainerStarted: ({ handle }) => step(Phase.Passing({ handle, fellBack: true })),
         Abandon: () => step(Phase.Abandoned({ backend: "container", fellBack: true })),
       }),
     Passing: ({ handle, fellBack }) =>
       FallbackEvent.$match(event, {
         IsolateRead: () => stay,
+        IsolateBroke: () => stay,
         ContainerStarted: ({ handle: late }) => stopLate(late),
         Abandon: () =>
           step(
@@ -129,6 +141,7 @@ function transition(phase: Phase, event: FallbackEvent): Step {
     Abandoned: () =>
       FallbackEvent.$match(event, {
         IsolateRead: () => stay,
+        IsolateBroke: () => stay,
         ContainerStarted: ({ handle }) => stopLate(handle),
         Abandon: () => stay,
       }),
@@ -234,7 +247,10 @@ class FallbackExec implements ExecBackendHandle {
       Holding: ({ isolate }) =>
         isolate.reader
           .read()
-          .then((read) => this.#dispatch(FallbackEvent.IsolateRead({ read })))
+          .then(
+            (read) => this.#dispatch(FallbackEvent.IsolateRead({ read })),
+            () => this.#dispatch(FallbackEvent.IsolateBroke()),
+          )
           .then(() => null),
       StartingContainer: () => this.#starting.then(() => null),
       Passing: ({ handle }): Promise<BackendRead | null> => handle.reader.read(),

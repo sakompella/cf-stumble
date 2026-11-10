@@ -3,10 +3,10 @@ import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js
 import { parseProjectId, type ProjectId } from "../../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
 import { shellQuote } from "../../shell-quote.js";
-import { projectDirectory } from "../../workspace-layout.js";
-import { type WorkspaceEffects, type WorkspaceFault } from "../operations.js";
+import { type WorkspaceEffects } from "../operations.js";
 import { holdProvisionLock } from "./clone-script.js";
 import { projectProvisionLockPath } from "./provision-project.js";
+import { removedDirectories, removedFromStore } from "./remove-project-store.js";
 import {
   answerDurableFailures,
   commandResult,
@@ -37,12 +37,6 @@ export function parseProjectRemovalRequest(
     : { kind: "remove-project", projectId };
 }
 
-function removedDirectories(projectId: ProjectId): readonly [string, string] {
-  const root = projectDirectory(projectId);
-
-  return [root, `${root}.provisioning`];
-}
-
 export function planProjectRemovalRequest(
   request: ParsedProjectRemovalRequest,
 ): Extract<WorkspacePlan, { kind: "run-command" }> {
@@ -61,19 +55,6 @@ export function planProjectRemovalRequest(
   };
 }
 
-export function removalIsDurable(
-  operations: WorkspaceEffects,
-  projectId: ProjectId,
-): Effect.Effect<boolean, WorkspaceFault> {
-  return Effect.gen(function* () {
-    for (const directory of removedDirectories(projectId)) {
-      if ((yield* operations.lstat(directory)) !== undefined) return false;
-    }
-
-    return true;
-  });
-}
-
 export function executeProjectRemovalRequest(
   input: Readonly<{
     operations: WorkspaceEffects;
@@ -89,7 +70,7 @@ export function executeProjectRemovalRequest(
     const plan = planProjectRemovalRequest(parsed);
     const output = yield* operations.runCommand(plan.source, plan.cwd, plan.timeoutMs);
 
-    if (output.exitCode === 0 && !(yield* removalIsDurable(operations, parsed.projectId))) {
+    if (output.exitCode === 0 && !(yield* removedFromStore(operations, parsed.projectId))) {
       return syncIncomplete();
     }
 

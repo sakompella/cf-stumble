@@ -200,10 +200,26 @@ export class ProjectConnections {
     now: number,
   ): Effect.Effect<ConnectRepositoryResult> {
     return Effect.gen({ self: this }, function* () {
+      const known = projectIdForRepository(repositoryUrl);
+
+      if (known !== undefined && this.projects.stateOf(known) === "removing") {
+        yield* recover(this.effects(), known);
+      }
+
       const connected = this.projects.connect({ repositoryUrl, displayName }, now);
 
       if (!connected.ok) {
         return this.refused({ code: connected.problem.code, detail: "" }, github);
+      }
+
+      if (connected.after === "removing") {
+        return this.refused(
+          {
+            code: "workspace-unavailable",
+            detail: "the earlier clone of this repository is still being removed",
+          },
+          github,
+        );
       }
 
       const settled = yield* execute(this.effects(), connected.project.id, connected.commands);

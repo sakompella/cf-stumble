@@ -30,6 +30,7 @@ export type WorkspaceEffects = Readonly<{
   ): Effect.Effect<CommandOutput, WorkspaceFault>;
   lstat(path: string): Effect.Effect<WorkspacePathKind | undefined, WorkspaceFault>;
   readFile(path: string): Effect.Effect<string, WorkspaceFault>;
+  removeTree(path: string): Effect.Effect<void, WorkspaceFault>;
   writeFile(path: string, content: string): Effect.Effect<void, WorkspaceFault>;
   runCommand(
     source: string,

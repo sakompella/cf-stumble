@@ -36,7 +36,7 @@ const removal = (cause: "disconnect" | "failed-provision"): Expected => ({
 
 const TABLE: Readonly<Record<Tag, (state: State) => Expected>> = {
   connect: (state) =>
-    state === "connected"
+    state === "connected" || state === "removing"
       ? unchanged(state)
       : { state: "provisioning", commands: [LifecycleCommand.Provision({ attempt: "connect" })] },
   provisioned: (state) => unchanged(state === "provisioning" ? "connected" : state),
@@ -60,9 +60,15 @@ function walkFromNothing(tc: hegel.TestCase, inspect?: (move: Move) => void) {
   return state;
 }
 
+const CONNECT_AFTER_REMOVAL: readonly Tag[] = ["removed", "connect", "provisioned"];
+
 function finish(from: State, tags: readonly Tag[]): State {
   return tags.reduce<State>((state, tag) => lifecycleStep(state, tagged(tag)).state, from);
 }
+
+test("a connect during a removal changes nothing", () => {
+  expect(lifecycleStep("removing", tagged("connect"))).toEqual(unchanged("removing"));
+});
 
 test("every state and event pair moves and emits like the documented transition table", () => {
   hegel.test((tc) => {
@@ -99,9 +105,9 @@ test("a disconnect then a successful removal ends with no project from every rea
   });
 });
 
-test("a connect then a successful provision ends connected from every reachable state, and stays connected", () => {
+test("a connect then a successful provision ends connected from every reachable state once a pending removal finishes, and stays connected", () => {
   hegel.test((tc) => {
-    const connected = finish(walkFromNothing(tc), ["connect", "provisioned"]);
+    const connected = finish(walkFromNothing(tc), CONNECT_AFTER_REMOVAL);
 
     expect(connected).toBe("connected");
     expect(lifecycleStep(connected, tagged("connect"))).toEqual(unchanged("connected"));
@@ -111,7 +117,7 @@ test("a connect then a successful provision ends connected from every reachable 
 test("a failed removal keeps the project in removing until a removal succeeds, and each disconnect asks for another", () => {
   hegel.test((tc) => {
     const failures = tc.draw(gs.integers({ minValue: 1, maxValue: 5 }));
-    const connected = finish(walkFromNothing(tc), ["connect", "provisioned"]);
+    const connected = finish(walkFromNothing(tc), CONNECT_AFTER_REMOVAL);
     let step = lifecycleStep(connected, tagged("disconnect"));
 
     for (let attempt = 0; attempt < failures; attempt += 1) {

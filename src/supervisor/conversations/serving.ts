@@ -36,6 +36,8 @@ type ServingPorts = Readonly<{
   }>;
 }>;
 
+type MountedOnInstance = Readonly<{ facet: MountedFacet; instance: number }>;
+
 const INSTANCE_KEY = "serving-instance";
 
 export class ServingConversations {
@@ -100,15 +102,15 @@ export class ServingConversations {
 
         if (this.#ports.resetting()) return yield* fail("workspace-busy");
 
-        const facet = yield* this.#facet();
+        const mounted = yield* this.#mounted();
 
         return yield* this.#projects.pointed(
           project,
-          (current) => this.#call(() => createConversation(facet, current)),
+          (current) => this.#use(mounted, (facet) => createConversation(facet, current)),
           (conversationId) =>
-            this.#call(() => facet.submit(conversationId, message.content, message.requestId)).pipe(
-              Effect.map((submissionId) => ({ submissionId })),
-            ),
+            this.#use(mounted, (facet) =>
+              facet.submit(conversationId, message.content, message.requestId),
+            ).pipe(Effect.map((submissionId) => ({ submissionId }))),
         );
       }),
     );
@@ -118,13 +120,13 @@ export class ServingConversations {
     return answered(
       Effect.gen({ self: this }, function* () {
         const project = yield* this.#project(projectId);
-        const facet = yield* this.#facet();
+        const mounted = yield* this.#mounted();
 
         return yield* this.#projects.pointed(
           project,
-          (current) => this.#call(() => createConversation(facet, current)),
+          (current) => this.#use(mounted, (facet) => createConversation(facet, current)),
           (conversationId) =>
-            this.#call(() => facet.events(conversationId, from)).pipe(
+            this.#use(mounted, (facet) => facet.events(conversationId, from)).pipe(
               Effect.map((events) => ({ events: this.#projects.relayed(project.id, events) })),
             ),
         );
@@ -136,13 +138,13 @@ export class ServingConversations {
     return answered(
       Effect.gen({ self: this }, function* () {
         const project = yield* this.#project(projectId);
-        const facet = yield* this.#facet();
+        const mounted = yield* this.#mounted();
 
         return yield* this.#projects.pointed(
           project,
-          (current) => this.#call(() => createConversation(facet, current)),
+          (current) => this.#use(mounted, (facet) => createConversation(facet, current)),
           (conversationId) =>
-            this.#call(() => facet.entries(conversationId, request)).pipe(
+            this.#use(mounted, (facet) => facet.entries(conversationId, request)).pipe(
               Effect.map((page) => ({ page })),
             ),
         );
@@ -157,8 +159,8 @@ export class ServingConversations {
         const conversationId = this.#projects.conversationOf(project.id);
 
         if (conversationId === undefined) return {};
-        const facet = yield* this.#facet();
-        yield* this.#call(() => facet.abort(this.#runs.cancelled(conversationId)));
+        const mounted = yield* this.#mounted();
+        yield* this.#use(mounted, (facet) => facet.abort(this.#runs.cancelled(conversationId)));
 
         return {};
       }),
@@ -169,12 +171,12 @@ export class ServingConversations {
     return answered(
       Effect.gen({ self: this }, function* () {
         const project = yield* this.#project(projectId);
-        const facet = yield* this.#facet();
+        const mounted = yield* this.#mounted();
 
         const conversationId = yield* this.#projects.replace(
           project,
-          (old) => this.#call(() => facet.abort(this.#runs.cancelled(old))),
-          this.#call(() => createConversation(facet, project)),
+          (old) => this.#use(mounted, (facet) => facet.abort(this.#runs.cancelled(old))),
+          this.#use(mounted, (facet) => createConversation(facet, project)),
         );
 
         return { conversationId };
@@ -231,6 +233,39 @@ export class ServingConversations {
         return { code: "generation-failed" } as const;
       },
     });
+  }
+
+  #mounted(): Effect.Effect<MountedOnInstance, ConversationProblem> {
+    return Effect.suspend(() => {
+      const instance = this.#instance();
+
+      return this.#mountNow().pipe(
+        Effect.catch((problem) =>
+          this.serves(instance) ? Effect.fail(problem) : this.#mountNow(),
+        ),
+      );
+    });
+  }
+
+  #mountNow(): Effect.Effect<MountedOnInstance, ConversationProblem> {
+    return Effect.suspend(() => {
+      const instance = this.#instance();
+
+      return this.#facet().pipe(Effect.map((facet) => ({ facet, instance })));
+    });
+  }
+
+  #use<T>(
+    mounted: MountedOnInstance,
+    call: (facet: MountedFacet) => Promise<T>,
+  ): Effect.Effect<T, ConversationProblem> {
+    return this.#call(() => call(mounted.facet)).pipe(
+      Effect.catch((problem) =>
+        this.serves(mounted.instance)
+          ? Effect.fail(problem)
+          : this.#mountNow().pipe(Effect.flatMap((next) => this.#call(() => call(next.facet)))),
+      ),
+    );
   }
 
   #facet(): Effect.Effect<MountedFacet, ConversationProblem> {

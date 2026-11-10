@@ -42,7 +42,7 @@ export function lifecycleStep(
 ): LifecycleStep {
   return LifecycleEvent.match(event, {
     connect: () =>
-      current === "connected"
+      current === "connected" || current === "removing"
         ? stay(current)
         : {
             state: "provisioning" as const,
