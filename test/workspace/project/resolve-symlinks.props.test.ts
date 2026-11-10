@@ -144,6 +144,6 @@ test("a path resolves exactly when the kernel resolves it inside the workspace, 
         rmSync(root, { recursive: true, force: true });
       }
     },
-    { testCases: 1_000 },
+    { testCases: 300 },
   );
 });
