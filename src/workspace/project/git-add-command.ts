@@ -1,27 +1,72 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
-import { without } from "./git-args.js";
 import type { GitScope, RunCli } from "./git-cli.js";
-import type { ReadFile } from "./git-index-file.js";
-import { rooted, under } from "./git-pathspec.js";
+import type { WorkFiles } from "./git-index-file.js";
+import { matching, matchesAny, resolveSpecs, WILDCARD } from "./git-pathspec.js";
 import { failure, OK } from "./git-result.js";
-import { fileStatusLines, statusLines } from "./git-status.js";
+import { fileStatusLines, type StatusLine } from "./git-status.js";
+
+const NOTHING_SPECIFIED =
+  "Nothing specified, nothing added.\nhint: Maybe you wanted to say 'git add .'?\nhint: Disable this message with \"git config set advice.addEmptyPathspec false\"\n";
+
+const IGNORED_HINT =
+  'hint: Use -f if you really want to add them.\nhint: Disable this message with "git config set advice.addIgnoredFile false"\n';
+
+interface AddRequest {
+  readonly update: boolean;
+  readonly force: boolean;
+  readonly paths: readonly string[];
+}
+
+function addRequest(args: readonly string[]): AddRequest | undefined {
+  let update = false;
+  let force = false;
+  let literal = false;
+  const paths: string[] = [];
+
+  for (const arg of args) {
+    if (literal || !arg.startsWith("-") || arg === "-") paths.push(arg);
+    else if (arg === "--") literal = true;
+    else if (arg === "-u" || arg === "--update") update = true;
+    else if (arg === "-f" || arg === "--force") force = true;
+    else return undefined;
+  }
+
+  return { update, force, paths };
+}
 
 async function stage(
   client: GitClient,
   dir: string,
-  lines: readonly { readonly path: string; readonly y: string }[],
+  changed: readonly string[],
+  deleted: readonly string[],
+  force: boolean,
 ): Promise<void> {
-  const pending = lines.filter((line) => line.y !== " ");
+  if (changed.length > 0) await client.add({ dir, paths: [...changed], force });
 
-  const changed = pending.flatMap((line) =>
-    line.y === "D" ? [] : [line.path.replace(/\/$/u, "")],
+  if (deleted.length > 0) await client.rm({ dir, paths: [...deleted] });
+}
+
+async function exists(files: WorkFiles, dir: string, path: string): Promise<boolean> {
+  try {
+    await files.read(`${dir}/${path}`);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function changeSelection(lines: readonly StatusLine[], specs: readonly string[], update: boolean) {
+  const matched = lines.filter(
+    (line) => matchesAny(line.path.replace(/\/$/u, ""), specs) && (!update || line.x !== "?"),
   );
 
-  const deleted = pending.flatMap((line) => (line.y === "D" ? [line.path] : []));
+  const pending = matched.filter((line) => line.y !== " ");
 
-  if (changed.length > 0) await client.add({ dir, paths: changed });
-
-  if (deleted.length > 0) await client.rm({ dir, paths: deleted });
+  return {
+    changed: pending.flatMap((line) => (line.y === "D" ? [] : [line.path.replace(/\/$/u, "")])),
+    deleted: pending.flatMap((line) => (line.y === "D" ? [line.path] : [])),
+  };
 }
 
 export async function addCommand(
@@ -29,44 +74,58 @@ export async function addCommand(
   cli: RunCli,
   input: GitCliInput,
   scope: GitScope,
-  readFile: ReadFile,
+  files: WorkFiles,
 ): Promise<GitCliResult> {
-  const args = input.argv.slice(1);
-  const rest = without(args, ["-u", "--update"]);
+  const request = addRequest(input.argv.slice(1));
 
-  if (rest.length === args.length || rest.some((arg) => arg !== ".")) {
-    if (args.some((arg) => arg.startsWith("-"))) return cli(input);
+  if (request === undefined) return cli(input);
 
-    const specs: string[] = [];
+  const { update, force } = request;
 
-    for (const path of rest) {
-      const at = rooted(path, scope.prefix);
+  if (request.paths.length === 0 && !update) return { ...OK, stderr: NOTHING_SPECIFIED };
 
-      if (at === undefined) return failure(`fatal: '${path}' is outside repository\n`);
+  const resolved = request.paths.length === 0 ? ["."] : resolveSpecs(request.paths, scope.prefix);
 
-      specs.push(at);
-    }
+  if ("outside" in resolved) return failure(`fatal: '${resolved.outside}' is outside repository\n`);
 
-    const lines = await fileStatusLines(client, scope.dir, readFile);
-    const matched = lines.filter((line) => specs.some((spec) => under(line.path, spec)));
+  const specs = resolved;
+  const lines = await fileStatusLines(client, scope.dir, files.read);
+  const tracked = await client.lsFiles({ dir: scope.dir });
+  const live = update ? lines.filter((line) => line.x !== "?") : lines;
+  const known = [...tracked, ...live.map((line) => line.path.replace(/\/$/u, ""))];
+  const worktree = force ? await files.list(scope.dir) : [];
+  const universe = [...known, ...worktree];
 
-    const missed = specs.find(
-      (spec) => spec !== "." && !matched.some((line) => under(line.path, spec)),
+  const missed = specs.filter((spec) => spec !== "." && matching(universe, spec).length === 0);
+
+  const ignored: string[] = [];
+
+  for (const spec of missed)
+    if (!force && !update && !WILDCARD.test(spec) && (await exists(files, scope.dir, spec)))
+      ignored.push(spec);
+
+  const unmatched = missed.find((spec) => !ignored.includes(spec));
+
+  if (unmatched !== undefined)
+    return failure(
+      update && (await exists(files, scope.dir, unmatched))
+        ? `error: pathspec '${unmatched}' did not match any file(s) known to git\n`
+        : `fatal: pathspec '${unmatched}' did not match any files\n`,
     );
 
-    if (missed !== undefined)
-      return failure(`fatal: pathspec '${missed}' did not match any files\n`);
+  const selection = changeSelection(live, specs, update);
 
-    await stage(client, scope.dir, matched);
+  const changed = force
+    ? [...new Set(specs.flatMap((spec) => matching(worktree, spec)))]
+    : selection.changed;
 
-    return OK;
-  }
+  await stage(client, scope.dir, changed, selection.deleted, force);
 
-  const tracked = (await statusLines(client, scope.dir, readFile)).filter(
-    (line) => line.x !== "?" && line.y !== " ",
-  );
+  if (ignored.length === 0) return OK;
 
-  await stage(client, scope.dir, tracked);
-
-  return OK;
+  return {
+    stdout: "",
+    stderr: `The following paths are ignored by one of your .gitignore files:\n${ignored.map((path) => `${path}\n`).join("")}${IGNORED_HINT}`,
+    exitCode: 1,
+  };
 }

@@ -2,10 +2,8 @@ import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/
 import type { GitScope } from "./git-cli.js";
 import { failure } from "./git-result.js";
 import { matching, rooted, WILDCARD } from "./git-pathspec.js";
-import type { ReadFile } from "./git-index-file.js";
+import type { ReadFile, RemoveFile } from "./git-index-file.js";
 import { statusLines, type StatusLine } from "./git-status.js";
-
-export type RemoveFile = (path: string, stop: string) => Promise<void>;
 
 const USAGE = "usage: git rm [<options>] [--] <file>...\n";
 

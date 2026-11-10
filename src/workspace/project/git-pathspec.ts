@@ -84,3 +84,24 @@ export function matching(files: readonly string[], at: string): readonly string[
 
   return files.filter((file) => pattern.test(file));
 }
+
+export function matchesAny(path: string, specs: readonly string[]): boolean {
+  return specs.some((spec) => matching([path], spec).length > 0);
+}
+
+export function resolveSpecs(
+  paths: readonly string[],
+  prefix: string,
+): readonly string[] | { readonly outside: string } {
+  const specs: string[] = [];
+
+  for (const path of paths) {
+    const at = rooted(path, prefix);
+
+    if (at === undefined) return { outside: path };
+
+    specs.push(at);
+  }
+
+  return specs;
+}

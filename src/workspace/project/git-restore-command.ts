@@ -1,7 +1,7 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope } from "./git-cli.js";
 import type { ReadFile } from "./git-index-file.js";
-import { rooted, under } from "./git-pathspec.js";
+import { matchesAny, matching, resolveSpecs } from "./git-pathspec.js";
 import { failure, OK, pathspecError } from "./git-result.js";
 import { resolves } from "./git-revision.js";
 import { statusLines, type StatusLine } from "./git-status.js";
@@ -46,9 +46,9 @@ function restoreRequest(args: readonly string[]): RestoreRequest {
 }
 
 function restoreSelection(candidates: readonly string[], specs: readonly string[]) {
-  const matched = candidates.filter((path) => specs.some((spec) => under(path, spec)));
+  const matched = candidates.filter((path) => matchesAny(path, specs));
 
-  return { matched, missed: specs.filter((spec) => !matched.some((path) => under(path, spec))) };
+  return { matched, missed: specs.filter((spec) => matching(matched, spec).length === 0) };
 }
 
 async function restoreIndex(
@@ -129,15 +129,9 @@ export async function restoreCommand(
   if (request.source !== undefined && source === undefined)
     return failure(`fatal: ambiguous argument '${request.source}': unknown revision or path\n`);
 
-  const specs: string[] = [];
+  const specs = resolveSpecs(request.paths, scope.prefix);
 
-  for (const path of request.paths) {
-    const at = rooted(path, scope.prefix);
-
-    if (at === undefined) return failure(`fatal: '${path}' is outside repository\n`);
-
-    specs.push(at);
-  }
+  if ("outside" in specs) return failure(`fatal: '${specs.outside}' is outside repository\n`);
 
   const tracked = await client.lsFiles({ dir });
 

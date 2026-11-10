@@ -1,7 +1,6 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import { dispatchGit } from "./git-dispatch.js";
-import type { ReadFile } from "./git-index-file.js";
-import type { RemoveFile } from "./git-rm-command.js";
+import type { WorkFiles } from "./git-index-file.js";
 
 export type RunCli = (input: GitCliInput) => Promise<GitCliResult>;
 
@@ -87,8 +86,7 @@ export async function gitCli(
   client: GitClient,
   cli: RunCli,
   original: GitCliInput,
-  readFile: ReadFile,
-  removeFile: RemoveFile,
+  files: WorkFiles,
 ): Promise<GitCliResult> {
   const resolved = resolveGlobalOptions(original);
 
@@ -101,5 +99,5 @@ export async function gitCli(
   const prepared =
     command === "commit" ? await withConfiguredIdentity(client, input, scope.dir) : input;
 
-  return dispatchGit(command ?? "", client, cli, prepared, scope, readFile, removeFile);
+  return dispatchGit(command ?? "", client, cli, prepared, scope, files);
 }
