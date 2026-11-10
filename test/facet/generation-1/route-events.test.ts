@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { isModelStreamEvent } from "../../src/model-route-wire/events.js";
+import { isModelStreamEvent } from "../../../src/facet/generation-1/route-events.js";
 
 const ASSISTANT = { role: "assistant", content: null, tool_calls: [] } as const;
 
