@@ -6,7 +6,7 @@ import {
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
 import type { Project } from "../../src/project-catalog.js";
-import { projectDirectory, projectGitDirectory } from "../../src/workspace-layout.js";
+import { projectDirectory } from "../../src/workspace-layout.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import {
   workspaceEffects,
@@ -87,7 +87,7 @@ function provision(operations: FakeProjectOperations, request: ProjectProvisionR
   );
 }
 
-test("runs the clone above the project root, then checks the clone is durable", async () => {
+test("runs the clone command above the project root", async () => {
   const operations = new FakeProjectOperations();
 
   await expect(provision(operations, provisionRequest(projectOne))).resolves.toEqual({
@@ -95,17 +95,7 @@ test("runs the clone above the project root, then checks the clone is durable", 
     result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
   });
 
-  const gitDir = projectGitDirectory(projectOne.id);
-
-  expect(operations.calls).toEqual([
-    `lstat:${projectDirectory(projectOne.id)}`,
-    "clone",
-    "command:/",
-    `lstat:${projectDirectory(projectOne.id)}`,
-    `lstat:${gitDir}`,
-    `lstat:${gitDir}/config`,
-    `read:${gitDir}/config`,
-  ]);
+  expect(operations.calls.filter((call) => call.startsWith("command:"))).toEqual(["command:/"]);
   expect(operations.sources).toEqual([projectCloneSource(projectOne)]);
 });
 

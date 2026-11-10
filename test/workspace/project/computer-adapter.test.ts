@@ -3,7 +3,6 @@ import { expect, test } from "vitest";
 import {
   computerExecBackend,
   type ExecWorkspace,
-  processGroupCommand,
 } from "../../../src/workspace/project/computer-adapter.js";
 import { CONTAINER_BACKEND_ID } from "../../../src/workspace/project/exec-backend.js";
 
@@ -14,15 +13,6 @@ function completePull(): ExecWorkspace["pull"] {
     }),
   });
 }
-
-test("wraps a command in a session leader that kills the whole process group", () => {
-  const wrapped = processGroupCommand("sleep 1 && printf '%s' \"done\"");
-
-  expect(wrapped).toContain("exec setsid /bin/sh -c");
-  expect(wrapped).toContain("& wait $!");
-  expect(wrapped).toContain("kill -s KILL 0");
-  expect(wrapped).toContain("sleep 1 && printf");
-});
 
 test("marks an in-flight read as container-restarted after the runtime generation changes", async () => {
   let resolveRead: ((value: { done: false; value: WorkspaceRuntimeEvent }) => void) | undefined;

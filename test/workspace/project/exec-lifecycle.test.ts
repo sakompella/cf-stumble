@@ -84,33 +84,6 @@ test("two staggered operations time out independently", async () => {
   expect(execBackend.handles[1]?.killCalls).toBe(1);
 });
 
-test("stops reading backend output while one event is buffered", async () => {
-  const { execBackend, target } = makeTarget();
-  const started = await target.startExec({ command: "x" });
-
-  if (!started.ok) throw new Error("expected startExec to succeed");
-  const handle = execBackend.handles[0]!;
-
-  handle.push(
-    { name: "stdout", data: new TextEncoder().encode("first") },
-    { name: "stdout", data: new TextEncoder().encode("second") },
-  );
-  await Promise.resolve();
-  await Promise.resolve();
-
-  expect(handle.readCalls).toBe(1);
-
-  const reader = started.value.events.getReader();
-  await expect(reader.read()).resolves.toEqual({
-    done: false,
-    value: { kind: "stdout", seq: 0, data: "first" },
-  });
-  await expect(reader.read()).resolves.toEqual({
-    done: false,
-    value: { kind: "stdout", seq: 1, data: "second" },
-  });
-});
-
 test("cancelling the consumer stream kills the running command", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });

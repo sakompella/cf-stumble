@@ -1,13 +1,11 @@
 import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
-  WorkspacePlan,
 } from "../../src/workspace/commands/command-result.js";
 import type { Project } from "../../src/project-catalog.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   parseProjectProvisionRequest,
-  planProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
 import { ProvisionFence } from "../../src/supervisor/readiness/provision-fence.js";
@@ -100,7 +98,6 @@ export class NeverSettlingProvisionHost extends FakeProvisionHost {
 }
 
 export class ScriptedProvisionHost extends FakeProvisionHost {
-  readonly plans: WorkspacePlan[] = [];
   failingStep: "clone" | "instructions" | undefined;
 
   override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
@@ -110,8 +107,6 @@ export class ScriptedProvisionHost extends FakeProvisionHost {
     if ("ok" in parsed) {
       return Promise.resolve(parsed);
     }
-
-    this.plans.push(planProjectProvisionRequest(parsed));
 
     return Promise.resolve({
       ok: true,

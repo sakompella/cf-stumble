@@ -190,7 +190,7 @@ test.each([
   expect(alarms.at(-1)).toBe(21_000);
 });
 
-test("a failed close is logged and the container is still destroyed, and a stopped container is not checked again", async () => {
+test("a failed close still destroys the container, and a stopped container is not checked again", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   const { idle, clock, alarms, calls } = controller({ closeFails: true });
   idle.begin()();
