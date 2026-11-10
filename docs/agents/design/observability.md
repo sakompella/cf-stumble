@@ -81,9 +81,10 @@ wrote about 12,600 spans. If the bill grows, lower `traces.headSamplingRate` fir
 ## Checking a running deployment
 
 Run `pnpm ops:check` after a staging deploy or an e2e run, and when the bill looks wrong. It needs a
-live account, so it is not part of `pnpm verify`. It checks two things: a workspace container that
-kept running past the Host's idle stop (rule `ran-past-idle`), and `facet.session-failed` events in
-the window (rule `facet.session-failed`). It prints one check mark when all is well and one line per
+live account, so it is not part of `pnpm verify`. It checks three things: a workspace container that
+kept running past the Host's idle stop (rule `ran-past-idle`), `facet.session-failed` events in
+the window (rule `facet.session-failed`), and a Durable Object that still runs an older Worker
+version after the latest deployment (rule `do-version-skew`). It prints one check mark when all is well and one line per
 finding otherwise, and exits 1 on any finding or `unknown`. After that it prints an informational
 line, `i model cache hit rate`, with the sum of `cachedTokens` over the sum of `promptTokens` of the
 `model.call` events in the window. The line never changes the exit code. It is fetched apart from the
@@ -117,6 +118,21 @@ finding. Only whole five-minute buckets inside the requested window count, and b
 than 10 minutes are still filling and do not count. The check mark names the window up to the last
 complete bucket, not up to now, and a window with nothing complete prints `unknown`. The finding lists the routes and end times of
 the last three requests before the run ended, which shows what kept the container awake.
+
+**Rule `do-version-skew`.** A Durable Object adopts a new Worker version when it restarts, and an
+active one can run older code for a while (`docs/deploy.md`, "Durable Objects and new versions").
+The check reads the latest deployment from `workers/scripts/<worker>/deployments` and then asks
+Workers Logs, for each class (`Supervisor`, `WorkspaceHost`), for invocations whose
+`$workers.scriptVersion.id` differs from every deployed version, from five minutes after the
+deployment (`DO_UPDATE_GRACE_MS`, the default code update delay) to now. Every `do.started` event
+and every other invocation carries that field, so a Durable Object that serves a request on old
+code shows up even if its constructor ran long before. The query returns only the old-version
+calls, so the 2,000-row limit is reached only when the skew itself is large; the check then prints
+`unknown`. A class that no one called since the deployment is silent and passes: an instance that
+runs no code cannot run the wrong code, and its next request starts it on the new version. The
+check ignores `--since` because the deployment, not the window, bounds it. It is independent of
+the container checks: a failed deployments call prints `unknown` and leaves the other rules
+alone.
 
 **Limits.** Other work that holds the container after its request ended is covered only by the 10-minute slack. A stuck container shows up about 30
 minutes after the last request with the defaults, or about 40 after a message.

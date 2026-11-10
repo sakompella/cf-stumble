@@ -79,6 +79,34 @@ Keep the file in a password manager or delete it. The browser asks for the user 
 
 A request that changes state (any method but `GET` and `HEAD`) must also come from the instance's own page: if its `Origin` header names another origin, or its `Sec-Fetch-Site` header is anything but `same-origin`, the Worker answers 403 `cross-origin-request`. `curl` sends neither header, so the Basic credential is enough.
 
+## Durable Objects and new versions
+
+A new Worker version does not restart a running Durable Object by itself. Cloudflare applies a code update strategy to each deployment (https://developers.cloudflare.com/durable-objects/deployments/durable-objects-code-updates/). The default is `deferred` with a 300-second `max_delay`: an object that is idle starts on the new version at its next request, and an object that is active keeps its current code until it hibernates or `max_delay` passes. Secrets are part of a version, so a secret change is a new version and follows the same rule. An instance holds its `env` from construction, so reading a secret per request does not help; the instance must restart.
+
+On staging stage `dv-ilj1k8` (2026-11-10) the default behaved like this:
+
+- After a secret change the idle Supervisor started on the new version within 2 to 5 seconds. A Supervisor that was running a conversation turn restarted about 23 seconds later.
+- The WorkspaceHost, which holds the container, a hibernating provider WebSocket and an alarm, stayed on the old version for at least 3 minutes after a deploy while it served a tool call, and for at least 80 seconds after a secret change while a poll kept it busy. During that time the Supervisor already ran the new version. This matches what the e2e run saw (a Supervisor without `GH_TOKEN`) and what the fuzz run saw (an old WorkspaceHost after a deploy).
+- Cloudflare documents a hard bound of `max_delay`, so the wait ends after 5 minutes at the latest, but nothing logs `do.started` until a request reaches the restarted object.
+
+The stack sets `codeUpdateStrategy: { mode: "immediate" }` (`infra/alchemy.run.ts`), so every `pnpm run deploy`, locally and in CI, restarts both classes on the new version. On the same stage the WorkspaceHost started on the new version 7 seconds after a deploy and the Supervisor 12 seconds after, while both were busy. A restart interrupts what a Durable Object is serving (a running tool call ended as interrupted and the agent retried it); a deferred update does the same once `max_delay` passes, only later.
+
+`cf workers secrets update` creates its version with the default strategy and cannot set another. After you change a secret, apply the new version at once:
+
+```sh
+pnpm run deploy <stage> --force
+```
+
+Or, without a build, deploy the latest version again with the immediate strategy:
+
+```sh
+pnpm exec cf workers deployments create --worker <worker> --strategy percentage \
+  --versions '[{"version_id":"<latest version id>","percentage":100}]' \
+  --code-update-strategy-mode immediate
+```
+
+`pnpm ops:check` reports `do-version-skew` when a Durable Object served a request on an older version more than five minutes after the latest deployment (`docs/agents/design/observability.md`, "Checking a running deployment").
+
 ## Deploying from CI
 
 GitHub Actions deploys production. Two workflows in `.github/workflows/` do the work:

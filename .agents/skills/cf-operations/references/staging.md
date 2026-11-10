@@ -31,7 +31,7 @@ The first plan on an account without a state store creates the Worker `alchemy-s
 
 ## Secrets and requests
 
-Set `OWNER_PASSWORD` right after the first deploy, because the Worker answers 503 until it exists: `pnpm exec cf workers secrets update OWNER_PASSWORD --worker <name> --type secret_text < <file>` reads the value from the file. Set the other secrets with `pnpm exec cf workers secrets update <NAME> --worker <name> --type secret_text --text "$(cat <file>)"`, with the value in a file outside the repository. Delete the file afterward.
+Set `OWNER_PASSWORD` right after the first deploy, because the Worker answers 503 until it exists: `pnpm exec cf workers secrets update OWNER_PASSWORD --worker <name> --type secret_text < <file>` reads the value from the file. Set the other secrets with `pnpm exec cf workers secrets update <NAME> --worker <name> --type secret_text --text "$(cat <file>)"`, with the value in a file outside the repository. Delete the file afterward. A secret change does not restart a busy Durable Object at once, so after the last secret run `pnpm run deploy <stage> --force` (`docs/deploy.md`, "Durable Objects and new versions").
 
 An HTTP client with a default user agent may get 403 from the API; set your own `User-Agent`.
 
