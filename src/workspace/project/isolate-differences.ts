@@ -40,6 +40,7 @@ const DIFFERS = new Map<string, (invocation: Invocation) => boolean>([
       operands.length > 1 || !(options.length === 1 && COUNT_OPTIONS.has(options[0] ?? "")),
   ],
   ["uniq", ({ options }) => hasShortOption(options, "c")],
+  ["awk", ({ operands }) => operands.some((word) => /\b(?:for|while|do)\b/u.test(word))],
   ["grep", ({ options }) => hasShortOption(options, "rR") || options.includes("--recursive")],
 ]);
 
