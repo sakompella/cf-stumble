@@ -1,0 +1,1 @@
+export const MAX_STREAM_EVENT_BYTES = 8_388_608;

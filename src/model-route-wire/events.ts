@@ -13,8 +13,6 @@ import {
 } from "@earendil-works/pi-schema";
 import type { AssistantMessage, RouteMessage, ToolDefinition } from "./request.js";
 
-export const MAX_STREAM_EVENT_BYTES = 8_388_608;
-
 export type StreamingProviderPayload = Readonly<{
   messages: ReadonlyArray<RouteMessage>;
   tools?: ReadonlyArray<ToolDefinition>;

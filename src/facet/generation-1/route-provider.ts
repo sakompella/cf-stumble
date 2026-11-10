@@ -6,7 +6,8 @@ import type {
   StreamOptions,
   TranscriptContext,
 } from "@earendil-works/pi-ai";
-import { isModelStreamEvent, MAX_STREAM_EVENT_BYTES } from "../../model-route-wire/events.js";
+import { isModelStreamEvent } from "../../model-route-wire/events.js";
+import { MAX_STREAM_EVENT_BYTES } from "../../model-route-wire/stream-limits.js";
 import type { ModelCapability } from "./capabilities.js";
 import { LineReader } from "./line-reader.js";
 import { transcriptToRouteRequest } from "./route-request.js";
