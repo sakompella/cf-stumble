@@ -8,6 +8,7 @@
     "tools/*.mts!",
     "tools/ops-check/run.mts!",
     "tools/e2e/run.mts!",
+    "tools/e2e/fuzz/run.mts!",
     "infra/alchemy.run.ts!"
   ],
   "project": ["src/**/*.ts!", "tools/**/*.{ts,mts}!", "infra/**/*.ts!"],
@@ -32,7 +33,6 @@
     "src/workspace/computer-operations.ts": ["exports"],
     "src/workspace/managed-instructions.ts": ["exports"],
     "src/workspace/project/computer-adapter.ts": ["exports"],
-    "src/workspace/project/exec-selection.ts": ["exports"],
     "src/workspace/project/isolate-egress.ts": ["exports"],
     "src/workspace/workspace-platform.ts": ["exports"],
     "src/page/client/sent-message.ts": ["exports"],

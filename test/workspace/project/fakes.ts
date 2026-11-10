@@ -4,7 +4,7 @@ import type {
   ExecBackendHandle,
   ExecBackendInput,
 } from "../../../src/workspace/project/exec-backend.js";
-import { routedBackend } from "../../../src/workspace/project/exec-selection.js";
+import { routedBackend } from "../../../src/workspace/project/exec-routing.js";
 import type { ExecBackendChoice } from "../../../src/workspace/project/protocol.js";
 import type {
   ProjectFilesystemProvider,

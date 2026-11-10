@@ -12,6 +12,7 @@
     "src/supervisor/projects/project-lifecycle-machine.ts",
     "src/supervisor/projects/github-connection-machine.ts",
     "src/workspace/container-lifecycle.ts",
+    "src/workspace/project/exec-routing.ts",
     "src/workspace/project/exec-selection.ts",
     "src/workspace/project/start-exec-input.ts",
     "src/workspace/project/git-status.ts",

@@ -1,7 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { routedBackend } from "../../../src/workspace/project/exec-selection.js";
+import { routedBackend } from "../../../src/workspace/project/exec-routing.js";
 import { ISOLATE_PROGRAMS } from "../../../src/workspace/project/isolate-programs.js";
 
 const SYSTEM_DIRECTORIES = [

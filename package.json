@@ -9,7 +9,7 @@
     "test:mutation": "stryker run",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",
     "typecheck": "tsrs --noEmit && tsrs --noEmit -p src/page/client && tsrs --noEmit -p src/stumble-cli/orb && tsrs --noEmit -p test/stumble-cli/orb && tsrs --noEmit -p test/page/client && tsrs --noEmit -p infra",
-    "typecheck:tools": "tsrs --noEmit -p tools",
+    "typecheck:tools": "tsrs --noEmit -p tools && tsrs --noEmit -p tools/e2e/fuzz/page",
     "knip": "knip --production",
     "lint": "oxlint --type-aware --max-warnings=0 --report-unused-disable-directives",
     "format": "oxfmt",
@@ -25,6 +25,7 @@
     "stumble": "tsx src/stumble-cli/orb/main.ts",
     "ops:check": "pnpm exec tsx tools/ops-check/run.mts --since 2h",
     "e2e": "pnpm exec tsx tools/e2e/run.mts",
+    "e2e:fuzz": "pnpm exec tsx tools/e2e/fuzz/run.mts",
     "test:browser": "pnpm build:page && playwright test -c tools/playwright/playwright.config.mts",
     "verify": "pnpm install:infra && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm knip && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:shell-modules && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
@@ -39,6 +40,7 @@
     "esbuild": "0.28.2"
   },
   "devDependencies": {
+    "@antithesishq/bombadil": "0.7.10",
     "@cloudflare/vitest-plugin": "^1.5.1",
     "@cloudflare/workers-types": "^5.20261104.1",
     "@effect/platform-browser": "4.1.2",
