@@ -6,9 +6,10 @@ import { commitWithSummary } from "./git-commit-text.js";
 import { indexCommand } from "./git-index-dispatch.js";
 import type { WorkFiles } from "./git-index-file.js";
 import { pushDelete } from "./git-push-delete.js";
+import { unbornCommand } from "./git-unborn.js";
 import { readCommand } from "./git-read-dispatch.js";
 
-export function dispatchGit(
+export async function dispatchGit(
   command: string,
   client: GitClient,
   cli: RunCli,
@@ -16,6 +17,10 @@ export function dispatchGit(
   scope: GitScope,
   files: WorkFiles,
 ): Promise<GitCliResult> {
+  const unborn = await unbornCommand(command, client, input, scope, files);
+
+  if (unborn !== undefined) return unborn;
+
   switch (command) {
     case "commit":
       return commitWithSummary(client, cli, input, scope, files.read);

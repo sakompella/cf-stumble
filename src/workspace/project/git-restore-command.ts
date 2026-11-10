@@ -127,7 +127,14 @@ export async function restoreCommand(
     request.source === undefined ? undefined : await resolves(client, dir, request.source);
 
   if (request.source !== undefined && source === undefined)
-    return failure(`fatal: ambiguous argument '${request.source}': unknown revision or path\n`);
+    return failure(`fatal: could not resolve '${request.source}'\n`);
+
+  if (
+    request.staged &&
+    request.source === undefined &&
+    (await resolves(client, dir, "HEAD")) === undefined
+  )
+    return failure("fatal: could not resolve 'HEAD'\n");
 
   const specs = resolveSpecs(request.paths, scope.prefix);
 
