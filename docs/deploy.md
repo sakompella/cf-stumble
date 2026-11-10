@@ -372,6 +372,15 @@ it; the run id is in the first output line. `.github/workflows/e2e.yml` runs it 
 `CLOUDFLARE_API_TOKEN` secret, the `CLOUDFLARE_ACCOUNT_ID` variable and an `E2E_GH_TOKEN` secret,
 and runs `--cleanup` again when the job is cancelled.
 
+### Page fuzz
+
+`pnpm e2e:fuzz --area page [--seed n] [--minutes n]` drives the owner page on a fresh `fzpage-<id>`
+stage with [Bombadil](https://github.com/antithesishq/bombadil) (`tools/e2e/fuzz/page/`, pinned in
+`package.json`). It needs `CHROMIUM_PATH` on NixOS. It clicks, double-clicks, reloads, resizes and
+sends a few capped hostile prompts, some while the network is offline, slow or dropping, and checks
+that no error is uncaught, no send is duplicated or lost, and the transcript matches the stored
+conversation after it settles. A failing round prints its seed and keeps its trace.
+
 ## Cost and cleanup
 
 Workers Paid, Container time, and Workers AI requests can cost money. The Workspace Host stops the container ten minutes after the last work (ADR-0043), so an unused instance costs little. A client that keeps calling a route that touches the workspace keeps the container running, and `pnpm ops:check` counts each call as work, so it does not report it (`docs/agents/incident-2026-09-container-cost.md`).
