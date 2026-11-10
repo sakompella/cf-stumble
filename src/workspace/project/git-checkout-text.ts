@@ -1,5 +1,6 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
-import { reportingFailure, restoreCommand } from "./git-index-commands.js";
+import { restoreCommand } from "./git-restore-command.js";
+import { reportingFailure } from "./git-result.js";
 import type { GitScope, RunCli } from "./git-cli.js";
 import type { ReadFile } from "./git-index-file.js";
 import { branchTracking, trackingLines } from "./git-tracking.js";

@@ -1,6 +1,7 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope } from "./git-cli.js";
-import { failure, rooted, under } from "./git-index-commands.js";
+import { failure } from "./git-result.js";
+import { matching, rooted, WILDCARD } from "./git-pathspec.js";
 import type { ReadFile } from "./git-index-file.js";
 import { statusLines, type StatusLine } from "./git-status.js";
 
@@ -96,26 +97,6 @@ function refusal(lines: readonly StatusLine[], cached: boolean): string {
           "(use --cached to keep the file, or -f to force removal)",
         ),
   ].join("");
-}
-
-const WILDCARD = /[*?[]/u;
-
-function wildcard(pattern: string): RegExp {
-  const body = pattern
-    .replaceAll(/[.+^${}()|\\]/gu, String.raw`\$&`)
-    .replaceAll("*", ".*")
-    .replaceAll("?", ".")
-    .replaceAll("[!", "[^");
-
-  return new RegExp(`^${body}$`, "u");
-}
-
-function matching(tracked: readonly string[], at: string): readonly string[] {
-  if (!WILDCARD.test(at)) return tracked.filter((file) => under(file, at));
-
-  const pattern = wildcard(at);
-
-  return tracked.filter((file) => pattern.test(file));
 }
 
 export async function rmCommand(
