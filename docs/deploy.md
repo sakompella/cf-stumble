@@ -330,7 +330,9 @@ a machine you trust with that.
 
 `pnpm e2e` (`tools/e2e/run.mts`) checks a real deployment. It deploys a fresh stage
 `e2e-<run id>` from the checkout, sets its secrets, and submits and activates a generation from the
-tip of `main`. Harness provisioning fetches only the default branch, so the facet code of an
+tip of `main`. It sets `OWNER_PASSWORD` last and then deploys the stage again with
+`--force`: the first deploy starts the Durable Objects without the secrets, and the Supervisor did
+not see `GH_TOKEN` until a new version replaced it, so every push answered 401. Harness provisioning fetches only the default branch, so the facet code of an
 unmerged branch does not run in the first generation. Then it runs three workflows, each with a time limit:
 
 1. Page: a Playwright spec opens the owner page, sends a message, waits for the streamed answer,
@@ -359,8 +361,14 @@ first in `PATH`. Set `CHROMIUM_PATH` where Playwright's own Chromium does not ru
   then does not deploy or destroy; it disconnects the project and rolls back to the generation that
   was active before. Set `E2E_OWNER_PASSWORD` to that instance's password.
 
-A run takes about RUNMIN minutes and uses about CONTMIN container minutes and MODELCALLS Workers AI
-calls. `.github/workflows/e2e.yml` runs it by hand (workflow_dispatch) and every Monday. It reads the
+A run takes about 5 minutes, 3 of them deploying. It uses about 4 container instance-minutes and 10
+to 16 Workers AI calls. When Workers AI answers `3040: Capacity temporarily exceeded`, a turn stops
+with `model_error`, and that workflow fails.
+
+Prefer a fresh stage. On an existing instance, a turn that failed in an earlier run stays in the
+harness conversation, and the agent can carry out its steps in the next turn, which then delays the
+page turn. If a run was killed before cleanup finished, `pnpm e2e --run-id <id> --cleanup` finishes
+it; the run id is in the first output line. `.github/workflows/e2e.yml` runs it by hand (workflow_dispatch) and every Monday. It reads the
 `CLOUDFLARE_API_TOKEN` secret, the `CLOUDFLARE_ACCOUNT_ID` variable and an `E2E_GH_TOKEN` secret,
 and runs `--cleanup` again when the job is cancelled.
 
