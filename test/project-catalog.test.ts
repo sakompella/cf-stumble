@@ -73,6 +73,7 @@ test("gives the longest names GitHub allows an id, unless punctuation makes it t
 
 test.each([
   ["another host", "https://gitlab.com/owner/repo"],
+  ["a port GitHub does not serve", "https://github.com:8443/owner/repo"],
   ["a path deeper than owner and repository", "https://github.com/owner/repo/tree"],
   ["an owner GitHub cannot have", "https://github.com/-/harness"],
   ["an owner with a dot", "https://github.com/own.er/repo"],
