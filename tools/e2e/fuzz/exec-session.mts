@@ -85,13 +85,17 @@ const FACET_PATH = "src/facet/generation-1/fuzz-exec.ts";
 export async function installFuzzGeneration(run: FuzzRun): Promise<void> {
   const active = (await run.owner.status()).generation;
 
-  if (active !== null && (await run.target.github.fileAt(FACET_PATH, active.harnessCommit)) !== undefined)
+  if (
+    active !== null &&
+    (await run.target.github.fileAt(FACET_PATH, active.harnessCommit)) !== undefined
+  )
     return;
 
   const base = await run.target.github.mainHead();
   const branch = `e2e/${run.target.runId}-fuzz`;
   const facet = readFileSync(new URL("./exec-facet.ts", import.meta.url), "utf8");
-  const commit = await new FuzzCommits(process.env["GH_TOKEN"] ?? "").branchWithFacet(base, branch, facet);
+  const commits = new FuzzCommits(process.env["GH_TOKEN"] ?? "");
+  const commit = await commits.branchWithFacet(base, branch, facet);
 
   await fetchBranch(run, branch);
 

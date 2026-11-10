@@ -72,7 +72,7 @@ async function fuzzCases(run: FuzzRun): Promise<boolean> {
   await installFuzzGeneration(run);
 
   const rng = new Rng(run.seed);
-  
+
   let failed = 0;
   let cases = 0;
 
