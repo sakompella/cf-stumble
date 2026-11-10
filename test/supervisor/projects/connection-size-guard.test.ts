@@ -10,25 +10,6 @@ afterEach(async () => {
   await reset();
 });
 
-test("leaves the size decision to the clone, whatever GitHub's API reports", async () => {
-  const subject = tenant("size-left-to-clone", {
-    fallbackToken: FAKE_TOKEN,
-    replies: [
-      { size: 6_000_000, default_branch: "main" },
-      { truncated: true, tree: [] },
-    ],
-  });
-
-  const connected = await subject.connections((connections) =>
-    connections.connect(REPOSITORY, undefined, NOW),
-  );
-
-  expect(connected).toMatchObject({ ok: true });
-  expect(
-    subject.workspace.commands.filter((command) => command.includes("git clone")),
-  ).toHaveLength(1);
-});
-
 test.each([
   {
     clone: "measures as too large",

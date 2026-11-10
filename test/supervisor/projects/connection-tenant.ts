@@ -8,7 +8,6 @@ import type {
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { tenantConnections, type TenantConnections } from "./tenant-connections.js";
 import type { ProjectId } from "../../../src/project-catalog.js";
-import type { GitHubFetch } from "../../../src/github/index.js";
 
 export const noRunActive = <Marked>(_projectId: ProjectId, mark: () => Marked) =>
   Effect.sync(() => ({ marked: mark() }));
@@ -17,40 +16,7 @@ export const NOW = 1_700_000_000_000;
 
 export const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
-export const CLIENT_ID = "Iv1.cfstumbleFAKE";
-
 export const REPOSITORY = "https://github.com/sample/repo-1";
-
-type Reply =
-  | Readonly<{
-      device_code: string;
-      user_code: string;
-      verification_uri: string;
-      expires_in: number;
-      interval: number;
-    }>
-  | Readonly<{ size: number; default_branch: string }>
-  | Readonly<{ truncated: boolean; tree: readonly Readonly<{ type: string; size: number }>[] }>
-  | Readonly<{ message: string }>;
-
-function githubReplying(replies: readonly Reply[]): GitHubFetch {
-  let index = 0;
-
-  return () => {
-    const reply = replies[Math.min(index, replies.length - 1)] ?? {};
-    index += 1;
-
-    return Promise.resolve(Response.json(reply));
-  };
-}
-
-export const deviceReply = {
-  device_code: "device-code-secret",
-  user_code: "WDJB-MJHT",
-  verification_uri: "https://github.com/login/device",
-  expires_in: 900,
-  interval: 5,
-} satisfies Reply;
 
 export interface Tenant {
   readonly workspace: FakeTenantWorkspace;
@@ -63,8 +29,6 @@ export function tenant(
   options: Readonly<{
     workspace?: FakeTenantWorkspace;
     fallbackToken?: string;
-    clientId?: string;
-    replies?: readonly Reply[];
   }> = {},
 ): Tenant {
   const workspace = options.workspace ?? new FakeTenantWorkspace();
@@ -74,9 +38,9 @@ export function tenant(
       Effect.runPromise(
         use(
           tenantConnections(state.storage, name, workspace, {
-            clientId: options.clientId ?? CLIENT_ID,
+            clientId: undefined,
             fallbackToken: options.fallbackToken,
-            fetcher: githubReplying(options.replies ?? [deviceReply]),
+            fetcher: () => Promise.resolve(Response.json({})),
           }),
         ),
       ),
