@@ -4,6 +4,7 @@ import {
   ProjectConnections,
   type GitHubConnectionEnvironment,
 } from "../../../src/supervisor/projects/index.js";
+import { ProvisionFence } from "../../../src/supervisor/readiness/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 
@@ -32,6 +33,7 @@ export function tenantConnections(
     connections: new ProjectConnections({
       storage,
       workspaceName,
+      fence: new ProvisionFence(),
       namespace: workspace.namespace,
       github,
     }),

@@ -5,7 +5,7 @@ import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import { provisionProjectWorkspace } from "../../src/supervisor/readiness/provisioning.js";
-import { waitForWorkspaceProvision } from "../../src/supervisor/readiness/provision-fence.js";
+import { ProvisionFence } from "../../src/supervisor/readiness/provision-fence.js";
 import type { WorkspaceCommandResult } from "../../src/workspace/commands/command-result.js";
 import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
@@ -33,9 +33,12 @@ test("an interrupted plan keeps the exclusion until its RPC settles", async () =
 
   const workspaceName = tenantWorkspaceName("interrupted-provision");
 
+  const fence = new ProvisionFence();
+
   const plan = Effect.runFork(
     provisionProjectWorkspace({
       workspaceName,
+      fence,
       project: sampleProjectOne,
       namespace: namespaceFor(host),
     }),
@@ -45,9 +48,7 @@ test("an interrupted plan keeps the exclusion until its RPC settles", async () =
   const interrupted = Effect.runPromise(Fiber.interrupt(plan));
   let admitted = false;
 
-  const turn = Effect.runPromise(
-    waitForWorkspaceProvision(workspaceName, sampleProjectOne.id),
-  ).then(() => {
+  const turn = Effect.runPromise(fence.wait(sampleProjectOne.id)).then(() => {
     admitted = true;
   });
 
