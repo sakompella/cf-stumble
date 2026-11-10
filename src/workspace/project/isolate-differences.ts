@@ -49,18 +49,20 @@ export function differsFromTheContainer(program: string, rest: readonly string[]
 }
 
 export function mergesStderrIntoStdout(words: readonly string[]): boolean {
-  return words.some((word) => /^\d*>&/u.test(word));
+  return words.some((word, index) => word === ">" && words[index + 1]?.startsWith("&") === true);
 }
 
 export function hasUnquotedPatternCharacter(command: string): boolean {
   let quote: string | undefined;
 
-  for (const char of command) {
+  for (let index = 0; index < command.length; index++) {
+    const char = command.charAt(index);
+
     if (quote !== undefined) {
       if (char === quote) quote = undefined;
     } else if (char === "'" || char === '"') {
       quote = char;
-    } else if (char === "?" || char === "[") {
+    } else if ((char === "?" && command.charAt(index - 1) !== "$") || char === "[") {
       return true;
     }
   }
