@@ -1,9 +1,10 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
 import type { WorkFiles } from "./git-index-file.js";
-import { matching, matchesAny, resolveSpecs, WILDCARD } from "./git-pathspec.js";
+import { matching, resolveSpecs, WILDCARD } from "./git-pathspec.js";
 import { failure, OK } from "./git-result.js";
-import { fileStatusLines, type StatusLine } from "./git-status.js";
+import { changeSelection, stage } from "./git-stage.js";
+import { fileStatusLines } from "./git-status.js";
 
 const NOTHING_SPECIFIED =
   "Nothing specified, nothing added.\nhint: Maybe you wanted to say 'git add .'?\nhint: Disable this message with \"git config set advice.addEmptyPathspec false\"\n";
@@ -34,18 +35,6 @@ function addRequest(args: readonly string[]): AddRequest | undefined {
   return { update, force, paths };
 }
 
-async function stage(
-  client: GitClient,
-  dir: string,
-  changed: readonly string[],
-  deleted: readonly string[],
-  force: boolean,
-): Promise<void> {
-  if (changed.length > 0) await client.add({ dir, paths: [...changed], force });
-
-  if (deleted.length > 0) await client.rm({ dir, paths: [...deleted] });
-}
-
 async function exists(files: WorkFiles, dir: string, path: string): Promise<boolean> {
   try {
     await files.read(`${dir}/${path}`);
@@ -54,19 +43,6 @@ async function exists(files: WorkFiles, dir: string, path: string): Promise<bool
   } catch {
     return false;
   }
-}
-
-function changeSelection(lines: readonly StatusLine[], specs: readonly string[], update: boolean) {
-  const matched = lines.filter(
-    (line) => matchesAny(line.path.replace(/\/$/u, ""), specs) && (!update || line.x !== "?"),
-  );
-
-  const pending = matched.filter((line) => line.y !== " ");
-
-  return {
-    changed: pending.flatMap((line) => (line.y === "D" ? [] : [line.path.replace(/\/$/u, "")])),
-    deleted: pending.flatMap((line) => (line.y === "D" ? [line.path] : [])),
-  };
 }
 
 export async function addCommand(
@@ -113,13 +89,13 @@ export async function addCommand(
         : `fatal: pathspec '${unmatched}' did not match any files\n`,
     );
 
-  const selection = changeSelection(live, specs, update);
+  const selection = changeSelection(live, specs);
 
   const changed = force
     ? [...new Set(specs.flatMap((spec) => matching(worktree, spec)))]
     : selection.changed;
 
-  await stage(client, scope.dir, changed, selection.deleted, force);
+  await stage(client, scope.dir, { changed, deleted: selection.deleted }, force);
 
   if (ignored.length === 0) return OK;
 

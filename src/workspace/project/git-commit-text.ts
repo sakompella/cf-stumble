@@ -7,6 +7,7 @@ import type {
 } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
 import type { ReadFile } from "./git-index-file.js";
+import { stagePathspecs } from "./git-commit-pathspec.js";
 import { statusLines, type StatusLine } from "./git-status.js";
 import { headState, longStatus } from "./git-status-text.js";
 
@@ -132,11 +133,10 @@ function scanCluster(cluster: string): ClusterFlags {
 }
 
 function scanCommit(args: readonly string[]): CommitFlags {
-  let quiet = false;
-  let amend = false;
-  let all = false;
-  let message = false;
+  const flags = { quiet: false, amend: false, all: false, message: false };
   const pathspecs: string[] = [];
+  const loose: string[] = [];
+  let unknownFlag = false;
   let index = 0;
 
   while (index < args.length) {
@@ -148,67 +148,38 @@ function scanCommit(args: readonly string[]): CommitFlags {
     }
 
     if (arg === "-m" || arg === "--message") {
-      message = true;
+      flags.message = true;
       index += 1;
-      continue;
-    }
+    } else if (arg.startsWith("--message=")) flags.message = true;
+    else if (arg === "--quiet" || arg === "-q") flags.quiet = true;
+    else if (arg === "--amend") flags.amend = true;
+    else if (arg === "--all" || arg === "-a") flags.all = true;
+    else if (IGNORED.has(arg)) continue;
+    else if (CLUSTER.test(arg)) {
+      const cluster = scanCluster(arg.slice(1));
 
-    if (arg.startsWith("--message=")) {
-      message = true;
-      continue;
-    }
+      flags.quiet = flags.quiet || cluster.quiet;
+      flags.all = flags.all || cluster.all;
+      flags.message = flags.message || arg.includes("m");
 
-    if (arg === "--quiet" || arg === "-q") {
-      quiet = true;
-
-      continue;
-    }
-
-    if (arg === "--amend") {
-      amend = true;
-
-      continue;
-    }
-
-    if (arg === "--all" || arg === "-a") {
-      all = true;
-
-      continue;
-    }
-
-    if (IGNORED.has(arg)) continue;
-
-    if (CLUSTER.test(arg)) {
-      const flags = scanCluster(arg.slice(1));
-
-      quiet = quiet || flags.quiet;
-      all = all || flags.all;
-
-      if (flags.value) index += 1;
-
-      message = message || arg.includes("m");
-
-      continue;
-    }
-
-    pathspecs.push(arg);
+      if (cluster.value) index += 1;
+    } else if (arg.startsWith("-")) unknownFlag = true;
+    else loose.push(arg);
   }
 
-  return { quiet, amend, all, message, pathspecs };
+  return { ...flags, pathspecs: unknownFlag ? pathspecs : [...loose, ...pathspecs] };
 }
 
-function forwardedArgv(args: readonly string[]): string[] {
+function forwardedArgv(args: readonly string[], pathspecs: readonly string[]): string[] {
   const forwarded: string[] = [];
   let index = 0;
 
   while (index < args.length) {
     const arg = args[index++] ?? "";
 
-    if (arg === "--") {
-      forwarded.push(...args.slice(index - 1));
+    if (arg === "--") return forwarded;
 
-      return forwarded;
-    }
+    if (!arg.startsWith("-") && pathspecs.includes(arg)) continue;
 
     if (arg === "-m" || arg === "--message") {
       forwarded.push(arg, args[index++] ?? "");
@@ -272,7 +243,15 @@ export async function commitWithSummary(
       exitCode: 128,
     };
 
-  const lines = await statusLines(client, dir, readFile);
+  const initial = await statusLines(client, dir, readFile);
+
+  if (flags.pathspecs.length > 0) {
+    const refused = await stagePathspecs(client, dir, scope.prefix, flags.pathspecs, initial);
+
+    if (refused !== undefined) return refused;
+  }
+
+  const lines = flags.pathspecs.length > 0 ? await statusLines(client, dir, readFile) : initial;
   const paths = committedPaths(lines, all);
 
   if (paths.length === 0 && !amend)
@@ -287,7 +266,7 @@ export async function commitWithSummary(
 
   const argv = [
     "commit",
-    ...forwardedArgv(args),
+    ...forwardedArgv(args, flags.pathspecs),
     ...(previous === undefined ? [] : ["-m", previous]),
   ];
 
