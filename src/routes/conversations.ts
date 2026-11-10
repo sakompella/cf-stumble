@@ -1,7 +1,13 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { type EntriesRequest, eventsFrom, parseEntriesRequest } from "../entries-request.js";
-import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
+import {
+  callSupervisor,
+  decodeRequestBody,
+  invalidRequestBody,
+  jsonError,
+  type SupervisorCallFailed,
+} from "./json.js";
 import { projectIdFromPath, type ProjectRouteSuffix } from "./route-pattern.js";
 import type {
   ConversationProblem,
@@ -75,16 +81,15 @@ function answer<T extends object>(
   );
 }
 
-const messageResponse = Effect.fnUntraced(
-  function* (request: Request, supervisor: ConversationApiSupervisor, projectId: string) {
-    const { content, requestId } = yield* decodeRequestBody(request, MessageBody);
+const messageResponse = Effect.fnUntraced(function* (
+  request: Request,
+  supervisor: ConversationApiSupervisor,
+  projectId: string,
+) {
+  const { content, requestId } = yield* decodeRequestBody(request, MessageBody);
 
-    return yield* answer(() => supervisor.submitProjectMessage(projectId, content, requestId), 202);
-  },
-  Effect.catchTag("InvalidRequestBody", () =>
-    Effect.succeed(jsonError(400, "invalid-message-request")),
-  ),
-);
+  return yield* answer(() => supervisor.submitProjectMessage(projectId, content, requestId), 202);
+}, invalidRequestBody("invalid-message-request"));
 
 function routeFor(
   request: Request,

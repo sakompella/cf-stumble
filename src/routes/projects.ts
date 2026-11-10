@@ -1,6 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
+import {
+  callSupervisor,
+  decodeRequestBody,
+  invalidRequestBody,
+  type SupervisorCallFailed,
+} from "./json.js";
 import { projectIdFromPath } from "./route-pattern.js";
 import type { SelectableCatalog } from "../selectable-projects.js";
 import type {
@@ -85,37 +90,35 @@ const ConnectBody = Schema.Struct({
   displayName: Schema.optionalKey(Schema.String),
 });
 
-const connectResponse = Effect.fnUntraced(
-  function* (request: Request, supervisor: ProjectApiSupervisor) {
-    const body = yield* decodeRequestBody(request, ConnectBody);
+const connectResponse = Effect.fnUntraced(function* (
+  request: Request,
+  supervisor: ProjectApiSupervisor,
+) {
+  const body = yield* decodeRequestBody(request, ConnectBody);
 
-    const result = yield* callSupervisor(() =>
-      supervisor.connectProject(body.repositoryUrl, body.displayName),
+  const result = yield* callSupervisor(() =>
+    supervisor.connectProject(body.repositoryUrl, body.displayName),
+  );
+
+  if (!result.ok) {
+    return Response.json(
+      {
+        ok: false,
+        problem: result.problem,
+        ...("github" in result && { github: result.github, checkedAt: result.checkedAt }),
+      },
+      { status: CONNECT_STATUS[result.problem.code] },
     );
+  }
 
-    if (!result.ok) {
-      return Response.json(
-        {
-          ok: false,
-          problem: result.problem,
-          ...("github" in result && { github: result.github, checkedAt: result.checkedAt }),
-        },
-        { status: CONNECT_STATUS[result.problem.code] },
-      );
-    }
-
-    return Response.json({
-      ok: true,
-      project: result.project,
-      alreadyConnected: result.alreadyConnected,
-      github: result.github,
-      checkedAt: result.checkedAt,
-    });
-  },
-  Effect.catchTag("InvalidRequestBody", () =>
-    Effect.succeed(jsonError(400, "invalid-connect-request")),
-  ),
-);
+  return Response.json({
+    ok: true,
+    project: result.project,
+    alreadyConnected: result.alreadyConnected,
+    github: result.github,
+    checkedAt: result.checkedAt,
+  });
+}, invalidRequestBody("invalid-connect-request"));
 
 function authorizationResponse(
   outcome: () => Promise<GitHubAuthorizationOutcome>,

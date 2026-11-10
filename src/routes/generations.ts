@@ -16,7 +16,13 @@ import {
   type Submission,
 } from "../supervisor/generations.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
-import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
+import {
+  callSupervisor,
+  decodeRequestBody,
+  invalidRequestBody,
+  jsonError,
+  type SupervisorCallFailed,
+} from "./json.js";
 
 export type GenerationStatusSupervisor = {
   readonly getActiveGeneration: () => Promise<ActiveGeneration>;
@@ -85,44 +91,42 @@ export const handleGenerationControl = Effect.fnUntraced(
     ),
 );
 
-export const handleGenerationSubmission = Effect.fnUntraced(
-  function* (request: Request, supervisor: GenerationSubmissionSupervisor) {
-    const { harnessCommit } = yield* decodeRequestBody(request, GenerationSubmissionRequest);
+export const handleGenerationSubmission = Effect.fnUntraced(function* (
+  request: Request,
+  supervisor: GenerationSubmissionSupervisor,
+) {
+  const { harnessCommit } = yield* decodeRequestBody(request, GenerationSubmissionRequest);
 
-    const submitted = yield* callSupervisor(() => supervisor.submitGeneration(harnessCommit));
+  const submitted = yield* callSupervisor(() => supervisor.submitGeneration(harnessCommit));
 
-    const preparation = yield* callSupervisor(() =>
-      supervisor.prepareGeneration(submitted.generation.label),
-    ).pipe(Effect.result);
+  const preparation = yield* callSupervisor(() =>
+    supervisor.prepareGeneration(submitted.generation.label),
+  ).pipe(Effect.result);
 
-    if (Result.isFailure(preparation)) {
-      logRedactedCause(
-        "owner-api POST /api/generations/submit: preparation-failed",
-        preparation.failure.cause,
-      );
+  if (Result.isFailure(preparation)) {
+    logRedactedCause(
+      "owner-api POST /api/generations/submit: preparation-failed",
+      preparation.failure.cause,
+    );
 
-      return Response.json(
-        {
-          ok: false,
-          error: { code: "preparation-failed" },
-          recorded: {
-            label: submitted.generation.label,
-            harnessCommit: submitted.generation.harnessCommit,
-          },
+    return Response.json(
+      {
+        ok: false,
+        error: { code: "preparation-failed" },
+        recorded: {
+          label: submitted.generation.label,
+          harnessCommit: submitted.generation.harnessCommit,
         },
-        { status: 500 },
-      );
-    }
+      },
+      { status: 500 },
+    );
+  }
 
-    const result: GenerationSubmissionResult = {
-      ok: true,
-      outcome: submitted,
-      preparation: preparation.success,
-    };
+  const result: GenerationSubmissionResult = {
+    ok: true,
+    outcome: submitted,
+    preparation: preparation.success,
+  };
 
-    return Response.json(result);
-  },
-  Effect.catchTag("InvalidRequestBody", () =>
-    Effect.succeed(jsonError(400, "invalid-submission-request")),
-  ),
-);
+  return Response.json(result);
+}, invalidRequestBody("invalid-submission-request"));
