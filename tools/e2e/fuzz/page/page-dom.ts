@@ -1,12 +1,11 @@
 export type Row = Readonly<{ who: string; text: string; buttons: number }>;
 
-export type Sent = Readonly<{ token: string; projectId: string; fault: string; conversation: number }>;
-
-export type FuzzWindow = Window & {
-  fzMode?: string;
-  fzAudit?: readonly string[];
-  fzAuditing?: boolean;
-};
+export type Sent = Readonly<{
+  token: string;
+  projectId: string;
+  fault: string;
+  conversation: number;
+}>;
 
 const IDS = [
   "owner-page",
@@ -21,24 +20,26 @@ const IDS = [
 ];
 
 export function readRows(document: Document): readonly Row[] {
-  return Array.from(document.querySelectorAll("#conversation-messages > li.message")).map((row) => ({
-    who: row.querySelector(".who")?.textContent ?? "",
-    text: row.querySelector(".text")?.textContent ?? "",
-    buttons: row.querySelectorAll("button").length,
-  }));
+  return Array.from(document.querySelectorAll("#conversation-messages > li.message")).map(
+    (row) => ({
+      who: row.querySelector(".who")?.textContent ?? "",
+      text: row.querySelector(".text")?.textContent ?? "",
+      buttons: row.querySelectorAll("button").length,
+    }),
+  );
 }
 
 export function selectedProject(document: Document): string {
-  const selected = document.querySelector(".project-button.selected");
+  const selected = document.querySelector<HTMLElement>(".project-button.selected");
 
-  return selected?.getAttribute("data-project-id") ?? "";
+  return selected?.dataset["projectId"] ?? "";
 }
 
 export function textOf(document: Document, id: string): string {
-  return document.getElementById(id)?.textContent?.trim() ?? "";
+  return document.querySelector(`#${id}`)?.textContent?.trim() ?? "";
 }
 
-export function uiProblems(document: Document, rows: readonly Row[]): readonly string[] {
+export function uiProblems(document: Document, rows: readonly Row[]): string[] {
   const problems: string[] = [];
 
   for (const id of IDS) {
@@ -54,7 +55,8 @@ export function uiProblems(document: Document, rows: readonly Row[]): readonly s
   for (const row of rows) {
     const unconfirmed = row.who === "you · not confirmed";
 
-    if (unconfirmed && row.buttons !== 1) problems.push(`not-confirmed row has ${row.buttons} buttons`);
+    if (unconfirmed && row.buttons !== 1)
+      problems.push(`not-confirmed row has ${row.buttons} buttons`);
 
     if (!unconfirmed && row.buttons > 0 && row.who.startsWith("you")) {
       problems.push(`row "${row.who}" has a button`);

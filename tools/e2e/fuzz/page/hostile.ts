@@ -5,11 +5,11 @@ const PAYLOADS: readonly string[] = [
   "</script><script>alert(1)</script>",
   "[click](javascript:alert(1))",
   "# heading\n- item\n```\ncode\n```\n> quote",
-  "\u001b[31mred\u001b[0m \u0000 nul",
-  "\u202eevil\u202c \u200b\u200d zero-width",
+  "\u001B[31mred\u001B[0m \u0000 nul",
+  "\u202Eevil\u202C \u200B\u200D zero-width",
   "{{7*7}} ${process.env} %s %n __proto__ constructor",
   "\"quoted\" 'single' `tick` \\ back\\slash \\n literal",
-  "emoji \u{1f600}\u{1f9d1}\u200d\u{1f680} \u00e9 e\u0301",
+  "emoji \u{1F600}\u{1F9D1}\u200D\u{1F680} \u00E9 e\u0301",
   "line\n".repeat(120),
   "x".repeat(4000),
   "diff --git a/x b/x\n@@ -1 +1 @@\n-a\n+b",
@@ -42,7 +42,11 @@ const runStamp = Date.now().toString(36);
 let counter = 0;
 
 export function pick<T>(items: readonly T[]): T {
-  return items[Math.floor(random() * items.length)] as T;
+  const item = items[Math.floor(random() * items.length)];
+
+  if (item === undefined) throw new Error("pick from an empty list");
+
+  return item;
 }
 
 export function chance(probability: number): boolean {

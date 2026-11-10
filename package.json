@@ -8,7 +8,7 @@
     "test:tools": "node --import tsx --test 'tools/**/*.test.ts'",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",
     "typecheck": "tsrs --noEmit && tsrs --noEmit -p src/page/client && tsrs --noEmit -p src/stumble-cli/orb && tsrs --noEmit -p test/stumble-cli/orb && tsrs --noEmit -p test/page/client && tsrs --noEmit -p infra",
-    "typecheck:tools": "tsrs --noEmit -p tools",
+    "typecheck:tools": "tsrs --noEmit -p tools && tsrs --noEmit -p tools/e2e/fuzz/page",
     "knip": "knip --production",
     "lint": "oxlint --type-aware --max-warnings=0 --report-unused-disable-directives",
     "format": "oxfmt",

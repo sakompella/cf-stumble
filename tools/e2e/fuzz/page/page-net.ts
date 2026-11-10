@@ -1,30 +1,34 @@
-import type { FuzzWindow } from "./page-dom.ts";
-
-type Patched = FuzzWindow & { fzPatched?: boolean };
+import { recordPost } from "./page-store.ts";
+import { fz } from "./page-state.ts";
 
 function requestUrl(input: RequestInfo | URL): string {
-  if (typeof input === "string") return input;
-
-  return input instanceof URL ? input.href : input.url;
+  return input instanceof Request ? input.url : String(input);
 }
 
-export function installNet(window: Patched): void {
-  if (window.fzPatched === true) return;
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+export function installNet(window: Window): void {
+  if (fz.patched) return;
 
   const real = window.fetch.bind(window);
 
-  window.fzPatched = true;
+  fz.patched = true;
   window.fetch = async (input, init) => {
-    const mode = window.fzMode ?? "none";
     const isSend = (init?.method ?? "GET") === "POST" && requestUrl(input).endsWith("/messages");
 
-    if (mode === "offline") throw new TypeError("Failed to fetch");
+    if (isSend) recordPost(window, await new Response(init?.body).text());
 
-    if (mode === "slow") await new Promise((resolve) => setTimeout(resolve, 2_000));
+    if (fz.mode === "offline") throw new TypeError("Failed to fetch");
+
+    if (fz.mode === "slow") await delay(2_000);
 
     const response = await real(input, init);
 
-    if (mode === "drop" && isSend) throw new TypeError("Failed to fetch");
+    if (fz.mode === "drop" && isSend) throw new TypeError("Failed to fetch");
 
     return response;
   };

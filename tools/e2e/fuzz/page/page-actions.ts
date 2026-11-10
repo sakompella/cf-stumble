@@ -1,10 +1,18 @@
-import { actions, extract, getFingerprint, weighted, type ActionTemplate } from "@antithesishq/bombadil/browser";
+import {
+  actions,
+  extract,
+  getFingerprint,
+  weighted,
+  type ActionTemplate,
+} from "@antithesishq/bombadil/browser";
 import { back, forward, reload, scroll } from "@antithesishq/bombadil/browser/defaults/actions";
 import config from "./config.json";
 import { audit, sendTurn, setMode, typeDraft } from "./page-handlers.ts";
 import { draftText, hostileText, newToken, pick, sendMode } from "./hostile.ts";
-import { selectedProject, type FuzzWindow } from "./page-dom.ts";
-import { sentTokens } from "./page-audit.ts";
+import { selectedProject } from "./page-dom.ts";
+import { installNet } from "./page-net.ts";
+import { fz } from "./page-state.ts";
+import { auditedCount, sendsMade, sentTokens } from "./page-store.ts";
 
 const CLICKABLE = [
   "#cancel-turn-button",
@@ -16,7 +24,10 @@ const CLICKABLE = [
   "#github-refresh-button",
 ].join(",");
 
-type Target = Readonly<{ fingerprint: ReturnType<typeof getFingerprint>; point: { x: number; y: number } }>;
+type Target = Readonly<{
+  fingerprint: ReturnType<typeof getFingerprint>;
+  point: { x: number; y: number };
+}>;
 
 const targets = extract((state) =>
   Array.from(state.document.querySelectorAll<HTMLElement>(CLICKABLE)).flatMap((element) => {
@@ -42,30 +53,35 @@ const fresh = extract((state) => {
   const y = box.top + box.height / 2;
   const hit = state.document.elementFromPoint(x, y);
 
-  return hit !== null && element.contains(hit) && x < state.window.innerWidth && y < state.window.innerHeight
+  return hit !== null &&
+    element.contains(hit) &&
+    x < state.window.innerWidth &&
+    y < state.window.innerHeight
     ? { fingerprint: getFingerprint(element), point: { x, y } }
     : null;
 });
 
-const sendsLeft = extract((state) =>
-  config.maxSends - Number(state.window.sessionStorage.getItem("fz.sends") ?? "0"),
-);
+const sendsLeft = extract((state) => config.maxSends - sendsMade(state.window));
 
 const pendingAudit = extract(
-  (state) => sentTokens(state.window).length > Number(state.window.sessionStorage.getItem("fz.audited") ?? "0"),
+  (state) => sentTokens(state.window).length > auditedCount(state.window),
 );
 
 const justReloaded = extract((state) => state.lastAction === "Reload");
 
-const auditing = extract((state) => (state.window as FuzzWindow).fzAuditing === true);
+const auditing = extract(() => fz.auditing);
 
-const projects = extract((state) => selectedProject(state.document));
+const projects = extract((state) => {
+  installNet(state.window);
 
-const clicks = actions(() => targets.current.map((target: Target): ActionTemplate => ({ Click: target })));
+  return selectedProject(state.document);
+});
 
-const freshThread = actions(() =>
-  fresh.current === null ? [] : [{ DoubleClick: fresh.current }],
+const clicks = actions(() =>
+  targets.current.map((target: Target): ActionTemplate => ({ Click: target })),
 );
+
+const freshThread = actions(() => (fresh.current === null ? [] : [{ DoubleClick: fresh.current }]));
 
 const drafts = actions(() => [typeDraft(draftText())]);
 
