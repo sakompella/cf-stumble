@@ -1,6 +1,7 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
-import { shortStatus, statusLines } from "./git-status.js";
+import { type ReadFile, withRenames } from "./git-rename.js";
+import { shortStatus, statusLines, type StatusLine } from "./git-status.js";
 import { branchHeader, headState, longStatus } from "./git-status-text.js";
 
 type Format = "long" | "short" | "v2";
@@ -53,15 +54,26 @@ function displayPath(path: string, prefix: string): string {
   return `${"../".repeat(prefix.split("/").length)}${path}`;
 }
 
-async function render(client: GitClient, scope: GitScope, options: StatusOptions): Promise<string> {
+async function render(
+  client: GitClient,
+  scope: GitScope,
+  readFile: ReadFile,
+  options: StatusOptions,
+): Promise<string> {
   const needsHead = options.format === "long" || options.branch;
 
   const [head, lines] = await Promise.all([
     needsHead ? headState(client, scope.dir) : undefined,
-    statusLines(client, scope.dir),
+    statusLines(client, scope.dir).then((found) => withRenames(client, scope.dir, readFile, found)),
   ]);
 
-  const shown = lines.map((line) => ({ ...line, path: displayPath(line.path, scope.prefix) }));
+  const shown = lines.map((line): StatusLine => {
+    const path = displayPath(line.path, scope.prefix);
+
+    if (line.from === undefined) return { ...line, path };
+
+    return { ...line, path, from: displayPath(line.from, scope.prefix) };
+  });
 
   if (options.format === "long" && head !== undefined) return longStatus(head, shown);
 
@@ -73,6 +85,7 @@ export function statusCommand(
   cli: RunCli,
   input: GitCliInput,
   scope: GitScope,
+  readFile: ReadFile,
 ): Promise<GitCliResult> {
   const options = parseOptions(input.argv.slice(1));
 
@@ -81,7 +94,7 @@ export function statusCommand(
   if (options.format === "v2")
     return Promise.resolve({ stdout: "", stderr: PORCELAIN_V2_UNSUPPORTED, exitCode: 129 });
 
-  return render(client, scope, options).then(
+  return render(client, scope, readFile, options).then(
     (stdout) => ({ stdout, stderr: "", exitCode: 0 }),
     () => cli(input),
   );

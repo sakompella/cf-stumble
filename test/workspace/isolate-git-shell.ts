@@ -19,13 +19,25 @@ export const SETUP = [
   "git commit -q -m first",
 ].join(" && ");
 
-export function shell(name: string, command: string) {
-  return runInDurableObject(env.WORKSPACE_HOST.getByName(name), async (host, state) => {
+const HOST_NAME = "isolate-git";
+
+let repositories = 0;
+
+export function shell(command: string) {
+  repositories += 1;
+
+  const directory = `/workspace/repo-${repositories}`;
+
+  return runInDurableObject(env.WORKSPACE_HOST.getByName(HOST_NAME), async (host, state) => {
     await seedWorkspaceRoot(state);
 
     const target = await host.project({ remainingMs: 60_000 });
 
-    const started = await target.startExec({ command, timeoutMs: 20_000, backend: "isolate" });
+    const started = await target.startExec({
+      command: `mkdir ${directory} && cd ${directory} && ${command}`,
+      timeoutMs: 20_000,
+      backend: "isolate",
+    });
 
     if (!started.ok) throw new Error(started.error.code);
 
@@ -36,7 +48,7 @@ export function shell(name: string, command: string) {
       stdout: events
         .flatMap((event) => (event.kind === "stdout" ? [event.data] : []))
         .join("")
-        .replace("Initialized empty Git repository in /workspace/.git/\n", ""),
+        .replace(`Initialized empty Git repository in ${directory}/.git/\n`, ""),
       stderr: events.flatMap((event) => (event.kind === "stderr" ? [event.data] : [])).join(""),
     };
   });

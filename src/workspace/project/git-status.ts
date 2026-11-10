@@ -4,6 +4,11 @@ export interface StatusLine {
   readonly path: string;
   readonly x: string;
   readonly y: string;
+  readonly from?: string;
+}
+
+export function shownPath(line: StatusLine): string {
+  return line.from === undefined ? line.path : `${line.from} -> ${line.path}`;
 }
 
 const SWAPPED = new Map([
@@ -64,5 +69,5 @@ export async function statusLines(client: GitClient, dir: string): Promise<Statu
 }
 
 export function shortStatus(lines: readonly StatusLine[]): string {
-  return lines.map((line) => `${line.x}${line.y} ${line.path}\n`).join("");
+  return lines.map((line) => `${line.x}${line.y} ${shownPath(line)}\n`).join("");
 }
