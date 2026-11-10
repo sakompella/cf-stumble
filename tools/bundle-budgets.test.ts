@@ -13,8 +13,8 @@ const OWNER_SCRIPT_GZIP_LIMIT = 240 * KIB;
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
-async function workerUploadGzipBytes(): Promise<number> {
-  const bundled = await build({
+function bundleWorker() {
+  return build({
     entryPoints: [resolve(repoRoot, "src/worker.ts")],
     bundle: true,
     write: false,
@@ -25,16 +25,33 @@ async function workerUploadGzipBytes(): Promise<number> {
     conditions: ["workerd", "worker", "browser"],
     external: ["cloudflare:*", "node:*"],
     legalComments: "none",
+    metafile: true,
   });
-
-  return bundled.outputFiles.reduce((total, file) => total + gzipSync(file.contents).length, 0);
 }
 
 describe("bundle budgets", () => {
   it(`the Worker upload stays within ${WORKER_UPLOAD_GZIP_LIMIT / KIB} KiB gzip`, async () => {
-    const size = await workerUploadGzipBytes();
+    const bundled = await bundleWorker();
+    const size = bundled.outputFiles.reduce(
+      (total, file) => total + gzipSync(file.contents).length,
+      0,
+    );
 
     assert.ok(size <= WORKER_UPLOAD_GZIP_LIMIT, `the Worker upload is ${size} bytes gzip`);
+  });
+
+  it("the Worker leaves out pi-schema, whose FinalizationRegistry the Workers runtime lacks", async () => {
+    const bundled = await bundleWorker();
+    const kept = Object.values(bundled.metafile.outputs).flatMap((output) =>
+      Object.entries(output.inputs)
+        .filter(([, input]) => input.bytesInOutput > 0)
+        .map(([path]) => path),
+    );
+
+    assert.deepEqual(
+      kept.filter((path) => path.includes("@earendil-works/pi-schema/")),
+      [],
+    );
   });
 
   it(`the owner page script stays within ${OWNER_SCRIPT_GZIP_LIMIT / KIB} KiB gzip`, () => {

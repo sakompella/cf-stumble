@@ -4,12 +4,12 @@ import { Sse } from "effect/encoding";
 import * as Predicate from "effect/Predicate";
 import { redactedExcerpt } from "./diagnostics.js";
 import type { AssistantMessage } from "./model-route-wire/request.js";
-import {
-  MAX_STREAM_EVENT_BYTES,
-  type ModelRouteErrorCode,
-  type ModelStreamEvent,
-  type ModelUsage,
+import type {
+  ModelRouteErrorCode,
+  ModelStreamEvent,
+  ModelUsage,
 } from "./model-route-wire/events.js";
+import { MAX_STREAM_EVENT_BYTES } from "./model-route-wire/stream-limits.js";
 import { runResponseBody } from "./run-entry-point.js";
 import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";
 
