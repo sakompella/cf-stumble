@@ -3,6 +3,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import type { Conversation } from "../../../src/page/client/conversation.js";
+import { chatGPTConnection } from "../../../src/page/client/chatgpt.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
@@ -70,7 +71,11 @@ const ANSWERS: readonly Step[] = [
   () => Message.ClickedAuthorize({ path: "/api/github/authorization" }),
 ];
 
-const CONNECTED_CHATGPT = { connection: "connected", isConnected: true, maybeLogin: Option.none() };
+const CONNECTED_CHATGPT = chatGPTConnection({
+  connection: { state: "connected", expiresAt: 1 },
+  login: null,
+  model: "gpt",
+});
 
 function listedPage(): Model {
   return update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS })).model;
