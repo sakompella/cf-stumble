@@ -1,3 +1,5 @@
+export const STACK_NAME = "cf-stumble";
+
 export const PRODUCTION_STAGE = "prod";
 
 const PRODUCTION_WORKER = "cf-stumble";

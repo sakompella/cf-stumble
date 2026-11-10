@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import {
+  assetsConfig,
   compatibility,
   durableObjectClasses,
   MODULE_MAPS_BINDING,
@@ -51,6 +52,8 @@ export const testWorker = {
     assets: {
       directory: resolve(import.meta.dirname, "..", shellModulesAssetDirectory),
       binding: "ASSETS",
+      routerConfig: { has_user_worker: true },
+      run_worker_first: assetsConfig.runWorkerFirst,
     },
   },
 };
