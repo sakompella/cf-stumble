@@ -44,7 +44,6 @@ export class ServingConversations {
   readonly #hosts = new Map<number, HostTargets>();
   readonly #workspaces: HeldWorkspaces;
   readonly #runs: ConversationRuns;
-  readonly #readers = new Map<string, Set<() => void>>();
 
   constructor(ports: ServingPorts) {
     this.#ports = ports;
@@ -126,7 +125,7 @@ export class ServingConversations {
           (current) => this.#call(() => createConversation(facet, current)),
           (conversationId) =>
             this.#call(() => facet.events(conversationId, from)).pipe(
-              Effect.map((events) => ({ events: this.#endedWhenReplaced(conversationId, events) })),
+              Effect.map((events) => ({ events: this.#projects.relayed(project.id, events) })),
             ),
         );
       }),
@@ -172,13 +171,11 @@ export class ServingConversations {
         const project = yield* this.#project(projectId);
         const facet = yield* this.#facet();
 
-        const { conversationId, previous } = yield* this.#projects.replace(
+        const conversationId = yield* this.#projects.replace(
           project,
           (old) => this.#call(() => facet.abort(this.#runs.cancelled(old))),
           this.#call(() => createConversation(facet, project)),
         );
-
-        for (const end of previous === undefined ? [] : (this.#readers.get(previous) ?? [])) end();
 
         return { conversationId };
       }),
@@ -274,61 +271,6 @@ export class ServingConversations {
     this.#hosts.set(instance, targets);
 
     return facet.attach(targets.host, targets.generations);
-  }
-
-  #endedWhenReplaced(
-    conversationId: string,
-    events: ReadableStream<Uint8Array>,
-  ): ReadableStream<Uint8Array> {
-    const source = events.getReader();
-    const readers = this.#readers.get(conversationId) ?? new Set();
-    let opened: ReadableStreamDefaultController<Uint8Array> | undefined;
-    let ended = false;
-    let reading = false;
-
-    const forget = () => {
-      readers.delete(end);
-
-      if (readers.size === 0) this.#readers.delete(conversationId);
-    };
-
-    const stop = () => {
-      ended = true;
-      forget();
-
-      if (!reading) void source.cancel().catch(() => {});
-    };
-
-    const end = () => {
-      stop();
-      opened?.close();
-    };
-
-    const readable = new ReadableStream<Uint8Array>({
-      start: (controller) => {
-        opened = controller;
-      },
-      pull: async (controller) => {
-        reading = true;
-        const next = await source.read().catch(() => ({ done: true }) as const);
-        reading = false;
-
-        if (ended) {
-          void source.cancel().catch(() => {});
-        } else if (next.done) {
-          forget();
-          controller.close();
-        } else {
-          controller.enqueue(next.value);
-        }
-      },
-      cancel: stop,
-    });
-
-    readers.add(end);
-    this.#readers.set(conversationId, readers);
-
-    return readable;
   }
 
   async #running(report: RunReport, instance: number): Promise<void> {
