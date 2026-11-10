@@ -90,6 +90,17 @@ export class FakeTenantWorkspace implements PromiseOperations {
     return Promise.resolve(this.durablePaths.get(path));
   }
 
+  removeTree(path: string): Promise<void> {
+    for (const known of [...this.durablePaths.keys()]) {
+      if (known === path || known.startsWith(`${path}/`)) {
+        this.durablePaths.delete(known);
+        this.durableFiles.delete(known);
+      }
+    }
+
+    return Promise.resolve();
+  }
+
   readFile(path: string): Promise<string> {
     const content = this.durableFiles.get(path);
 

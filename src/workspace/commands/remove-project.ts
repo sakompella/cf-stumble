@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { logEvent } from "../../diagnostics.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import { parseProjectId, type ProjectId } from "../../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
@@ -61,16 +62,37 @@ export function planProjectRemovalRequest(
   };
 }
 
-export function removalIsDurable(
+function remainingDirectories(
+  operations: WorkspaceEffects,
+  projectId: ProjectId,
+): Effect.Effect<readonly string[], WorkspaceFault> {
+  return Effect.gen(function* () {
+    const remaining: string[] = [];
+
+    for (const directory of removedDirectories(projectId)) {
+      if ((yield* operations.lstat(directory)) !== undefined) remaining.push(directory);
+    }
+
+    return remaining;
+  });
+}
+
+function removedFromStore(
   operations: WorkspaceEffects,
   projectId: ProjectId,
 ): Effect.Effect<boolean, WorkspaceFault> {
   return Effect.gen(function* () {
-    for (const directory of removedDirectories(projectId)) {
-      if ((yield* operations.lstat(directory)) !== undefined) return false;
-    }
+    const unsynced = yield* remainingDirectories(operations, projectId);
 
-    return true;
+    if (unsynced.length === 0) return true;
+
+    logEvent("warn", "workspace.project-removal.store-kept-directories", {
+      directories: unsynced.join(" "),
+    });
+
+    for (const directory of unsynced) yield* operations.removeTree(directory);
+
+    return (yield* remainingDirectories(operations, projectId)).length === 0;
   });
 }
 
@@ -89,7 +111,7 @@ export function executeProjectRemovalRequest(
     const plan = planProjectRemovalRequest(parsed);
     const output = yield* operations.runCommand(plan.source, plan.cwd, plan.timeoutMs);
 
-    if (output.exitCode === 0 && !(yield* removalIsDurable(operations, parsed.projectId))) {
+    if (output.exitCode === 0 && !(yield* removedFromStore(operations, parsed.projectId))) {
       return syncIncomplete();
     }
 

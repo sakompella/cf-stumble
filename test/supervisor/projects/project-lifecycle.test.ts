@@ -233,3 +233,57 @@ test("a removal that failed is finished when another project connects", async ()
     expect(isConnected(connections)).toBe(false);
   });
 });
+
+test("a removal that failed is swept before the next connect of the same repository", async () => {
+  const workspace = new FakeTenantWorkspace();
+
+  await withConnections("failed-removal-same-project", workspace, async (connections) => {
+    await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    workspace.commandSync = "incomplete";
+
+    await expect(
+      Effect.runPromise(connections.disconnect(PROJECT_ID, noRunActive)),
+    ).resolves.toMatchObject({ ok: true, workspace: "failed" });
+
+    workspace.commandSync = "complete";
+    const removalsBefore = workspace.commands.filter((command) => command.includes(REMOVAL)).length;
+
+    await expect(
+      Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 1)),
+    ).resolves.toMatchObject({ ok: true, alreadyConnected: false });
+
+    expect(workspace.commands.filter((command) => command.includes(REMOVAL))).toHaveLength(
+      removalsBefore + 1,
+    );
+    expect(indexOfLast(workspace.commands, CLONE)).toBeGreaterThan(
+      indexOfLast(workspace.commands, REMOVAL),
+    );
+    expect(isConnected(connections)).toBe(true);
+  });
+});
+
+test("a connect does not clone over a directory whose removal keeps failing", async () => {
+  const workspace = new FakeTenantWorkspace();
+
+  await withConnections("failed-removal-stays", workspace, async (connections) => {
+    await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    workspace.commandSync = "incomplete";
+    await Effect.runPromise(connections.disconnect(PROJECT_ID, noRunActive));
+    const clonesBefore = workspace.commands.filter((command) => command.includes(CLONE)).length;
+
+    await expect(
+      Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 1)),
+    ).resolves.toMatchObject({ ok: false, problem: { code: "workspace-unavailable" } });
+
+    expect(workspace.commands.filter((command) => command.includes(CLONE))).toHaveLength(
+      clonesBefore,
+    );
+    expect(isConnected(connections)).toBe(false);
+
+    workspace.commandSync = "complete";
+
+    await expect(
+      Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 2)),
+    ).resolves.toMatchObject({ ok: true });
+  });
+});

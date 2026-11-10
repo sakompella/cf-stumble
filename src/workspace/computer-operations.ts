@@ -80,6 +80,10 @@ export class ComputerWorkspaceOperations implements WorkspaceEffects {
     return attemptWorkspace(() => this.workspace.fs.readFile(path, "utf8"));
   }
 
+  removeTree(path: string): Effect.Effect<void, WorkspaceFault> {
+    return attemptWorkspace(() => this.workspace.fs.rm(path, { recursive: true, force: true }));
+  }
+
   writeFile(path: string, content: string): Effect.Effect<void, WorkspaceFault> {
     return attemptWorkspace(() => this.workspace.fs.writeFile(path, content));
   }

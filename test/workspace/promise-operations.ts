@@ -22,6 +22,7 @@ export type PromiseOperations = Readonly<{
   ): Promise<CommandOutput>;
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   readFile(path: string): Promise<string>;
+  removeTree?(path: string): Promise<void>;
   writeFile(path: string, content: string): Promise<void>;
   runCommand(
     source: string,
@@ -45,6 +46,12 @@ export function workspaceEffects(operations: PromiseOperations): WorkspaceEffect
       ),
     lstat: (path) => attemptWorkspace(() => operations.lstat(path)),
     readFile: (path) => attemptWorkspace(() => operations.readFile(path)),
+    removeTree: (path) =>
+      attemptWorkspace(() =>
+        operations.removeTree === undefined
+          ? Promise.reject(new Error("this fake removes no tree"))
+          : operations.removeTree(path),
+      ),
     writeFile: (path, content) => attemptWorkspace(() => operations.writeFile(path, content)),
     runCommand: (source, cwd, timeoutMs, stdin) =>
       attemptWorkspace(() => operations.runCommand(source, cwd, timeoutMs, stdin)),

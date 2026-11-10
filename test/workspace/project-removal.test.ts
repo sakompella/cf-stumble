@@ -31,12 +31,22 @@ class FakeOperations implements PromiseOperations {
   readonly sources: string[] = [];
   readonly statted: string[] = [];
   readonly remaining = new Set<string>();
+  readonly removedTrees: string[] = [];
+  treesStay = false;
   syncFailure: WorkspaceSyncIncomplete | undefined;
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     this.statted.push(path);
 
     return Promise.resolve(this.remaining.has(path) ? "directory" : undefined);
+  }
+
+  removeTree(path: string): Promise<void> {
+    this.removedTrees.push(path);
+
+    if (!this.treesStay) this.remaining.delete(path);
+
+    return Promise.resolve();
   }
 
   readFile(): Promise<string> {
@@ -120,15 +130,17 @@ test.each([
     },
   ],
   [
-    "the durable store still holds the clone",
+    "the durable store still holds the clone after it was removed from the store",
     (operations: FakeOperations) => {
       operations.remaining.add(projectDirectory(sampleProjectOne.id));
+      operations.treesStay = true;
     },
   ],
   [
-    "the durable store still holds the staging directory",
+    "the durable store still holds the staging directory after it was removed from the store",
     (operations: FakeOperations) => {
       operations.remaining.add(`${projectDirectory(sampleProjectOne.id)}.provisioning`);
+      operations.treesStay = true;
     },
   ],
 ] as const)("a removal is not reported as done when %s", async (_case, arrange) => {
@@ -144,4 +156,19 @@ test.each([
     ok: false,
     error: { code: "workspace-sync-incomplete" },
   });
+});
+
+test("directories that the command left in the durable store are removed from the store", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  const operations = new FakeOperations();
+  const clone = projectDirectory(sampleProjectOne.id);
+  operations.remaining.add(clone);
+
+  await expect(
+    Effect.runPromise(
+      executeProjectRemovalRequest({ operations: workspaceEffects(operations), request }),
+    ),
+  ).resolves.toMatchObject({ ok: true, result: { exitCode: 0 } });
+
+  expect(operations.removedTrees).toEqual([clone]);
 });
