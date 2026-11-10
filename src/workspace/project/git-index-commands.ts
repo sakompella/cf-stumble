@@ -4,7 +4,7 @@ import { fileStatusLines, statusLines, type StatusLine } from "./git-status.js";
 
 const OK: GitCliResult = { stdout: "", stderr: "", exitCode: 0 };
 
-function failure(stderr: string): GitCliResult {
+export function failure(stderr: string): GitCliResult {
   return { stdout: "", stderr, exitCode: 128 };
 }
 
@@ -12,7 +12,7 @@ function without(argv: readonly string[], flags: readonly string[]): string[] {
   return argv.filter((arg) => !flags.includes(arg));
 }
 
-function rooted(path: string, prefix: string): string | undefined {
+export function rooted(path: string, prefix: string): string | undefined {
   const parts = prefix.split("/").filter((part) => part !== "");
   let rest = path.startsWith("./") ? path.slice(2) : path;
 
@@ -33,7 +33,7 @@ function rooted(path: string, prefix: string): string | undefined {
   return parts.length === 0 ? "." : parts.join("/");
 }
 
-function under(path: string, spec: string): boolean {
+export function under(path: string, spec: string): boolean {
   const bare = spec.replace(/\/$/u, "");
 
   return bare === "." || path === bare || path.startsWith(`${bare}/`) || path === `${bare}/`;
@@ -44,8 +44,13 @@ async function stage(
   dir: string,
   lines: readonly { readonly path: string; readonly y: string }[],
 ): Promise<void> {
-  const changed = lines.flatMap((line) => (line.y === "D" ? [] : [line.path.replace(/\/$/u, "")]));
-  const deleted = lines.flatMap((line) => (line.y === "D" ? [line.path] : []));
+  const pending = lines.filter((line) => line.y !== " ");
+
+  const changed = pending.flatMap((line) =>
+    line.y === "D" ? [] : [line.path.replace(/\/$/u, "")],
+  );
+
+  const deleted = pending.flatMap((line) => (line.y === "D" ? [line.path] : []));
 
   if (changed.length > 0) await client.add({ dir, paths: changed });
 
@@ -76,7 +81,10 @@ export async function addCommand(
 
     const lines = await fileStatusLines(client, scope.dir);
     const matched = lines.filter((line) => specs.some((spec) => under(line.path, spec)));
-    const missed = specs.find((spec) => !matched.some((line) => under(line.path, spec)));
+
+    const missed = specs.find(
+      (spec) => spec !== "." && !matched.some((line) => under(line.path, spec)),
+    );
 
     if (missed !== undefined)
       return failure(`fatal: pathspec '${missed}' did not match any files\n`);
@@ -130,6 +138,11 @@ async function resetReport(client: GitClient, dir: string, hard: boolean): Promi
     : `Unstaged changes after reset:\n${unstaged.map((line) => `${line.y}\t${line.path}\n`).join("")}`;
 }
 
+const REVISION_SYNTAX = /[~^@]/u;
+
+const AMBIGUOUS = (target: string): string =>
+  `fatal: ambiguous argument '${target}': unknown revision or path not in the working tree.\nUse '--' to separate paths from revisions, like this:\n'git <command> [<revision>...] -- [<file>...]'\n`;
+
 async function resetWithoutReport(
   client: GitClient,
   cli: RunCli,
@@ -150,8 +163,13 @@ async function resetWithoutReport(
   const oid =
     target === undefined || others.length > 0 ? undefined : await resolves(client, dir, target);
 
-  if (oid === undefined && target !== undefined && (soft || mixed) && others.length === 0)
-    return failure(`fatal: ambiguous argument '${target}': unknown revision or path\n`);
+  if (
+    oid === undefined &&
+    target !== undefined &&
+    others.length === 0 &&
+    (soft || mixed || REVISION_SYNTAX.test(target))
+  )
+    return failure(AMBIGUOUS(target));
 
   if (oid === undefined || (!soft && !mixed && target === "HEAD"))
     return soft ? OK : cli({ ...input, argv: ["reset", ...rest] });

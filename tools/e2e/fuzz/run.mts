@@ -11,6 +11,9 @@ import type { Finding, Fuzzer } from "./context.mts";
 const AREAS = new Map<string, () => Promise<Fuzzer>>([
   ["http", async () => (await import("./http.mts")).fuzz],
   ["exec", async () => (await import("./exec.mts")).fuzz],
+  ["page", async () => (await import("./page.mts")).fuzz],
+  ["git", async () => (await import("./git.mts")).fuzz],
+  ["lifecycle", async () => (await import("./lifecycle.mts")).fuzz],
 ]);
 
 const { values } = parseArgs({
