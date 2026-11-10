@@ -4,11 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import type { Owner } from "./owner-api.mts";
-import { stopChildren } from "./process.mts";
+import { MINUTE_MS, Steps } from "./steps.mts";
 import { Target } from "./target.mts";
 import { pageWorkflow, productLoop, selfModification, type Run } from "./workflows.mts";
-
-const MINUTE_MS = 60_000;
 
 const { values } = parseArgs({
   options: {
@@ -20,13 +18,7 @@ const { values } = parseArgs({
   },
 });
 
-type Outcome = Readonly<{ name: string; ok: boolean; seconds: number; detail: string }>;
-
-const outcomes: Outcome[] = [];
-
-const interrupted = new AbortController();
-
-const startedMs = Date.now();
+const steps = new Steps();
 
 const password = process.env["E2E_OWNER_PASSWORD"] ?? randomBytes(24).toString("base64url");
 
@@ -38,57 +30,8 @@ const target = new Target({
   env: process.env,
 });
 
-let cleaning = false;
-
-function onSignal(signal: NodeJS.Signals): void {
-  console.error(`e2e: ${signal}, ${cleaning ? "cleanup continues" : "stopping, then cleaning up"}`);
-
-  if (cleaning) return;
-
-  interrupted.abort(new Error(signal));
-  stopChildren();
-}
-
-process.on("SIGINT", onSignal);
-
-process.on("SIGTERM", onSignal);
-
-function describe(cause: unknown): string {
-  if (!(cause instanceof Error)) return String(cause);
-
-  const inner = cause.cause === undefined ? "" : describe(cause.cause);
-
-  return cause.message.includes(inner) ? cause.message : `${cause.message} (${inner})`;
-}
-
-async function step(name: string, limitMs: number, work: (signal: AbortSignal) => Promise<void>) {
-  const began = Date.now();
-  const limit = AbortSignal.timeout(limitMs);
-  const signal = cleaning ? limit : AbortSignal.any([interrupted.signal, limit]);
-
-  const aborted = new Promise<never>((_resolve, reject) => {
-    signal.addEventListener("abort", () => {
-      reject(new Error(`stopped: ${String(signal.reason)}`));
-    });
-  });
-
-  let detail = "";
-
-  console.error(`e2e: ${name} (limit ${limitMs / MINUTE_MS} min)`);
-
-  try {
-    await Promise.race([work(signal), aborted]);
-  } catch (cause) {
-    detail = describe(cause);
-  }
-
-  const seconds = Math.round((Date.now() - began) / 1000);
-
-  outcomes.push({ name, ok: detail === "", seconds, detail });
-  console.error(`e2e: ${name} ${detail === "" ? "passed" : `failed: ${detail}`}`);
-
-  return detail === "";
-}
+const step = (name: string, limitMs: number, work: (signal: AbortSignal) => Promise<void>) =>
+  steps.run(name, limitMs, work);
 
 async function workflows(owner: Owner): Promise<void> {
   const run = (signal: AbortSignal): Run => ({
@@ -118,7 +61,7 @@ async function cleanUp(): Promise<void> {
   }
 }
 
-async function main(): Promise<boolean> {
+async function main(): Promise<void> {
   let owner: Owner | undefined;
 
   console.error(`e2e: run ${target.runId}, target ${values.url ?? `stage ${target.stage ?? ""}`}`);
@@ -131,7 +74,7 @@ async function main(): Promise<boolean> {
     if (owner !== undefined) await workflows(owner);
   }
 
-  cleaning = true;
+  steps.startCleanup();
 
   if (!values.cleanup) await step("ops:check", 5 * MINUTE_MS, () => target.checkOps());
 
@@ -143,22 +86,10 @@ async function main(): Promise<boolean> {
   } else {
     await cleanUp();
   }
-
-  return outcomes.every((outcome) => outcome.ok);
 }
 
-const passed = await main().catch((cause: unknown) => {
+await main().catch((cause: unknown) => {
   console.error(cause);
-
-  return false;
 });
 
-const minutes = Math.round((Date.now() - startedMs) / MINUTE_MS);
-
-console.error(`\ne2e run ${target.runId}: ${passed ? "PASS" : "FAIL"} in ${minutes} min`);
-
-for (const { ok, name, seconds, detail } of outcomes) {
-  console.error(`${ok ? "✓" : "✗"} ${name} (${seconds} s)${ok ? "" : `: ${detail}`}`);
-}
-
-process.exitCode = passed ? 0 : 1;
+process.exitCode = steps.report(`e2e run ${target.runId}`) ? 0 : 1;

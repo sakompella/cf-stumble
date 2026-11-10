@@ -1,10 +1,9 @@
 import { appendFileSync } from "node:fs";
-import { parseArgs } from "node:util";
 import { routedBackend } from "../../../src/workspace/project/exec-routing.ts";
 import { Rng, generateCase, type Case } from "./exec-gen.mts";
 import { judge, stepsFor, type CaseSteps } from "./exec-oracle.mts";
 import { freshThread, installFuzzGeneration, runSteps } from "./exec-session.mts";
-import { withStage, type FuzzRun } from "./exec-stage.mts";
+import type { FuzzContext as FuzzRun, Fuzzer } from "./context.mts";
 
 const BATCH = 5;
 
@@ -19,10 +18,10 @@ async function runBatch(run: FuzzRun, items: readonly Case[]): Promise<readonly 
   const planned = items.map((item): [Case, CaseSteps] => [
     item,
     stepsFor(
-      run.runId,
+      run.target.runId,
       item,
       routedBackend(item.command) === "isolate",
-      `fz-${run.runId}-${item.id}`,
+      `fz-${run.target.runId}-${item.id}`,
     ),
   ]);
 
@@ -68,15 +67,16 @@ function record(seed: number, failure: Failure): void {
   );
 }
 
-async function fuzz(run: FuzzRun, commands: readonly string[]): Promise<boolean> {
+async function fuzzCases(run: FuzzRun): Promise<boolean> {
+  const commands = run.commands;
   await installFuzzGeneration(run);
 
   const rng = new Rng(run.seed);
-  const deadline = Date.now() + run.minutes * 60_000;
+  
   let failed = 0;
   let cases = 0;
 
-  while (Date.now() < deadline && !run.signal.aborted) {
+  while (Date.now() < run.deadlineMs && !run.signal.aborted) {
     const items = nextBatch(rng, commands, cases);
 
     const failures = await runBatch(run, items).catch((cause: unknown) =>
@@ -96,27 +96,17 @@ async function fuzz(run: FuzzRun, commands: readonly string[]): Promise<boolean>
   return failed === 0;
 }
 
-const { values } = parseArgs({
-  options: {
-    seed: { type: "string", default: String(Date.now() % 1_000_000) },
-    minutes: { type: "string", default: "30" },
-    stage: { type: "string" },
-    keep: { type: "boolean", default: false },
-    command: { type: "string", multiple: true },
-  },
-});
+export const fuzz: Fuzzer = async (context) => {
+  const passed = await fuzzCases(context);
 
-const passed = await withStage(
-  "exec",
-  {
-    seed: Number(values.seed),
-    minutes: Number(values.minutes),
-    stage: values.stage,
-    keep: values.keep,
-  },
-  (run) => fuzz(run, values.command ?? []),
-);
-
-console.error(`fuzz exec: ${passed ? "PASS" : "FAIL"}`);
-
-process.exitCode = passed ? 0 : 1;
+  return passed
+    ? []
+    : [
+        {
+          area: "exec",
+          oracle: "backends agree",
+          detail: `failures recorded in /tmp/fuzz-exec-${context.seed}.jsonl`,
+          reproduction: `pnpm e2e:fuzz --area exec --seed ${context.seed}`,
+        },
+      ];
+};
