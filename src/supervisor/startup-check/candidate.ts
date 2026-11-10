@@ -27,11 +27,7 @@ export function runStartupCheck(
 ): Effect.Effect<StartupCheckOutcome> {
   const name = candidateFacetName(artifact.harnessCommit);
 
-  const discard = Effect.sync(() => {
-    host.ctx.facets.delete(name);
-  });
-
-  return discard.pipe(Effect.andThen(checkCandidate(host, artifact, name, deadlines)));
+  return checkCandidate(host, artifact, name, deadlines);
 }
 
 function withinDeadline(

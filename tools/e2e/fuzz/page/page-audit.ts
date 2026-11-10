@@ -2,6 +2,7 @@ import { readRows, selectedProject, sendingRows, textOf, type Row, type Sent } f
 import { serverState, type Server } from "./page-server.ts";
 import { fz } from "./page-state.ts";
 import { markAudited, postLog, sentTokens, wasCancelled } from "./page-store.ts";
+import { tokenIn } from "./token.ts";
 
 const AUDIT_WINDOW_MS = 45_000;
 
@@ -16,7 +17,7 @@ function delay(ms: number): Promise<void> {
 }
 
 function storedCount(server: Server, token: string): number {
-  return server.users.filter((text) => text.includes(token)).length;
+  return server.users.filter((text) => tokenIn(text) === token).length;
 }
 
 function sendProblems(
@@ -31,14 +32,18 @@ function sendProblems(
   for (const { token, projectId: sentTo } of sent) {
     const stored = storedCount(server, token);
 
-    if (sentTo !== projectId && rows.some((row) => row.text.includes(token))) {
+    if (sentTo !== projectId && rows.some((row) => tokenIn(row.text) === token)) {
       problems.push(`${token} shown in another project`);
     }
 
     if (sentTo === projectId && stored > 1) {
-      const posts = postLog(window).filter((body) => body.includes(token));
+      const posts = postLog(window).filter((body) => tokenIn(body) === token);
 
-      problems.push(`duplicate turn: ${token} stored ${stored} times, posted ${posts.length}`);
+      const sends = posts.map((body) => body.split(" ").slice(0, 3).join(" ")).join(", ");
+
+      problems.push(
+        `duplicate turn: ${token} stored ${stored} times, posted ${posts.length}: ${sends}`,
+      );
     }
   }
 

@@ -90,6 +90,10 @@ export class Owner {
     return this.#fetch(path, {});
   }
 
+  postRaw(path: string, body: string): Promise<Response> {
+    return this.#fetch(path, { method: "POST", body });
+  }
+
   post(path: string, body: RequestBody = {}): Promise<Response> {
     return this.#fetch(path, { method: "POST", body: JSON.stringify(body) });
   }

@@ -29,7 +29,7 @@ export function installNet(window: Window): void {
   window.fetch = async (input, init) => {
     const isSend = (init?.method ?? "GET") === "POST" && requestUrl(input).endsWith("/messages");
 
-    if (isSend) recordPost(window, await new Response(init?.body).text());
+    if (isSend) recordPost(window, await new Response(init?.body).text(), fz.mode);
 
     if (fz.mode === "offline") throw new TypeError("Failed to fetch");
 
