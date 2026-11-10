@@ -78,8 +78,13 @@ test("a reply is the same wherever the route's bytes are cut into reads", async 
       const bytes = encoder.encode(events.map((event) => `${JSON.stringify(event)}\n`).join(""));
       const cuts = drawCuts(tc, bytes.length);
 
-      expect(await replyTo(readsOf(bytes, cuts)), `cuts at ${cuts.join(",")}`).toEqual(
-        await replyTo([bytes]),
+      const whole = await replyTo([bytes]);
+
+      expect(await replyTo(readsOf(bytes, cuts)), `cuts at ${cuts.join(",")}`).toEqual(whole);
+      expect(whole.events.filter((event) => event.startsWith("text_delta:"))).toEqual(
+        events.flatMap((event) =>
+          event.type === "text-delta" ? [`text_delta:${event.delta}`] : [],
+        ),
       );
     },
     { testCases: 50 },

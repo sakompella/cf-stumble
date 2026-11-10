@@ -1,15 +1,11 @@
 import * as Predicate from "effect/Predicate";
-import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
 import type { Conversation } from "../../../src/page/client/conversation.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
-import { FollowTranscript } from "../../../src/page/client/mount.js";
 import { init, update } from "../../../src/page/client/update.js";
-import { view } from "../../../src/page/client/view.js";
+import { htmlOf, textOf, type Rendered } from "./rendered.js";
 import { received, running, streaming as streamingText, viewing } from "./views.js";
-
-type Rendered = NonNullable<ReturnType<typeof view>>;
 
 const PROJECT = { id: "repo", displayName: "hello-world", isHarness: false, location: "o/r" };
 
@@ -33,25 +29,8 @@ function liveRegions(node: Rendered | string): readonly Rendered[] {
   return [...(isLive ? [node] : []), ...(node.children ?? []).flatMap(liveRegions)];
 }
 
-function textOf(node: Rendered | string): string {
-  return Predicate.isString(node)
-    ? node
-    : (node.text ?? "") + (node.children ?? []).map(textOf).join("");
-}
-
 function announced(model: Model): readonly Readonly<{ politeness: unknown; text: string }>[] {
-  let html: Rendered | undefined;
-
-  Scene.scene(
-    { update, view },
-    Scene.given(model),
-    Scene.tap((simulation) => {
-      html = simulation.html;
-    }),
-    Scene.Mount.resolve(FollowTranscript, Message.CompletedFollowTranscript()),
-  );
-
-  return (html === undefined ? [] : liveRegions(html)).map((region) => ({
+  return liveRegions(htmlOf(model)).map((region) => ({
     politeness: region.data?.attrs?.["aria-live"],
     text: textOf(region),
   }));

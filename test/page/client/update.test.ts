@@ -329,6 +329,10 @@ test("a generation label names one whole generation or nothing", () => {
   expect(Option.getOrNull(controlLabel("-1"))).toBe(null);
   expect(Option.getOrNull(controlLabel(""))).toBe(null);
   expect(Option.getOrNull(controlLabel("two"))).toBe(null);
+  expect(Option.getOrNull(controlLabel("1e3"))).toBe(null);
+  expect(Option.getOrNull(controlLabel("0x10"))).toBe(null);
+  expect(Option.getOrNull(controlLabel("+5"))).toBe(null);
+  expect(Option.getOrNull(controlLabel("9007199254740993"))).toBe(null);
 });
 
 test("the status answer is read into a numeric label and epoch, or refused", () => {
