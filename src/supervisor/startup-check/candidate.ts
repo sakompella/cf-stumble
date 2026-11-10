@@ -31,10 +31,7 @@ export function runStartupCheck(
     host.ctx.facets.delete(name);
   });
 
-  return discard.pipe(
-    Effect.andThen(checkCandidate(host, artifact, name, deadlines)),
-    Effect.ensuring(discard),
-  );
+  return discard.pipe(Effect.andThen(checkCandidate(host, artifact, name, deadlines)));
 }
 
 function withinDeadline(
