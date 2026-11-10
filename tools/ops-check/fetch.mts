@@ -39,7 +39,9 @@ const UsageEnvelope = Schema.Struct({
   errors: Schema.optional(Schema.NullOr(Schema.Array(Schema.Json))),
   data: Schema.Struct({
     viewer: Schema.Struct({
-      accounts: Schema.Array(Schema.Struct({ containersUsageAdaptiveGroups: Schema.Array(Schema.Json) })),
+      accounts: Schema.Array(
+        Schema.Struct({ containersUsageAdaptiveGroups: Schema.Array(Schema.Json) }),
+      ),
     }),
   }),
 });
@@ -186,7 +188,10 @@ export async function fetchUsage(
 ): Promise<readonly UsageBucket[]> {
   const namespaces = decoded(
     NamespacesResponse,
-    await send(token, `${API}/accounts/${account}/workers/durable_objects/namespaces?per_page=1000`),
+    await send(
+      token,
+      `${API}/accounts/${account}/workers/durable_objects/namespaces?per_page=1000`,
+    ),
     `no container application serves ${worker}'s ${durableObjectClasses.WORKSPACE_HOST} namespace`,
   );
 

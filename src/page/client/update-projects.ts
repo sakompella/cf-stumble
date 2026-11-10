@@ -1,15 +1,8 @@
 import * as Array from "effect/Array";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
-import {
-  AuthorizeGitHub,
-  ConnectRepository,
-  DisconnectChatGPT,
-  FetchProjects,
-  FinishChatGPTLogin,
-  RefreshGitHub,
-  StartChatGPTLogin,
-} from "./commands.js";
+import { AuthorizeGitHub, ConnectRepository, FetchProjects, RefreshGitHub } from "./commands.js";
+import { DisconnectChatGPT, FinishChatGPTLogin, StartChatGPTLogin } from "./commands-chatgpt.js";
 import type { GitHubReport, Model, Project } from "./model.js";
 import { keepingAddress, pendingLogin, withAddress } from "./chatgpt.js";
 import { StreamPhase } from "./stream-phase.js";
@@ -17,6 +10,8 @@ import { withOpenedStream } from "./update-conversation.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 export { backendHandlers, FetchBackend } from "./update-backend.js";
+
+export { FetchChatGPT } from "./commands-chatgpt.js";
 
 function withGitHub(model: Model, report: GitHubReport): Model {
   const github = Predicate.isTagged(report, "Known")

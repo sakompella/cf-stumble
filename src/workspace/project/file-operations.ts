@@ -24,7 +24,9 @@ import {
 } from "./protocol.js";
 import { parseWriteFileInput } from "./start-exec-input.js";
 
-export function projectResultOf<T>(result: Result.Result<T, ProjectFailureDetail>): ProjectResult<T> {
+export function projectResultOf<T>(
+  result: Result.Result<T, ProjectFailureDetail>,
+): ProjectResult<T> {
   return Result.match(result, {
     onFailure: (error): ProjectResult<T> => ({ ok: false, error }),
     onSuccess: (value) => ok(value),
@@ -49,13 +51,7 @@ export function lstatProjectPath(
 
     const name = segments.at(-1) ?? "/";
 
-    const info = fileInfoOf(
-      provider,
-      name,
-      addressedPathOf(segments),
-      outcome.path,
-      outcome.stat,
-    );
+    const info = fileInfoOf(provider, name, addressedPathOf(segments), outcome.path, outcome.stat);
 
     return { ...info, canonicalPath: projectResultOf(resolveCanonicalPath(provider, segments)) };
   });

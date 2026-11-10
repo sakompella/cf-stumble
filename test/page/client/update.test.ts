@@ -3,6 +3,7 @@ import * as Predicate from "effect/Predicate";
 import { expect, test } from "vitest";
 import {
   checkedWording,
+  decodeStatusAnswer,
   generationReading,
   gitHubReport,
   submitRejection,
@@ -65,7 +66,11 @@ test("asking to refresh GitHub is what checks the connection again", () => {
   expect(commandNames(readyPage(), Message.ClickedRefreshGitHub())).toEqual(["RefreshGitHub"]);
 });
 
-const CONNECTED_GITHUB = { state: "connected", login: "octocat", source: "device-authorization" };
+const CONNECTED_GITHUB = {
+  state: "connected",
+  login: "octocat",
+  source: "device-authorization",
+} as const;
 
 const LATE_MORNING = new Date(2026, 9, 16, 11, 5).getTime();
 
@@ -78,7 +83,12 @@ test("the page words when the Worker last checked GitHub, with the date once it 
 });
 
 test("a pending authorization is the Worker's live state, so it carries no check time", () => {
-  const awaiting = { state: "awaiting-authorization", userCode: "WDJB-MJHT", verificationUri: "u" };
+  const awaiting = {
+    state: "awaiting-authorization",
+    userCode: "WDJB-MJHT",
+    verificationUri: "u",
+    expiresAt: 1,
+  } as const;
 
   expect(gitHubReport(awaiting, LATE_MORNING, LATE_MORNING)).toMatchObject({
     connection: { checked: "" },
@@ -324,33 +334,31 @@ test("a generation label names one whole generation or nothing", () => {
 test("the status answer is read into a numeric label and epoch, or refused", () => {
   const generation = { label: 2, harnessCommit: "abc", status: "ready" };
 
-  expect(
-    Option.getOrNull(generationReading({ activeGeneration: { generation, epoch: 4 } })),
-  ).toEqual({ maybeActive: Option.some(generation), epoch: 4 });
+  expect(generationReading({ activeGeneration: { generation, epoch: 4 } })).toEqual({
+    maybeActive: Option.some(generation),
+    epoch: 4,
+  });
+
+  expect(generationReading({ activeGeneration: { generation: null, epoch: 0 } })).toEqual({
+    maybeActive: Option.none(),
+    epoch: 0,
+  });
 
   expect(
-    Option.getOrNull(generationReading({ activeGeneration: { generation: null, epoch: 0 } })),
-  ).toEqual({ maybeActive: Option.none(), epoch: 0 });
-
-  expect(
-    Option.isNone(generationReading({ ok: false, problem: { code: "status-unavailable" } })),
+    Option.isNone(decodeStatusAnswer({ ok: false, problem: { code: "status-unavailable" } })),
   ).toBe(true);
-  expect(Option.isNone(generationReading({ activeGeneration: { generation, epoch: "4" } }))).toBe(
+  expect(Option.isNone(decodeStatusAnswer({ activeGeneration: { generation, epoch: "4" } }))).toBe(
     true,
   );
 });
 
 test("a submit refused after the label was recorded says so", () => {
-  const payload = {
-    ok: false,
-    error: { code: "preparation-failed" },
-    recorded: { label: 7, harnessCommit: "abc" },
-  };
-
-  expect(submitRejection({ status: 500, payload })).toBe(
-    "label 7 recorded (commit abc), preparation failed: error: preparation-failed",
-  );
-  expect(submitRejection({ status: 400, payload: { ok: false, error: { code: "x" } } })).toBe(
-    "error: x",
-  );
+  expect(
+    submitRejection({
+      ok: false,
+      error: { code: "preparation-failed" },
+      recorded: { label: 7, harnessCommit: "abc" },
+    }),
+  ).toBe("label 7 recorded (commit abc), preparation failed: error: preparation-failed");
+  expect(submitRejection({ ok: false, error: { code: "x" } })).toBe("error: x");
 });

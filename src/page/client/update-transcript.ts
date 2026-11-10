@@ -1,5 +1,5 @@
 import * as Option from "effect/Option";
-import { LoadTranscript } from "./commands.js";
+import { LoadTranscript } from "./commands-transcript.js";
 import type { Model } from "./model.js";
 import { withError, type Handlers } from "./update-shared.js";
 

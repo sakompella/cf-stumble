@@ -4,7 +4,13 @@ import * as Schema from "effect/Schema";
 import { routePattern } from "../../src/routes/route-pattern.ts";
 import type { JsonRecord, JsonValue } from "../json.mts";
 import { ApiFailure, send } from "./fetch.mts";
-import type { Invocation, ModelCalls, RunSettlement, SessionFailure, TimeWindow } from "./check.mts";
+import type {
+  Invocation,
+  ModelCalls,
+  RunSettlement,
+  SessionFailure,
+  TimeWindow,
+} from "./check.mts";
 
 const TELEMETRY_ROW_LIMIT = 2000;
 
@@ -89,7 +95,9 @@ export function parseInvocations(response: JsonValue): readonly Invocation[] {
       {
         endMs: timestamp,
         wallTimeMs: $workers.wallTimeMs,
-        route: routePattern(URL.parse($workers.event.request.url)?.pathname ?? $workers.event.request.url),
+        route: routePattern(
+          URL.parse($workers.event.request.url)?.pathname ?? $workers.event.request.url,
+        ),
       },
     ];
   });

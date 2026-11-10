@@ -89,7 +89,8 @@ function walkSegments(
     if (segment === "..") {
       resolved = resolved === "/" ? "/" : resolved.slice(0, resolved.lastIndexOf("/")) || "/";
 
-      if (!isWithinRoot(resolved)) return Result.fail(failureDetail("path-outside-root", addressed));
+      if (!isWithinRoot(resolved))
+        return Result.fail(failureDetail("path-outside-root", addressed));
       continue;
     }
 

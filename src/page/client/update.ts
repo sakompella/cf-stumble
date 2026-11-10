@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import type { Runtime } from "foldkit";
-import { FetchChatGPT, FetchGitHub, FetchProjects, FetchStatus } from "./commands.js";
+import { FetchGitHub, FetchProjects, FetchStatus } from "./commands.js";
 import { ChatGPT } from "./chatgpt.js";
 import { Message } from "./message.js";
 import { ControlRequest, StatusRead, SubmitRequest, type Model } from "./model.js";
@@ -10,6 +10,7 @@ import {
   chatGPTHandlers,
   connectHandlers,
   FetchBackend,
+  FetchChatGPT,
   gitHubHandlers,
   projectHandlers,
 } from "./update-projects.js";

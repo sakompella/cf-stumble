@@ -150,9 +150,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       });
 
       if (cwd.kind === "missing") {
-        return yield* Result.fail(
-          failureDetail("not-found", addressedPathOf(input.cwdSegments)),
-        );
+        return yield* Result.fail(failureDetail("not-found", addressedPathOf(input.cwdSegments)));
       }
 
       if (!cwd.stat.isDirectory()) {

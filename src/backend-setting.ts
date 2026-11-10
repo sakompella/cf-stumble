@@ -12,7 +12,7 @@ type SettingStore = Readonly<{
 
 const BACKEND_SETTING_KEY = "workspace-backend";
 
-export const decodeBackendSetting = Schema.decodeUnknownOption(BackendSetting);
+const decodeBackendSetting = Schema.decodeUnknownOption(BackendSetting);
 
 export function readBackendSetting(kv: SettingStore): BackendSetting {
   return Option.getOrElse(decodeBackendSetting(kv.get(BACKEND_SETTING_KEY)), () => "cloudflare");

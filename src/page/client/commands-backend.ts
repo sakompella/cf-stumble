@@ -1,8 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
-import { BackendSetting, decodeBackendSetting } from "../../backend-setting.js";
-import { field, isOk, problemText, requestJson, type Answer, type JsonBody } from "./api.js";
+import { BackendAnswer } from "./answers.js";
+import { type Answered, refusalWording, requestJson, type JsonBody } from "./api.js";
+import { BackendSetting } from "../../backend-setting.js";
 import { Message } from "./message.js";
 
 const BACKEND_MESSAGES = [
@@ -11,18 +12,23 @@ const BACKEND_MESSAGES = [
   Message.FailedBackend,
 ] as const;
 
-type BackendAnswer = Extract<Message, { readonly _tag: "SucceededBackend" | "RejectedBackend" }>;
+type BackendAnswerMessage = Extract<
+  Message,
+  { readonly _tag: "SucceededBackend" | "RejectedBackend" }
+>;
 
-function backendAnswer(answer: Answer): BackendAnswer {
-  const backend = decodeBackendSetting(field(answer.payload, "backend"));
-
-  return isOk(answer.payload) && Option.isSome(backend)
-    ? Message.SucceededBackend({ backend: backend.value })
-    : Message.RejectedBackend({ wording: problemText(answer) });
+function backendAnswer(answered: Answered<typeof BackendAnswer.Type>): BackendAnswerMessage {
+  return Option.match(answered.maybeAnswer, {
+    onNone: () => Message.RejectedBackend({ wording: refusalWording(answered) }),
+    onSome: (answer) =>
+      answer.ok
+        ? Message.SucceededBackend({ backend: answer.backend })
+        : Message.RejectedBackend({ wording: `rejected: ${answer.problem.code}` }),
+  });
 }
 
 function backendRequest(method: "GET" | "POST", maybeBody: Option.Option<JsonBody>) {
-  return requestJson(method, "/api/workspace/backend", maybeBody).pipe(
+  return requestJson(method, "/api/workspace/backend", maybeBody, BackendAnswer).pipe(
     Effect.map(backendAnswer),
     Effect.catch((detail) => Effect.succeed(Message.FailedBackend({ detail }))),
   );
