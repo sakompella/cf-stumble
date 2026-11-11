@@ -1,7 +1,12 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
-import { parseCallback, requestTokens } from "../../src/chatgpt/oauth.js";
+import {
+  parseCallback,
+  parseRefreshGrant,
+  parseTokenGrant,
+  requestTokens,
+} from "../../src/chatgpt/oauth.js";
 import { ACCESS_ONE, grant, recordingFetch, REFRESH_ONE } from "./fixtures.js";
 
 const STATE = "state-FAKE-0123456789";
@@ -40,12 +45,46 @@ test("the token endpoint's status decides whether a failure consumed anything", 
 
   for (const [reply, failure] of cases) {
     const { fetcher } = recordingFetch(reply);
-    const outcome = await Effect.runPromise(Effect.result(requestTokens(fetcher, {})));
+
+    const outcome = await Effect.runPromise(
+      Effect.result(requestTokens(fetcher, {}, parseTokenGrant)),
+    );
+
     expect(Result.isFailure(outcome) ? outcome.failure.failure : "granted").toBe(failure);
   }
 
   const { fetcher, calls } = recordingFetch(() => Promise.resolve(grant(ACCESS_ONE, REFRESH_ONE)));
-  await Effect.runPromise(requestTokens(fetcher, { grant_type: "refresh_token" }));
+  await Effect.runPromise(requestTokens(fetcher, { grant_type: "refresh_token" }, parseTokenGrant));
   expect(calls[0]?.url).toBe("https://auth.openai.com/api/accounts/oauth/token");
   expect(calls[0]?.init.redirect).toBe("manual");
+});
+
+test("a sign-in reply without a scope does not connect", () => {
+  const reply = { access_token: ACCESS_ONE, refresh_token: REFRESH_ONE, expires_in: 3600 };
+
+  expect(parseTokenGrant(JSON.stringify(reply))).toEqual(Result.fail("ambiguous"));
+});
+
+function jwtPart(claims: Readonly<Record<string, string | number>>): string {
+  return btoa(JSON.stringify(claims)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+}
+
+test("a refresh reply with no lifetime and no readable expiry in its access token is ambiguous", () => {
+  const header = jwtPart({ alg: "RS256" });
+
+  const accessTokens = [
+    ACCESS_ONE,
+    `${header}.${jwtPart({ iat: 1 })}.FAKE`,
+    `${header}.${jwtPart({ exp: "4600" })}.FAKE`,
+    `${header}.${jwtPart({ exp: 4600 })}`,
+    `${header}.not-json-FAKE.FAKE`,
+  ];
+
+  for (const accessToken of accessTokens) {
+    const reply = JSON.stringify({ access_token: accessToken, refresh_token: REFRESH_ONE });
+
+    expect(parseRefreshGrant(reply, { refreshToken: "previous" }, 0), accessToken).toEqual(
+      Result.fail("ambiguous"),
+    );
+  }
 });

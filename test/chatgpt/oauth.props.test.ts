@@ -2,7 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
-import { parseCallback, parseTokenGrant } from "../../src/chatgpt/oauth.js";
+import { parseCallback, parseRefreshGrant, parseTokenGrant } from "../../src/chatgpt/oauth.js";
 
 const REDIRECT_URI = "http://127.0.0.1:1455/auth/callback";
 
@@ -62,6 +62,16 @@ const unsoundLifetime = gs.oneOf<unknown>(
 );
 
 const faults = ["none", "access token", "refresh token", "lifetime"] as const;
+
+const DIRECT_SCOPE = `openid profile email offline_access resource.invoke ${DIRECT_SCOPE_WORD}`;
+
+function jwtPart(claims: Readonly<Record<string, string | number>>): string {
+  return btoa(JSON.stringify(claims)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+}
+
+function accessJwt(exp: number): string {
+  return `${jwtPart({ alg: "RS256", typ: "JWT" })}.${jwtPart({ exp })}.FAKE-signature`;
+}
 
 test("a pasted address yields its code and client, whatever they contain and however it is padded", () => {
   hegel.test((tc) => {
@@ -137,8 +147,46 @@ test("a token reply connects only with sound tokens, a positive lifetime and the
   });
 });
 
+test("a refresh reply that leaves out the refresh token, the scope or the lifetime still stores the new grant", () => {
+  hegel.test((tc) => {
+    const now = tc.draw(gs.integers({ minValue: 0, maxValue: 4e12 }));
+    const exp = Math.floor(now / 1000) + tc.draw(gs.integers({ minValue: 1, maxValue: 1e6 }));
+    const accessToken = accessJwt(exp);
+    const previousRefreshToken = tc.draw(validToken);
+    const refreshToken = tc.draw(gs.optional(validToken));
+    const expiresIn = tc.draw(gs.optional(soundLifetime));
+    const scope = tc.draw(gs.sampledFrom(["absent", "direct", "without direct"] as const));
+
+    const body = JSON.stringify({
+      access_token: accessToken,
+      refresh_token: refreshToken ?? undefined,
+      expires_in: expiresIn ?? undefined,
+      scope: { absent: undefined, direct: DIRECT_SCOPE, "without direct": "openid profile" }[scope],
+    });
+
+    const parsed = parseRefreshGrant(body, { refreshToken: previousRefreshToken }, now);
+
+    if (scope === "without direct") {
+      expect(parsed).toEqual(Result.fail("missing-scope"));
+    } else {
+      expect(parsed).toEqual(
+        Result.succeed({
+          accessToken,
+          refreshToken: refreshToken ?? previousRefreshToken,
+          expiresInMs: expiresIn === null ? exp * 1000 - now : expiresIn * 1000,
+        }),
+      );
+    }
+  });
+});
+
 test("text that is not a token reply never connects", () => {
   hegel.test((tc) => {
-    expect(parseTokenGrant(tc.draw(gs.text()))).toEqual(Result.fail("ambiguous"));
+    const text = tc.draw(gs.text());
+
+    expect(parseTokenGrant(text)).toEqual(Result.fail("ambiguous"));
+    expect(parseRefreshGrant(text, { refreshToken: "previous" }, 0)).toEqual(
+      Result.fail("ambiguous"),
+    );
   });
 });
