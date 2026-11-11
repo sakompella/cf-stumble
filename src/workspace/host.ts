@@ -80,6 +80,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
           id: ctx.id,
           exports: ctx.exports,
           isolateToken: this.#isolateToken,
+          workspace: () => this.#platform.workspace.stub(),
         }),
         git: workspaceGit,
       },
