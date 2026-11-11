@@ -8,6 +8,7 @@ import type {
 import type { GitScope, RunCli } from "./git-cli.js";
 import type { ReadFile } from "./git-index-file.js";
 import { stagePathspecs } from "./git-commit-pathspec.js";
+import { gitDate } from "./git-log-format.js";
 import { statusLines, type StatusLine } from "./git-status.js";
 import { headState, longStatus } from "./git-status-text.js";
 
@@ -50,6 +51,7 @@ async function summary(
   client: GitClient,
   dir: string,
   paths: string[] | undefined,
+  amend: boolean,
 ): Promise<string> {
   const [branch, commit] = await Promise.all([
     client.currentBranch({ dir }),
@@ -62,7 +64,8 @@ async function summary(
   if (paths !== undefined) options.paths = paths;
 
   const entries = await client.diffSummary(options);
-  const where = [branch ?? "detached HEAD", ...(parent === undefined ? ["(root-commit)"] : [])];
+  const root = parent === undefined && !amend;
+  const where = [branch ?? "detached HEAD", ...(root ? ["(root-commit)"] : [])];
 
   const modes = await Promise.all(
     entries.map((entry) =>
@@ -72,7 +75,7 @@ async function summary(
 
   const subject = commit.message.split("\n")[0] ?? "";
 
-  return `[${where.join(" ")} ${commit.oid.slice(0, 7)}] ${subject}\n${changeLine(entries)}\n${modes.join("")}`;
+  return `[${where.join(" ")} ${commit.oid.slice(0, 7)}] ${subject}\n${amend ? ` Date: ${gitDate(commit.author)}\n` : ""}${changeLine(entries)}\n${modes.join("")}`;
 }
 
 async function modeLine(
@@ -289,7 +292,7 @@ export async function commitWithSummary(
 
   if (flags.quiet) return { ...result, stdout: "" };
 
-  return summary(client, dir, amend ? undefined : paths).then(
+  return summary(client, dir, amend ? undefined : paths, amend).then(
     (stdout) => ({ ...result, stdout }),
     () => result,
   );
