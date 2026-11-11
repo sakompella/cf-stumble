@@ -89,6 +89,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       idleLimitMs: WORKSPACE_IDLE_STOP_MS,
       setAlarm: (atMs) => ctx.storage.setAlarm(atMs),
       containerRunning: () => this.#platform.containerRunning(),
+      pullContainer: () => this.#platform.pullContainer(),
       closeWorkspace: () => this.#platform.workspace.close(),
       stopContainer: (reason) =>
         this.#platform.stopContainer(reason).pipe(Effect.mapError(({ cause }) => cause)),

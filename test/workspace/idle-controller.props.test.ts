@@ -91,6 +91,7 @@ function makeIdleController(world: World, failures: FailureSwitch): WorkspaceIdl
       return Promise.resolve();
     },
     containerRunning: () => world.running,
+    pullContainer: () => exclusively(world, failures.current.close, "pull failed"),
     closeWorkspace: () => exclusively(world, failures.current.close, "close failed"),
     stopContainer: () =>
       Effect.promise(async () => {
