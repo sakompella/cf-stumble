@@ -33,15 +33,29 @@ Durable Object's SQLite, such as `node_modules`, `/tmp`, and anything outside `/
 an ignored segment. Everything else is kept, because SQLite is the authority, every exec pulls
 the container's changes before it settles, and the stop pulls once more before the close, so a
 file that a background process (a dev server, `cmd &`) wrote after the last exec is kept too. A
-write made after that pull is lost. The stop pulls only from a container this Host instance has
-connected to: after a Host restart (every deploy restarts it), connecting again can make Computer
-destroy and relaunch the container, so there is nothing to pull, and a background process's writes
-since the last exec are lost at the idle stop if no exec came first. The pull is bounded at 60
-seconds, and a pull that fails or times out is logged and does not stop the destroy.
+write made after that pull is lost. The stop pulls when this Host instance has connected to the
+container or when the platform reports it running (`ctx.container.running`).
+
+A deploy resets the Host (`codeUpdateStrategy: immediate`) and nothing wakes the new instance until
+a request or the alarm, so the object is inactive and the platform stops the container shortly
+after (23 seconds after a deploy on a staging stage, with no pull). The Host therefore sets the
+container's inactivity timeout to one idle limit plus a minute, when it connects and when it starts
+beside a running container. The container then outlives the reset until the alarm wakes the new
+instance. A new instance counts itself idle for one limit already, so the alarm that wakes it
+stops the container at once; a request that wakes it first counts as activity, as before. (Counting
+idle time from the instance's start made each woken instance rearm, and with the inactivity timeout
+the container never stopped.) Its pull connects first: Computer's `start()`
+finds the container running with the same launch record and adopts it (`outcome: "adopted"`, the
+same runtime id), and the pull copies what a background process wrote since the last exec. If the
+launch record differs (a changed container environment, instance size or ignore list), Computer
+destroys and relaunches the container instead, those writes are lost, and the stop pays one cold
+start; Computer has no adopt-only connect to avoid it. The pull is bounded at 60 seconds, and a
+pull that fails or times out is logged and does not stop the destroy.
 
 **Alternatives.**
 
-- `setInactivityTimeout` only counts after the object is inactive, which never happens here.
+- `setInactivityTimeout` only counts after the object is inactive, which never happens here, so it
+  cannot stop an idle container; the Host uses it only to keep a container through a reset.
 - Turning the heartbeat off changes nothing; the open request alone keeps the object active.
 - Closing the Workspace without destroying the container works, but the stop comes 70 to 140
   seconds later and the object is already gone, so nothing can log it.

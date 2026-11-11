@@ -92,6 +92,28 @@ test("a past-due alarm closes the Workspace and destroys the container for being
   expect(destroyed).toEqual(["idle"]);
 });
 
+test("an alarm that wakes a restarted Host beside a running container pulls it, then destroys it", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const container = await withHost("host-seam-restarted", async (host, _state, running) => {
+    await host.alarm();
+
+    return running;
+  });
+
+  expect(container.pulledBefore, "one pull, before any destroy").toEqual([[]]);
+  expect(container.destroyed).toEqual(["idle"]);
+});
+
+test("a Host that starts beside a running container keeps it through one idle limit of inactivity", async () => {
+  const container = await withHost("host-seam-outlive", (_host, _state, running) =>
+    Promise.resolve(running),
+  );
+
+  expect(container.inactivityTimeoutsMs).toHaveLength(1);
+  expect(container.inactivityTimeoutsMs[0]).toBeGreaterThan(WORKSPACE_IDLE_STOP_MS);
+});
+
 test("a backend change while a project lease is held is refused and leaves the container running", async () => {
   const result = await withHost("host-seam-backend-lease", async (host, _state, container) => {
     await host.project({ remainingMs: 60_000 });
