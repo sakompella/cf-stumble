@@ -39,10 +39,25 @@ const FIXED_DATE = "2026-01-02T03:04:05Z";
 
 const IDENTITY = ["-c", "user.name=T", "-c", "user.email=t@e"];
 
+const GIT_IDENTITY_VARIABLES = new Set([
+  "GIT_AUTHOR_NAME",
+  "GIT_AUTHOR_EMAIL",
+  "GIT_COMMITTER_NAME",
+  "GIT_COMMITTER_EMAIL",
+]);
+
+const realGitEnv = {
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !GIT_IDENTITY_VARIABLES.has(name)),
+  ),
+  GIT_AUTHOR_DATE: FIXED_DATE,
+  GIT_COMMITTER_DATE: FIXED_DATE,
+};
+
 export function realGit(dir: string, args: readonly string[]): GitCliResult {
   const ran = spawnSync("git", ["-C", dir, ...IDENTITY, ...args], {
     encoding: "utf8",
-    env: { ...process.env, GIT_AUTHOR_DATE: FIXED_DATE, GIT_COMMITTER_DATE: FIXED_DATE },
+    env: realGitEnv,
   });
 
   return { stdout: ran.stdout, stderr: ran.stderr, exitCode: ran.status ?? -1 };
