@@ -66,7 +66,7 @@ function connect(backend: HostedBackend<number>): Promise<BackendHandle> {
   return backend.connect(0);
 }
 
-test("adds node_modules to a fetchChanges call with no caller ignore", async () => {
+test("adds the sync ignores to a fetchChanges call with no caller ignore", async () => {
   const inputs: FetchChangesInput[] = [];
 
   const { backend } = backendWith((input) => {
@@ -81,10 +81,10 @@ test("adds node_modules to a fetchChanges call with no caller ignore", async () 
 
   await (await connect(withWorkspaceSyncIgnore(backend))).rpc.sync.fetchChanges({});
 
-  expect(inputs).toEqual([{ ignore: ["node_modules"] }]);
+  expect(inputs).toEqual([{ ignore: ["node_modules", ".venv"] }]);
 });
 
-test("preserves caller ignores while adding node_modules", async () => {
+test("preserves caller ignores while adding the sync ignores", async () => {
   const inputs: FetchChangesInput[] = [];
 
   const { backend } = backendWith((input) => {
@@ -105,11 +105,11 @@ test("preserves caller ignores while adding node_modules", async () => {
   });
 
   expect(inputs).toEqual([
-    { after: { rev: 3, path: "/project" }, ignore: [".cache", "node_modules"] },
+    { after: { rev: 3, path: "/project" }, ignore: [".cache", "node_modules", ".venv"] },
   ]);
 });
 
-test("adds node_modules to a change pack fetch and keeps the pack transport", async () => {
+test("adds the sync ignores to a change pack fetch and keeps the pack transport", async () => {
   const inputs: Parameters<NonNullable<SyncRPC["fetchChangePack"]>>[0][] = [];
 
   const { backend, handle } = backendWith(() => Promise.reject(new Error("unused")));
@@ -133,7 +133,7 @@ test("adds node_modules to a change pack fetch and keeps the pack transport", as
   await sync.fetchChangePack?.({ maxEntries: 1, maxBytes: 1, generation: "g" });
 
   expect(inputs).toEqual([
-    { maxEntries: 1, maxBytes: 1, generation: "g", ignore: ["node_modules"] },
+    { maxEntries: 1, maxBytes: 1, generation: "g", ignore: ["node_modules", ".venv"] },
   ]);
   expect("applyChangePack" in sync).toBe(true);
 });

@@ -4,7 +4,7 @@ import type { SelectableProject } from "./selectable-projects.js";
 
 export const WORKSPACE_ROOT = "/workspace";
 
-export const WORKSPACE_SYNC_IGNORES = ["node_modules"] as const;
+export const WORKSPACE_SYNC_IGNORES = ["node_modules", ".venv"] as const;
 
 export const HARNESS_DIRECTORY = `${WORKSPACE_ROOT}/harness`;
 
