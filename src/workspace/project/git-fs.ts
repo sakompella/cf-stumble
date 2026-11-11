@@ -9,6 +9,7 @@ import {
 } from "@cloudflare/computer/git";
 import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
 import { gitCli } from "./git-cli.js";
+import type { WorkFiles } from "./git-index-file.js";
 import { githubCloneHeaders, githubTokenFromHosts, isGitHubRemote } from "./github-remote.js";
 
 type ReadOptions = Parameters<SQLiteWorkspaceProvider["readFile"]>[1];
@@ -94,6 +95,45 @@ async function removeFile(
   }
 }
 
+function listFiles(provider: SQLiteWorkspaceProvider, root: string): readonly string[] {
+  const walk = (relative: string): string[] =>
+    provider.readdirEntriesSync(relative === "" ? root : `${root}/${relative}`).flatMap((entry) => {
+      const path = relative === "" ? entry.name : `${relative}/${entry.name}`;
+
+      if (entry.type === "dir") return entry.name === ".git" && relative === "" ? [] : walk(path);
+
+      return [path];
+    });
+
+  return walk("");
+}
+
+async function moveFile(
+  provider: SQLiteWorkspaceProvider,
+  from: string,
+  to: string,
+  stop: string,
+): Promise<void> {
+  await provider.mkdir(to.slice(0, to.lastIndexOf("/")), { recursive: true });
+  await provider.rename(from, to);
+
+  let directory = from.slice(0, from.lastIndexOf("/"));
+
+  while (directory.length > stop.length && (await provider.readdir(directory)).length === 0) {
+    await provider.rmdir(directory);
+    directory = directory.slice(0, directory.lastIndexOf("/"));
+  }
+}
+
+function workFiles(provider: SQLiteWorkspaceProvider): WorkFiles {
+  return {
+    read: async (path) => Buffer.from(await provider.readFile(path)),
+    remove: (path, stop) => removeFile(provider, path, stop),
+    rename: (from, to, stop) => moveFile(provider, from, to, stop),
+    list: (root) => Promise.resolve(listFiles(provider, root)),
+  };
+}
+
 export const workspaceGit: GitClientFactory = (options) => {
   const client = sqliteGit(options);
 
@@ -123,12 +163,6 @@ export const workspaceGit: GitClientFactory = (options) => {
     push: (input: Parameters<typeof push>[0]) => push({ onAuth, ...input }),
     pull: (input: Parameters<typeof pull>[0]) => pull({ onAuth, ...input }),
     cli: (input: GitCliInput): Promise<GitCliResult> =>
-      gitCli(
-        client,
-        cli,
-        input,
-        async (path) => Buffer.from(await options.ws.provider().readFile(path)),
-        (path, stop) => removeFile(options.ws.provider(), path, stop),
-      ),
+      gitCli(client, cli, input, workFiles(options.ws.provider())),
   });
 };

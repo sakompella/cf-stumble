@@ -1,17 +1,6 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
-import { verboseBranches } from "./git-branch-text.js";
-import { checkoutWithMessages } from "./git-checkout-text.js";
-import { commitWithSummary } from "./git-commit-text.js";
-import {
-  addCommand,
-  reportingFailure,
-  resetCommand,
-  restoreCommand,
-} from "./git-index-commands.js";
-import { pushDelete } from "./git-push-delete.js";
-import type { ReadFile } from "./git-index-file.js";
-import { rmCommand, type RemoveFile } from "./git-rm-command.js";
-import { statusCommand } from "./git-status-command.js";
+import { dispatchGit } from "./git-dispatch.js";
+import type { WorkFiles } from "./git-index-file.js";
 
 export type RunCli = (input: GitCliInput) => Promise<GitCliResult>;
 
@@ -97,8 +86,7 @@ export async function gitCli(
   client: GitClient,
   cli: RunCli,
   original: GitCliInput,
-  readFile: ReadFile,
-  removeFile: RemoveFile,
+  files: WorkFiles,
 ): Promise<GitCliResult> {
   const resolved = resolveGlobalOptions(original);
 
@@ -108,33 +96,8 @@ export async function gitCli(
   const [command] = input.argv;
   const scope = await gitScope(client, input.cwd ?? "/");
 
-  switch (command ?? "") {
-    case "status":
-      return statusCommand(client, cli, input, scope, readFile);
-    case "commit":
-      return commitWithSummary(
-        client,
-        cli,
-        await withConfiguredIdentity(client, input, scope.dir),
-        scope,
-        readFile,
-      );
-    case "checkout":
-    case "switch":
-      return checkoutWithMessages(client, cli, input, scope, readFile);
-    case "branch":
-      return verboseBranches(client, cli, input, scope);
-    case "add":
-      return reportingFailure(() => addCommand(client, cli, input, scope, readFile));
-    case "rm":
-      return reportingFailure(() => rmCommand(client, input, scope, removeFile, readFile));
-    case "reset":
-      return reportingFailure(() => resetCommand(client, cli, input, scope, readFile));
-    case "restore":
-      return reportingFailure(() => restoreCommand(client, input, scope, readFile));
-    case "push":
-      return cli(pushDelete(input));
-    default:
-      return cli(input);
-  }
+  const prepared =
+    command === "commit" ? await withConfiguredIdentity(client, input, scope.dir) : input;
+
+  return dispatchGit(command ?? "", client, cli, prepared, scope, files);
 }

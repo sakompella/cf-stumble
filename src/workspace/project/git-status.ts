@@ -8,8 +8,40 @@ export interface StatusLine {
   readonly from?: string;
 }
 
+const ESCAPES = new Map([
+  [7, "\\a"],
+  [8, "\\b"],
+  [9, "\\t"],
+  [10, "\\n"],
+  [11, "\\v"],
+  [12, "\\f"],
+  [13, "\\r"],
+  [34, '\\"'],
+  [92, "\\\\"],
+]);
+
+function plainByte(byte: number): boolean {
+  return byte >= 0x20 && byte < 0x7f && !ESCAPES.has(byte);
+}
+
+export function quotePath(path: string): string {
+  const bytes = new TextEncoder().encode(path);
+
+  if (bytes.every(plainByte)) return path;
+
+  const body = [...bytes].map(
+    (byte) =>
+      ESCAPES.get(byte) ??
+      (plainByte(byte) ? String.fromCodePoint(byte) : `\\${byte.toString(8).padStart(3, "0")}`),
+  );
+
+  return `"${body.join("")}"`;
+}
+
 export function shownPath(line: StatusLine): string {
-  return line.from === undefined ? line.path : `${line.from} -> ${line.path}`;
+  return line.from === undefined
+    ? quotePath(line.path)
+    : `${quotePath(line.from)} -> ${quotePath(line.path)}`;
 }
 
 const SWAPPED = new Map([

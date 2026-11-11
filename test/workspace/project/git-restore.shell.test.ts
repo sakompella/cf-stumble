@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { Workspace } from "@cloudflare/computer";
 import { createGitClient } from "@cloudflare/computer/git";
 import { afterEach, expect, test } from "vitest";
-import { restoreCommand } from "../../../src/workspace/project/git-index-commands.js";
+import { restoreCommand } from "../../../src/workspace/project/git-restore-command.js";
 
 const directories: string[] = [];
 

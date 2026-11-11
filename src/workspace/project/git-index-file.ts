@@ -18,6 +18,15 @@ const MODE_OFFSET = 24;
 
 export type ReadFile = (path: string) => Promise<Uint8Array>;
 
+export type RemoveFile = (path: string, stop: string) => Promise<void>;
+
+export interface WorkFiles {
+  readonly read: ReadFile;
+  readonly remove: RemoveFile;
+  readonly rename: (from: string, to: string, stop: string) => Promise<void>;
+  readonly list: (dir: string) => Promise<readonly string[]>;
+}
+
 export interface IndexEntry {
   readonly oid: string;
   readonly mode: string;
