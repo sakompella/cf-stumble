@@ -18,9 +18,14 @@ Instructions that ask the model to install elsewhere were not followed.
 
 The patch makes the shim use `lstat`, sync a symlink as a symlink, and skip every path with a
 segment in `COMPUTERD_WALK_IGNORE` in both directions. The image sets that variable to the same
-list as `WORKSPACE_SYNC_IGNORES`, and a test checks that the two agree. Files under an ignored
-segment therefore exist only in the container: they are not durable and a container restart
-loses them.
+list as `WORKSPACE_SYNC_IGNORES`, and a test checks that the two agree. The list holds
+`node_modules` and `.venv`. A Python virtual environment is the same kind of tree as
+`node_modules`: a local run with numpy, pandas, django and matplotlib (8,272 files, 194 MB) took
+31 s for the first pull after the install and 3 to 6 s for each pull in the next 25 s, and
+ignoring `.venv` brought both to a few milliseconds. No deployed project has produced this yet.
+Files under an ignored segment therefore exist only in the container: they are not durable and a
+container restart loses them. A segment matches at any depth, so a nested `.venv` is ignored the
+same way as a nested `node_modules`.
 
 The build follows upstream's release workflow. Since 0.8.0 the binary embeds a native FUSE addon,
 which the source stage compiles on Debian trixie and passes to the build through

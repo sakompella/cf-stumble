@@ -87,7 +87,7 @@ COPY git-forward.mts /usr/local/lib/git-forward.mts
 ENV PORT=8080
 ENV MOUNT_POINT=/workspace
 ENV FUSE_MOUNT=shim
-ENV COMPUTERD_WALK_IGNORE=node_modules
+ENV COMPUTERD_WALK_IGNORE=node_modules,.venv
 ENV COMPUTERD_POLL_MS=5000
 ENV COMPUTER_VAR_GH_CONFIG_DIR=/workspace/.config/gh
 ENV COMPUTER_VAR_GIT_CONFIG_GLOBAL=/workspace/.gitconfig
