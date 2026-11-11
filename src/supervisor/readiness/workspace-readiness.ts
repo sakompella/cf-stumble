@@ -47,6 +47,7 @@ export class WorkspaceReadiness {
 
     return Effect.gen({ self: this }, function* () {
       yield* this.fence.wait(project.id);
+      yield* this.github.installConfiguredCredential(Date.now());
 
       if (!(yield* this.provision(project))) return null;
 
