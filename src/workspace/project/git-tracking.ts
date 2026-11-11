@@ -37,6 +37,14 @@ export async function upstreamRef(
   return remote === "." ? merge : `refs/remotes/${remote}/${merge.replace(/^refs\/heads\//u, "")}`;
 }
 
+export function upstreamRemote(
+  client: TrackingClient,
+  dir: string,
+  branch: string,
+): Promise<string | undefined> {
+  return configString(client, dir, `branch.${branch}.remote`);
+}
+
 export async function hasUpstream(
   client: TrackingClient,
   dir: string,
