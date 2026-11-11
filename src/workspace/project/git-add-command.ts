@@ -1,7 +1,7 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
 import type { WorkFiles } from "./git-index-file.js";
-import { matching, resolveSpecs, WILDCARD } from "./git-pathspec.js";
+import { matching, resolveSpecs, under, WILDCARD } from "./git-pathspec.js";
 import { failure, OK } from "./git-result.js";
 import { changeSelection, stage } from "./git-stage.js";
 import { fileStatusLines } from "./git-status.js";
@@ -45,6 +45,31 @@ async function exists(files: WorkFiles, dir: string, path: string): Promise<bool
   }
 }
 
+function unmatchedFailure(typed: readonly string[], onDisk: readonly boolean[]): GitCliResult {
+  const absent = onDisk.indexOf(false);
+
+  if (absent !== -1)
+    return failure(`fatal: pathspec '${typed[absent] ?? ""}' did not match any files\n`);
+
+  return {
+    stdout: "",
+    stderr: typed
+      .map((spec) => `error: pathspec '${spec}' did not match any file(s) known to git\n`)
+      .join(""),
+    exitCode: 128,
+  };
+}
+
+async function present(
+  files: WorkFiles,
+  dir: string,
+  specs: readonly string[],
+): Promise<ReadonlySet<string>> {
+  const everything = await files.list(dir);
+
+  return new Set(specs.filter((spec) => everything.some((file) => under(file, spec))));
+}
+
 export async function addCommand(
   client: GitClient,
   cli: RunCli,
@@ -80,15 +105,15 @@ export async function addCommand(
     if (!force && !update && !WILDCARD.test(spec) && (await exists(files, scope.dir, spec)))
       ignored.push(spec);
 
-  const unmatched = missed.find((spec) => !ignored.includes(spec));
+  const unmatched = missed.filter((spec) => !ignored.includes(spec));
 
-  if (unmatched !== undefined) {
-    const typed = request.paths[specs.indexOf(unmatched)] ?? unmatched;
+  if (unmatched.length > 0) {
+    const onDisk = update ? await present(files, scope.dir, unmatched) : new Set<string>();
+    const typed = (spec: string): string => request.paths[specs.indexOf(spec)] ?? spec;
 
-    return failure(
-      update && (await exists(files, scope.dir, unmatched))
-        ? `error: pathspec '${typed}' did not match any file(s) known to git\n`
-        : `fatal: pathspec '${typed}' did not match any files\n`,
+    return unmatchedFailure(
+      unmatched.map(typed),
+      unmatched.map((spec) => onDisk.has(spec)),
     );
   }
 
