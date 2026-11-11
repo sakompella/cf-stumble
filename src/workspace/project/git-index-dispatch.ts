@@ -7,6 +7,7 @@ import { resetCommand } from "./git-reset-command.js";
 import { restoreCommand } from "./git-restore-command.js";
 import { reportingFailure } from "./git-result.js";
 import { rmCommand } from "./git-rm-command.js";
+import { stashCommand } from "./git-stash.js";
 
 export function indexCommand(
   command: string,
@@ -27,6 +28,8 @@ export function indexCommand(
       return reportingFailure(() => resetCommand(client, cli, input, scope, files.read));
     case "restore":
       return reportingFailure(() => restoreCommand(client, input, scope, files.read));
+    case "stash":
+      return reportingFailure(() => stashCommand(cli, input, scope, files));
     default:
       return undefined;
   }

@@ -94,14 +94,18 @@ const FILES: WorkFiles = {
     await fsp.rename(from, to);
   },
   list: (root) => Promise.resolve(listFiles(root)),
+  mkdir: async (path) => {
+    await fsp.mkdir(path, { recursive: true });
+  },
 };
 
 export function isolateGitWith(
   cli: (input: GitCliInput) => Promise<GitCliResult>,
   dir: string,
   args: readonly string[],
+  gitClient: typeof client = client,
 ): Promise<GitCliResult> {
-  return gitCli(client, cli, { argv: [...IDENTITY, ...args], cwd: dir }, FILES);
+  return gitCli(gitClient, cli, { argv: [...IDENTITY, ...args], cwd: dir }, FILES);
 }
 
 export function isolateGit(dir: string, args: readonly string[]): Promise<GitCliResult> {

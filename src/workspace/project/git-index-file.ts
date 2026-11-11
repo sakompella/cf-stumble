@@ -25,6 +25,7 @@ export interface WorkFiles {
   readonly remove: RemoveFile;
   readonly rename: (from: string, to: string, stop: string) => Promise<void>;
   readonly list: (dir: string) => Promise<readonly string[]>;
+  readonly mkdir: (path: string) => Promise<void>;
 }
 
 export interface IndexEntry {
