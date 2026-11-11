@@ -2,6 +2,7 @@ import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/
 import { branchSwitch } from "./git-checkout-branch.js";
 import { restoreCommand } from "./git-restore-command.js";
 import { reportingFailure } from "./git-result.js";
+import { nonBranchTarget } from "./git-switch-target.js";
 import type { GitScope, RunCli } from "./git-cli.js";
 import type { ReadFile } from "./git-index-file.js";
 import { branchTracking, trackingLines } from "./git-tracking.js";
@@ -25,6 +26,7 @@ async function switchMessages(
   target: string,
   created: boolean,
   before: string | undefined,
+  guessed: boolean,
 ): Promise<GitCliResult> {
   const branch = await client.currentBranch({ dir });
 
@@ -40,6 +42,13 @@ async function switchMessages(
   }
 
   const tracking = await branchTracking(client, dir, branch);
+
+  if (guessed && tracking !== undefined)
+    return {
+      stdout: `branch '${branch}' set up to track '${tracking.upstream}'.\n`,
+      stderr: `Switched to a new branch '${branch}'\n`,
+      exitCode: 0,
+    };
 
   const stderr =
     before === target && !created
@@ -98,9 +107,18 @@ export async function checkoutWithMessages(
   if (separator !== -1) return cli(input);
 
   const dir = scope.dir;
+  const [word] = args;
+
+  if (input.argv[0] === "switch" && args.length === 1 && word?.startsWith("-") === false) {
+    const refused = await reportingFailure(() => nonBranchTarget(client, dir, word));
+
+    if (refused !== undefined) return refused;
+  }
+
   const created = args.some((arg) => CREATE.has(arg));
   const target = args.find((arg) => !arg.startsWith("-"));
   const before = await client.currentBranch({ dir }).catch((): undefined => {});
+  const known = await client.branchList({ dir }).catch((): string[] => []);
 
   const result =
     created && args.length === 2 && target !== undefined
@@ -111,5 +129,7 @@ export async function checkoutWithMessages(
 
   if (target === undefined) return result;
 
-  return switchMessages(client, dir, target, created, before).catch(() => result);
+  const guessed = !created && !known.includes(target);
+
+  return switchMessages(client, dir, target, created, before, guessed).catch(() => result);
 }
