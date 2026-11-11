@@ -1,6 +1,6 @@
 import type { GenerationControl } from "../generation-requests.js";
 import { isHarnessCommit } from "../harness-commit.js";
-import { printed, refused, type CommandNode, type CommandOutput } from "./tree.js";
+import { failureText, printed, refused, type CommandNode, type CommandOutput } from "./tree.js";
 
 export type GenerationPorts = Readonly<{ generations: GenerationControl }>;
 
@@ -33,22 +33,31 @@ async function status({ generations }: GenerationPorts): Promise<CommandOutput> 
   );
 }
 
-async function prepare(harnessCommit: string, { generations }: GenerationPorts) {
-  const { generation } = await generations.submitGeneration(harnessCommit);
+async function prepare(harnessCommit: string, ports: GenerationPorts): Promise<CommandOutput> {
+  const { generation } = await ports.generations.submitGeneration(harnessCommit);
   const submitted = `submitted generation ${generation.label} for ${harnessCommit}`;
-  const checked = await generations.prepareGeneration(generation.label);
+
+  return startupCheck(generation.label, submitted, ports).catch((cause: unknown) =>
+    refused(`${submitted}\ngeneration ${generation.label} was not prepared: ${failureText(cause)}`),
+  );
+}
+
+async function startupCheck(
+  label: number,
+  submitted: string,
+  { generations }: GenerationPorts,
+): Promise<CommandOutput> {
+  const checked = await generations.prepareGeneration(label);
 
   if (!checked.ok) {
-    return refused(
-      `${submitted}\ngeneration ${generation.label} was not prepared: ${checked.problem.code}`,
-    );
+    return refused(`${submitted}\ngeneration ${label} was not prepared: ${checked.problem.code}`);
   }
 
   const { stage, reason } = checked.report;
 
   if (stage !== "ready") {
     return refused(
-      `${submitted}\ngeneration ${generation.label} failed its startup check (${stage}): ${reason}`,
+      `${submitted}\ngeneration ${label} failed its startup check (${stage}): ${reason}`,
     );
   }
 
@@ -57,8 +66,8 @@ async function prepare(harnessCommit: string, { generations }: GenerationPorts) 
   return printed(
     [
       submitted,
-      `generation ${generation.label} is ready`,
-      `activate it with: stumble gen activate ${generation.label} --epoch ${epoch}`,
+      `generation ${label} is ready`,
+      `activate it with: stumble gen activate ${label} --epoch ${epoch}`,
     ].join("\n"),
   );
 }

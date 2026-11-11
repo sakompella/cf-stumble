@@ -1,3 +1,5 @@
+import { redactedExcerpt } from "../diagnostics.js";
+
 export type CommandOutput = Readonly<{ stdout: string; stderr: string; exitCode: number }>;
 
 type Leaf<Ports> = Readonly<{
@@ -23,6 +25,10 @@ export function printed(stdout: string, exitCode = 0): CommandOutput {
 
 export function refused(stderr: string, exitCode = 1): CommandOutput {
   return { stdout: "", stderr: `${stderr}\n`, exitCode };
+}
+
+export function failureText(cause: unknown): string {
+  return redactedExcerpt(cause instanceof Error ? cause.message : String(cause));
 }
 
 function isGroup<Ports>(node: CommandNode<Ports>): node is Group<Ports> {
@@ -87,5 +93,7 @@ export function runCommandTree<Ports>(
     return Promise.resolve(refused(usage, USAGE_EXIT));
   }
 
-  return running.catch(() => refused(`${path.join(" ")}: the request failed`));
+  return running.catch((cause: unknown) =>
+    refused(`${path.join(" ")}: the request failed: ${failureText(cause)}`),
+  );
 }

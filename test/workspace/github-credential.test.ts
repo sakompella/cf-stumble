@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import { REDACTED, type GitHubCredentialState } from "../../src/github/index.js";
+import type { GitHubCredentialState } from "../../src/github/index.js";
+import { REDACTED } from "../../src/github/redaction.js";
 import {
   executeGitHubCredentialRequest,
   type GitHubCredentialRequest,

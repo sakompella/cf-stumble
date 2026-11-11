@@ -2,8 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import { redactCredentials, REDACTED } from "../../src/github/index.js";
-import { containsCredential } from "../../src/github/redaction.js";
+import { containsCredential, redactCredentials, REDACTED } from "../../src/github/redaction.js";
 
 const prefix = gs.sampledFrom(["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]);
 
