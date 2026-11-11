@@ -1,11 +1,9 @@
 import { env } from "cloudflare:workers";
-import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
+import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import * as Result from "effect/Result";
 import { ModuleMapStore } from "../../../src/supervisor/artifacts/index.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
-import { migrateModuleMaps } from "../../../src/supervisor/artifacts/migrate.js";
-import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activateGeneration,
   activeSupervisor,
@@ -27,13 +25,8 @@ const commits = {
   rolledForward: "7100000000000000000000000000000000000005",
   unbuildable: "7100000000000000000000000000000000000006",
   immutable: "7100000000000000000000000000000000000007",
-  migrated: "7100000000000000000000000000000000000008",
   raced: "7100000000000000000000000000000000000009",
 } as const;
-
-function supervisor(name: string): DurableObjectStub<Supervisor> {
-  return env.SUPERVISOR.getByName(name);
-}
 
 function refusingPut(bucket: R2Bucket): R2Bucket {
   return {
@@ -105,49 +98,6 @@ test("a refused write reports a problem and stores nothing", async () => {
     "artifact-write-failed",
   );
   expect(Result.isSuccess(read) ? read.success.kind : "problem").toBe("absent");
-});
-
-test("copies module maps from the old SQLite tables to R2 and drops the tables", async () => {
-  const control = supervisor("module-map-migration");
-  const input = largeModuleMap(commits.migrated);
-  const expected = encodeModuleMap(parsedArtifact(input));
-  const bytes = new TextEncoder().encode(expected);
-  const split = Math.floor(bytes.byteLength / 2);
-
-  const remaining = await runInDurableObject(control, async (_instance, state) => {
-    state.storage.sql.exec(
-      `CREATE TABLE module_map_manifests (harness_commit TEXT PRIMARY KEY, chunk_count INTEGER, byte_count INTEGER);
-       CREATE TABLE module_map_chunks (harness_commit TEXT, chunk_index INTEGER, bytes BLOB, PRIMARY KEY (harness_commit, chunk_index))`,
-    );
-    state.storage.sql.exec(
-      "INSERT INTO module_map_manifests VALUES (?, 2, ?)",
-      commits.migrated,
-      bytes.byteLength,
-    );
-    state.storage.sql.exec(
-      "INSERT INTO module_map_chunks VALUES (?, 0, ?)",
-      commits.migrated,
-      bytes.slice(0, split),
-    );
-    state.storage.sql.exec(
-      "INSERT INTO module_map_chunks VALUES (?, 1, ?)",
-      commits.migrated,
-      bytes.slice(split),
-    );
-
-    await migrateModuleMaps(state.storage.sql, env.MODULE_MAPS);
-
-    return state.storage.sql
-      .exec<{ readonly name: string }>(
-        "SELECT name FROM sqlite_master WHERE name LIKE 'module_map_%'",
-      )
-      .toArray();
-  });
-
-  expect(remaining).toEqual([]);
-  expect(await (await env.MODULE_MAPS.get(`module-maps/${commits.migrated}.json`))?.text()).toBe(
-    expected,
-  );
 });
 
 test("rolls back to a stored generation while every build fails", async () => {

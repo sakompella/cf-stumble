@@ -4,7 +4,6 @@ import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 import { Generations } from "../../../src/supervisor/generations.js";
 import type { HistoryCommit } from "../../../src/supervisor/history/commits.js";
-import { importGenerations } from "../../../src/supervisor/history/import.js";
 import { GenerationHistory } from "../../../src/supervisor/history/log.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 
@@ -147,25 +146,5 @@ test("a failed history write does not block activation or later commits", async 
   expect(commits.map((commit) => commit.message)).toEqual([
     "prepared generation 0",
     "activated generation 0",
-  ]);
-});
-
-test("existing generations import as the first commit once", async () => {
-  const { commits, history, settled } = recorder(0);
-
-  await runInDurableObject(env.SUPERVISOR.getByName("history-import"), async (_instance, state) => {
-    state.storage.kv.delete("generations.history-imported");
-    const generations = new Generations(state.storage, FACET_COMPATIBILITY);
-    generations.submit(testHarnessCommit(firstCommit));
-    generations.submit(testHarnessCommit(secondCommit));
-
-    importGenerations(history, generations, state.storage.kv);
-    await settled();
-    importGenerations(history, generations, state.storage.kv);
-    await settled();
-  });
-
-  expect(commits.map((commit) => Object.keys(commit.files))).toEqual([
-    ["generations/0.json", "generations/1.json"],
   ]);
 });

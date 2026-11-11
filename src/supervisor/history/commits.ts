@@ -47,10 +47,3 @@ export function changeCommit(change: GenerationChange, time: number): HistoryCom
     },
   };
 }
-
-export function importCommit(records: readonly GenerationRecord[]): HistoryCommit {
-  return {
-    message: "import generations from the Supervisor",
-    files: Object.fromEntries(records.map(generationFile)),
-  };
-}

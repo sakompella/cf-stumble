@@ -119,6 +119,4 @@ export type { MainFacetCapabilities } from "../../facet/index.js";
 
 export { candidateFacetName, SERVING_FACET_NAME } from "./facet-name.js";
 
-export { migrateModuleMaps } from "./migrate.js";
-
 export { ModuleMapStore } from "./store.js";
