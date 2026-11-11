@@ -23,6 +23,10 @@ import { serveEgress, type WorkerTarget } from "./tunnel.js";
 
 const PING_INTERVAL_MS = 30_000;
 
+const SILENT_LINK_MS = 1.5 * PING_INTERVAL_MS;
+
+const DECODED_BODY_HEADERS = new Set(["content-encoding", "content-length"]);
+
 type Launch = Readonly<{ runtime: string; container: string; address: string }>;
 
 type FetchAnswer = Readonly<{
@@ -97,8 +101,17 @@ export class OrbProvider {
             socket.send(frame === ORB_PING ? frame : encodeFrame(frame));
           };
 
+          let lastHeardAt = Date.now();
+
           const ping = setInterval(() => {
-            send(ORB_PING);
+            if (Date.now() - lastHeardAt <= SILENT_LINK_MS) {
+              send(ORB_PING);
+
+              return;
+            }
+
+            socket.close(4001, "no pong");
+            finish("the Workspace Host stopped answering");
           }, PING_INTERVAL_MS);
 
           const finish = (reason: string): void => {
@@ -107,10 +120,12 @@ export class OrbProvider {
           };
 
           socket.addEventListener("open", () => {
+            lastHeardAt = Date.now();
             this.#options.log("connected to the Workspace Host");
             send(providerFrame.hello({ egressPort: this.#egressPort }));
           });
           socket.addEventListener("message", (event) => {
+            lastHeardAt = Date.now();
             const frame = decodeHostFrame(event.data);
 
             if (Option.isSome(frame)) runFork(this.#handle(frame.value, send));
@@ -244,11 +259,12 @@ export class OrbProvider {
           method: frame.method,
           headers: frame.headers.map(([name, value]) => [name, value]),
           body: frame.body === null ? null : decodeBody(frame.body),
+          redirect: "manual",
         });
 
         return {
           status: response.status,
-          headers: [...response.headers],
+          headers: [...response.headers].filter(([name]) => !DECODED_BODY_HEADERS.has(name)),
           body: encodeBody(new Uint8Array(await response.arrayBuffer())),
         };
       });

@@ -129,6 +129,41 @@ test("a preparation that fails its startup check exits non-zero", async () => {
   expect((await runStumble(["gen", "prepare", "b".repeat(40)], ports)).exitCode).toBe(1);
 });
 
+function failing(method: "generationStatus" | "prepareGeneration", message: string) {
+  const { ports } = generationControl({ label: undefined, epoch: 0 });
+
+  return {
+    generations: { ...ports.generations, [method]: () => Promise.reject(new Error(message)) },
+  };
+}
+
+test("a request that fails says why, without a credential in its message", async () => {
+  const token = `ghp_${"a".repeat(36)}`;
+
+  const ran = await runStumble(
+    ["gen", "status"],
+    failing("generationStatus", `the Supervisor is unavailable (${token})`),
+  );
+
+  expect(ran.exitCode).toBe(1);
+  expect(ran.stderr).toContain(
+    "stumble gen status: the request failed: the Supervisor is unavailable",
+  );
+  expect(ran.stderr).not.toContain(token);
+});
+
+test("a preparation whose startup check request fails still names the submitted generation", async () => {
+  const ran = await runStumble(
+    ["gen", "prepare", "c".repeat(40)],
+    failing("prepareGeneration", "the Supervisor is unavailable"),
+  );
+
+  expect(ran.exitCode).toBe(1);
+  expect(ran.stderr).toBe(
+    `submitted generation 7 for ${"c".repeat(40)}\ngeneration 7 was not prepared: the Supervisor is unavailable\n`,
+  );
+});
+
 test("a repeated activation after its epoch moved on reports the generation as already active", async () => {
   await hegel.testAsync(async (tc) => {
     const epoch = tc.draw(gs.integers({ minValue: 0, maxValue: 99 }));
