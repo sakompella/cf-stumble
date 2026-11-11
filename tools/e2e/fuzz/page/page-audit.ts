@@ -1,7 +1,7 @@
 import { readRows, selectedProject, sendingRows, textOf, type Row, type Sent } from "./page-dom.ts";
 import { serverState, type Server } from "./page-server.ts";
 import { fz } from "./page-state.ts";
-import { markAudited, postLog, sentTokens, wasCancelled } from "./page-store.ts";
+import { markAudited, postLog, sentTokens } from "./page-store.ts";
 import { tokenIn } from "./token.ts";
 
 const AUDIT_WINDOW_MS = 45_000;
@@ -50,16 +50,10 @@ function sendProblems(
   return problems;
 }
 
-function lostSends(
-  server: Server,
-  sent: readonly Sent[],
-  projectId: string,
-  window: Window,
-): string[] {
+function lostSends(server: Server, sent: readonly Sent[], projectId: string): string[] {
   return sent.flatMap((entry) =>
     entry.projectId === projectId &&
     entry.fault === "none" &&
-    !wasCancelled(window, entry.token) &&
     entry.conversation === server.conversation &&
     storedCount(server, entry.token) === 0
       ? [`send lost: ${entry.token}`]
@@ -130,7 +124,7 @@ function mismatches(
 
   return [
     ...problems,
-    ...lostSends(server, sent, projectId, window),
+    ...lostSends(server, sent, projectId),
     ...transcriptProblems(server, rows, document),
     ...settledProblems(server, rows, document),
   ];

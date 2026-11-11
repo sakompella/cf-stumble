@@ -8,8 +8,6 @@ const AUDITED_KEY = "fz.audited";
 
 const SENDS_KEY = "fz.sends";
 
-const CANCELLED_KEY = "fz.cancelled";
-
 function lines(window: Window, key: string): string[] {
   return (window.sessionStorage.getItem(key) ?? "").split("\n").filter((line) => line !== "");
 }
@@ -55,19 +53,6 @@ export function auditedCount(window: Window): number {
 
 export function markAudited(window: Window): void {
   window.sessionStorage.setItem(AUDITED_KEY, String(sentTokens(window).length));
-}
-
-export function markCancelled(window: Window): void {
-  window.sessionStorage.setItem(
-    CANCELLED_KEY,
-    sentTokens(window)
-      .map((sent) => sent.token)
-      .join("\n"),
-  );
-}
-
-export function wasCancelled(window: Window, token: string): boolean {
-  return lines(window, CANCELLED_KEY).includes(token);
 }
 
 export function sendsMade(window: Window): number {
