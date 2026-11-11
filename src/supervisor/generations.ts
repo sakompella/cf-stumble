@@ -130,8 +130,6 @@ export class Generations {
         VALUES (1, NULL, NULL, 0)
         ON CONFLICT (singleton) DO NOTHING;
       `);
-      storage.kv.delete("generations.proven");
-      storage.kv.delete("generations.probation");
     });
   }
 
@@ -183,13 +181,6 @@ export class Generations {
         ? { commands: [], reply: undefined }
         : preparation(this.#selection(), current, outcome);
     });
-  }
-
-  all(): readonly GenerationRecord[] {
-    return this.#sql
-      .exec<GenerationRow>(`SELECT ${GENERATION_COLUMNS} FROM generations ORDER BY label ASC`)
-      .toArray()
-      .map((row) => wireRecord(generationFromRow(row)));
   }
 
   active(): ActiveGeneration {

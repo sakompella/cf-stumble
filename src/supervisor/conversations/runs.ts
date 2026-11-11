@@ -26,11 +26,6 @@ type RunRow = Readonly<{
   instance: number | null;
 }>;
 
-const ADDED_COLUMNS = {
-  ending: "ending TEXT CHECK (ending IN ('cancelled', 'interrupted'))",
-  instance: "instance INTEGER",
-} as const;
-
 export type FacetReplacement = Readonly<{
   command: Readonly<{ kind: "activate" | "rollback"; label: number }>;
   epoch: number;
@@ -59,27 +54,15 @@ export class ConversationRuns {
 
   constructor(storage: DurableObjectStorage) {
     this.#storage = storage;
-    storage.transactionSync(() => {
-      storage.sql.exec(`
-        CREATE TABLE IF NOT EXISTS conversation_runs (
-          conversation_id TEXT PRIMARY KEY,
-          run INTEGER,
-          deadline INTEGER NOT NULL,
-          ${ADDED_COLUMNS.ending},
-          ${ADDED_COLUMNS.instance}
-        );
-      `);
-
-      for (const [column, definition] of Object.entries(ADDED_COLUMNS)) {
-        const present = storage.sql
-          .exec("SELECT 1 FROM pragma_table_info('conversation_runs') WHERE name = ?", column)
-          .toArray();
-
-        if (present.length === 0) {
-          storage.sql.exec(`ALTER TABLE conversation_runs ADD COLUMN ${definition}`);
-        }
-      }
-    });
+    storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS conversation_runs (
+        conversation_id TEXT PRIMARY KEY,
+        run INTEGER,
+        deadline INTEGER NOT NULL,
+        ending TEXT CHECK (ending IN ('cancelled', 'interrupted')),
+        instance INTEGER
+      );
+    `);
   }
 
   cancelled(conversationId: string): string {
