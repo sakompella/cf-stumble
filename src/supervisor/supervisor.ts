@@ -27,7 +27,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       prepareGeneration: (label) => this.prepareGeneration(label),
       controlGeneration: (command) => this.#activate(command),
     });
-    void ctx.blockConcurrencyWhile(() => this.#parts.migrate());
     this.#parts.serving.started(env.CF_VERSION_METADATA?.id ?? null);
   }
 

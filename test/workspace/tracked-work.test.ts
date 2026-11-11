@@ -9,6 +9,7 @@ function controller() {
     idleLimitMs: 10_000,
     setAlarm: () => Promise.resolve(),
     containerRunning: () => true,
+    pullContainer: () => Promise.resolve(),
     closeWorkspace: () => Promise.resolve(),
     stopContainer: () => Effect.void,
   });

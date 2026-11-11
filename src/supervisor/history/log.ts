@@ -23,9 +23,9 @@ export class GenerationHistory {
     this.commit(changeCommit(change, this.#clock()));
   }
 
-  commit(commit: HistoryCommit, written?: () => void): void {
+  commit(commit: HistoryCommit): void {
     const pending = this.#tail.then(() =>
-      this.#append(commit).then(written, (cause: unknown) => {
+      this.#append(commit).catch((cause: unknown) => {
         logEvent("warn", "generation.history-failed", { message: commit.message });
         logRedactedCause("generation-history.append", cause);
       }),

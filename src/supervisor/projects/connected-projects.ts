@@ -57,29 +57,16 @@ export class ConnectedProjects {
   constructor(storage: DurableObjectStorage) {
     this.storage = storage;
     this.sql = storage.sql;
-    storage.transactionSync(() => {
-      this.sql.exec(`
-        CREATE TABLE IF NOT EXISTS connected_projects (
-          project_id TEXT PRIMARY KEY,
-          display_name TEXT NOT NULL,
-          repository_url TEXT NOT NULL UNIQUE,
-          connected_at INTEGER NOT NULL,
-          state TEXT NOT NULL DEFAULT 'connected'
-            CHECK (state IN ('provisioning', 'connected', 'removing'))
-        );
-      `);
-
-      const columns = this.sql
-        .exec<{ readonly name: string }>(`SELECT name FROM pragma_table_info('connected_projects')`)
-        .toArray();
-
-      if (!columns.some(({ name }) => name === "state")) {
-        this.sql.exec(`
-          ALTER TABLE connected_projects ADD COLUMN state TEXT NOT NULL DEFAULT 'connected'
-            CHECK (state IN ('provisioning', 'connected', 'removing'))
-        `);
-      }
-    });
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS connected_projects (
+        project_id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        repository_url TEXT NOT NULL UNIQUE,
+        connected_at INTEGER NOT NULL,
+        state TEXT NOT NULL DEFAULT 'connected'
+          CHECK (state IN ('provisioning', 'connected', 'removing'))
+      );
+    `);
   }
 
   catalog(): ProjectCatalog {

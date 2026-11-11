@@ -17,6 +17,8 @@ const RECONNECT_PAUSE = "1 second";
 
 const STALL_TIMEOUT = "10 seconds";
 
+const REFUSED_PAUSE = "15 seconds";
+
 function resumePath(projectId: string, from: number | undefined): string {
   return `${projectPath(projectId, "/events")}${from === undefined ? "" : `?from=${from}`}`;
 }
@@ -48,7 +50,9 @@ function connection({
     if (!response.ok || response.body === null) {
       const wording = problemText(yield* answerOf(response));
 
-      return Stream.make<Message[]>(Message.RefusedEvents({ streamId, wording }));
+      return Stream.make<Message[]>(Message.RefusedEvents({ streamId, wording })).pipe(
+        Stream.concat(Stream.fromEffectDrain(Effect.sleep(REFUSED_PAUSE))),
+      );
     }
 
     const { body } = response;

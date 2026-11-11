@@ -6,6 +6,7 @@ import {
   type ExecBackendInput,
 } from "./exec-backend.js";
 import { enqueueEvent, enqueueOutput } from "./exec-framing.js";
+import { commandProgram } from "./exec-program.js";
 import type { ExecBackendChoice, ExecEvent } from "./protocol.js";
 
 export type TerminalEvent = Extract<ExecEvent, { kind: "terminal" }>;
@@ -24,6 +25,10 @@ type Ending = TerminalEvent extends infer Event
   : never;
 
 type BackendRead = Awaited<ReturnType<ExecBackendHandle["reader"]["read"]>>;
+
+const WRITE_FORM_REFUSAL = "the workspace git does not support this form";
+
+const ISOLATE_REFUSED_EXIT_CODE = 129;
 
 function failure(restarted: boolean): Ending {
   return {
@@ -55,6 +60,7 @@ function startBackendExec(
 class ExecRun implements ExecOperation {
   readonly events: ReadableStream<Uint8Array>;
   readonly #requested: ExecBackendChoice | "automatic";
+  readonly #program: string | null;
   readonly #startedAt = Date.now();
   readonly #frames = { seq: 0 };
   readonly #decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
@@ -65,6 +71,7 @@ class ExecRun implements ExecOperation {
   #handle: ExecBackendHandle | undefined;
   #settled = false;
   #cause: unknown;
+  #writeFormRefused = false;
 
   constructor(
     execBackend: ExecBackend,
@@ -73,6 +80,7 @@ class ExecRun implements ExecOperation {
     timeoutEndsTurn: boolean,
   ) {
     this.#requested = input.backend ?? "automatic";
+    this.#program = commandProgram(input.command);
     this.#onSettle = onSettle;
     this.events = new ReadableStream<Uint8Array>(
       {
@@ -129,6 +137,11 @@ class ExecRun implements ExecOperation {
 
     if (event !== undefined && event.name !== "exit") {
       const text = this.#decoders[event.name].decode(event.data, { stream: true });
+
+      if (event.name === "stderr" && text.includes(WRITE_FORM_REFUSAL)) {
+        this.#writeFormRefused = true;
+      }
+
       enqueueOutput(this.#frames, this.#controller, event.name, text);
 
       return;
@@ -164,16 +177,24 @@ class ExecRun implements ExecOperation {
   }
 
   #log(terminal: TerminalEvent): void {
+    const exitCode = terminal.outcome === "exited" ? terminal.exitCode : null;
+    const backend = this.#handle?.backend ?? null;
+
     logEvent(
       terminal.outcome === "exited" || terminal.outcome === "killed" ? "info" : "warn",
       "exec.finished",
       {
         requested: this.#requested,
-        backend: this.#handle?.backend ?? null,
+        backend,
+        program: this.#program,
         durationMs: Date.now() - this.#startedAt,
         outcome: terminal.outcome,
-        exitCode: terminal.outcome === "exited" ? terminal.exitCode : null,
+        exitCode,
         fellBackFrom: this.#handle?.fellBackFrom ?? null,
+        isolateRefused:
+          this.#handle?.isolateRefused === true ||
+          (backend === "isolate" && exitCode === ISOLATE_REFUSED_EXIT_CODE),
+        writeFormRefused: this.#writeFormRefused,
         errorCode: terminal.outcome === "failed" ? terminal.error.code : null,
         cause: this.#cause === undefined ? null : causeText(this.#cause),
       },

@@ -1,6 +1,7 @@
 import * as Result from "effect/Result";
 import { afterEach, expect, test, vi } from "vitest";
-import { parseGitHubToken, REDACTED } from "../../src/github/index.js";
+import { parseGitHubToken } from "../../src/github/index.js";
+import { REDACTED } from "../../src/github/redaction.js";
 import { installWorkspaceCredential } from "../../src/workspace/index.js";
 import { textLines } from "../log-capture.js";
 import { runToResult } from "./workspace-results.js";

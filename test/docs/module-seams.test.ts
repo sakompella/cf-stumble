@@ -56,6 +56,7 @@ const groupDirectories = Object.keys(sourceFiles)
 
 const publicEntrypoints = new Set([
   "src/workspace/project/protocol.ts",
+  "src/github/redaction.ts",
   "src/supervisor/conversations/conversation-result.ts",
 ]);
 

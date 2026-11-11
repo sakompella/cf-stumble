@@ -1,4 +1,4 @@
-import { REDACTED, redactCredentials } from "./github/index.js";
+import { REDACTED, redactCredentials } from "./github/redaction.js";
 
 const CAUSE_TEXT_LIMIT = 400;
 

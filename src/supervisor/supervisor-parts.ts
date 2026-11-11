@@ -5,7 +5,7 @@ import {
   type GitHubConnectionEnvironment,
 } from "./projects/index.js";
 import { Generations } from "./generations.js";
-import { generationHistory, migrateStorage } from "./history/wiring.js";
+import { generationHistory } from "./history/wiring.js";
 import { FACET_COMPATIBILITY } from "../facet/index.js";
 import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
@@ -83,7 +83,6 @@ export function supervisorParts(
   return {
     workspaceName,
     generations,
-    migrate: () => migrateStorage(ctx, env.MODULE_MAPS, history, generations),
     startupCheckHost: {
       ctx,
       loader: env.LOADER,

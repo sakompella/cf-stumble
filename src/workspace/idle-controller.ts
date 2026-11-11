@@ -15,6 +15,8 @@ import {
 
 export { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 
+const FINAL_PULL_TIMEOUT_MS = 60_000;
+
 export type ProjectActivity = Readonly<{
   begin(): () => void;
   touch(): void;
@@ -25,6 +27,7 @@ type IdleControllerPorts = Readonly<{
   idleLimitMs: number;
   setAlarm(atMs: number): Promise<void>;
   containerRunning(): boolean;
+  pullContainer(): Promise<void>;
   closeWorkspace(): Promise<void>;
   stopContainer(reason: "idle" | "backend"): Effect.Effect<void, unknown>;
 }>;
@@ -180,7 +183,8 @@ export class WorkspaceIdleController implements ProjectActivity {
   }
 
   #close(): Effect.Effect<void, unknown> {
-    return attempt(() => this.#ports.closeWorkspace()).pipe(
+    return this.#finalPull().pipe(
+      Effect.andThen(attempt(() => this.#ports.closeWorkspace())),
       Effect.catch((cause) =>
         Effect.sync(() => {
           logRedactedCause("workspace.idle-stop: workspace close failed", cause);
@@ -196,6 +200,17 @@ export class WorkspaceIdleController implements ProjectActivity {
             }),
           ),
         ),
+      ),
+    );
+  }
+
+  #finalPull(): Effect.Effect<void> {
+    return attempt(() => this.#ports.pullContainer()).pipe(
+      Effect.timeout(FINAL_PULL_TIMEOUT_MS),
+      Effect.catch((cause) =>
+        Effect.sync(() => {
+          logRedactedCause("workspace.idle-stop: final pull failed", cause);
+        }),
       ),
     );
   }

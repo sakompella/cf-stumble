@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -15,6 +16,7 @@ const LIMIT = 10_000;
 
 type Behavior = Readonly<{
   running?: boolean;
+  pull?: "fails" | "hangs";
   closeFails?: boolean;
   destroyFails?: boolean;
   alarmFails?: boolean;
@@ -47,6 +49,13 @@ function controller(options: Behavior = {}) {
         : Promise.resolve();
     },
     containerRunning: () => state.running,
+    pullContainer: () => {
+      calls.push("pull");
+
+      if (options.pull === "fails") return Promise.reject(new Error("pull failed"));
+
+      return options.pull === "hangs" ? new Promise<void>(() => {}) : Promise.resolve();
+    },
     closeWorkspace: () => {
       calls.push("close");
 
@@ -186,7 +195,7 @@ test.each([
   clock.now = 11_000;
   await idle.onAlarm();
 
-  expect(calls).toEqual(["close"]);
+  expect(calls).toEqual(["pull", "close"]);
   expect(alarms.at(-1)).toBe(21_000);
 });
 
@@ -197,7 +206,7 @@ test("a failed close still destroys the container, and a stopped container is no
   clock.now = 11_000;
   await idle.onAlarm();
 
-  expect(calls).toEqual(["close", "destroy"]);
+  expect(calls).toEqual(["pull", "close", "destroy"]);
   expect(alarms).toHaveLength(1);
 });
 
@@ -222,5 +231,49 @@ test("a container that exits during the close is not destroyed", async () => {
   clock.now = 11_000;
   await idle.onAlarm();
 
-  expect(calls).toEqual(["close"]);
+  expect(calls).toEqual(["pull", "close"]);
+});
+
+test("an idle stop pulls the container's changes before it closes and destroys", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const { idle, clock, calls } = controller();
+  idle.begin()();
+  clock.now = 11_000;
+  await idle.onAlarm();
+
+  expect(calls).toEqual(["pull", "close", "destroy"]);
+});
+
+test("a stop for a backend change pulls before it closes and destroys", async () => {
+  const { idle, calls } = controller();
+  await idle.stopForBackendChange();
+
+  expect(calls).toEqual(["pull", "close", "destroy"]);
+});
+
+test("a failed pull is logged and still closes and destroys the container", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { idle, clock, calls } = controller({ pull: "fails" });
+  idle.begin()();
+  clock.now = 11_000;
+  await idle.onAlarm();
+
+  expect(calls).toEqual(["pull", "close", "destroy"]);
+  expect(errors).toHaveBeenCalledWith("workspace.idle-stop: final pull failed: pull failed");
+});
+
+test("a pull that never settles is given up after its bound, and the container is destroyed", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { idle, clock, calls } = controller({ pull: "hangs" });
+  idle.begin()();
+  clock.now = 11_000;
+  const alarm = idle.onAlarm();
+  await vi.runAllTimersAsync();
+  await alarm;
+
+  expect(calls).toEqual(["pull", "close", "destroy"]);
+  expect(errors).toHaveBeenCalledOnce();
 });

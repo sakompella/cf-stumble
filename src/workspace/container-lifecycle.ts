@@ -15,6 +15,10 @@ export class ContainerLifecycle {
   generation = 0;
   #connection: Connection = Connection.Unconnected();
 
+  isConnected(): boolean {
+    return Connection.$is("Connected")(this.#connection);
+  }
+
   connected(runtimeId: string | undefined): void {
     const replaced = Connection.$match(this.#connection, {
       Unconnected: () => false,

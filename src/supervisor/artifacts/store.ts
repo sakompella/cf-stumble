@@ -17,7 +17,7 @@ type StoredModuleMap =
 
 type StoredModuleMapResult = Result.Result<StoredModuleMap, StoredModuleMapProblem>;
 
-export function moduleMapKey(harnessCommit: string): string {
+function moduleMapKey(harnessCommit: string): string {
   return `module-maps/${harnessCommit}.json`;
 }
 

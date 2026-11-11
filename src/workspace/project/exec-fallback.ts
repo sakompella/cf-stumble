@@ -43,7 +43,9 @@ function step(phase: Phase, ...commands: readonly FallbackCommand[]): Step {
   return { phase, commands };
 }
 
-const NOTHING_RAN_EXIT_CODES: ReadonlySet<number> = new Set([127, 129]);
+const ISOLATE_REFUSED_EXIT_CODE = 129;
+
+const NOTHING_RAN_EXIT_CODES: ReadonlySet<number> = new Set([127, ISOLATE_REFUSED_EXIT_CODE]);
 
 const DECODER = new TextDecoder();
 
@@ -168,6 +170,7 @@ class FallbackExec implements ExecBackendHandle {
   readonly #ready: BackendExecEvent[] = [];
   #phase: Phase;
   #starting: Promise<void> = Promise.resolve();
+  #isolateExitCode: number | undefined;
 
   readonly reader: ExecBackendHandle["reader"] = {
     read: () => this.#read(),
@@ -202,6 +205,10 @@ class FallbackExec implements ExecBackendHandle {
     });
 
     return fellBack ? "isolate" : undefined;
+  }
+
+  get isolateRefused(): boolean {
+    return this.#isolateExitCode === ISOLATE_REFUSED_EXIT_CODE;
   }
 
   #dispatch(event: FallbackEvent): Promise<void> {
@@ -248,7 +255,11 @@ class FallbackExec implements ExecBackendHandle {
         isolate.reader
           .read()
           .then(
-            (read) => this.#dispatch(FallbackEvent.IsolateRead({ read })),
+            (read) => {
+              if (read.value?.name === "exit") this.#isolateExitCode = read.value.exitCode;
+
+              return this.#dispatch(FallbackEvent.IsolateRead({ read }));
+            },
             () => this.#dispatch(FallbackEvent.IsolateBroke()),
           )
           .then(() => null),

@@ -20,8 +20,6 @@ export {
   type GitHubToken,
 } from "./device-flow.js";
 
-export { redactCredentials, REDACTED } from "./redaction.js";
-
 export {
   repositorySizeVerdictSource,
   REPOSITORY_SIZE_VERDICT_FUNCTION,

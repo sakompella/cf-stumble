@@ -70,6 +70,58 @@ test("concurrent callers near expiry share one refresh, and the rotated pair is 
   expect(rotated).toMatchObject({ refreshToken: REFRESH_TWO });
 });
 
+function jwtPart(claims: Readonly<Record<string, string | number>>): string {
+  return btoa(JSON.stringify(claims)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+}
+
+function accessJwt(name: string, exp: number): string {
+  return `${jwtPart({ alg: "RS256" })}.${jwtPart({ exp, jti: name })}.FAKE-signature`;
+}
+
+test("a refresh reply without a scope, a lifetime or a refresh token keeps the latest refresh token", async () => {
+  const firstExp = 4600;
+  const secondExp = 8200;
+  const rotatedAccess = accessJwt("rotated", firstExp);
+  const renewedAccess = accessJwt("renewed", secondExp);
+
+  const replies = [
+    { access_token: rotatedAccess, refresh_token: REFRESH_TWO },
+    { access_token: renewedAccess },
+  ];
+
+  await withConnection(
+    "chatgpt-refresh-sparse-reply",
+    () => Promise.resolve(Response.json(replies.shift())),
+    async (harness) => {
+      connected(harness, 5 * 60 * 1000);
+
+      await expect(access(harness.connection)).resolves.toEqual({
+        kind: "ready",
+        accessToken: rotatedAccess,
+      });
+      expect(harness.store.account()).toMatchObject({
+        accessToken: rotatedAccess,
+        refreshToken: REFRESH_TWO,
+        expiresAt: firstExp * 1000,
+      });
+
+      await expect(access(harness.connection, rotatedAccess)).resolves.toEqual({
+        kind: "ready",
+        accessToken: renewedAccess,
+      });
+      expect(harness.calls.map((call) => formOf(call).get("refresh_token"))).toEqual([
+        REFRESH_ONE,
+        REFRESH_TWO,
+      ]);
+      expect(harness.store.account()).toMatchObject({
+        accessToken: renewedAccess,
+        refreshToken: REFRESH_TWO,
+        expiresAt: secondExp * 1000,
+      });
+    },
+  );
+});
+
 test("a token far from expiry is used as stored, and one the provider refused is refreshed", async () => {
   await withConnection(
     "chatgpt-refused-token",

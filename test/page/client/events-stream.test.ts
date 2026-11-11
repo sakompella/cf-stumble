@@ -197,6 +197,77 @@ test("a stream that falls silent for ten seconds is dropped and opened again", a
   expect(paths).toHaveLength(2);
 });
 
+test("a stream that ends opens again after one second", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  const paths: string[] = [];
+  const tags: string[] = [];
+
+  vi.stubGlobal("fetch", (path: string) => {
+    paths.push(path);
+
+    return ndjson(`${SNAPSHOT}\n`);
+  });
+
+  const dependencies = events.modelToDependencies(listedPage());
+
+  const messages = Effect.runPromise(
+    openedTranscript().provide(
+      Stream.runCollect(
+        events.dependenciesToStream(dependencies).pipe(
+          Stream.tap((message) => Effect.sync(() => tags.push(message._tag))),
+          Stream.take(3),
+        ),
+      ),
+    ),
+  );
+
+  await vi.waitFor(() => {
+    expect(tags).toContain("DisconnectedEvents");
+  });
+  await vi.advanceTimersByTimeAsync(800);
+  expect(paths).toHaveLength(1);
+
+  await vi.advanceTimersByTimeAsync(400);
+  expect([...(await messages)].map((message) => message._tag)).toEqual([
+    "ReceivedConversation",
+    "DisconnectedEvents",
+    "ReceivedConversation",
+  ]);
+  expect(paths).toHaveLength(2);
+});
+
+test("a refused stream asks again after about fifteen seconds, not one", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  const paths: string[] = [];
+
+  vi.stubGlobal("fetch", (path: string) => {
+    paths.push(path);
+
+    return Promise.resolve(
+      Response.json({ ok: false, problem: { code: "mount-failed" } }, { status: 503 }),
+    );
+  });
+
+  const dependencies = events.modelToDependencies(listedPage());
+
+  const messages = Effect.runPromise(
+    openedTranscript().provide(
+      Stream.runCollect(events.dependenciesToStream(dependencies).pipe(Stream.take(2))),
+    ),
+  );
+
+  await oneTimerArmed();
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(paths).toHaveLength(1);
+
+  await vi.advanceTimersByTimeAsync(6_000);
+  expect([...(await messages)].map((message) => message._tag)).toEqual([
+    "RefusedEvents",
+    "RefusedEvents",
+  ]);
+  expect(paths).toHaveLength(2);
+});
+
 test("a refused stream says why, and a line it cannot read is reported", async () => {
   vi.stubGlobal("fetch", () =>
     Promise.resolve(
