@@ -10,9 +10,13 @@ import {
   WORKSPACE_CONTAINER_INSTANCE,
   WORKSPACE_OUTPUT_OPTIONS,
 } from "../../infra/worker-settings.js";
-import { logEvent } from "../diagnostics.js";
+import { logEvent, logRedactedCause } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore, type HostedBackend } from "./backend-sync-ignore.js";
-import { ContainerLifecycle, ContainerStopFailed } from "./container-lifecycle.js";
+import {
+  CONTAINER_INACTIVITY_TIMEOUT_MS,
+  ContainerLifecycle,
+  ContainerStopFailed,
+} from "./container-lifecycle.js";
 import { ProviderContainerAPI } from "./provider-container.js";
 import { ProviderLink } from "./provider-link.js";
 import { gitForwardToken, routeFetch } from "./route-fetch.js";
@@ -83,9 +87,21 @@ export class WorkspacePlatform {
     this.#workspaceBackend = withWorkspaceSyncIgnore(this.#chosenBackend(), (runtimeId) => {
       this.lifecycle.connected(runtimeId);
       logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
+      this.#outliveRestart();
     });
     this.#isolate = isolate;
     this.#workspace = this.#newWorkspace();
+    this.#outliveRestart();
+  }
+
+  #outliveRestart(): void {
+    if (this.#platformContainer?.running !== true) return;
+
+    this.#platformContainer
+      .setInactivityTimeout(CONTAINER_INACTIVITY_TIMEOUT_MS)
+      .catch((cause: unknown) => {
+        logRedactedCause("workspace.container: inactivity timeout not set", cause);
+      });
   }
 
   get workspace(): Workspace {
@@ -101,7 +117,7 @@ export class WorkspacePlatform {
   }
 
   async pullContainer(): Promise<void> {
-    if (!this.lifecycle.isConnected()) return;
+    if (!this.lifecycle.isConnected() && this.#platformContainer?.running !== true) return;
 
     for await (const block of this.workspace.pull(this.#containerBackend.id)) {
       if (block.skipped > 0) throw new Error(`container pull skipped ${block.skipped} entries`);

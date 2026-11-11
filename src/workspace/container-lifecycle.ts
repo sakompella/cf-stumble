@@ -1,4 +1,7 @@
 import * as Data from "effect/Data";
+import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
+
+export const CONTAINER_INACTIVITY_TIMEOUT_MS = WORKSPACE_IDLE_STOP_MS + 60_000;
 
 type Connection = Data.TaggedEnum<{
   Unconnected: object;

@@ -50,7 +50,7 @@ export class WorkspaceIdleController implements ProjectActivity {
 
   constructor(ports: IdleControllerPorts) {
     this.#ports = ports;
-    this.#lastActiveAtMs = ports.nowMs();
+    this.#lastActiveAtMs = ports.nowMs() - ports.idleLimitMs;
   }
 
   begin(): () => void {
