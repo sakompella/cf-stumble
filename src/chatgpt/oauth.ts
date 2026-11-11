@@ -142,14 +142,22 @@ export type ProviderFetch = (url: string, init: RequestInit) => Promise<Response
 
 const Bearer = Schema.String.check(Schema.isPattern(BEARER_PATTERN));
 
+const Lifetime = Schema.Finite.check(Schema.isGreaterThan(0));
+
 const TokenReply = Schema.Struct({
   access_token: Bearer,
   refresh_token: Bearer,
-  expires_in: Schema.Finite.check(Schema.isGreaterThan(0)),
+  expires_in: Lifetime,
   scope: Schema.String,
 });
 
 const decodeTokenReply = Schema.decodeUnknownOption(Schema.fromJsonString(TokenReply));
+
+function grantsDirectUse(scope: string): boolean {
+  return scope.split(/\s+/u).includes(DIRECT_TOKEN_SCOPE);
+}
+
+type TokenParser = (body: string) => Result.Result<TokenGrant, TokenFailure>;
 
 export function parseTokenGrant(body: string): Result.Result<TokenGrant, TokenFailure> {
   const reply = decodeTokenReply(body);
@@ -157,12 +165,61 @@ export function parseTokenGrant(body: string): Result.Result<TokenGrant, TokenFa
   if (Option.isNone(reply)) return Result.fail("ambiguous");
   const { access_token, refresh_token, expires_in, scope } = reply.value;
 
-  if (!scope.split(/\s+/u).includes(DIRECT_TOKEN_SCOPE)) return Result.fail("missing-scope");
+  if (!grantsDirectUse(scope)) return Result.fail("missing-scope");
 
   return Result.succeed({
     accessToken: access_token,
     refreshToken: refresh_token,
     expiresInMs: expires_in * 1000,
+  });
+}
+
+const RefreshReply = Schema.Struct({
+  access_token: Bearer,
+  refresh_token: Schema.optionalKey(Bearer),
+  expires_in: Schema.optionalKey(Lifetime),
+  scope: Schema.optionalKey(Schema.String),
+});
+
+const decodeRefreshReply = Schema.decodeUnknownOption(Schema.fromJsonString(RefreshReply));
+
+const decodeAccessClaims = Schema.decodeUnknownOption(
+  Schema.StringFromBase64Url.pipe(
+    Schema.decodeTo(Schema.fromJsonString(Schema.Struct({ exp: Schema.Finite }))),
+  ),
+);
+
+function accessTokenExpiry(accessToken: string): Option.Option<number> {
+  const segments = accessToken.split(".");
+
+  return segments.length === 3
+    ? Option.map(decodeAccessClaims(segments[1]), ({ exp }) => exp * 1000)
+    : Option.none();
+}
+
+export function parseRefreshGrant(
+  body: string,
+  previous: Readonly<{ refreshToken: string }>,
+  now: number,
+): Result.Result<TokenGrant, TokenFailure> {
+  const reply = decodeRefreshReply(body);
+
+  if (Option.isNone(reply)) return Result.fail("ambiguous");
+  const { access_token, refresh_token, expires_in, scope } = reply.value;
+
+  if (scope !== undefined && !grantsDirectUse(scope)) return Result.fail("missing-scope");
+
+  const expiresInMs =
+    expires_in === undefined
+      ? Option.map(accessTokenExpiry(access_token), (expiresAt) => expiresAt - now)
+      : Option.some(expires_in * 1000);
+
+  if (Option.isNone(expiresInMs)) return Result.fail("ambiguous");
+
+  return Result.succeed({
+    accessToken: access_token,
+    refreshToken: refresh_token ?? previous.refreshToken,
+    expiresInMs: expiresInMs.value,
   });
 }
 
@@ -177,6 +234,7 @@ function statusFailure(status: number): TokenFailure {
 export function requestTokens(
   fetcher: ProviderFetch,
   fields: Readonly<Record<string, string>>,
+  parse: TokenParser,
 ): Effect.Effect<TokenGrant, TokenRequestFailed> {
   return Effect.gen(function* () {
     const response = yield* Effect.tryPromise({
@@ -205,7 +263,7 @@ export function requestTokens(
       catch: () => new TokenRequestFailed({ failure: "ambiguous" }),
     });
 
-    return yield* Effect.fromResult(parseTokenGrant(body)).pipe(
+    return yield* Effect.fromResult(parse(body)).pipe(
       Effect.mapError((failure) => new TokenRequestFailed({ failure })),
     );
   });
