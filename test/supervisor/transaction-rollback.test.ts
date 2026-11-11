@@ -46,7 +46,7 @@ test("a submission whose epoch write fails raises and labels nothing", async () 
     refuseStatements(state.storage, "UPDATE generation_state SET");
 
     const raised = raises(() => {
-      generations.submit(testHarnessCommit(commit));
+      generations.submit(testHarnessCommit(commit), "owner");
     });
 
     vi.restoreAllMocks();
@@ -65,15 +65,16 @@ test("a preparation check whose selection write fails raises and changes nothing
   const outcome = await runInDurableObject(supervisor("check-rolls-back"), (_instance, state) => {
     const generations = new Generations(state.storage, FACET_COMPATIBILITY);
 
-    const { label } = generations.submit(testHarnessCommit(commit)).generation;
+    const { label } = generations.submit(testHarnessCommit(commit), "owner").generation;
 
     refuseStatements(state.storage, "UPDATE generation_state SET");
 
     const raised = raises(() => {
-      generations.recordPreparation(label, {
-        status: "ready",
-        compatibility: FACET_COMPATIBILITY,
-      });
+      generations.recordPreparation(
+        label,
+        { status: "ready", compatibility: FACET_COMPATIBILITY },
+        "owner",
+      );
     });
 
     vi.restoreAllMocks();

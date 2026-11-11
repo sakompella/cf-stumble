@@ -17,7 +17,7 @@ const METRICS_ROW_LIMIT = 5000;
 
 export class ApiFailure extends Error {}
 
-function decoded<S extends Schema.ConstraintDecoder<unknown>>(
+export function decoded<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   value: JsonValue,
   message: string,

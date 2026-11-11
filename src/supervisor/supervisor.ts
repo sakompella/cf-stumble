@@ -1,7 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import type { HarnessCommit } from "../harness-commit.js";
-import type { ActivationCommand, GenerationControlResult, GenerationLabel } from "./generations.js";
+import type {
+  ActivationCommand,
+  GenerationActor,
+  GenerationControlResult,
+  GenerationLabel,
+} from "./generations.js";
 import { WORKSPACE_BUSY, type WorkspaceHostNamespace } from "../workspace/index.js";
 import type { EntriesRequest } from "../entries-request.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
@@ -23,20 +28,25 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     super(ctx, env);
     this.#parts = supervisorParts(ctx, env, () => this.#resetInProgress, {
       getActiveGeneration: () => this.getActiveGeneration(),
-      submitGeneration: (harnessCommit) => this.submitGeneration(harnessCommit),
-      prepareGeneration: (label) => this.prepareGeneration(label),
-      controlGeneration: (command) => this.#activate(command),
+      submitGeneration: (harnessCommit) =>
+        this.#parts.generations.submit(harnessCommit, "conversation"),
+      prepareGeneration: (label) => this.#prepare(label, "conversation"),
+      controlGeneration: (command) => this.#activate(command, "conversation"),
     });
     this.#parts.serving.started(env.CF_VERSION_METADATA?.id ?? null);
   }
 
   prepareGeneration(label: GenerationLabel) {
+    return this.#prepare(label, "owner");
+  }
+
+  #prepare(label: GenerationLabel, actor: GenerationActor) {
     const pending = this.#preparations.get(label);
 
     if (pending !== undefined) return pending;
 
     const checking = runAtEntryPoint(
-      checkGenerationStartup(this.#parts.startupCheckHost, label),
+      checkGenerationStartup(this.#parts.startupCheckHost, label, actor),
     ).finally(() => {
       this.#preparations.delete(label);
     });
@@ -51,17 +61,17 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   submitGeneration(harnessCommit: HarnessCommit) {
-    return this.#parts.generations.submit(harnessCommit);
+    return this.#parts.generations.submit(harnessCommit, "owner");
   }
 
   controlGeneration(command: ActivationCommand): GenerationControlResult {
     if (this.#parts.serving.running()) return { ok: false, problem: { code: "run-active" } };
 
-    return this.#activate(command);
+    return this.#activate(command, "owner");
   }
 
-  #activate(command: ActivationCommand): GenerationControlResult {
-    const result = this.#parts.generations.activate(command);
+  #activate(command: ActivationCommand, actor: GenerationActor): GenerationControlResult {
+    const result = this.#parts.generations.activate(command, actor);
 
     if (result.ok && result.outcome.effect === "activated") {
       this.#parts.serving.replaceFacet(command, result.outcome.epoch);

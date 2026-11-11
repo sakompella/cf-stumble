@@ -2,7 +2,12 @@ import { reset, runDurableObjectAlarm } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { builtGeneration } from "../../facet/generation-1/built-module-map.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
-import { prepareWithModuleMap, submitCandidate } from "../helpers.js";
+import {
+  historyEventText,
+  prepareWithModuleMap,
+  storeModuleMap,
+  submitCandidate,
+} from "../helpers.js";
 import {
   answeredLines,
   commitNamed,
@@ -44,6 +49,11 @@ test("a conversation activates a prepared generation with stumble, and the new g
   );
 
   expect(model.inputs, "the replaced facet stops before its next model turn").toHaveLength(1);
+
+  expect(JSON.parse(await historyEventText(`${epoch + 1}-activated`))).toMatchObject({
+    actor: "conversation",
+    label,
+  });
   expect(await runDurableObjectAlarm(control)).toBe(true);
 
   const answered = await answeredLines(control, project, 1);
@@ -55,4 +65,24 @@ test("a conversation activates a prepared generation with stumble, and the new g
     },
     { role: "assistant", text: "already active" },
   ]);
+});
+
+test("a conversation prepares a generation with stumble, and the history names the conversation", async () => {
+  const control = await servingGeneration1("self-preparation", new ProjectWorkspace());
+  const next = await commitNamed("self-preparation-next");
+  await storeModuleMap(await builtGeneration(next));
+  const { epoch } = await control.getActiveGeneration();
+
+  scriptModel(calls("bash", { command: `stumble gen prepare ${next}` }), says("prepared"));
+
+  await submitted(control, project, "prepare it", "r1");
+  await answeredLines(control, project, 1);
+
+  expect(JSON.parse(await historyEventText(`${epoch + 1}-submitted`))).toMatchObject({
+    actor: "conversation",
+  });
+  expect(JSON.parse(await historyEventText(`${epoch + 2}-prepared`))).toMatchObject({
+    actor: "conversation",
+    outcome: "ready",
+  });
 });

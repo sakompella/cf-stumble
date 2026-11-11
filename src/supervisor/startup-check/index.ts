@@ -5,7 +5,7 @@ import { FACET_COMPATIBILITY } from "../../facet/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
 import type { ProjectCapabilityStub } from "../../workspace/index.js";
 import type { PreparationReply } from "../generation-machine.js";
-import type { Generation, GenerationLabel, Generations } from "../generations.js";
+import type { Generation, GenerationActor, GenerationLabel, Generations } from "../generations.js";
 import {
   runStartupCheck,
   type StartupCheckDeadlines,
@@ -42,8 +42,9 @@ export type StartupCheckResult =
 export function checkGenerationStartup(
   host: StartupCheckHost,
   label: GenerationLabel,
+  actor: GenerationActor,
 ): Effect.Effect<StartupCheckResult> {
-  return checkLabeledStartup(host, label).pipe(
+  return checkLabeledStartup(host, label, actor).pipe(
     Effect.match({
       onSuccess: (report): StartupCheckResult => ({ ok: true, report }),
       onFailure: (problem): StartupCheckResult => ({ ok: false, problem }),
@@ -54,6 +55,7 @@ export function checkGenerationStartup(
 function checkLabeledStartup(
   host: StartupCheckHost,
   label: GenerationLabel,
+  actor: GenerationActor,
 ): Effect.Effect<StartupCheckReport, StartupCheckProblem> {
   return Effect.gen(function* () {
     const unknown: StartupCheckProblem = { code: "unknown-generation", label };
@@ -70,6 +72,7 @@ function checkLabeledStartup(
       outcome.stage === "ready"
         ? { status: "ready", compatibility: FACET_COMPATIBILITY }
         : { status: "failed" },
+      actor,
     );
 
     if (recorded === undefined) return yield* Effect.fail(unknown);

@@ -8,6 +8,7 @@ import type {
 import type {
   ControlProblemCode,
   Generation,
+  GenerationActor,
   GenerationControlResult,
   PreparationOutcome,
   Submission,
@@ -52,11 +53,14 @@ function wire(model: Model, label: number): Generation {
 
 function changed(
   kind: GenerationChange["kind"],
+  actor: GenerationActor,
   epoch: number,
   label: number,
   outcome: string | null = null,
 ): GenerationCommand {
-  return { _tag: "Changed", kind, epoch, label: generationLabel(label), outcome, errorCode: null };
+  const target = generationLabel(label);
+
+  return { _tag: "Changed", kind, actor, epoch, label: target, outcome, errorCode: null };
 }
 
 export function submit(model: Model, label: number, commit: HarnessCommit): Result<Submission> {
@@ -73,7 +77,7 @@ export function submit(model: Model, label: number, commit: HarnessCommit): Resu
     epoch: model.epoch,
   } as const;
 
-  return { reply, commands: known ? [] : [changed("submitted", model.epoch, label)] };
+  return { reply, commands: known ? [] : [changed("submitted", "owner", model.epoch, label)] };
 }
 
 export function prepare(
@@ -103,7 +107,7 @@ export function prepare(
 
   return {
     reply: { generation: wire(model, label), epoch: model.epoch, effect: "recorded" },
-    commands: [changed("prepared", model.epoch, label, outcome.status)],
+    commands: [changed("prepared", "owner", model.epoch, label, outcome.status)],
   };
 }
 
@@ -129,6 +133,7 @@ export function activate(
   model: Model,
   command: Command,
   compat: string,
+  actor: GenerationActor = "owner",
 ): Result<GenerationControlResult> {
   const code = refusalOf(model, command, compat);
 
@@ -155,7 +160,7 @@ export function activate(
     effect: noOp ? "no-op" : "activated",
   } as const;
 
-  const commands = noOp ? [] : [changed(kind, model.epoch, command.label)];
+  const commands = noOp ? [] : [changed(kind, actor, model.epoch, command.label)];
 
   return { reply: { ok: true, outcome }, commands };
 }
@@ -169,9 +174,16 @@ export function settle(
   const none = { reply: undefined, commands: [] };
 
   if (outcome === "completed") {
-    if (model.active !== null) model.proven = model.active;
+    const { active } = model;
 
-    return none;
+    if (active === null || model.proven === active) return none;
+
+    model.proven = active;
+
+    return {
+      reply: undefined,
+      commands: [changed("proven", "probation", model.epoch, active, outcome)],
+    };
   }
 
   const { active, proven, epoch } = model;
@@ -183,11 +195,12 @@ export function settle(
   const fallback = generationLabel(proven);
   const label = generationLabel(active);
   const command = { kind: "rollback", label: fallback, observedEpoch: epoch } as const;
-  const rollback = activate(model, command, compat);
+  const rollback = activate(model, command, compat, "probation");
 
   const failed: GenerationCommand = {
     _tag: "Changed",
     kind: "probation-failed",
+    actor: "probation",
     epoch,
     label,
     outcome,

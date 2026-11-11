@@ -112,10 +112,15 @@ function submitStep(world: World, target: number, digit: number): void {
 
   check(
     world,
-    submission(world.selection, world.store.get(target), {
-      label: label(target),
-      harnessCommit: commit,
-    }),
+    submission(
+      world.selection,
+      world.store.get(target),
+      {
+        label: label(target),
+        harnessCommit: commit,
+      },
+      "owner",
+    ),
     submit(world.model, target, commit),
   );
 }
@@ -125,7 +130,11 @@ function prepareStep(world: World, target: number, result: PreparationOutcome): 
 
   if (current === undefined) throw new Error(`no generation ${target}`);
 
-  check(world, preparation(world.selection, current, result), prepare(world.model, target, result));
+  check(
+    world,
+    preparation(world.selection, current, result, "owner"),
+    prepare(world.model, target, result),
+  );
 }
 
 function controlStep(
@@ -138,7 +147,7 @@ function controlStep(
 
   check(
     world,
-    activation(world.selection, world.store.get(target), command, world.host),
+    activation(world.selection, world.store.get(target), command, world.host, "owner"),
     activate(world.model, { kind, label: target, observedEpoch }, world.host),
   );
 }

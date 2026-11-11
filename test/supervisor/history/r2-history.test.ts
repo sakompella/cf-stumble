@@ -17,7 +17,7 @@ function commitFor(name: string, hash: string): Promise<HistoryCommit> {
 
     new Generations(state.storage, FACET_COMPATIBILITY, (change) => {
       commits.push(changeCommit(change, 1_700_000_000_000));
-    }).submit(testHarnessCommit(hash));
+    }).submit(testHarnessCommit(hash), "owner");
 
     return commits[0] ?? { message: "none", files: {} };
   });

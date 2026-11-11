@@ -13,6 +13,7 @@ import type {
   ActivationCommand,
   ControlProblemCode,
   Generation,
+  GenerationActor,
   GenerationControlResult,
   GenerationLabel,
   PreparationOutcome,
@@ -23,6 +24,7 @@ import type { GenerationChange } from "./history/commits.js";
 export type GenerationCommand = Data.TaggedEnum<{
   Changed: {
     readonly kind: GenerationChange["kind"];
+    readonly actor: GenerationActor;
     readonly epoch: number;
     readonly label: GenerationLabel;
     readonly outcome: string | null;
@@ -77,12 +79,13 @@ function refused(code: ControlProblemCode): Step<GenerationControlResult> {
 
 function changed(
   kind: GenerationChange["kind"],
+  actor: GenerationActor,
   epoch: number,
   label: GenerationLabel,
   outcome: string | null = null,
   errorCode: string | null = null,
 ): GenerationCommand {
-  return GenerationCommand.Changed({ kind, epoch, label, outcome, errorCode });
+  return GenerationCommand.Changed({ kind, actor, epoch, label, outcome, errorCode });
 }
 
 function servingAfter(serving: Serving, label: GenerationLabel): Serving {
@@ -101,6 +104,7 @@ function activated(
   target: LabeledGeneration,
   command: ActivationCommand,
   compatibility: string,
+  actor: GenerationActor,
 ): Step<GenerationControlResult> {
   const kind: "activated" | "rolled-back" =
     command.kind === "activate" ? "activated" : "rolled-back";
@@ -117,7 +121,7 @@ function activated(
   return {
     selection: { epoch, serving: servingAfter(selection.serving, target.label) },
     generation,
-    commands: [changed(kind, epoch, target.label)],
+    commands: [changed(kind, actor, epoch, target.label)],
     reply: {
       ok: true,
       outcome: { kind, generation: wireGeneration(generation), epoch, effect: "activated" },
@@ -130,6 +134,7 @@ export function activation(
   target: LabeledGeneration | undefined,
   command: ActivationCommand,
   compatibility: string,
+  actor: GenerationActor,
 ): Step<GenerationControlResult> {
   if (command.observedEpoch !== selection.epoch) return refused("stale-epoch");
 
@@ -137,7 +142,7 @@ export function activation(
 
   const ifCompatible = (recorded: string) =>
     recorded === compatibility
-      ? activated(selection, target, command, compatibility)
+      ? activated(selection, target, command, compatibility, actor)
       : refused("facet-compatibility-mismatch");
 
   return GenerationState.match(target.state, {
@@ -164,9 +169,17 @@ function rolledBack(
     observedEpoch: selection.epoch,
   } as const;
 
-  const rollback = activation(selection, target, command, compatibility);
+  const rollback = activation(selection, target, command, compatibility, "probation");
   const { label, fallback } = { label: probation.active, fallback: probation.fallback };
-  const failed = changed("probation-failed", selection.epoch, label, run.outcome, run.errorCode);
+
+  const failed = changed(
+    "probation-failed",
+    "probation",
+    selection.epoch,
+    label,
+    run.outcome,
+    run.errorCode,
+  );
 
   if (!rollback.reply.ok) {
     const { code } = rollback.reply.problem;
@@ -202,7 +215,7 @@ export function settlement(
 
   const proven = (active: GenerationLabel): Step<RollbackReply> => ({
     selection: { ...selection, serving: Serving.cases.Proven.make({ active }) },
-    commands: [],
+    commands: [changed("proven", "probation", selection.epoch, active, run.outcome)],
     reply: undefined,
   });
 
@@ -226,6 +239,7 @@ export function preparation(
   selection: Selection,
   current: LabeledGeneration,
   outcome: PreparationOutcome,
+  actor: GenerationActor,
 ): Step<PreparationReply> {
   const checked =
     outcome.status === "ready"
@@ -252,7 +266,7 @@ export function preparation(
   return {
     selection: { ...selection, epoch },
     generation,
-    commands: [changed("prepared", epoch, current.label, outcome.status)],
+    commands: [changed("prepared", actor, epoch, current.label, outcome.status)],
     reply: { generation: wireGeneration(generation), epoch, effect: "recorded" },
   };
 }
@@ -261,6 +275,7 @@ export function submission(
   selection: Selection,
   existing: LabeledGeneration | undefined,
   candidate: Readonly<{ label: GenerationLabel; harnessCommit: HarnessCommit }>,
+  actor: GenerationActor,
 ): Step<Submission> {
   if (existing !== undefined) {
     return reply({
@@ -276,7 +291,7 @@ export function submission(
   return {
     selection: { ...selection, epoch },
     generation,
-    commands: [changed("submitted", epoch, candidate.label)],
+    commands: [changed("submitted", actor, epoch, candidate.label)],
     reply: { kind: "candidate-submitted", generation: wireGeneration(generation), epoch },
   };
 }
