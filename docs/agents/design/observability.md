@@ -81,7 +81,10 @@ wrote about 12,600 spans. If the bill grows, lower `traces.headSamplingRate` fir
 ## Checking a running deployment
 
 Run `pnpm ops:check` after a staging deploy or an e2e run, and when the bill looks wrong. It needs a
-live account, so it is not part of `pnpm verify`. It checks three things: a workspace container that
+live account, so it is not part of `pnpm verify`. The workflow `.github/workflows/ops-check.yml` also
+runs it on production once a day (13:41 UTC) over the last 26 hours, so consecutive runs overlap and
+a late start leaves no gap. A failed run means a finding or an `unknown`: read the `✗` lines in the
+run log. GitHub reports the failure through its Actions notifications. It checks three things: a workspace container that
 kept running past the Host's idle stop (rule `ran-past-idle`), `facet.session-failed` events in
 the window (rule `facet.session-failed`), and a Durable Object that still runs an older Worker
 version after the latest deployment (rule `do-version-skew`). It prints one check mark when all is well and one line per
