@@ -18,7 +18,7 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-function gitDate(person: CommitView["author"]): string {
+export function gitDate(person: CommitView["author"]): string {
   const east = -person.timezoneOffset;
   const local = new Date((person.timestamp + east * 60) * 1000);
   const sign = east < 0 ? "-" : "+";

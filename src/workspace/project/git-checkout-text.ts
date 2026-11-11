@@ -1,7 +1,10 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import { branchSwitch } from "./git-checkout-branch.js";
 import { restoreCommand } from "./git-restore-command.js";
-import { reportingFailure } from "./git-result.js";
+import { matching, resolveSpecs } from "./git-pathspec.js";
+import { pathspecError, reportingFailure } from "./git-result.js";
+import { resolves } from "./git-revision.js";
+import { nonBranchTarget } from "./git-switch-target.js";
 import type { GitScope, RunCli } from "./git-cli.js";
 import type { ReadFile } from "./git-index-file.js";
 import { branchTracking, trackingLines } from "./git-tracking.js";
@@ -25,6 +28,7 @@ async function switchMessages(
   target: string,
   created: boolean,
   before: string | undefined,
+  guessed: boolean,
 ): Promise<GitCliResult> {
   const branch = await client.currentBranch({ dir });
 
@@ -40,6 +44,13 @@ async function switchMessages(
   }
 
   const tracking = await branchTracking(client, dir, branch);
+
+  if (guessed && tracking !== undefined)
+    return {
+      stdout: `branch '${branch}' set up to track '${tracking.upstream}'.\n`,
+      stderr: `Switched to a new branch '${branch}'\n`,
+      exitCode: 0,
+    };
 
   const stderr =
     before === target && !created
@@ -73,6 +84,31 @@ function unknownTarget(result: GitCliResult): GitCliResult {
       };
 }
 
+async function restoreFromTree(
+  client: GitClient,
+  input: GitCliInput,
+  scope: GitScope,
+  readFile: ReadFile,
+): Promise<GitCliResult | undefined> {
+  const [, ref = "", , ...paths] = input.argv;
+
+  if (ref.startsWith("-") || (await resolves(client, scope.dir, ref)) === undefined)
+    return undefined;
+
+  const specs = resolveSpecs(paths, scope.prefix);
+
+  if ("outside" in specs) return undefined;
+
+  const files = await client.lsFiles({ dir: scope.dir, ref });
+  const missed = specs.filter((spec) => matching(files, spec).length === 0);
+
+  if (missed.length > 0) return pathspecError(missed);
+
+  const argv = ["restore", `--source=${ref}`, "--staged", "--worktree", "--", ...paths];
+
+  return restoreCommand(client, { ...input, argv }, scope, readFile);
+}
+
 export async function checkoutWithMessages(
   client: GitClient,
   cli: RunCli,
@@ -95,12 +131,27 @@ export async function checkoutWithMessages(
       restoreCommand(client, { ...input, argv: ["restore", ...args] }, scope, readFile),
     );
 
+  if (separator === 1 && input.argv[0] === "checkout") {
+    const restored = await reportingFailure(() => restoreFromTree(client, input, scope, readFile));
+
+    if (restored !== undefined) return restored;
+  }
+
   if (separator !== -1) return cli(input);
 
   const dir = scope.dir;
+  const [word] = args;
+
+  if (input.argv[0] === "switch" && args.length === 1 && word?.startsWith("-") === false) {
+    const refused = await reportingFailure(() => nonBranchTarget(client, dir, word));
+
+    if (refused !== undefined) return refused;
+  }
+
   const created = args.some((arg) => CREATE.has(arg));
   const target = args.find((arg) => !arg.startsWith("-"));
   const before = await client.currentBranch({ dir }).catch((): undefined => {});
+  const known = await client.branchList({ dir }).catch((): string[] => []);
 
   const result =
     created && args.length === 2 && target !== undefined
@@ -111,5 +162,7 @@ export async function checkoutWithMessages(
 
   if (target === undefined) return result;
 
-  return switchMessages(client, dir, target, created, before).catch(() => result);
+  const guessed = !created && !known.includes(target);
+
+  return switchMessages(client, dir, target, created, before, guessed).catch(() => result);
 }

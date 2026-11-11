@@ -60,6 +60,10 @@ const COMMANDS = [
   "grep '[a-z]*' a.txt",
   "ls ü.txt",
   "cat ü.txt",
+  "sha256sum a.txt",
+  "sha256sum missing | tac",
+  "sha1sum missing a.txt",
+  "md5sum missing",
 ];
 
 function fixtureDirectory(): string {
@@ -125,6 +129,10 @@ describe("a command that the router sends to the isolate prints what dash and GN
         "echo [a-z].txt",
         "echo [ü].txt",
         "echo ?/x",
+        "sha256sum a.txt",
+        "sha256sum missing | tac",
+        "sha1sum missing a.txt",
+        "md5sum missing",
       ],
     );
   });

@@ -22,6 +22,29 @@ async function configString(
   return Array.isArray(value) ? value[0] : value;
 }
 
+export async function upstreamRef(
+  client: TrackingClient,
+  dir: string,
+  branch: string,
+): Promise<string | undefined> {
+  const [remote, merge] = await Promise.all([
+    configString(client, dir, `branch.${branch}.remote`),
+    configString(client, dir, `branch.${branch}.merge`),
+  ]);
+
+  if (remote === undefined || merge === undefined) return undefined;
+
+  return remote === "." ? merge : `refs/remotes/${remote}/${merge.replace(/^refs\/heads\//u, "")}`;
+}
+
+export function upstreamRemote(
+  client: TrackingClient,
+  dir: string,
+  branch: string,
+): Promise<string | undefined> {
+  return configString(client, dir, `branch.${branch}.remote`);
+}
+
 export async function hasUpstream(
   client: TrackingClient,
   dir: string,

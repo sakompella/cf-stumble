@@ -33,7 +33,7 @@ export async function dispatchGit(
       return (
         indexCommand(command, client, cli, input, scope, files) ??
         readCommand(command, client, cli, input, scope, files) ??
-        remoteCommand(command, client, cli, input, scope) ??
+        remoteCommand(command, client, cli, input, scope, files) ??
         cli(input)
       );
   }

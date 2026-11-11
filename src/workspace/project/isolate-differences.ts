@@ -32,6 +32,9 @@ const DIFFERS = new Map<string, (invocation: Invocation) => boolean>([
   ["ls", ({ operands }) => operands.length > 1],
   ["cut", ({ options }) => hasShortOption(options, "f")],
   ["chmod", () => true],
+  ["md5sum", () => true],
+  ["sha1sum", () => true],
+  ["sha256sum", () => true],
   ["du", () => true],
   ["echo", ({ options }) => hasShortOption(options, "eE")],
   [

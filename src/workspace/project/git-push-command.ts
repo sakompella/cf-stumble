@@ -1,9 +1,11 @@
 import type { GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope, RunCli } from "./git-cli.js";
+import type { WorkFiles } from "./git-index-file.js";
 import { pushDelete } from "./git-push-delete.js";
 import { NO_DESTINATION, noUpstream, notARepository, unknownRemote } from "./git-remote-text.js";
+import { nonFastForward, pushReport, remoteBranches, type Pushed } from "./git-ref-report.js";
 import { resolves } from "./git-revision.js";
-import { hasUpstream } from "./git-tracking.js";
+import { hasUpstream, upstreamRemote } from "./git-tracking.js";
 
 const UPSTREAM = new Set(["-u", "--set-upstream"]);
 
@@ -83,11 +85,58 @@ async function trackUpstream(
   return `branch '${branch}' set up to track '${remote}/${dst}'.\n`;
 }
 
+function pushedRefs(request: PushRequest, branch: string | undefined): Pushed[] {
+  if (request.refspecs.length === 0)
+    return branch === undefined || request.deleting ? [] : [{ from: branch, to: branch }];
+
+  return request.refspecs
+    .map((refspec) => {
+      const { src, dst } = split(refspec);
+      const head = src === "HEAD" && !refspec.includes(":");
+
+      return { from: src.replace(/^refs\/heads\//u, ""), to: head ? (branch ?? dst) : dst };
+    })
+    .filter(({ to }) => !to.startsWith("refs/"));
+}
+
+interface PushTarget {
+  readonly name: string;
+  readonly url: string;
+  readonly branch: string | undefined;
+}
+
+async function reportedPush(
+  client: GitClient,
+  cli: RunCli,
+  input: GitCliInput,
+  files: WorkFiles,
+  dir: string,
+  request: PushRequest,
+  target: PushTarget,
+): Promise<GitCliResult> {
+  const before = await remoteBranches(client, files, dir, target.name);
+  const result = await cli(input);
+
+  if (result.exitCode !== 0) return result;
+
+  const after = await remoteBranches(client, files, dir, target.name);
+  const forced = await nonFastForward(client, dir, before, after);
+
+  const report = pushReport(target.url, pushedRefs(request, target.branch), {
+    before,
+    after,
+    forced,
+  });
+
+  return { ...result, stderr: `${result.stderr}${report}` };
+}
+
 export async function pushCommand(
   client: GitClient,
   cli: RunCli,
   input: GitCliInput,
   scope: GitScope,
+  files: WorkFiles,
 ): Promise<GitCliResult> {
   const request = pushRequest(input.argv.slice(1));
   const dir = scope.dir;
@@ -103,6 +152,14 @@ export async function pushCommand(
 
   const branch = await client.currentBranch({ dir });
 
+  const pushTo = (name: string, sent: GitCliInput = pushDelete(input)): Promise<GitCliResult> => {
+    const url = remotes.find((known) => known.name === name)?.url;
+
+    return url === undefined
+      ? cli(sent)
+      : reportedPush(client, cli, sent, files, dir, request, { name, url, branch });
+  };
+
   if (
     refspecs.length === 0 &&
     !request.deleting &&
@@ -111,7 +168,12 @@ export async function pushCommand(
   )
     return noUpstream(target, branch);
 
-  if (remote === undefined) return cli(pushDelete(input));
+  if (remote === undefined) {
+    const named =
+      (branch === undefined ? undefined : await upstreamRemote(client, dir, branch)) ?? target;
+
+    return pushTo(named);
+  }
 
   const missing = request.deleting ? [] : await missingSources(client, dir, refspecs);
 
@@ -128,7 +190,7 @@ export async function pushCommand(
   if (unknownRemote(remotes, remote)) return notARepository(remote);
 
   const forwarded = { ...input, argv: input.argv.filter((arg) => !UPSTREAM.has(arg)) };
-  const result = await cli(pushDelete(forwarded));
+  const result = await pushTo(remote, pushDelete(forwarded));
 
   if (result.exitCode !== 0 || !request.upstream || request.deleting) return result;
 
