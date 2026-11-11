@@ -68,7 +68,7 @@ On load the page reads the recorded status with `GET /api/github/connection`, wh
 
 See `docs/deploy.md`, "Instance secrets", for `GITHUB_OAUTH_CLIENT_ID` and `GH_TOKEN`.
 
-When the workspace has no usable credential and `GH_TOKEN` is set, cf-stumble installs that token exactly as it installs one from the device flow and records the connection with the source `configured-token`, so the status says which credential is in use. A deployment that sets neither `GITHUB_OAUTH_CLIENT_ID` nor `GH_TOKEN` reports `disconnected`.
+When the workspace has no usable credential and `GH_TOKEN` is set, cf-stumble installs that token exactly as it installs one from the device flow and records the connection with the source `configured-token`, so the status says which credential is in use. Connecting a project installs it, and so does every turn in any project, the harness included, while the Supervisor has no record of a working credential (`WorkspaceReadiness.obtain`); once the install is recorded, a turn runs no credential command. Before 2026-11-11 only a project connection or a failed clone installed it, so on a fresh stage, or after a workspace reset, a turn in the harness had no `hosts.yml` and its `git push` answered 401. A deployment that sets neither `GITHUB_OAUTH_CLIENT_ID` nor `GH_TOKEN` reports `disconnected`.
 
 ## Where the credential lives
 

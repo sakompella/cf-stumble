@@ -124,6 +124,14 @@ export class GitHubConnection {
     });
   }
 
+  installConfiguredCredential(now: number): Effect.Effect<void> {
+    return Effect.suspend(() =>
+      parseGitHubToken(this.environment.fallbackToken) === undefined || this.credentialWorking()
+        ? Effect.void
+        : Effect.asVoid(this.ensureCredential(now)),
+    );
+  }
+
   startAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
       const clientId = this.environment.clientId;
