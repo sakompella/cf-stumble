@@ -108,6 +108,22 @@ test.each([
     compact: false,
   },
   {
+    error: {
+      code: "model-unavailable",
+      detail: "429 3040: Capacity temporarily exceeded, please try again.",
+    },
+    retry: true,
+    compact: false,
+  },
+  {
+    error: {
+      code: "model-unavailable",
+      detail: "3021: rate limiting: inference request per min rate reached",
+    },
+    retry: true,
+    compact: false,
+  },
+  {
     error: { code: "model-unavailable", detail: "context_length_exceeded" },
     retry: false,
     compact: true,

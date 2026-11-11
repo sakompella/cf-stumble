@@ -5,6 +5,9 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { ConversationHost } from "../../../src/facet/index.js";
 import { MainFacet } from "../../../src/facet/generation-1/main-facet.js";
 import type { ModelCapability } from "../../../src/facet/generation-1/capabilities.js";
+import { workersAiTurn } from "../../../src/model-route-stream.js";
+import { modelEventStream } from "../../../src/model-route-turn.js";
+import { providerStreamOfLines, sseLine, DONE_LINE } from "../../model-route-provider-stream.js";
 
 const noModelRun: ModelCapability = {
   runStream: () => Promise.reject(new Error("no run asks the model")),
@@ -250,3 +253,68 @@ test("a submit that fails re-arms the plain wake", async () => {
     },
   );
 });
+
+function capacityOnceModel(calls: number[]): ModelCapability {
+  return {
+    runStream: (request) => {
+      calls.push(Date.now());
+
+      const ai = {
+        run: () =>
+          calls.length === 1
+            ? Promise.reject(new Error("3040: Capacity temporarily exceeded, please try again."))
+            : Promise.resolve(providerStreamOfLines([sseLine({ response: "hi" }), DONE_LINE])),
+      };
+
+      return Promise.resolve(modelEventStream(workersAiTurn(ai, request)));
+    },
+  };
+}
+
+test("a Workers AI capacity error (3040) is retried by Pi and the turn answers", async () => {
+  const calls: number[] = [];
+  const reports: Array<Readonly<Record<string, string>> | undefined> = [];
+  let alarm: (() => void) | undefined;
+
+  const host = hostWith({
+    arm: ({ at }) => {
+      if (at !== undefined) setTimeout(() => alarm?.(), Math.max(0, at - Date.now()));
+
+      return Promise.resolve();
+    },
+    running: (_conversations, failed) => {
+      reports.push(failed);
+
+      return Promise.resolve();
+    },
+  });
+
+  await runInDurableObject(
+    env.SUPERVISOR.getByName("main-facet-3040"),
+    async (_instance, state) => {
+      const facet = new MainFacet(state, { MODEL: capacityOnceModel(calls) });
+
+      alarm = () => void facet.attach(host);
+      await facet.attach(host);
+      const id = await facet.createConversation("/workspace");
+
+      await facet.submit(id, "hello", "r1");
+      await vi.waitFor(
+        async () => {
+          expect(calls).toHaveLength(2);
+
+          const entries = await facet.entries(id, {
+            minEntryId: undefined,
+            maxEntryId: undefined,
+            order: "ascending",
+            limit: 50,
+          });
+
+          expect(entries).toContain('"hi"');
+        },
+        { timeout: 10_000, interval: 100 },
+      );
+      expect(reports.flatMap((failed) => Object.values(failed ?? {}))).not.toContain("model_error");
+    },
+  );
+}, 15_000);

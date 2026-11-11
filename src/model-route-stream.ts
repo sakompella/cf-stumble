@@ -157,6 +157,16 @@ export function finishedTurn(
   return accumulator.truncated ? { ...answer, truncated: true } : answer;
 }
 
+const CAPACITY_EXCEEDED_CODE = "3040:";
+
+const CAPACITY_EXCEEDED_STATUS = 429;
+
+function bindingFailure(cause: unknown): ModelTurnFailed {
+  return cause instanceof Error && cause.message.startsWith(CAPACITY_EXCEEDED_CODE)
+    ? modelUnavailableBecause(`${CAPACITY_EXCEEDED_STATUS} ${cause.message}`)
+    : modelUnavailable(cause);
+}
+
 function providerFailure(detail: string | undefined): ModelTurnFailed {
   return detail === undefined ? modelUnavailable() : modelUnavailableBecause(detail);
 }
@@ -178,7 +188,7 @@ export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteReque
 
     return Effect.tryPromise({
       try: (signal) => ai.run(MODEL, buildStreamingProviderPayload(request), signal),
-      catch: modelUnavailable,
+      catch: bindingFailure,
     }).pipe(
       Effect.flatMap((providerStream) =>
         pumpSseStream(providerStream, (data) => accumulator.handleEvent(data)),
