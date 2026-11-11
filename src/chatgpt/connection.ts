@@ -15,6 +15,8 @@ import {
   authorizeUrl,
   exchangeFields,
   parseCallback,
+  parseRefreshGrant,
+  parseTokenGrant,
   randomSecret,
   refreshFields,
   requestTokens,
@@ -222,6 +224,7 @@ export class ChatGPTConnection {
           return requestTokens(
             this.fetcher,
             exchangeFields(callback.success, pending.verifier),
+            parseTokenGrant,
           ).pipe(
             Effect.matchEffect({
               onFailure: ({ failure }) => {
@@ -260,7 +263,9 @@ export class ChatGPTConnection {
     const shared = Deferred.makeUnsafe<ChatGPTAccount>();
     this.phase = RefreshPhase.Refreshing({ from, shared });
 
-    return requestTokens(this.fetcher, refreshFields(from.clientId, from.refreshToken)).pipe(
+    return requestTokens(this.fetcher, refreshFields(from.clientId, from.refreshToken), (body) =>
+      parseRefreshGrant(body, from, this.clock()),
+    ).pipe(
       Effect.match({
         onFailure: ({ failure }) => {
           logEvent(failure === "rejected" ? "error" : "warn", "chatgpt.refresh", {
