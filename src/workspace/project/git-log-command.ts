@@ -1,6 +1,7 @@
 import type { CommitView, GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import type { GitScope } from "./git-cli.js";
 import type { WorkFiles } from "./git-index-file.js";
+import { gitOrder } from "./git-log-order.js";
 import { renderLog, supportedSpec, type LogFormat } from "./git-log-format.js";
 import { matching, resolveSpecs, WILDCARD } from "./git-pathspec.js";
 import { failure } from "./git-result.js";
@@ -226,6 +227,21 @@ async function touching(
   return picked;
 }
 
+async function history(
+  client: GitClient,
+  dir: string,
+  head: string,
+  limit: number | undefined,
+): Promise<readonly CommitView[]> {
+  if (limit !== undefined) {
+    const prefix = await client.log({ dir, ref: head, depth: limit });
+
+    if (prefix.every((commit) => commit.parent.length <= 1)) return prefix;
+  }
+
+  return gitOrder(await client.log({ dir, ref: head }), head);
+}
+
 export async function logCommand(
   client: GitClient,
   input: GitCliInput,
@@ -252,13 +268,11 @@ export async function logCommand(
   if ("outside" in specs)
     return failure(`fatal: '${specs.outside}': no such path in the working tree.\n`);
 
-  const commits =
-    specs.length === 0 && request.limit !== undefined
-      ? await client.log({ dir: scope.dir, ref: head, depth: request.limit })
-      : await client.log({ dir: scope.dir, ref: head });
-
-  const distinct = commits.filter(
-    (commit, index) => commits.findIndex((other) => other.oid === commit.oid) === index,
+  const distinct = await history(
+    client,
+    scope.dir,
+    head,
+    specs.length === 0 ? request.limit : undefined,
   );
 
   const chosen =
