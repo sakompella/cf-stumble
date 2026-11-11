@@ -2,7 +2,6 @@ import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Conversation, ConversationId } from "@earendil-works/pi-durable";
 import { FACET_COMPATIBILITY } from "../runtime-contract.js";
-import { cancelKeepingInputs } from "./cancel-keeping-inputs.js";
 import { PacedStream } from "./paced-stream.js";
 import { entriesQuery, entryId } from "../entries-query.js";
 import type {
@@ -10,7 +9,8 @@ import type {
   ConversationHost,
   GenerationControl,
 } from "../conversation-protocol.js";
-import { openSession, type Session, type SessionInput } from "./open-session.js";
+import type { ModelCapability } from "./capabilities.js";
+import { openSession, type Session } from "./open-session.js";
 import { ROUTE_MODEL } from "./route-provider.js";
 
 const context = BACKGROUND_CONTEXT;
@@ -35,7 +35,7 @@ type SessionSlot =
 const CLOSED: SessionSlot = { kind: "closed" };
 
 export class MainFacet
-  extends DurableObject<Readonly<{ MODEL: SessionInput["model"] }>>
+  extends DurableObject<Readonly<{ MODEL: ModelCapability }>>
   implements ConversationFacet
 {
   #slot: SessionSlot = CLOSED;
@@ -153,7 +153,8 @@ export class MainFacet
     const conversation = await this.#conversation(conversationId);
     const endWork = await this.#beginWork();
 
-    void cancelKeepingInputs(conversation, context)
+    void conversation
+      .abort(context)
       .catch(() => {})
       .finally(endWork);
   }

@@ -1,4 +1,4 @@
-import { recordPost } from "./page-store.ts";
+import { markCancelled, recordPost } from "./page-store.ts";
 import { fz } from "./page-state.ts";
 
 function requestUrl(input: RequestInfo | URL): string {
@@ -17,6 +17,15 @@ export function installNet(window: Window): void {
   const real = window.fetch.bind(window);
 
   fz.patched = true;
+  window.document.addEventListener(
+    "click",
+    (event) => {
+      if (event.target instanceof Element && event.target.closest("#cancel-turn-button") !== null) {
+        markCancelled(window);
+      }
+    },
+    true,
+  );
   window.fetch = async (input, init) => {
     const isSend = (init?.method ?? "GET") === "POST" && requestUrl(input).endsWith("/messages");
 

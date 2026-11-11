@@ -21,8 +21,8 @@ import {
   type Extension,
 } from "@earendil-works/pi-durable";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { EntriesRequest } from "../../src/entries-request.js";
 import { entriesQuery, entryId } from "../../src/facet/entries-query.js";
-import { cancelKeepingInputs } from "../../src/facet/generation-1/cancel-keeping-inputs.js";
 import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 import {
   CONNECTED_PROJECT_URL,
@@ -149,7 +149,7 @@ export type Conversations = Readonly<{
   barrier: Barrier;
   submit: (projectId: string, content: string, requestId: string) => Promise<number>;
   watch: (projectId: string, from: number | undefined) => Promise<ConversationWatch>;
-  page: (projectId: string, request: Parameters<typeof entriesQuery>[0]) => Promise<string>;
+  page: (projectId: string, request: EntriesRequest) => Promise<string>;
   abort: (projectId: string) => Promise<void>;
   fresh: (projectId: string) => Promise<number>;
   entries: (projectId: string) => Promise<readonly EntryRecord[]>;
@@ -236,7 +236,7 @@ function readers({ conversationOf }: Registry) {
         start === undefined ? undefined : { from: start },
       );
     },
-    page: async (projectId: string, request: Parameters<typeof entriesQuery>[0]) =>
+    page: async (projectId: string, request: EntriesRequest) =>
       JSON.stringify(
         await (
           await conversationOf(projectId)
@@ -266,7 +266,7 @@ export async function openConversations(scenario: HarnessScenario): Promise<Conv
       return submission.id;
     },
     abort: async (projectId) => {
-      await cancelKeepingInputs(await registry.conversationOf(projectId), context);
+      await (await registry.conversationOf(projectId)).abort(context);
     },
     fresh: async (projectId) => {
       const conversation = create();
