@@ -32,6 +32,8 @@ import type { GenerationChange } from "./history/commits.js";
 
 export type GenerationStatus = "candidate" | "ready" | "failed";
 
+export type GenerationActor = "owner" | "conversation" | "probation";
+
 declare const generationLabelBrand: unique symbol;
 
 export type GenerationLabel = number & {
@@ -133,7 +135,7 @@ export class Generations {
     });
   }
 
-  submit(harnessCommit: HarnessCommit): Submission {
+  submit(harnessCommit: HarnessCommit, actor: GenerationActor): Submission {
     return this.#run(() => {
       const next = this.#sql
         .exec<{ label: GenerationLabel }>(
@@ -141,16 +143,24 @@ export class Generations {
         )
         .one();
 
-      return submission(this.#selection(), this.#where("harness_commit", harnessCommit), {
-        label: next.label,
-        harnessCommit,
-      });
+      return submission(
+        this.#selection(),
+        this.#where("harness_commit", harnessCommit),
+        { label: next.label, harnessCommit },
+        actor,
+      );
     });
   }
 
-  activate(command: ActivationCommand): GenerationControlResult {
+  activate(command: ActivationCommand, actor: GenerationActor): GenerationControlResult {
     return this.#run(() =>
-      activation(this.#selection(), this.#generation(command.label), command, this.#compatibility),
+      activation(
+        this.#selection(),
+        this.#generation(command.label),
+        command,
+        this.#compatibility,
+        actor,
+      ),
     );
   }
 
@@ -173,13 +183,14 @@ export class Generations {
   recordPreparation(
     label: GenerationLabel,
     outcome: PreparationOutcome,
+    actor: GenerationActor,
   ): PreparationReply | undefined {
     return this.#run(() => {
       const current = this.#generation(label);
 
       return current === undefined
         ? { commands: [], reply: undefined }
-        : preparation(this.#selection(), current, outcome);
+        : preparation(this.#selection(), current, outcome, actor);
     });
   }
 
@@ -214,11 +225,11 @@ export class Generations {
 
   #perform(command: GenerationCommand): void {
     GenerationCommand.$match(command, {
-      Changed: ({ kind, epoch, label, outcome, errorCode }) => {
+      Changed: ({ kind, actor, epoch, label, outcome, errorCode }) => {
         const changed = this.#generation(label);
 
         if (changed !== undefined) {
-          this.#onChange?.({ kind, epoch, outcome, errorCode, record: wireRecord(changed) });
+          this.#onChange?.({ kind, actor, epoch, outcome, errorCode, record: wireRecord(changed) });
         }
       },
       ProbationFailed: ({ _tag, ...fields }) => {

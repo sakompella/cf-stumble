@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
 import { seedSampleProjects } from "./projects/seed-connected.js";
 import {
   fixtureMainHarnessArtifact,
@@ -103,6 +103,12 @@ export async function storeModuleMap(input: MainHarnessArtifactInput): Promise<v
   if (written._tag === "Failure") {
     throw new Error(`a stored module map must be written: ${written.failure.code}`);
   }
+}
+
+export async function historyEventText(key: string): Promise<string> {
+  const object = await vi.waitUntil(() => env.MODULE_MAPS.get(`history/events/${key}.json`));
+
+  return object.text();
 }
 
 export function connectSampleProjects(control: DurableObjectStub<Supervisor>): Promise<void> {

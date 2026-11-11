@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
-import { Generations } from "../../../src/supervisor/generations.js";
+import { Generations, type GenerationLabel } from "../../../src/supervisor/generations.js";
 import type { HistoryCommit } from "../../../src/supervisor/history/commits.js";
 import { GenerationHistory } from "../../../src/supervisor/history/log.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
@@ -41,6 +41,17 @@ function recorder(failures: number) {
   return { commits, history, settled: () => Promise.all(pending) };
 }
 
+const READY = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;
+
+function served(generations: Generations, commit: string): GenerationLabel {
+  const { label } = generations.submit(testHarnessCommit(commit), "owner").generation;
+  generations.recordPreparation(label, READY, "owner");
+  const observedEpoch = generations.active().epoch;
+  generations.activate({ kind: "activate", label, observedEpoch }, "owner");
+
+  return label;
+}
+
 test("each outcome appends one commit, in order, after the transaction", async () => {
   const { commits, history, settled } = recorder(0);
 
@@ -49,25 +60,10 @@ test("each outcome appends one commit, in order, after the transaction", async (
       history.record(change);
     });
 
-    const first = generations.submit(testHarnessCommit(firstCommit)).generation.label;
-    generations.recordPreparation(first, { status: "ready", compatibility: FACET_COMPATIBILITY });
-    generations.activate({
-      kind: "activate",
-      label: first,
-      observedEpoch: generations.active().epoch,
-    });
-    const second = generations.submit(testHarnessCommit(secondCommit)).generation.label;
-    generations.recordPreparation(second, { status: "ready", compatibility: FACET_COMPATIBILITY });
-    generations.activate({
-      kind: "activate",
-      label: second,
-      observedEpoch: generations.active().epoch,
-    });
-    generations.activate({
-      kind: "rollback",
-      label: first,
-      observedEpoch: generations.active().epoch,
-    });
+    const first = served(generations, firstCommit);
+    served(generations, secondCommit);
+    const observedEpoch = generations.active().epoch;
+    generations.activate({ kind: "rollback", label: first, observedEpoch }, "owner");
   });
 
   await settled();
@@ -91,13 +87,7 @@ test("a commit holds the generation record and the event", async () => {
       history.record(change);
     });
 
-    const first = generations.submit(testHarnessCommit(firstCommit)).generation.label;
-    generations.recordPreparation(first, { status: "ready", compatibility: FACET_COMPATIBILITY });
-    generations.activate({
-      kind: "activate",
-      label: first,
-      observedEpoch: generations.active().epoch,
-    });
+    served(generations, firstCommit);
   });
 
   await settled();
@@ -114,6 +104,7 @@ test("a commit holds the generation record and the event", async () => {
   });
   expect(JSON.parse(last?.files["events/3-activated.json"] ?? "")).toEqual({
     kind: "activated",
+    actor: "owner",
     label: 0,
     epoch: 3,
     time: "2023-11-14T22:13:20.000Z",
@@ -132,9 +123,7 @@ test("a failed history write does not block activation or later commits", async 
         history.record(change);
       });
 
-      const label = generations.submit(testHarnessCommit(firstCommit)).generation.label;
-      generations.recordPreparation(label, { status: "ready", compatibility: FACET_COMPATIBILITY });
-      generations.activate({ kind: "activate", label, observedEpoch: generations.active().epoch });
+      served(generations, firstCommit);
 
       return generations.active().generation?.label;
     },

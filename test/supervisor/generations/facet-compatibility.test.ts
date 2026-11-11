@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
-import { Generations } from "../../../src/supervisor/generations.js";
+import { Generations, type GenerationLabel } from "../../../src/supervisor/generations.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activateFixtureGeneration,
@@ -22,6 +22,10 @@ afterEach(async () => {
   await reset();
 });
 
+function command(kind: "activate" | "rollback", label: GenerationLabel, observedEpoch: number) {
+  return { kind, label, observedEpoch };
+}
+
 function rollback(control: DurableObjectStub<Supervisor>, observedEpoch: number) {
   return control.controlGeneration({ kind: "rollback", label: generationLabel(0), observedEpoch });
 }
@@ -31,21 +35,20 @@ test("rollback refuses a generation prepared under the previous host protocol", 
     env.SUPERVISOR.getByName("rollback-across-protocols"),
     (_instance, state) => {
       const before = new Generations(state.storage, PREVIOUS_HOST_PROTOCOL);
-      const first = before.submit(testHarnessCommit(fixtureMainHarnessCommit)).generation.label;
-      before.recordPreparation(first, { status: "ready", compatibility: PREVIOUS_HOST_PROTOCOL });
-      before.activate({ kind: "activate", label: first, observedEpoch: before.active().epoch });
+      const previous = { status: "ready", compatibility: PREVIOUS_HOST_PROTOCOL } as const;
+      const first = before.submit(testHarnessCommit(fixtureMainHarnessCommit), "owner");
+      const firstLabel = first.generation.label;
+      before.recordPreparation(firstLabel, previous, "owner");
+      before.activate(command("activate", firstLabel, before.active().epoch), "owner");
 
       const after = new Generations(state.storage, FACET_COMPATIBILITY);
-      const second = after.submit(testHarnessCommit(secondCommit)).generation.label;
-      after.recordPreparation(second, { status: "ready", compatibility: FACET_COMPATIBILITY });
-      after.activate({ kind: "activate", label: second, observedEpoch: after.active().epoch });
+      const current = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;
+      const second = after.submit(testHarnessCommit(secondCommit), "owner").generation.label;
+      after.recordPreparation(second, current, "owner");
+      after.activate(command("activate", second, after.active().epoch), "owner");
 
       return {
-        rollback: after.activate({
-          kind: "rollback",
-          label: first,
-          observedEpoch: after.active().epoch,
-        }),
+        rollback: after.activate(command("rollback", firstLabel, after.active().epoch), "owner"),
         active: after.active().generation?.label,
       };
     },

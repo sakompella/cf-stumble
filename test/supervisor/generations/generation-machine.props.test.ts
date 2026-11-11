@@ -56,7 +56,7 @@ test("every reachable selection survives its columns, and serves and falls back 
 
       const next =
         kind === "activate" || kind === "rollback"
-          ? activation(selection, store.get(target), { ...command, kind }, COMPATIBILITY)
+          ? activation(selection, store.get(target), { ...command, kind }, COMPATIBILITY, "owner")
           : kind === "check-ready" || kind === "check-failed"
             ? preparation(
                 selection,
@@ -64,6 +64,7 @@ test("every reachable selection survives its columns, and serves and falls back 
                 kind === "check-ready"
                   ? { status: "ready", compatibility: COMPATIBILITY }
                   : { status: "failed" },
+                "owner",
               )
             : settlement(
                 selection,

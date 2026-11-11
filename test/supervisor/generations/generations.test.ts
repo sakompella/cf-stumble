@@ -48,13 +48,14 @@ test("a later preparation outcome replaces the recorded status, and a repeated o
     supervisor("records-latest-preparation-outcome"),
     (_instance, state) => {
       const generations = new Generations(state.storage, FACET_COMPATIBILITY);
-      const { label } = generations.submit(testHarnessCommit(secondHarnessCommit)).generation;
+      const submitted = generations.submit(testHarnessCommit(secondHarnessCommit), "owner");
+      const { label } = submitted.generation;
       const ready = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;
 
       return {
-        recorded: generations.recordPreparation(label, ready),
-        repeated: generations.recordPreparation(label, ready),
-        failed: generations.recordPreparation(label, { status: "failed" }),
+        recorded: generations.recordPreparation(label, ready, "owner"),
+        repeated: generations.recordPreparation(label, ready, "owner"),
+        failed: generations.recordPreparation(label, { status: "failed" }, "owner"),
         stored: generations.byLabel(label)?.status,
       };
     },

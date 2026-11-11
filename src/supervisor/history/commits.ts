@@ -1,7 +1,8 @@
-import type { GenerationRecord } from "../generations.js";
+import type { GenerationActor, GenerationRecord } from "../generations.js";
 
 export type GenerationChange = Readonly<{
-  kind: "submitted" | "prepared" | "activated" | "rolled-back" | "probation-failed";
+  kind: "submitted" | "prepared" | "activated" | "rolled-back" | "probation-failed" | "proven";
+  actor: GenerationActor;
   epoch: number;
   outcome: string | null;
   errorCode: string | null;
@@ -32,6 +33,7 @@ export function changeCommit(change: GenerationChange, time: number): HistoryCom
 
   const event = {
     kind: change.kind,
+    actor: change.actor,
     label,
     epoch: change.epoch,
     time: new Date(time).toISOString(),

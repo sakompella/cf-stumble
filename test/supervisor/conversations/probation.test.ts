@@ -10,6 +10,7 @@ import {
   submitCandidate,
   FACET_COMPATIBILITY_METHOD,
   ANSWER_STARTUP_CHECK,
+  historyEventText,
 } from "../helpers.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
@@ -112,9 +113,22 @@ test("a generation whose first real turn fails is rolled back to the last genera
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
+  const { epoch: activated, generation } = await control.getActiveGeneration();
   await send(control, "r2");
 
   expect((await control.getActiveGeneration()).generation?.label).toBe(working);
+  expect(JSON.parse(await historyEventText(`${activated}-activated`))).toMatchObject({
+    actor: "owner",
+  });
+  expect(JSON.parse(await historyEventText(`${activated}-probation-failed`))).toMatchObject({
+    actor: "probation",
+    label: generation?.label,
+    errorCode: "faulted",
+  });
+  expect(JSON.parse(await historyEventText(`${activated + 1}-rolled-back`))).toMatchObject({
+    actor: "probation",
+    label: working,
+  });
   expect(warn).toHaveBeenCalledWith(
     expect.objectContaining({
       event: "generation.probation-failed",
@@ -135,9 +149,18 @@ test("a generation whose first real turn fails is rolled back to the last genera
 
 test("a completed turn ends probation, so a later failed turn keeps the generation", async () => {
   const { control } = await provenThenActivated("probation-passed", SOUND, null);
-  const activated = (await control.getActiveGeneration()).generation?.label;
+  const { epoch, generation } = await control.getActiveGeneration();
+  const activated = generation?.label;
 
   await send(control, "r2");
+
+  expect(JSON.parse(await historyEventText(`${epoch}-proven`))).toMatchObject({
+    kind: "proven",
+    actor: "probation",
+    label: activated,
+    outcome: "completed",
+  });
+
   await send(control, "r3", "fail");
 
   expect((await control.getActiveGeneration()).generation?.label).toBe(activated);

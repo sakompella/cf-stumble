@@ -11,6 +11,7 @@ import {
   type TimeWindow,
 } from "./check.mts";
 import { fetchGitExecs, gitExecLine } from "./exec-commands.mts";
+import { gatherGenerationHistory, generationLine } from "./generations.mts";
 import { fetchUsage, readToken, resolveAccount, ApiFailure } from "./fetch.mts";
 import {
   fetchInvocations,
@@ -136,10 +137,13 @@ const [modelCalls, gitExecs] = activityOk
     ])
   : [null, null];
 
+const history = await gatherGenerationHistory(options.worker, options.window, process.env);
+
 console.log(
   [
     ...formatReport(input, findings, modelCalls),
     ...(gitExecs === null ? [] : gitExecLine(gitExecs)),
+    ...generationLine(history),
   ].join("\n"),
 );
 

@@ -13,9 +13,10 @@ afterEach(async () => {
 const READY = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;
 
 function served(generations: Generations, digit: string) {
-  const { label } = generations.submit(testHarnessCommit(digit.repeat(40))).generation;
-  generations.recordPreparation(label, READY);
-  generations.activate({ kind: "activate", label, observedEpoch: generations.active().epoch });
+  const { label } = generations.submit(testHarnessCommit(digit.repeat(40)), "owner").generation;
+  generations.recordPreparation(label, READY, "owner");
+  const observedEpoch = generations.active().epoch;
+  generations.activate({ kind: "activate", label, observedEpoch }, "owner");
 
   return label;
 }
@@ -69,13 +70,10 @@ test("a failed re-check of the serving generation keeps it serving and a rollbac
     const generations = new Generations(storage, FACET_COMPATIBILITY);
     const first = served(generations, "a");
     served(generations, "b");
-    generations.recordPreparation(first, { status: "failed" });
+    generations.recordPreparation(first, { status: "failed" }, "owner");
+    const observedEpoch = generations.active().epoch;
 
-    return generations.activate({
-      kind: "rollback",
-      label: first,
-      observedEpoch: generations.active().epoch,
-    });
+    return generations.activate({ kind: "rollback", label: first, observedEpoch }, "owner");
   });
 
   expect(outcome).toMatchObject({ ok: true, outcome: { generation: { status: "ready" } } });
