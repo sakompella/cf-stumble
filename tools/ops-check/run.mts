@@ -8,9 +8,9 @@ import {
   runChecks,
   type Activity,
   type CheckInput,
-  type ModelCalls,
   type TimeWindow,
 } from "./check.mts";
+import { fetchGitExecs, gitExecLine } from "./exec-commands.mts";
 import { fetchUsage, readToken, resolveAccount, ApiFailure } from "./fetch.mts";
 import {
   fetchInvocations,
@@ -75,12 +75,15 @@ async function readActivity(options: Options): Promise<Activity> {
   return { invocations, usage, sessionFailures, runStarts, runSettlements };
 }
 
-async function readModelCalls(options: Options): Promise<ModelCalls | null> {
+async function readOptional<T>(
+  options: Options,
+  fetch: (token: string, account: string, worker: string, window: TimeWindow) => Promise<T>,
+): Promise<T | null> {
   try {
     const token = readToken(process.env);
     const account = await resolveAccount(token, process.env);
 
-    return await fetchModelCalls(token, account, options.worker, options.window);
+    return await fetch(token, account, options.worker, options.window);
   } catch {
     return null;
   }
@@ -124,8 +127,20 @@ const findings = [
   ...versionFindings(await gatherVersions(options.worker, nowMs, process.env)),
 ];
 
-const modelCalls = input.activity.status === "ok" ? await readModelCalls(options) : null;
+const activityOk = input.activity.status === "ok";
 
-console.log(formatReport(input, findings, modelCalls).join("\n"));
+const [modelCalls, gitExecs] = activityOk
+  ? await Promise.all([
+      readOptional(options, fetchModelCalls),
+      readOptional(options, fetchGitExecs),
+    ])
+  : [null, null];
+
+console.log(
+  [
+    ...formatReport(input, findings, modelCalls),
+    ...(gitExecs === null ? [] : gitExecLine(gitExecs)),
+  ].join("\n"),
+);
 
 process.exitCode = findings.length === 0 ? 0 : 1;

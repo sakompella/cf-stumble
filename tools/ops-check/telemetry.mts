@@ -133,7 +133,7 @@ export function parseSessionFailures(response: JsonValue): readonly SessionFailu
   });
 }
 
-export function parseModelCalls(response: JsonValue): ModelCalls {
+export function pageRows(response: JsonValue) {
   const rows = decodeOption(TelemetryEnvelope)(response);
 
   if (Option.isNone(rows)) {
@@ -142,7 +142,13 @@ export function parseModelCalls(response: JsonValue): ModelCalls {
 
   const events = rows.value.result.events.events;
 
-  const calls = events.flatMap((row) => {
+  return { rows: events, sample: events.length >= TELEMETRY_ROW_LIMIT };
+}
+
+export function parseModelCalls(response: JsonValue): ModelCalls {
+  const { rows, sample } = pageRows(response);
+
+  const calls = rows.flatMap((row) => {
     const parsed = decodeOption(ModelCallRow)(row);
 
     return Option.isSome(parsed) && parsed.value.source.event === MODEL_CALL_EVENT
@@ -155,7 +161,7 @@ export function parseModelCalls(response: JsonValue): ModelCalls {
       : [];
   });
 
-  return { calls, sample: events.length >= TELEMETRY_ROW_LIMIT };
+  return { calls, sample };
 }
 
 function eventQuery(worker: string, window: TimeWindow, event: string): JsonRecord {
@@ -172,7 +178,7 @@ function eventQuery(worker: string, window: TimeWindow, event: string): JsonReco
   };
 }
 
-function queryEvents(
+export function queryEvents(
   token: string,
   account: string,
   worker: string,

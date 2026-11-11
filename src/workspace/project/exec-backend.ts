@@ -15,6 +15,7 @@ export interface ExecBackendHandle {
   kill(): Promise<void>;
   readonly backend: ExecBackendChoice;
   readonly fellBackFrom?: "isolate" | undefined;
+  readonly isolateRefused?: boolean | undefined;
 }
 
 export interface ExecBackendInput {
