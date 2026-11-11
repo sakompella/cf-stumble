@@ -45,5 +45,5 @@ Each item is a merge on `main` that production now runs. The facet changes reach
 4. **ChatGPT is unproved end to end.** No real ChatGPT answer has streamed yet. Reconnect from the owner page, run one turn, and check the Worker log for the call.
 5. **Token usage can be undercounted.** When a provider reports no usage, or a negative or fractional count, the model route estimates usage from bytes.
 6. **The Computer `ExecutionEnv` conformance suite has not run against a real container.** It runs over a local shell and filesystem; production runs use the real one.
-7. **Scheduled e2e cannot run.** `.github/workflows/e2e.yml` reads the repository secret `E2E_GH_TOKEN`, which is not set (`gh secret list` on 2026-11-11 shows only `CLOUDFLARE_API_TOKEN`), so the Monday run will fail.
+7. **The e2e workflow cannot run until `E2E_GH_TOKEN` exists.** `.github/workflows/e2e.yml` runs by hand only (the Monday schedule was removed on 2026-11-11). It reads the repository secret `E2E_GH_TOKEN`, a user token, which is not set (`gh secret list` on 2026-11-11 shows only `CLOUDFLARE_API_TOKEN`).
 8. **The scheduled Ops check has no proof of access.** Its one probe run (43004899414, 2026-11-11) failed with HTTP 403 from the Workers Observability telemetry query: the CI `CLOUDFLARE_API_TOKEN` lacks the read permission it needs.

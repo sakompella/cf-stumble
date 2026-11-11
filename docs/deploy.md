@@ -396,9 +396,11 @@ with `model_error`, and that workflow fails.
 Prefer a fresh stage. On an existing instance, a turn that failed in an earlier run stays in the
 harness conversation, and the agent can carry out its steps in the next turn, which then delays the
 page turn. If a run was killed before cleanup finished, `pnpm e2e --run-id <id> --cleanup` finishes
-it; the run id is in the first output line. `.github/workflows/e2e.yml` runs it by hand (workflow_dispatch) and every Monday. It reads the
-`CLOUDFLARE_API_TOKEN` secret, the `CLOUDFLARE_ACCOUNT_ID` variable and an `E2E_GH_TOKEN` secret,
-and runs `--cleanup` again when the job is cancelled.
+it; the run id is in the first output line. `.github/workflows/e2e.yml` runs it by hand only (workflow_dispatch); it has no schedule. It reads
+the `CLOUDFLARE_API_TOKEN` secret, the `CLOUDFLARE_ACCOUNT_ID` variable and an `E2E_GH_TOKEN`
+secret, and runs `--cleanup` again when the job is cancelled. `E2E_GH_TOKEN` must be a user token
+with contents write on the harness repository. The job's `GITHUB_TOKEN` does not work: the stage's
+connection check calls `GET /user`, which an installation token cannot call.
 
 ### Page fuzz
 
