@@ -100,6 +100,18 @@ export class WorkspacePlatform {
     return (this.#platformContainer?.running ?? false) || this.#providerContainer.running();
   }
 
+  async pullContainer(): Promise<void> {
+    if (!this.lifecycle.isConnected()) return;
+
+    for await (const block of this.workspace.pull(this.#containerBackend.id)) {
+      if (block.skipped > 0) throw new Error(`container pull skipped ${block.skipped} entries`);
+
+      if (block.complete) return;
+    }
+
+    throw new Error("container pull ended incomplete");
+  }
+
   stopContainer(reason: "idle" | "reset" | "backend"): Effect.Effect<void, ContainerStopFailed> {
     const container = this.#platformContainer;
 

@@ -5,7 +5,7 @@ import { ContainerLifecycle } from "../../src/workspace/container-lifecycle.js";
 
 const STEPS = ["run-1", "run-2", "run-3", undefined, "stop"] as const;
 
-test("the generation counts each connect to a runtime other than the one connected before it", () => {
+test("the generation counts each connect to a runtime other than the one connected before it, and the lifecycle is connected from a connect until a stop", () => {
   hegel.test(
     (tc) => {
       const lifecycle = new ContainerLifecycle();
@@ -24,6 +24,7 @@ test("the generation counts each connect to a runtime other than the one connect
         }
 
         expect(lifecycle.generation).toBe(generation);
+        expect(lifecycle.isConnected()).toBe(previous !== undefined);
       }
     },
     { testCases: 200 },

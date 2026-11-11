@@ -28,6 +28,11 @@ function gated(phase: "close" | "destroy") {
     idleLimitMs: LIMIT,
     setAlarm: () => Promise.resolve(),
     containerRunning: () => true,
+    pullContainer: () => {
+      calls.push("pull");
+
+      return Promise.resolve();
+    },
     closeWorkspace: async () => {
       calls.push("close");
 
@@ -88,7 +93,7 @@ test.each(["close", "destroy"] as const)(
     expect(stopFinished).toBe(true);
 
     expect(started).toEqual(["exec"]);
-    expect(calls).toEqual(phase === "close" ? ["close"] : ["close", "destroy"]);
+    expect(calls).toEqual(phase === "close" ? ["pull", "close"] : ["pull", "close", "destroy"]);
   },
 );
 
@@ -107,7 +112,7 @@ test("a backend change during an idle stop that work keeps alive still stops the
   await backendChange;
   end();
 
-  expect(calls).toEqual(["close", "destroy"]);
+  expect(calls).toEqual(["pull", "close", "destroy"]);
 });
 
 test("a failed stop for a backend change rejects, and work waiting on the stop still runs", async () => {
@@ -118,6 +123,7 @@ test("a failed stop for a backend change rejects, and work waiting on the stop s
     idleLimitMs: LIMIT,
     setAlarm: () => Promise.resolve(),
     containerRunning: () => true,
+    pullContainer: () => Promise.resolve(),
     closeWorkspace: () => Promise.resolve(),
     stopContainer: () => Effect.fail(new Error("provider stop failed")),
   });

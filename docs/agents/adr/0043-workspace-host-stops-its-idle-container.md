@@ -4,7 +4,8 @@
 
 The Workspace Host stops the workspace container itself when the workspace has had no work for ten
 minutes (`WORKSPACE_IDLE_STOP_MS`). An alarm checks, `decideIdleStop` decides, and the
-Host closes the Computer `Workspace` and then destroys the container with the reason `idle`.
+Host pulls the container's changes, closes the Computer `Workspace`, and then destroys the
+container with the reason `idle`.
 
 The platform would not stop it. Computer's container backend accepts a WebSocket that computerd
 opens back to the Workspace Host (`GET http://computer.internal/api`), and nothing in cf-stumble
@@ -29,8 +30,14 @@ early, and the alarm sets no timer, so it cannot keep the object in memory. The 
 **Cost of a stop.** The next request after a stop builds a fresh container, which takes a cold
 start. An idle stop loses what a platform restart loses: files the sync does not copy into the
 Durable Object's SQLite, such as `node_modules`, `/tmp`, and anything outside `/workspace` or under
-an ignored segment. Everything else is kept, because SQLite is the authority and every exec pulls
-the container's changes before it settles.
+an ignored segment. Everything else is kept, because SQLite is the authority, every exec pulls
+the container's changes before it settles, and the stop pulls once more before the close, so a
+file that a background process (a dev server, `cmd &`) wrote after the last exec is kept too. A
+write made after that pull is lost. The stop pulls only from a container this Host instance has
+connected to: after a Host restart (every deploy restarts it), connecting again can make Computer
+destroy and relaunch the container, so there is nothing to pull, and a background process's writes
+since the last exec are lost at the idle stop if no exec came first. The pull is bounded at 60
+seconds, and a pull that fails or times out is logged and does not stop the destroy.
 
 **Alternatives.**
 
