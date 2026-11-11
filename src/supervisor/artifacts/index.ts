@@ -19,9 +19,12 @@ export type MainFacetMountProblem = { readonly code: "no-active-generation" } | 
 
 export type MountedFacet = Fetcher<MainFacetTarget>;
 
+const DECODED_MAPS_KEPT = 2;
+
 export class HarnessArtifacts {
   private readonly store: ModuleMapStore;
   private readonly workspace: () => WorkspaceHostRpc<"build">;
+  private readonly decoded = new Map<HarnessCommit, MainHarnessArtifact>();
 
   constructor(bucket: R2Bucket, workspace: () => WorkspaceHostRpc<"build">) {
     this.store = new ModuleMapStore(bucket);
@@ -30,19 +33,19 @@ export class HarnessArtifacts {
 
   prepare(harnessCommit: HarnessCommit): Effect.Effect<MainHarnessArtifact, ModuleMapProblem> {
     return Effect.gen({ self: this }, function* () {
-      const stored = yield* Effect.promise(() => this.store.read(harnessCommit)).pipe(
-        Effect.flatMap(Effect.fromResult),
-      );
+      const stored = yield* this.read(harnessCommit);
 
-      if (stored.kind === "stored") {
-        return stored.artifact;
+      if (stored !== undefined) {
+        return stored;
       }
 
       const built = yield* buildModuleMap(this.workspace, harnessCommit);
 
-      const written = yield* Effect.promise(() => this.store.write(built));
+      const written = yield* Effect.promise(() => this.store.write(built)).pipe(
+        Effect.flatMap(Effect.fromResult),
+      );
 
-      return yield* Effect.fromResult(written);
+      return this.remembered(written);
     });
   }
 
@@ -75,15 +78,40 @@ export class HarnessArtifacts {
     }
 
     const { harnessCommit } = active.generation;
+    const cached = this.decoded.get(harnessCommit);
 
-    return Effect.promise(() => this.store.read(harnessCommit)).pipe(
-      Effect.flatMap(Effect.fromResult),
-      Effect.flatMap((stored) =>
-        stored.kind === "stored"
-          ? Effect.succeed(stored.artifact)
-          : Effect.fail({ code: "stored-module-map-absent", harnessCommit } as const),
+    if (cached !== undefined) return Effect.succeed(this.remembered(cached));
+
+    return this.read(harnessCommit).pipe(
+      Effect.flatMap((artifact) =>
+        artifact === undefined
+          ? Effect.fail({ code: "stored-module-map-absent", harnessCommit } as const)
+          : Effect.succeed(artifact),
       ),
     );
+  }
+
+  private read(
+    harnessCommit: HarnessCommit,
+  ): Effect.Effect<MainHarnessArtifact | undefined, StoredModuleMapProblem> {
+    return Effect.promise(() => this.store.read(harnessCommit)).pipe(
+      Effect.flatMap(Effect.fromResult),
+      Effect.map((stored) =>
+        stored.kind === "stored" ? this.remembered(stored.artifact) : undefined,
+      ),
+    );
+  }
+
+  private remembered(artifact: MainHarnessArtifact): MainHarnessArtifact {
+    this.decoded.delete(artifact.harnessCommit);
+    this.decoded.set(artifact.harnessCommit, artifact);
+
+    for (const leastRecent of this.decoded.keys()) {
+      if (this.decoded.size <= DECODED_MAPS_KEPT) break;
+      this.decoded.delete(leastRecent);
+    }
+
+    return artifact;
   }
 }
 
