@@ -112,6 +112,36 @@ test.describe("a follow-up", () => {
   });
 });
 
+test.describe("a follow-up sent before a cancel", () => {
+  test.use({ scenario: "ready-paused" });
+
+  test("stays in the conversation after the run is cancelled and the page reloads", async ({
+    owner,
+    server,
+  }) => {
+    await sendMessage(owner, PROMPT);
+    await server.waitForBarrier();
+    await sendMessage(owner, FOLLOW_UP);
+    await expect(turnState(owner)).toHaveText("running · 1 queued");
+    await owner.locator(`#${ID.cancelTurnButton}`).click();
+
+    await expect(turnState(owner)).toHaveText("stopped: aborted");
+    server.release();
+    await owner.reload();
+
+    await expect(transcriptTexts(owner, "user")).toHaveText([
+      /^Read the README/u,
+      PROMPT,
+      FOLLOW_UP,
+    ]);
+    await expect(owner.locator(`#${ID.messageList} > li.user .who`)).toHaveText([
+      "you",
+      "you",
+      "you",
+    ]);
+  });
+});
+
 test("a fresh thread needs a second click, then shows an empty conversation", async ({
   owner,
   server,
