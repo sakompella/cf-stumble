@@ -1,5 +1,6 @@
 import type { CommitView, GitCliInput, GitCliResult, GitClient } from "@cloudflare/computer/git";
 import { createBranch, creationRequest } from "./git-branch-create.js";
+import { deleteBranches, deletionRequest } from "./git-branch-delete.js";
 import type { GitScope, RunCli } from "./git-cli.js";
 import { reportingFailure } from "./git-result.js";
 import { branchTracking, trackingCounts, type Tracking } from "./git-tracking.js";
@@ -82,6 +83,11 @@ export function verboseBranches(
   scope: GitScope,
 ): Promise<GitCliResult> {
   const args = input.argv.slice(1);
+  const deletion = deletionRequest(args);
+
+  if (deletion !== undefined)
+    return reportingFailure(() => deleteBranches(client, scope.dir, deletion));
+
   const creation = creationRequest(args);
 
   if (creation !== undefined)
