@@ -131,6 +131,9 @@ function workFiles(provider: SQLiteWorkspaceProvider): WorkFiles {
     remove: (path, stop) => removeFile(provider, path, stop),
     rename: (from, to, stop) => moveFile(provider, from, to, stop),
     list: (root) => Promise.resolve(listFiles(provider, root)),
+    mkdir: async (path) => {
+      await provider.mkdir(path, { recursive: true });
+    },
   };
 }
 

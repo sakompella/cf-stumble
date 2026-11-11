@@ -33,17 +33,20 @@ const FORMS: readonly (readonly string[])[] = [
   ["tag", "t"],
 ];
 
-test.each(FORMS)("git %s %s %s %s on an unborn branch matches real git", async (...args) => {
-  const both = pair({});
+test.each(FORMS.map((args) => [args.join(" "), args] as const))(
+  "git %s on an unborn branch matches real git",
+  async (_command, args) => {
+    const both = pair({});
 
-  for (const dir of [both.real, both.isolate]) {
-    write(dir, "a.txt", "a\n");
-    write(dir, "u.txt", "u\n");
-    realGit(dir, ["add", "a.txt"]);
-  }
+    for (const dir of [both.real, both.isolate]) {
+      write(dir, "a.txt", "a\n");
+      write(dir, "u.txt", "u\n");
+      realGit(dir, ["add", "a.txt"]);
+    }
 
-  const ran = await bothRun(both, [...args]);
+    const ran = await bothRun(both, args);
 
-  expect(ran.isolate).toEqual(ran.real);
-  expect(state(both.isolate)).toEqual(state(both.real));
-});
+    expect(ran.isolate).toEqual(ran.real);
+    expect(state(both.isolate)).toEqual(state(both.real));
+  },
+);
