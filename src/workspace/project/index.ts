@@ -12,8 +12,6 @@ export { IsolateEgressGateway } from "./isolate-egress.js";
 
 export { isolateShellBackend } from "./isolate-shell.js";
 
-export { IsolateWorkspaceGate } from "./isolate-gate.js";
-
 export { CONTAINER_BACKEND_ID, type ExecBackend } from "./exec-backend.js";
 
 export { ProjectRpcTarget } from "./target.js";

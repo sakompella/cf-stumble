@@ -1,4 +1,4 @@
-import { logEvent } from "../../diagnostics.js";
+import { logEvent, redactedExcerpt } from "../../diagnostics.js";
 import {
   isContainerRestartedError,
   type ExecBackend,
@@ -32,6 +32,12 @@ function failure(restarted: boolean): Ending {
   };
 }
 
+function causeText(cause: unknown): string {
+  return redactedExcerpt(
+    cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause),
+  );
+}
+
 function stopHandle(handle: ExecBackendHandle): void {
   void handle.reader.cancel().catch(() => {});
   void handle.kill().catch(() => {});
@@ -58,6 +64,7 @@ class ExecRun implements ExecOperation {
   #controller!: ReadableStreamDefaultController<Uint8Array>;
   #handle: ExecBackendHandle | undefined;
   #settled = false;
+  #cause: unknown;
 
   constructor(
     execBackend: ExecBackend,
@@ -88,7 +95,7 @@ class ExecRun implements ExecOperation {
         else this.#handle = handle;
       },
       (cause) => {
-        this.#settle(failure(isContainerRestartedError(cause)));
+        this.#fail(cause);
       },
     );
   }
@@ -108,8 +115,13 @@ class ExecRun implements ExecOperation {
 
       if (!this.#settled) this.#deliver(read);
     } catch (cause) {
-      this.#settle(failure(isContainerRestartedError(cause)));
+      this.#fail(cause);
     }
+  }
+
+  #fail(cause: unknown): void {
+    if (!this.#settled) this.#cause = cause;
+    this.#settle(failure(isContainerRestartedError(cause)));
   }
 
   #deliver(read: BackendRead): void {
@@ -163,6 +175,7 @@ class ExecRun implements ExecOperation {
         exitCode: terminal.outcome === "exited" ? terminal.exitCode : null,
         fellBackFrom: this.#handle?.fellBackFrom ?? null,
         errorCode: terminal.outcome === "failed" ? terminal.error.code : null,
+        cause: this.#cause === undefined ? null : causeText(this.#cause),
       },
     );
   }

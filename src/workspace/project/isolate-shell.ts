@@ -1,10 +1,9 @@
-import type { BackendHandle, WorkspaceBackend } from "@cloudflare/computer";
+import type { BackendHandle, Workspace, WorkspaceBackend } from "@cloudflare/computer";
 import type { ShellWorker } from "@cloudflare/computer/backends/worker-shell";
 import * as Schema from "effect/Schema";
 import { SHELL_MODULES_FILE } from "../../../infra/worker-settings.js";
 import { ISOLATE_BACKEND_ID } from "./exec-backend.js";
 import type { IsolateEgressGatewayProps } from "./isolate-egress.js";
-import type { IsolateGateProps } from "./isolate-gate.js";
 
 type ShellModuleSet = Readonly<{
   mainModule: string;
@@ -17,13 +16,21 @@ type ShellEvents = Awaited<ReturnType<ShellRpc["exec"]>>["events"];
 
 type ShellEvent = ShellEvents extends ReadableStream<infer Event> ? Event : never;
 
+type WorkspaceHandle = ReturnType<Workspace["stub"]>;
+
+type IsolateShellWorker = ShellWorker & {
+  exec(
+    input: Parameters<ShellWorker["exec"]>[0] & { workspace: WorkspaceHandle },
+  ): ReturnType<ShellWorker["exec"]>;
+};
+
 export interface ShellHost {
   readonly id: DurableObjectId;
   readonly isolateToken: string;
   readonly exports: {
-    IsolateWorkspaceGate(options: { props: IsolateGateProps }): Fetcher;
     IsolateEgressGateway(options: { props: IsolateEgressGatewayProps }): Fetcher;
   };
+  workspace(): WorkspaceHandle;
 }
 
 const COMPATIBILITY_DATE = "2026-06-17";
@@ -80,10 +87,13 @@ const NO_SYNC: BackendHandle["rpc"]["sync"] = {
   watermarks: refuseSync,
 };
 
-function shellRpc(runtime: () => Fetcher<ShellWorker>): ShellRpc {
+function shellRpc(
+  runtime: () => Fetcher<IsolateShellWorker>,
+  workspace: () => WorkspaceHandle,
+): ShellRpc {
   return {
     async exec({ source, ...rest }) {
-      const started = await runtime().exec({ command: source, ...rest });
+      const started = await runtime().exec({ command: source, ...rest, workspace: workspace() });
 
       return { id: started.id, events: framesToEvents(started.events) };
     },
@@ -110,9 +120,6 @@ export function isolateShellBackend(
           mainModule: set.mainModule,
           modules: set.modules,
           env: {
-            HOST: host.exports.IsolateWorkspaceGate({
-              props: { id: host.id.toString(), token: host.isolateToken },
-            }),
             EGRESS: host.exports.IsolateEgressGateway({
               props: { id: host.id.toString(), token: host.isolateToken },
             }),
@@ -120,7 +127,7 @@ export function isolateShellBackend(
           globalOutbound: null,
         };
       })
-      .getEntrypoint<ShellWorker>("ShellWorker");
+      .getEntrypoint<IsolateShellWorker>("ShellWorker");
 
   return {
     id: ISOLATE_BACKEND_ID,
@@ -129,7 +136,7 @@ export function isolateShellBackend(
       "A just-bash shell in a Dynamic Worker with no container, Git over the workspace, and curl through an egress gateway that reaches any host with any method.",
     connect: () =>
       Promise.resolve({
-        rpc: { sync: NO_SYNC, shell: shellRpc(runtime) },
+        rpc: { sync: NO_SYNC, shell: shellRpc(runtime, () => host.workspace()) },
         sync: "none",
         close: () => Promise.resolve(),
       }),

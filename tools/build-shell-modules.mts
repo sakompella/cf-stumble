@@ -46,8 +46,15 @@ function withErrnoCodes(workspace) {
 }
 
 export class ShellWorker extends BaseShellWorker {
+  #workspace;
+
   constructor(ctx, env) {
-    super(ctx, { ...env, HOST: { getWorkspace: async () => withErrnoCodes(await env.HOST.getWorkspace()) } });
+    super(ctx, { ...env, HOST: { getWorkspace: async () => withErrnoCodes(this.#workspace) } });
+  }
+
+  exec({ workspace, ...input }) {
+    this.#workspace = workspace;
+    return super.exec(input);
   }
 
   shellOptions = {

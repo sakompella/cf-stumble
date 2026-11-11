@@ -1,6 +1,7 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import { WorkspaceHost } from "../../src/workspace/host.js";
 import { seedWorkspaceRoot } from "./host-fixtures.js";
 
 async function linesOf(stream: ReadableStream<Uint8Array>): Promise<string[]> {
@@ -72,6 +73,31 @@ test("appending to a file that does not exist creates it", async () => {
     JSON.stringify({ kind: "stdout", seq: 0, data: "hi\n" }),
     JSON.stringify({ kind: "terminal", seq: 1, outcome: "exited", exitCode: 0 }),
   ]);
+});
+
+test("isolate commands open no new request back into their host", async () => {
+  const opened = await runInDurableObject(
+    env.WORKSPACE_HOST.getByName("isolate-no-loopback"),
+    async (host, state) => {
+      await seedWorkspaceRoot(state);
+      const opens = vi.spyOn(WorkspaceHost.prototype, "openIsolateWorkspace");
+      const project = await host.project({ remainingMs: 60_000 });
+
+      for (const command of ["true", "echo hi >> a.txt", "git status"]) {
+        const started = await project.startExec({ command, timeoutMs: 10_000, backend: "isolate" });
+
+        if (!started.ok) throw new Error(started.error.code);
+        await new Response(started.value.events).text();
+      }
+
+      const calls = opens.mock.calls.length;
+      opens.mockRestore();
+
+      return calls;
+    },
+  );
+
+  expect(opened).toBe(0);
 });
 
 test("a holder of the WORKSPACE_HOST binding cannot get the workspace without the isolate's token", async () => {
