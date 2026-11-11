@@ -26,6 +26,7 @@ export async function writeModuleMap(target: ModuleMapBuild): Promise<void> {
     target: "es2023",
     conditions: ["workerd", "worker", "browser"],
     external: ["cloudflare:workers"],
+    loader: { ".md": "text" },
     legalComments: "none",
     sourcemap: false,
   });

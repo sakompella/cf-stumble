@@ -68,6 +68,16 @@ async function effectPrebundle(): Promise<Plugin> {
   };
 }
 
+const markdownText: Plugin = {
+  name: "markdown-text",
+  enforce: "pre",
+  load(id) {
+    return id.endsWith(".md")
+      ? `export default ${JSON.stringify(readFileSync(id, "utf8"))};`
+      : null;
+  },
+};
+
 const PLATFORM_STREAM_REJECTIONS = [
   {
     file: "test/supervisor/conversations/generation-1.test.ts",
@@ -94,7 +104,7 @@ export default defineConfig({
     onUnhandledError: (error) => !isPlatformStreamNoise(error),
     projects: [
       {
-        plugins: [await effectPrebundle(), cloudflareTest(testWorker)],
+        plugins: [markdownText, await effectPrebundle(), cloudflareTest(testWorker)],
         test: {
           name: "workers",
           testTimeout: 20_000,
