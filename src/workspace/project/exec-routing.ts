@@ -1,14 +1,11 @@
-import {
-  differsFromTheContainer,
-  hasUnquotedPatternCharacter,
-  mergesStderrIntoStdout,
-} from "./isolate-differences.js";
 import { ISOLATE_PROGRAMS } from "./isolate-programs.js";
 import type { ExecBackendChoice } from "./protocol.js";
 
 const SEGMENT_BREAKS = new Set(["|", ";", "&", "\n"]);
 
 const REFUSED_OUTSIDE_QUOTES = new Set(["(", ")", "{", "}", "`", "\\"]);
+
+const AWK_LOOP = /\b(?:for|while|do)\b/u;
 
 const EXECUTING_FIND_FLAGS = new Set(["-exec", "-execdir", "-ok", "-okdir", "-delete"]);
 
@@ -89,7 +86,7 @@ function segmentRunsInIsolate(words: readonly string[]): boolean {
 
   if (rest.some((word) => EXECUTING_FIND_FLAGS.has(word))) return false;
 
-  return !differsFromTheContainer(program, rest) && !mergesStderrIntoStdout(rest);
+  return program !== "awk" || !rest.some((word) => AWK_LOOP.test(word));
 }
 
 const OUTSIDE_WORKSPACE_PREFIXES = [
@@ -136,12 +133,7 @@ function touchesPathOutsideWorkspace(command: string): boolean {
 function isolateCanRun(command: string): boolean {
   const segments = firstWords(command);
 
-  return (
-    segments !== undefined &&
-    segments.length > 0 &&
-    segments.every(segmentRunsInIsolate) &&
-    !hasUnquotedPatternCharacter(command)
-  );
+  return segments !== undefined && segments.length > 0 && segments.every(segmentRunsInIsolate);
 }
 
 export function routedBackend(command: string, requested?: ExecBackendChoice): ExecBackendChoice {
