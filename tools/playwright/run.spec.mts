@@ -112,10 +112,10 @@ test.describe("a follow-up", () => {
   });
 });
 
-test.describe("a follow-up sent before a cancel", () => {
+test.describe("a follow-up queued before a cancel", () => {
   test.use({ scenario: "ready-paused" });
 
-  test("stays in the conversation after the run is cancelled and the page reloads", async ({
+  test("is withdrawn when the run is cancelled, with no Queued row left", async ({
     owner,
     server,
   }) => {
@@ -126,19 +126,12 @@ test.describe("a follow-up sent before a cancel", () => {
     await owner.locator(`#${ID.cancelTurnButton}`).click();
 
     await expect(turnState(owner)).toHaveText("stopped: aborted");
+    await expect(transcriptTexts(owner, "user")).toHaveText([/^Read the README/u, PROMPT]);
     server.release();
     await owner.reload();
 
-    await expect(transcriptTexts(owner, "user")).toHaveText([
-      /^Read the README/u,
-      PROMPT,
-      FOLLOW_UP,
-    ]);
-    await expect(owner.locator(`#${ID.messageList} > li.user .who`)).toHaveText([
-      "you",
-      "you",
-      "you",
-    ]);
+    await expect(transcriptTexts(owner, "user")).toHaveText([/^Read the README/u, PROMPT]);
+    await expect(owner.locator(`#${ID.messageList}`)).not.toContainText("Queued");
   });
 });
 

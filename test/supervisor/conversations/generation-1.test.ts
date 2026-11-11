@@ -83,7 +83,7 @@ test("a message sent while a run is busy is answered after the first", async () 
   expect(model.inputs[1], "the second request carries the first exchange").toHaveLength(3);
 });
 
-test("a message queued behind a cancelled run stays in the conversation and joins the next turn", async () => {
+test("a message queued behind a cancelled run is withdrawn", async () => {
   const first = held();
   const model = scriptModel(first.respond, says("third answer"));
   const control = await servingGeneration1("generation-1-cancel-keeps", new ProjectWorkspace());
@@ -98,11 +98,10 @@ test("a message queued behind a cancelled run stays in the conversation and join
 
   expect(await answeredLines(control, project, 1)).toEqual([
     { role: "user", text: "first" },
-    { role: "user", text: "second" },
     { role: "user", text: "third" },
     { role: "assistant", text: "third answer" },
   ]);
-  expect(model.inputs[1], "the next turn sees the kept message").toHaveLength(3);
+  expect(model.inputs[1], "the next turn does not see the withdrawn message").toHaveLength(2);
 });
 
 test("a fresh thread is a new conversation that does not see the old messages", async () => {
