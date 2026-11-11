@@ -250,6 +250,25 @@ test("a binding call that throws before it returns a Promise becomes one termina
   ]);
 });
 
+test("a binding capacity error (3040) carries Workers AI's documented status 429", async () => {
+  const capacity = Object.assign(
+    new Error("3040: Capacity temporarily exceeded, please try again."),
+    { name: "AiError" },
+  );
+
+  const full: ModelStreamInference = { run: () => Promise.reject(capacity) };
+
+  await expect(collectEvents(streamModelEvents(full, REQUEST))).resolves.toEqual([
+    {
+      type: "error",
+      error: {
+        code: "model-unavailable",
+        detail: "429 3040: Capacity temporarily exceeded, please try again.",
+      },
+    },
+  ]);
+});
+
 test("logs one model.call event with prompt, cached and completion tokens", async () => {
   const events = capturedEvents();
 
