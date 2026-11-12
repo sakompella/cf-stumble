@@ -58,7 +58,7 @@ index 1247dd4..8ccb280 100644
 -export { mountShim } from "./shim";
 +export { mountShim, parsePollMs } from "./shim";
 diff --git a/packages/computerd/src/shim/shim.test.ts b/packages/computerd/src/shim/shim.test.ts
-index d9a5b24..256a0e0 100644
+index d9a5b24..27b4cad 100644
 --- a/packages/computerd/src/shim/shim.test.ts
 +++ b/packages/computerd/src/shim/shim.test.ts
 @@ -4,7 +4,7 @@ import path from "node:path";
@@ -88,7 +88,7 @@ index d9a5b24..256a0e0 100644
    onTestFinished(async () => {
      await shim.unmount();
      await fs.rm(mountPoint, { recursive: true, force: true });
-@@ -240,3 +245,138 @@ test("shim drops VFS writes outside the mount point", async (_ctx) => {
+@@ -240,3 +245,156 @@ test("shim drops VFS writes outside the mount point", async (_ctx) => {
    expect(await fs.readFile(path.join(mountPoint, "repo", "a.txt"), "utf8")).toBe("alpha");
    await expect(fs.access(path.join(mountPoint, "outside.txt"))).rejects.toThrow(/ENOENT/);
  });
@@ -227,8 +227,26 @@ index d9a5b24..256a0e0 100644
 +    expect(() => parsePollMs(bad), bad).toThrow(/COMPUTERD_POLL_MS/);
 +  }
 +});
++
++test("shim.flush() settles VFS deletes onto disk before resolving", async (_ctx) => {
++  // A slow poll and a flush right after the deletes: the watcher has
++  // not ticked yet, so only flush() can remove the files from disk.
++  const { vfs, mountPoint, shim } = await setup({ pollIntervalMs: 60_000 });
++  vfs.writeFileSync(`${mountPoint}/ünï.txt`, Buffer.from("first"));
++  vfs.mkdirSync(`${mountPoint}/d/e`, { recursive: true });
++  vfs.writeFileSync(`${mountPoint}/d/e/f.txt`, Buffer.from("deep"));
++  await shim.flush();
++
++  vfs.unlinkSync(`${mountPoint}/ünï.txt`);
++  vfs.unlinkSync(`${mountPoint}/d/e/f.txt`);
++  vfs.rmdirSync(`${mountPoint}/d/e`);
++  await shim.flush();
++
++  expect(await fs.readdir(mountPoint)).toEqual(["d"]);
++  expect(await fs.readdir(path.join(mountPoint, "d"))).toEqual([]);
++});
 diff --git a/packages/computerd/src/shim/shim.ts b/packages/computerd/src/shim/shim.ts
-index 411728d..ba39ded 100644
+index 411728d..540846e 100644
 --- a/packages/computerd/src/shim/shim.ts
 +++ b/packages/computerd/src/shim/shim.ts
 @@ -8,7 +8,16 @@
@@ -379,15 +397,32 @@ index 411728d..ba39ded 100644
          await fsMkdir(hostPath, { recursive: true });
          shadow.set(vfsPath, dirShadow(stat.mtimeMs));
          queue.push(vfsPath);
-@@ -264,6 +310,7 @@ async function flushVfsToDisk(
+@@ -255,16 +301,20 @@ async function materialiseVfsToDisk(
+ }
+ 
+ /**
+- * Walk the VFS tree and call `syncVfsPathToDisk` for every entry.
+- * Unlike `materialiseVfsToDisk` (which always writes), this honors
+- * the shadow so files that already match disk are no-ops. Used by
+- * `ShimMount.flush()` to settle a freshly-applied push batch.
++ * Walk the VFS tree and call `syncVfsPathToDisk` for every entry,
++ * then for every shadow entry the VFS no longer has, which removes
++ * it from disk. Unlike `materialiseVfsToDisk` (which always writes),
++ * this honors the shadow so files that already match disk are
++ * no-ops. Used by `ShimMount.flush()` to settle a freshly-applied
++ * push batch.
+  */
+ async function flushVfsToDisk(
    vfs: NodeVirtualFileSystem,
    mountPoint: string,
    shadow: Shadow,
 +  skip: Skip,
  ): Promise<void> {
++  const seen = new Set<string>();
    const queue: string[] = [mountPoint];
    while (queue.length > 0) {
-@@ -276,9 +323,10 @@ async function flushVfsToDisk(
+     const current = queue.shift() as string;
+@@ -276,12 +326,21 @@ async function flushVfsToDisk(
      }
      for (const name of entries) {
        const vfsPath = `${current}/${name}`;
@@ -395,11 +430,22 @@ index 411728d..ba39ded 100644
        const stat = safeVfsStat(vfs, vfsPath);
        if (stat === undefined) continue;
 -      await syncVfsPathToDisk(vfs, mountPoint, vfsPath, shadow);
++      seen.add(vfsPath);
 +      await syncVfsPathToDisk(vfs, mountPoint, vfsPath, shadow, skip);
        if (stat.isDirectory()) queue.push(vfsPath);
      }
    }
-@@ -289,9 +337,16 @@ async function syncVfsPathToDisk(
++  // Deletions: a synced path the VFS no longer has. The watcher
++  // removes it from disk only on its next tick, after a push has
++  // already been acknowledged and its command may have run.
++  for (const vfsPath of [...shadow.keys()]) {
++    if (seen.has(vfsPath) || !shadow.has(vfsPath)) continue;
++    await syncVfsPathToDisk(vfs, mountPoint, vfsPath, shadow, skip);
++  }
+ }
+ 
+ async function syncVfsPathToDisk(
+@@ -289,9 +348,16 @@ async function syncVfsPathToDisk(
    mountPoint: string,
    vfsPath: string,
    shadow: Shadow,
@@ -416,7 +462,7 @@ index 411728d..ba39ded 100644
  
    if (stat === undefined) {
      // VFS says it's gone. Remove from disk + shadow. Recursive rm
-@@ -302,6 +357,17 @@ async function syncVfsPathToDisk(
+@@ -302,6 +368,17 @@ async function syncVfsPathToDisk(
      return;
    }
  
@@ -434,7 +480,7 @@ index 411728d..ba39ded 100644
    if (stat.isDirectory()) {
      await fsMkdir(hostPath, { recursive: true });
      shadow.set(vfsPath, dirShadow(stat.mtimeMs));
-@@ -345,17 +411,46 @@ async function reconcileDiskToVfs(
+@@ -345,17 +422,46 @@ async function reconcileDiskToVfs(
    vfs: NodeVirtualFileSystem,
    mountPoint: string,
    shadow: Shadow,
@@ -483,7 +529,7 @@ index 411728d..ba39ded 100644
          try {
            vfs.unlinkSync(vfsPath);
          } catch {
-@@ -376,6 +471,15 @@ async function reconcileDiskToVfs(
+@@ -376,6 +482,15 @@ async function reconcileDiskToVfs(
      if (prev?.kind === "file" && prev.size === stat.size && prev.mtimeMs === stat.mtimeMs) {
        return;
      }
@@ -499,7 +545,7 @@ index 411728d..ba39ded 100644
      let bytes: Buffer;
      try {
        bytes = await fsReadFile(hostPath);
-@@ -434,6 +538,7 @@ async function reconcileDiskToVfs(
+@@ -434,6 +549,7 @@ async function reconcileDiskToVfs(
        if (entry.kind === "dir") {
          vfs.rmdirSync(vfsPath);
        } else {
@@ -507,7 +553,7 @@ index 411728d..ba39ded 100644
          vfs.unlinkSync(vfsPath);
        }
      } catch {
-@@ -445,13 +550,23 @@ async function reconcileDiskToVfs(
+@@ -445,13 +561,23 @@ async function reconcileDiskToVfs(
    }
  }
  
@@ -532,7 +578,7 @@ index 411728d..ba39ded 100644
    ) => Promise<void>,
  ): Promise<void> {
    let entries: string[];
-@@ -462,16 +577,17 @@ async function walkDisk(
+@@ -462,16 +588,17 @@ async function walkDisk(
    }
    for (const name of entries) {
      const hostPath = join(current, name);
@@ -554,7 +600,7 @@ index 411728d..ba39ded 100644
      }
    }
  }
-@@ -506,6 +622,67 @@ function dirShadow(mtimeMs: number): ShadowEntry {
+@@ -506,6 +633,67 @@ function dirShadow(mtimeMs: number): ShadowEntry {
    return { kind: "dir", size: 0, mtimeMs };
  }
  
@@ -622,7 +668,7 @@ index 411728d..ba39ded 100644
  function depth(path: string): number {
    let count = 0;
    for (let i = 0; i < path.length; i++) if (path.charCodeAt(i) === 47) count++;
-@@ -526,20 +703,25 @@ function safeVfsStat(
+@@ -526,20 +714,25 @@ function safeVfsStat(
    | {
        isFile(): boolean;
        isDirectory(): boolean;
@@ -649,7 +695,7 @@ index 411728d..ba39ded 100644
        size: s.size,
        mtimeMs: s.mtime.getTime(),
      };
-@@ -548,6 +730,14 @@ function safeVfsStat(
+@@ -548,6 +741,14 @@ function safeVfsStat(
    }
  }
  

@@ -27,10 +27,19 @@ Files under an ignored segment therefore exist only in the container: they are n
 container restart loses them. A segment matches at any depth, so a nested `.venv` is ignored the
 same way as a nested `node_modules`.
 
+The patch also makes the shim's `flush` remove from disk every synced path the store no longer
+has. computerd runs `flush` after it applies a push, before a container command starts, but
+upstream `flush` only writes the store's entries to disk. A delete reached the disk only on the
+store watcher's next tick, up to 100 ms later, so a command could still read the deleted file, and a
+command that wrote to it brought the file back with its old content. The git fuzz found this on
+staging (seed 1361621634): a file that an isolate `rm -rf` deleted was still in the container.
+A probe on staging stage `fzgit-sldb1` (2026-11-12) saw it in 1 of 42 tries before the change and
+in none of 50 after it. Upstream main (812bce58, 2026-11-11) has the same `flush`.
+
 The build follows upstream's release workflow. Since 0.8.0 the binary embeds a native FUSE addon,
 which the source stage compiles on Debian trixie and passes to the build through
 `COMPUTERD_FUSE_ADDON`. To upgrade, move `COMPUTER_COMMIT` in `infra/workspace-image/computerd.Dockerfile`
 and rebase the walk patch. Delete the walk patch and this record when an upstream release fixes
-the walk.
+the walk and `flush`.
 
 ADR-0044 changes how often the shim walks the disk: it no longer polls every 250 ms.
