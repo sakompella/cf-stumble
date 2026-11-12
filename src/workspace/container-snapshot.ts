@@ -5,7 +5,7 @@ import {
 } from "@cloudflare/computer/backends/container";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { logEvent } from "../diagnostics.js";
+import { logEvent, logRedactedCause } from "../diagnostics.js";
 import { WORKSPACE_ROOT } from "../workspace-layout.js";
 
 const SNAPSHOT_KEY = "workspace-container-snapshot";
@@ -15,6 +15,8 @@ const LAUNCHED_IMAGE_KEY = "workspace-container-image";
 const IMAGE_NAME = "app";
 
 const RESTORABLE_MS = 29 * 24 * 60 * 60 * 1_000;
+
+const SNAPSHOT_TIMEOUT_MS = 60_000;
 
 const RESTORE_ENTRYPOINT = [
   "/bin/sh",
@@ -83,9 +85,12 @@ export class SnapshotContainerAPI extends WorkspaceContainerAPI {
       .start({ ...spec, containerSnapshot: { id: snapshot.id }, entrypoint: RESTORE_ENTRYPOINT })
       .catch((cause: unknown) => {
         this.#kv.delete(SNAPSHOT_KEY);
+        logRedactedCause("workspace.container: snapshot restore failed", cause);
 
-        throw cause;
+        return null;
       });
+
+    if (runtime === null) return this.#launched(await super.start(spec), image, "image");
 
     if (runtime.outcome !== "adopted") this.#kv.put(SNAPSHOT_KEY, { ...snapshot, usedAtMs: nowMs });
 
@@ -127,10 +132,26 @@ async function countStorePaths(container: SnapshotContainer): Promise<number> {
   return count;
 }
 
-export async function snapshotBeforeStop(
-  container: SnapshotContainer,
-  kv: SnapshotStore,
-): Promise<void> {
+export function snapshotBeforeStop(container: SnapshotContainer, kv: SnapshotStore): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("container snapshot timed out"));
+    }, SNAPSHOT_TIMEOUT_MS);
+
+    save(container, kv).then(
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      (cause: unknown) => {
+        clearTimeout(timer);
+        reject(cause instanceof Error ? cause : new Error("container snapshot failed", { cause }));
+      },
+    );
+  });
+}
+
+async function save(container: SnapshotContainer, kv: SnapshotStore): Promise<void> {
   const image = container.images[IMAGE_NAME] ?? "";
 
   if (!Option.contains(decodeImage(kv.get(LAUNCHED_IMAGE_KEY)), image)) {

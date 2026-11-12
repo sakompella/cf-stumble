@@ -3,8 +3,10 @@
 > **Review:** Agent-only
 
 At an idle stop (ADR-0043) the Workspace Host saves a Cloudflare Container snapshot. It saves
-one only when `/nix/store` has more entries than the last snapshot holds. The next start restores
-that snapshot instead of booting the bare image. A snapshot holds the container's whole
+one only when `/nix/store` has more entries than the last snapshot holds, and it gives a save up
+after 60 seconds; a save that does not settle within the bound counts as not taken and is logged,
+so an idle stop never waits on it. The next start restores that snapshot instead of booting the
+bare image. A snapshot holds the container's whole
 filesystem but not its processes, so the Nix store, `/root` and `/tmp` come back and the first
 `nix develop` after an idle stop does not download its toolchain again. On staging the first
 `nix develop -c true` of cf-stumble's flake took 16.3 s cold and 2.2 s after a restore. Code:
@@ -31,8 +33,9 @@ registry reference) and the entry count. A start restores the snapshot only when
 the current one; otherwise the start uses the image and deletes the record. The Host also records
 the image each container launched from, and saves a snapshot only from a container that launched
 from the current image, so a container that outlives a deploy is never saved. A workspace reset
-deletes all Host storage, the record with it. A `restart` (failed health check) and a restore that
-throws drop the record, so a bad snapshot is used at most once.
+deletes all Host storage, the record with it. A `restart` (failed health check) drops the record, and a restore that
+throws drops it and starts from the image in the same call, so a bad snapshot is used at most
+once and costs one plain start, not a failed start.
 
 **Cost.** A save took 17.4 s of container time at the stop and stored 743 MB. Cloudflare has no
 API to list or delete snapshots; each expires 30 days after its creation or its last restore. A

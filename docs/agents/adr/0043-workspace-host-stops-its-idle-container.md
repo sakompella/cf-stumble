@@ -49,8 +49,10 @@ finds the container running with the same launch record and adopts it (`outcome:
 same runtime id), and the pull copies what a background process wrote since the last exec. If the
 launch record differs (a changed container environment, instance size or ignore list), Computer
 destroys and relaunches the container instead, those writes are lost, and the stop pays one cold
-start; Computer has no adopt-only connect to avoid it. The pull is bounded at 60 seconds, and a
-pull that fails or times out is logged and does not stop the destroy.
+start; Computer has no adopt-only connect to avoid it. The pull is bounded at 60 seconds and tried twice, and a pull that fails or times out does not
+stop the destroy. When both attempts fail, the Host logs the failures and logs
+`workspace.container.idle-stop` with `outcome: "writes-may-be-lost"` before the destroy, because
+a write made since the last pull is then lost with the container.
 
 **Alternatives.**
 

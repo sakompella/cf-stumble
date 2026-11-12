@@ -16,7 +16,7 @@ const LIMIT = 10_000;
 
 type Behavior = Readonly<{
   running?: boolean;
-  pull?: "fails" | "hangs";
+  pull?: "fails" | "fails-once" | "hangs";
   closeFails?: boolean;
   destroyFails?: boolean;
   alarmFails?: boolean;
@@ -30,6 +30,7 @@ function controller(options: Behavior = {}) {
   const state = { running: options.running ?? true };
   const alarms: number[] = [];
   const calls: string[] = [];
+  let pullAttempts = 0;
 
   const world = {
     get idle() {
@@ -51,8 +52,10 @@ function controller(options: Behavior = {}) {
     containerRunning: () => state.running,
     pullContainer: () => {
       calls.push("pull");
+      pullAttempts += 1;
 
-      if (options.pull === "fails") return Promise.reject(new Error("pull failed"));
+      if (options.pull === "fails" || (options.pull === "fails-once" && pullAttempts === 1))
+        return Promise.reject(new Error("pull failed"));
 
       return options.pull === "hangs" ? new Promise<void>(() => {}) : Promise.resolve();
     },
@@ -251,22 +254,45 @@ test("a stop for a backend change pulls before it closes and destroys", async ()
   expect(calls).toEqual(["pull", "close", "destroy"]);
 });
 
-test("a failed pull is logged and still closes and destroys the container", async () => {
+test("a final pull that fails both attempts is logged, the writes are flagged, and the container is still destroyed", async () => {
   vi.spyOn(console, "log").mockImplementation(() => {});
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const warns = vi.spyOn(console, "warn").mockImplementation(() => {});
   const { idle, clock, calls } = controller({ pull: "fails" });
   idle.begin()();
   clock.now = 11_000;
   await idle.onAlarm();
 
-  expect(calls).toEqual(["pull", "close", "destroy"]);
+  expect(calls).toEqual(["pull", "pull", "close", "destroy"]);
   expect(errors).toHaveBeenCalledWith("workspace.idle-stop: final pull failed: pull failed");
+  expect(errors).toHaveBeenCalledTimes(2);
+  expect(warns).toHaveBeenCalledWith(
+    expect.objectContaining({
+      event: "workspace.container.idle-stop",
+      outcome: "writes-may-be-lost",
+    }),
+  );
 });
 
-test("a pull that never settles is given up after its bound, and the container is destroyed", async () => {
+test("a final pull that fails once succeeds on its retry, so no writes are flagged", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const warns = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const { idle, clock, calls } = controller({ pull: "fails-once" });
+  idle.begin()();
+  clock.now = 11_000;
+  await idle.onAlarm();
+
+  expect(calls).toEqual(["pull", "pull", "close", "destroy"]);
+  expect(errors).toHaveBeenCalledOnce();
+  expect(warns).not.toHaveBeenCalled();
+});
+
+test("a pull that never settles is given up after its bound, retried, and the container is destroyed", async () => {
   vi.useFakeTimers();
   vi.spyOn(console, "log").mockImplementation(() => {});
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const warns = vi.spyOn(console, "warn").mockImplementation(() => {});
   const { idle, clock, calls } = controller({ pull: "hangs" });
   idle.begin()();
   clock.now = 11_000;
@@ -274,6 +300,7 @@ test("a pull that never settles is given up after its bound, and the container i
   await vi.runAllTimersAsync();
   await alarm;
 
-  expect(calls).toEqual(["pull", "close", "destroy"]);
-  expect(errors).toHaveBeenCalledOnce();
+  expect(calls).toEqual(["pull", "pull", "close", "destroy"]);
+  expect(errors).toHaveBeenCalledTimes(2);
+  expect(warns).toHaveBeenCalledOnce();
 });

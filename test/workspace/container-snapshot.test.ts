@@ -19,8 +19,13 @@ class SnapshotFake {
   storePaths = 100;
   readonly starts: ContainerStartupOptions[] = [];
   snapshots = 0;
+  hangs = false;
+  restoreFails = false;
 
   start(options: ContainerStartupOptions): void {
+    if (options.containerSnapshot !== undefined && this.restoreFails)
+      throw new Error("restore failed");
+
     this.starts.push(options);
     this.running = true;
   }
@@ -36,6 +41,8 @@ class SnapshotFake {
   }
 
   exec(): Promise<Pick<ExecProcess, "output">> {
+    if (this.hangs) return new Promise(() => {});
+
     const bytes = new TextEncoder().encode(`${String(this.storePaths)}\n`);
     const stdout = new ArrayBuffer(bytes.length);
     new Uint8Array(stdout).set(bytes);
@@ -82,6 +89,7 @@ function withSnapshotHost(name: string, run: (host: Host) => Promise<void>): Pro
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -134,6 +142,44 @@ test("a new image launches fresh, and its container is snapshotted only after it
     fake.images = { app: "image-2" };
     fake.running = false;
     expect(await launch(), "the image-2 snapshot was dropped").toMatchObject({ image: "image-2" });
+  });
+});
+
+test("a snapshot that never settles is given up after its bound and saves nothing", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  await withSnapshotHost("snapshot-bound", async ({ fake, launch, state }) => {
+    await launch();
+    vi.useFakeTimers();
+    fake.hangs = true;
+    const stopped = snapshotBeforeStop(fake, state.storage.kv);
+    const failure = expect(stopped).rejects.toThrow("container snapshot timed out");
+    await vi.advanceTimersByTimeAsync(60_000);
+    await failure;
+
+    expect(state.storage.kv.get("workspace-container-snapshot")).toBeUndefined();
+  });
+});
+
+test("a failed restore falls back to the plain image start in the same call", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await withSnapshotHost("snapshot-restore-fallback", async ({ fake, launch, idleStop }) => {
+    await launch();
+    await idleStop();
+    fake.restoreFails = true;
+
+    const started = await launch();
+
+    expect(started).toMatchObject({ image: "image-1" });
+    expect(started).not.toHaveProperty("containerSnapshot");
+    expect(errors).toHaveBeenCalledWith(
+      "workspace.container: snapshot restore failed: restore failed",
+    );
+
+    fake.restoreFails = false;
+    expect(await launch(), "the record was dropped").toMatchObject({ image: "image-1" });
   });
 });
 

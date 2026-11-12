@@ -205,11 +205,34 @@ export class WorkspaceIdleController implements ProjectActivity {
   }
 
   #finalPull(): Effect.Effect<void> {
+    return this.#pullOnce().pipe(
+      Effect.flatMap((pulled) =>
+        pulled
+          ? Effect.void
+          : this.#pullOnce().pipe(
+              Effect.flatMap((retried) =>
+                retried
+                  ? Effect.void
+                  : Effect.sync(() => {
+                      logEvent("warn", "workspace.container.idle-stop", {
+                        outcome: "writes-may-be-lost",
+                      });
+                    }),
+              ),
+            ),
+      ),
+    );
+  }
+
+  #pullOnce(): Effect.Effect<boolean> {
     return attempt(() => this.#ports.pullContainer()).pipe(
       Effect.timeout(FINAL_PULL_TIMEOUT_MS),
+      Effect.map(() => true),
       Effect.catch((cause) =>
         Effect.sync(() => {
           logRedactedCause("workspace.idle-stop: final pull failed", cause);
+
+          return false;
         }),
       ),
     );
