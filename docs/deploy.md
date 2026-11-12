@@ -193,7 +193,7 @@ Your first submission is slow. Installing packages and bundling the harness take
 
 The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk), set by `WORKSPACE_CONTAINER_INSTANCE` in `infra/worker-settings.ts`. Activating or rolling back a generation takes under a second.
 
-The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules` and `/tmp`. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
+The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. On a staging stage in November 2026, a container start took about 1 s when the host already had the image, and the first start after an image change took about 38 s. An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules` and `/tmp`. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
 
 ## Troubleshooting a hostname that serves another site
 

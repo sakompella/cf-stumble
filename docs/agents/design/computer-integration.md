@@ -31,7 +31,7 @@ The workspace name comes from the tenant and nothing else. The Worker reaches on
 | `/workspace/projects/<project id>` | One connected project's clone.                                                          |
 | `/tmp/cf-stumble-builds/<commit>`  | Build scratch for one labeled commit, outside `/workspace`. It holds no repository.     |
 
-The workspace behaves like an ordinary development machine: unrestricted outbound internet, `git`, `gh`, and repository toolchains. GitHub credentials live in `gh` and Git configuration under `/workspace`, so they survive a container replacement.
+The workspace behaves like an ordinary development machine: unrestricted outbound internet, `git`, `gh`, Node 22, python3 with venv, the Debian build tools (`build-essential`, `pkg-config`, `unzip`), and Nix with flakes in single-user mode. The image has no bun, Rust or Go; a repository with a `flake.nix` gets its toolchain from `nix develop`. The Nix store is `/nix` and `CARGO_TARGET_DIR` is `/tmp/cargo-target`, both container-local and outside the sync, so an idle stop drops what `nix develop` downloaded and the next one downloads it again. GitHub credentials live in `gh` and Git configuration under `/workspace`, so they survive a container replacement.
 
 cf-stumble owns `/workspace/AGENTS.md`. Whenever a run asks for a project capability, provisioning calls the Workspace Host's `ensureManagedInstructions`, which writes the current text over whatever file is there. An instruction change reaches the workspace at the first run after a deploy, and an edit to the file lasts only until the next run. The Host refuses the write when the workspace root or the file is a symbolic link, or the path is a directory. Provisioning never writes a repository's own `AGENTS.md`.
 
