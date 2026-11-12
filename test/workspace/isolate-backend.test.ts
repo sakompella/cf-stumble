@@ -46,11 +46,17 @@ test("a command with no backend and only isolate programs runs in the isolate", 
   ]);
 });
 
-test("git runs in the isolate and prints status the way real git does", async () => {
-  const lines = await runIn("isolate-git-status", undefined, "git init && git status");
+test("git asked to run in the isolate is refused with an error that names the container", async () => {
+  const lines = await runIn("isolate-git-refused", "isolate", "git status");
 
-  expect(lines.join("\n")).toContain("On branch main");
-  expect(lines.join("\n")).toContain("Untracked files:");
+  expect(lines).toEqual([
+    JSON.stringify({
+      kind: "stderr",
+      seq: 0,
+      data: 'git runs only in the container. Leave out backend, or pass backend: "container".\n',
+    }),
+    JSON.stringify({ kind: "terminal", seq: 1, outcome: "exited", exitCode: 1 }),
+  ]);
 });
 
 test("a command that writes to /dev/null runs in the isolate and discards the output", async () => {

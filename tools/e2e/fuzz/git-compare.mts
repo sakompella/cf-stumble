@@ -23,7 +23,7 @@ const HASHED = new Set([
   "mv",
 ]);
 
-const STABLE_HASHES = /^(?:diff|cat-file|ls-files|rev-parse|show)\b/u;
+const STABLE_HASHES = /^(?:diff|cat-file|ls-files|show)\b/u;
 
 export function normalize(text: string, item: Case | undefined, roots: readonly string[]): string {
   const subcommand = (item?.command ?? "").replace(/^git\s+/u, "");
@@ -36,7 +36,9 @@ export function normalize(text: string, item: Case | undefined, roots: readonly 
   out = out
     .replaceAll(/^remote: .*\n/gmu, "")
     .replaceAll(/^To .*$/gmu, "To <remote>")
-    .replaceAll(/^Date: .*$/gmu, "Date: <date>");
+    .replaceAll(/^From .*$/gmu, "From <remote>")
+    .replaceAll(/(failed to push some refs to )'.*'/gu, "$1'<remote>'")
+    .replaceAll(/^(\s*)Date: .*$/gmu, "$1Date: <date>");
 
   if (hashed) out = out.replaceAll(/\b[0-9a-f]{7,40}\b/gu, "<sha>");
 

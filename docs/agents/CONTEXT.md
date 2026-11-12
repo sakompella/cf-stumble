@@ -59,10 +59,10 @@ Conversation history, compacted context, and other useful context that can survi
 main-harness generation.
 
 **Worker-shell**:
-Computer's text-oriented execution backend, including host-forwarded Git.
+Computer's text-oriented execution backend. It has no Git; every `git` command runs in the container backend.
 
 **Container backend**:
-Computer's Linux process backend for Node, package managers, builds, tests, and project commands.
+Computer's Linux process backend for Git, Node, package managers, builds, tests, and project commands.
 
 ## Generation requests
 

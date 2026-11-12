@@ -15,36 +15,28 @@ const GIT_ENV = {
   GIT_PAGER: "cat",
   GIT_OPTIONAL_LOCKS: "0",
   LC_ALL: "C",
+  TZ: "UTC",
 };
 
 export const WORKSPACE_DIRECTORY = "/workspace/fz";
 
-export function probe(git: string, wide: boolean): string {
-  const parts = [
-    `${git} status --porcelain=v1 -b -uall`,
-    "echo --index",
-    `${git} ls-files -s`,
-    "echo --head",
-    `${git} rev-parse -q --verify HEAD^{tree}`,
-    `${git} symbolic-ref -q HEAD`,
-    "echo --log",
-    `${git} log --all --format='%s|%T|%an|%ae' | sort`,
-  ];
-
-  if (wide) {
-    parts.push(
-      "echo --refs",
-      `${git} for-each-ref --format='%(refname) %(tree)'`,
-      "echo --files",
-      "find . -name .git -prune -o -type f -printf '%m %p\\n' | LC_ALL=C sort",
-      "find . -name .git -prune -o -type f -exec cksum {} + | LC_ALL=C sort -k3",
-      "echo --fsck",
-      `${git} fsck --no-dangling 2>&1 | grep -iE 'error|missing|corrupt|broken|invalid|bad|fatal'; true`,
-    );
-  }
-
-  return parts.join("; ");
-}
+export const PROBE = [
+  "git status --porcelain=v1 -b -uall",
+  "echo --index",
+  "git ls-files -s",
+  "echo --head",
+  "git rev-parse -q --verify HEAD^{tree}",
+  "git symbolic-ref -q HEAD",
+  "echo --log",
+  "git log --all --format='%s|%T|%an|%ae' | sort",
+  "echo --refs",
+  "git for-each-ref --format='%(refname) %(tree)'",
+  "echo --files",
+  "find . -name .git -prune -o -type f -printf '%m %p\\n' | LC_ALL=C sort",
+  "find . -name .git -prune -o -type f -exec cksum {} + | LC_ALL=C sort -k3",
+  "echo --fsck",
+  "git fsck --no-dangling 2>&1 | grep -iE 'error|missing|corrupt|broken|invalid|bad|fatal'; true",
+].join("; ");
 
 export class Oracle {
   readonly root: string;

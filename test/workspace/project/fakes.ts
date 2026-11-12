@@ -264,7 +264,8 @@ export class FakeExecBackend implements ExecBackend {
 
     if (deferred !== undefined) return deferred;
     const handle = new ManualExecHandle();
-    handle.backend = routedBackend(input.command, input.backend);
+    handle.backend =
+      routedBackend(input.command, input.backend) === "container" ? "container" : "isolate";
     this.handles.push(handle);
 
     return Promise.resolve(handle);

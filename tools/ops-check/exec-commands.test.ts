@@ -8,7 +8,6 @@ interface ExecFields {
   readonly backend?: string;
   readonly fellBackFrom?: string;
   readonly isolateRefused?: boolean;
-  readonly writeFormRefused?: boolean;
 }
 
 const finished = (fields: ExecFields): JsonRecord => ({
@@ -18,7 +17,6 @@ const finished = (fields: ExecFields): JsonRecord => ({
     backend: "isolate",
     fellBackFrom: null,
     isolateRefused: false,
-    writeFormRefused: false,
     ...fields,
   },
 });
@@ -37,7 +35,6 @@ const fixture = page([
     backend: "container",
     fellBackFrom: "isolate",
     isolateRefused: true,
-    writeFormRefused: true,
   }),
   finished({ program: "git push", backend: "container", fellBackFrom: "isolate" }),
   finished({ program: "ls" }),
@@ -60,7 +57,7 @@ describe("parseGitExecs", () => {
 describe("gitExecLine", () => {
   it("summarises subcommands by backend with fallback and refusal counts", () => {
     assert.deepEqual(gitExecLine(parseGitExecs(fixture)), [
-      "i git commands 6, 50.0% in the isolate: container 3 (commit 2, push 1); isolate 3 (status 2, diff 1); fell back 2 (commit 1, push 1); isolate refused 1 (commit 1); write form refused 1 (commit 1)",
+      "i git commands 6, 50.0% in the isolate: container 3 (commit 2, push 1); isolate 3 (status 2, diff 1); fell back 2 (commit 1, push 1); isolate refused 1 (commit 1)",
     ]);
   });
 

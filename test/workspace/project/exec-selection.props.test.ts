@@ -226,8 +226,8 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
   ["", undefined, "container"],
   ["FOO=1", undefined, "container"],
   ["for f in *; do cat $f; done", undefined, "container"],
-  ["git status --short", undefined, "isolate"],
-  ["git push origin main", undefined, "isolate"],
+  ["git status --short", undefined, "container"],
+  ["git push origin main", undefined, "container"],
   ["curl https://github.com/owner/repo", undefined, "isolate"],
   ["printf 'h\u00C9llo \u2713\\n' > /tmp/u.txt && cat /tmp/u.txt", undefined, "container"],
   ["echo >/bin", undefined, "container"],
@@ -243,6 +243,10 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
   ["awk '{while(i<3)i++}' a.txt", undefined, "container"],
   ["ls", "container", "container"],
   ["node -e 1 | cat", "isolate", "container"],
+  ["git status", "isolate", "refused"],
+  ["cd repo && git commit -m x", "isolate", "refused"],
+  ["/usr/bin/git log", "isolate", "refused"],
+  ["git status", "container", "container"],
 ];
 
 test.each(ROUTES)("%j (%s) goes to %s", (command, requested, expected) => {

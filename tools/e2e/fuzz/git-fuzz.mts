@@ -5,7 +5,7 @@ import { parseBash } from "./bash-result.mts";
 import { Generator } from "./git-cases.mts";
 import { KNOWN, signature, type Case } from "./git-data.mts";
 import { classify, describe, matches, normalize, type Divergence } from "./git-compare.mts";
-import { Oracle, probe, WORKSPACE_DIRECTORY, type Outcome } from "./git-oracle.mts";
+import { Oracle, PROBE, WORKSPACE_DIRECTORY, type Outcome } from "./git-oracle.mts";
 import { branchTree } from "./github-tree.mts";
 import { runSteps, type Step } from "./scripted-generation.mts";
 
@@ -51,23 +51,13 @@ function plan(item: Case, directory: string, oracle: Oracle, index: number): rea
 
   if (item.kind === "read" && index % 4 !== 0) return [main];
 
-  const real = probe("/usr/bin/git", true);
-  const local = probe("git", true);
-  const narrow = probe("git", false);
-
   return [
     main,
     {
-      label: "container-probe",
+      label: "probe",
       item: undefined,
-      step: bash(directory, real, "container"),
-      oracle: () => oracle.inRepository(local),
-    },
-    {
-      label: "isolate-probe",
-      item: undefined,
-      step: bash(directory, narrow, "isolate"),
-      oracle: () => oracle.inRepository(narrow),
+      step: bash(directory, PROBE, "container"),
+      oracle: () => oracle.inRepository(PROBE),
     },
   ];
 }

@@ -8,7 +8,7 @@ The workspace image builds `computerd` from that commit with one patch instead o
 
 The Workspace Host uses 0.8.0's `ContainerBackend`, so the container is scheduled by its Durable Object (`schedulingPolicy: "durable-object"`) and the Host picks the instance size when it starts it. The platform-scheduled `LegacyContainerBackend` is deprecated.
 
-Worker-shell provides text operations and host-forwarded Git. The container provides Node, pnpm, TypeScript compilation, tests, and project commands.
+Worker-shell provides text operations. The container provides Git (ADR-0052), Node, pnpm, TypeScript compilation, tests, and project commands.
 
 The first pair ran on a paid account on 2026-08-29. Container execution, persistent and isolated files, Node 22.23.2, pnpm 11.24.0, Git, FUSE, and network package installation all worked. Computer issue [#114](https://github.com/cloudflare/computer/issues/114) for `0.2.1` was neither reproduced nor disproved; repeated warm and cold requests with this `0.3.0` pair did not show it.
 

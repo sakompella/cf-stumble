@@ -149,8 +149,4 @@ export const HISTORY: readonly string[] = [
   "reset --soft HEAD",
 ];
 
-export const KNOWN: readonly string[] = [
-  "checkout:checkout --detach",
-  "checkout:checkout -B",
-  "fs:append",
-];
+export const KNOWN: readonly string[] = ["fs:append"];

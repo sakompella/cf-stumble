@@ -1,15 +1,7 @@
 import { Buffer } from "node:buffer";
 import type { SQLiteWorkspaceProvider } from "@cloudflare/computer";
-import {
-  createGitClient,
-  type GitAuth,
-  type GitCliInput,
-  type GitCliResult,
-  type GitClientFactory,
-} from "@cloudflare/computer/git";
+import { createGitClient, type GitAuth, type GitClientFactory } from "@cloudflare/computer/git";
 import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
-import { gitCli } from "./git-cli.js";
-import type { WorkFiles } from "./git-index-file.js";
 import { githubCloneHeaders, githubTokenFromHosts, isGitHubRemote } from "./github-remote.js";
 
 type ReadOptions = Parameters<SQLiteWorkspaceProvider["readFile"]>[1];
@@ -80,63 +72,6 @@ async function githubToken(provider: SQLiteWorkspaceProvider): Promise<string | 
   return githubTokenFromHosts(await readHosts(provider));
 }
 
-async function removeFile(
-  provider: SQLiteWorkspaceProvider,
-  path: string,
-  stop: string,
-): Promise<void> {
-  await provider.unlink(path);
-
-  let directory = path.slice(0, path.lastIndexOf("/"));
-
-  while (directory.length > stop.length && (await provider.readdir(directory)).length === 0) {
-    await provider.rmdir(directory);
-    directory = directory.slice(0, directory.lastIndexOf("/"));
-  }
-}
-
-function listFiles(provider: SQLiteWorkspaceProvider, root: string): readonly string[] {
-  const walk = (relative: string): string[] =>
-    provider.readdirEntriesSync(relative === "" ? root : `${root}/${relative}`).flatMap((entry) => {
-      const path = relative === "" ? entry.name : `${relative}/${entry.name}`;
-
-      if (entry.type === "dir") return entry.name === ".git" && relative === "" ? [] : walk(path);
-
-      return [path];
-    });
-
-  return walk("");
-}
-
-async function moveFile(
-  provider: SQLiteWorkspaceProvider,
-  from: string,
-  to: string,
-  stop: string,
-): Promise<void> {
-  await provider.mkdir(to.slice(0, to.lastIndexOf("/")), { recursive: true });
-  await provider.rename(from, to);
-
-  let directory = from.slice(0, from.lastIndexOf("/"));
-
-  while (directory.length > stop.length && (await provider.readdir(directory)).length === 0) {
-    await provider.rmdir(directory);
-    directory = directory.slice(0, directory.lastIndexOf("/"));
-  }
-}
-
-function workFiles(provider: SQLiteWorkspaceProvider): WorkFiles {
-  return {
-    read: async (path) => Buffer.from(await provider.readFile(path)),
-    remove: (path, stop) => removeFile(provider, path, stop),
-    rename: (from, to, stop) => moveFile(provider, from, to, stop),
-    list: (root) => Promise.resolve(listFiles(provider, root)),
-    mkdir: async (path) => {
-      await provider.mkdir(path, { recursive: true });
-    },
-  };
-}
-
 export const workspaceGit: GitClientFactory = (options) => {
   const client = sqliteGit(options);
 
@@ -152,7 +87,6 @@ export const workspaceGit: GitClientFactory = (options) => {
   const fetch = client.fetch.bind(client);
   const push = client.push.bind(client);
   const pull = client.pull.bind(client);
-  const cli = client.cli.bind(client);
 
   return Object.assign(client, {
     clone: async (input: Parameters<typeof clone>[0]) => {
@@ -165,7 +99,5 @@ export const workspaceGit: GitClientFactory = (options) => {
     fetch: (input: Parameters<typeof fetch>[0]) => fetch({ onAuth, ...input }),
     push: (input: Parameters<typeof push>[0]) => push({ onAuth, ...input }),
     pull: (input: Parameters<typeof pull>[0]) => pull({ onAuth, ...input }),
-    cli: (input: GitCliInput): Promise<GitCliResult> =>
-      gitCli(client, cli, input, workFiles(options.ws.provider())),
   });
 };

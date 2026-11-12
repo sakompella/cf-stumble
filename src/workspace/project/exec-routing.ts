@@ -1,5 +1,8 @@
+import { commandProgram } from "./exec-program.js";
 import { ISOLATE_PROGRAMS } from "./isolate-programs.js";
 import type { ExecBackendChoice } from "./protocol.js";
+
+type ExecRoute = ExecBackendChoice | "refused";
 
 const SEGMENT_BREAKS = new Set(["|", ";", "&", "\n"]);
 
@@ -136,8 +139,16 @@ function isolateCanRun(command: string): boolean {
   return segments !== undefined && segments.length > 0 && segments.every(segmentRunsInIsolate);
 }
 
-export function routedBackend(command: string, requested?: ExecBackendChoice): ExecBackendChoice {
+function runsGit(command: string): boolean {
+  const program = commandProgram(command);
+
+  return program === "git" || program?.startsWith("git ") === true;
+}
+
+export function routedBackend(command: string, requested?: ExecBackendChoice): ExecRoute {
   if (requested === "container") return "container";
+
+  if (requested === "isolate" && runsGit(command)) return "refused";
 
   if (touchesPathOutsideWorkspace(command)) return "container";
 
