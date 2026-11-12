@@ -121,7 +121,9 @@ function estimateTokens(byteLength: number): number {
 }
 
 function resolveUsage(
-  reported: Readonly<{ inputTokens: number; outputTokens: number }> | undefined,
+  reported:
+    | Readonly<{ inputTokens: number; outputTokens: number; cachedTokens?: number | undefined }>
+    | undefined,
   request: ModelRouteRequest,
   message: AssistantMessage,
 ): ModelUsage {
@@ -129,6 +131,7 @@ function resolveUsage(
     return {
       inputTokens: reported.inputTokens,
       outputTokens: reported.outputTokens,
+      cachedTokens: reported.cachedTokens,
       estimated: false,
     };
   }

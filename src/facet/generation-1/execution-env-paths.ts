@@ -84,8 +84,25 @@ const FILE_ERROR_CODES: Readonly<Record<ProjectErrorCode, FileErrorCode>> = {
   "container-restarted": "unknown",
 };
 
-function fileErrorOf(code: ProjectErrorCode, path?: string): FileError {
-  return new FileError(FILE_ERROR_CODES[code], `the Computer capability reported "${code}"`, path);
+const FILE_ERROR_MESSAGES: Readonly<Partial<Record<ProjectErrorCode, string>>> = {
+  "not-found": "no such file",
+  "not-directory": "not a directory",
+  "is-directory": "is a directory",
+  "permission-denied": "permission denied",
+  "already-exists": "file already exists",
+  "path-outside-root": "path is outside the workspace root",
+  "content-too-large": "content too large",
+  "symlink-loop": "symlink loop",
+};
+
+function fileErrorOf(code: ProjectErrorCode, path: string): FileError {
+  const plain = FILE_ERROR_MESSAGES[code];
+
+  return new FileError(
+    FILE_ERROR_CODES[code],
+    plain === undefined ? `the Computer capability reported "${code}"` : `${plain}: ${path}`,
+    path,
+  );
 }
 
 export function aborted(path?: string): Result<never, FileError> {
