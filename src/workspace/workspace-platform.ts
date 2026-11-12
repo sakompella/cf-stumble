@@ -4,7 +4,7 @@ import {
   type WorkspaceBackend,
   type WorkspaceOptions,
 } from "@cloudflare/computer";
-import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
+import { ContainerBackend } from "@cloudflare/computer/backends/container";
 import * as Effect from "effect/Effect";
 import {
   WORKSPACE_CONTAINER_INSTANCE,
@@ -17,8 +17,8 @@ import {
   ContainerLifecycle,
   ContainerStopFailed,
 } from "./container-lifecycle.js";
+import { snapshotBeforeStop, SnapshotContainerAPI } from "./container-snapshot.js";
 import { ProviderContainerAPI } from "./provider-container.js";
-import { ProviderLink } from "./provider-link.js";
 import { routeFetch } from "./route-fetch.js";
 
 type WorkspaceHostBackend = HostedBackend<Parameters<WorkspaceBackend["connect"]>[0]>;
@@ -43,9 +43,8 @@ type IsolateWorkspace = Readonly<{
 }>;
 
 export class WorkspacePlatform {
-  #container: WorkspaceContainerAPI | undefined;
+  #container: SnapshotContainerAPI | undefined;
   readonly lifecycle = new ContainerLifecycle();
-  readonly provider: ProviderLink;
   readonly #providerContainer: ProviderContainerAPI;
   readonly #state: DurableObjectState;
   readonly #providerToken: string | undefined;
@@ -69,8 +68,7 @@ export class WorkspacePlatform {
     this.#providerToken = providerToken;
     this.#usesProvider = usesProvider;
     this.#platformContainer = state.container;
-    this.provider = new ProviderLink(state);
-    this.#providerContainer = new ProviderContainerAPI(this.provider, state.id.toString());
+    this.#providerContainer = new ProviderContainerAPI(state);
 
     this.#containerBackend = new ContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#cloudflareContainer() }),
@@ -96,6 +94,10 @@ export class WorkspacePlatform {
       .catch((cause: unknown) => {
         logRedactedCause("workspace.container: inactivity timeout not set", cause);
       });
+  }
+
+  get provider() {
+    return this.#providerContainer.link;
   }
 
   get workspace(): Workspace {
@@ -127,10 +129,14 @@ export class WorkspacePlatform {
 
     const destroy =
       container?.running === true
-        ? Effect.tryPromise({
-            try: () => container.destroy(reason),
-            catch: (cause) => new ContainerStopFailed({ cause }),
-          })
+        ? this.#snapshotBeforeIdleStop(container, reason).pipe(
+            Effect.andThen(
+              Effect.tryPromise({
+                try: () => container.destroy(reason),
+                catch: (cause) => new ContainerStopFailed({ cause }),
+              }),
+            ),
+          )
         : Effect.void;
 
     return destroy.pipe(
@@ -140,6 +146,16 @@ export class WorkspacePlatform {
           this.lifecycle.stoppedByHost();
         }),
       ),
+    );
+  }
+
+  #snapshotBeforeIdleStop(container: Container, reason: string): Effect.Effect<void> {
+    if (reason !== "idle") return Effect.void;
+
+    return Effect.promise(() =>
+      snapshotBeforeStop(container, this.#state.storage.kv).catch((cause: unknown) => {
+        logRedactedCause("workspace.container: snapshot not taken", cause);
+      }),
     );
   }
 
@@ -167,8 +183,8 @@ export class WorkspacePlatform {
     });
   }
 
-  #cloudflareContainer(): WorkspaceContainerAPI {
-    this.#container ??= new WorkspaceContainerAPI(this.#state);
+  #cloudflareContainer(): SnapshotContainerAPI {
+    this.#container ??= new SnapshotContainerAPI(this.#state);
 
     return this.#container;
   }

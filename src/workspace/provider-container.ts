@@ -5,7 +5,7 @@ import type {
 } from "@cloudflare/computer/backends/container";
 import * as Predicate from "effect/Predicate";
 import { decodeBody, encodeBody, orbJob } from "../orb-protocol.js";
-import type { ProviderLink } from "./provider-link.js";
+import { ProviderLink } from "./provider-link.js";
 import { providerEvent, type ProviderExit } from "./provider-state.js";
 
 type ContainerStatus = Awaited<ReturnType<IWorkspaceContainerAPI["status"]>>;
@@ -23,22 +23,22 @@ function clientSecret(): string {
 }
 
 export class ProviderContainerAPI implements IWorkspaceContainerAPI {
-  readonly #link: ProviderLink;
+  readonly link: ProviderLink;
   readonly #container: string;
 
-  constructor(link: ProviderLink, container: string) {
-    this.#link = link;
-    this.#container = container;
+  constructor(state: DurableObjectState) {
+    this.link = new ProviderLink(state);
+    this.#container = state.id.toString();
   }
 
   async start(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
     const secret = clientSecret();
     const env = { ...spec.env, RPC_CLIENT_SECRET: secret };
-    const runtime = await this.#link.job(orbJob.start({ container: this.#container, env }));
+    const runtime = await this.link.job(orbJob.start({ container: this.#container, env }));
 
     if (runtime === null) throw new Error("the workspace provider started no container");
 
-    this.#link.update(providerEvent.started({ runtime }));
+    this.link.update(providerEvent.started({ runtime }));
 
     return { runtimeId: runtime, clientSecret: secret, outcome: "launched" };
   }
@@ -48,21 +48,21 @@ export class ProviderContainerAPI implements IWorkspaceContainerAPI {
   }
 
   async stop(): Promise<void> {
-    await this.#link.job(orbJob.stop({ container: this.#container }), STOP_DEADLINE_MS);
-    this.#link.update(providerEvent.stopped());
+    await this.link.job(orbJob.stop({ container: this.#container }), STOP_DEADLINE_MS);
+    this.link.update(providerEvent.stopped());
   }
 
   async remove(): Promise<void> {
-    await this.#link.job(orbJob.delete({ container: this.#container }), STOP_DEADLINE_MS);
-    this.#link.update(providerEvent.stopped());
+    await this.link.job(orbJob.delete({ container: this.#container }), STOP_DEADLINE_MS);
+    this.link.update(providerEvent.stopped());
   }
 
   running(): boolean {
-    return Predicate.isTagged(this.#link.state(), "running");
+    return Predicate.isTagged(this.link.state(), "running");
   }
 
   status(): Promise<ContainerStatus> {
-    const state = this.#link.state();
+    const state = this.link.state();
 
     return Promise.resolve(
       Predicate.isTagged(state, "running")
@@ -72,7 +72,7 @@ export class ProviderContainerAPI implements IWorkspaceContainerAPI {
   }
 
   exitInfo(): Promise<ProviderExit | null> {
-    const state = this.#link.state();
+    const state = this.link.state();
 
     return Promise.resolve(Predicate.isTagged(state, "stopped") ? state.exit : null);
   }
@@ -94,7 +94,7 @@ export class ProviderContainerAPI implements IWorkspaceContainerAPI {
     const url = new URL(request.url);
     const body = encodeBody(new Uint8Array(await request.arrayBuffer()));
 
-    const result = await this.#link.fetch(
+    const result = await this.link.fetch(
       {
         port,
         method: request.method,
