@@ -29,7 +29,8 @@ A user interaction. A successful HTTP status alone does not prove that a streame
 **Run**:
 The work Pi Durable does on a project's conversation from a submitted message until it settles. A run
 outlives the browser that sent the message. Each run has its own deadline, 8 minutes after the facet
-reports its conversation running, and the Supervisor aborts the run when that deadline passes.
+reports its conversation running (or after a newly activated generation takes the run over), and
+the Supervisor aborts the run when that deadline passes.
 A run that the deadline aborts, or whose reply the model's output length limit cuts off, ends with a
 run notice: a harness entry in the conversation that says what happened and that a message continues
 the run. The model reads it on the next turn, and the owner page shows it

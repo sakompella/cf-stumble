@@ -6,6 +6,7 @@ const KNOWN_OUTCOMES = new Set([
   "completed",
   "failed",
   "interrupted",
+  "stalled",
   "cancelled",
   "unanswered",
   "replaced",
@@ -46,7 +47,7 @@ export async function checkLogs(
   for (const { source } of probation) {
     console.error(`fuzz: probation-failed ${JSON.stringify(source)}`);
 
-    if (source.outcome !== "failed" && source.outcome !== "interrupted") {
+    if (source.outcome !== "failed" && source.outcome !== "stalled") {
       problems.push(`probation rolled back on outcome ${String(source.outcome)}`);
     }
 

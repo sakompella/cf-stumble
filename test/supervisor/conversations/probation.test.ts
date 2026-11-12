@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { reset, runInDurableObject } from "cloudflare:test";
+import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   activateGeneration,
@@ -13,8 +13,10 @@ import {
   historyEventText,
 } from "../helpers.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
+import { PROJECT_RUN_DEADLINE_MS } from "../../../src/turn-budget.js";
 
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   await reset();
 });
@@ -31,11 +33,17 @@ import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
   ${FACET_COMPATIBILITY_METHOD}
   fetch() { return new Response("ready"); }
-  async attach(host) { this.host ??= host.dup(); }
+  async attach(host, model) { this.host ??= host.dup(); this.model ??= model; }
   async createConversation(cwd) { return "conversation:" + cwd; }
   async submit(conversationId, content) {
     if (content === "hold") {
       await this.host.running([{ conversationId }]);
+      return 1;
+    }
+    if (content === "ask") {
+      await this.host.running([{ conversationId }]);
+      const reply = await this.model.runStream({ messages: [{ role: "user", content }] });
+      await reply.cancel();
       return 1;
     }
     if (content === "numbered") {
@@ -52,7 +60,9 @@ export class MainFacet extends DurableObject {
     await this.host.running([], failure === null ? {} : { [conversationId]: failure });
     return 1;
   }
-  async abort() {}
+  async abort(conversationId, reason) {
+    if (reason === "deadline") await this.host.running([]);
+  }
   async events(conversationId) {
     ${ANSWER_STARTUP_CHECK}
     return new ReadableStream({
@@ -224,4 +234,51 @@ test("an owner activation is refused while a run is in flight", async () => {
       observedEpoch: epoch,
     }),
   ).toEqual({ ok: false, problem: { code: "run-active" } });
+});
+
+async function pastDeadline(control: DurableObjectStub<Supervisor>): Promise<void> {
+  vi.setSystemTime(Date.now() + PROJECT_RUN_DEADLINE_MS + 1_000);
+  await runDurableObjectAlarm(control);
+}
+
+test("a run stopped at its deadline fails probation only when its generation never asked the model", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { control, working } = await provenThenActivated("probation-deadline", SOUND, null);
+  const activated = await activeLabel(control);
+  const { epoch } = await control.getActiveGeneration();
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  await send(control, "r2", "ask");
+  await pastDeadline(control);
+
+  expect(await activeLabel(control)).toBe(activated);
+
+  await send(control, "r3", "hold");
+  await pastDeadline(control);
+
+  expect(await activeLabel(control)).toBe(working);
+  expect(JSON.parse(await historyEventText(`${epoch}-probation-failed`))).toMatchObject({
+    label: activated,
+    outcome: "stalled",
+  });
+});
+
+test("a run cut off by a Supervisor restart before it asked the model does not fail probation at its deadline", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const name = "probation-deadline-restart";
+  const { control } = await provenThenActivated(name, SOUND, null);
+  const activated = await activeLabel(control);
+
+  await send(control, "r2", "hold");
+  vi.setSystemTime(Date.now() + 1_000);
+  await expect(
+    runInDurableObject(control, (_instance, state) => {
+      state.abort("the platform reset the Supervisor");
+    }),
+  ).rejects.toThrow();
+
+  const restarted = env.SUPERVISOR.getByName(name);
+  await pastDeadline(restarted);
+
+  expect(await activeLabel(restarted)).toBe(activated);
 });

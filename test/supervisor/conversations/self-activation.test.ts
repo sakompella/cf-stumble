@@ -24,7 +24,7 @@ afterEach(async () => {
   await reset();
 });
 
-test("a conversation activates a prepared generation with stumble, and the new generation goes on with it", async () => {
+test("a conversation activates a prepared generation with stumble, and the new generation goes on with it and is proven by it", async () => {
   const control = await servingGeneration1("self-activation", new ProjectWorkspace());
   const next = await commitNamed("self-activation-next");
   const label = await submitCandidate(control, next);
@@ -65,6 +65,7 @@ test("a conversation activates a prepared generation with stumble, and the new g
     },
     { role: "assistant", text: "already active" },
   ]);
+  expect(JSON.parse(await historyEventText(`${epoch + 1}-proven`))).toMatchObject({ label });
 });
 
 test("a conversation prepares a generation with stumble, and the history names the conversation", async () => {

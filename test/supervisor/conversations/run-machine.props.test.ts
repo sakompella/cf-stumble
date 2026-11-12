@@ -31,6 +31,8 @@ type Seen = Readonly<{ run: number | undefined }>;
 
 type Expected = Readonly<{ next: Open | null; commands: RunCommand[] }>;
 
+type Signs = Readonly<{ modelTurnAt: number | null; supervisorStartedAt: number }>;
+
 const GENERATION_FAULTS = ["faulted", "orphaned", "restart_limit", "session-failed"];
 
 const OTHER_REASONS = ["model_error", "no_model", "aborted"];
@@ -44,6 +46,8 @@ const errorCode = gs.oneOf(
 const run = gs.optional(gs.integers({ minValue: 0, maxValue: 2 })).map((id) => id ?? undefined);
 
 const instance = gs.integers({ minValue: 0, maxValue: 2 });
+
+const nearStart = gs.sampledFrom([-1, 0, 1]);
 
 const ending = gs.sampledFrom(["cancelled", "interrupted"] as const);
 
@@ -64,12 +68,24 @@ function view(state: RunState): View {
   };
 }
 
+function endedOutcome(open: Open, code: string | null, signs: Signs): RunOutcome {
+  if (open.ending === null) return answeredOutcome(code);
+
+  if (open.ending === "cancelled") return "cancelled";
+
+  const startedAt = open.deadline - PROJECT_RUN_DEADLINE_MS;
+  const askedModel = signs.modelTurnAt !== null && signs.modelTurnAt >= startedAt;
+
+  return askedModel || signs.supervisorStartedAt > startedAt ? "interrupted" : "stalled";
+}
+
 function expectedReport(
   open: Open | null,
   report: Seen | null,
   code: string | null,
   by: number,
   now: number,
+  signs: Signs,
 ): Expected {
   const commands: RunCommand[] = [];
 
@@ -79,15 +95,20 @@ function expectedReport(
     (report.run === undefined || open.run === null || report.run === open.run);
 
   if (continuing) {
+    const kept = open.run ?? report.run ?? null;
+    const takenOver = open.ending === null && open.instance !== null && open.instance !== by;
+
     return {
-      next: { ...open, run: open.run ?? report.run ?? null, instance: open.instance ?? by },
+      next: takenOver
+        ? { run: kept, deadline: now + PROJECT_RUN_DEADLINE_MS, instance: by, ending: null }
+        : { ...open, run: kept, instance: open.instance ?? by },
       commands,
     };
   }
 
   if (open !== null) {
     const ours = open.instance === null || open.instance === by;
-    const outcome = ours ? (open.ending ?? answeredOutcome(code)) : "replaced";
+    const outcome = ours ? endedOutcome(open, code, signs) : "replaced";
 
     commands.push({ _tag: "Settled", outcome, errorCode: code, deadline: open.deadline });
   }
@@ -130,10 +151,18 @@ function reported(tc: hegel.TestCase, world: World, seen: Seen | null) {
   const by = tc.draw(instance);
   const report = seen === null ? undefined : { conversationId: "c", run: seen.run };
 
+  const startedAt = (world.open?.deadline ?? world.now) - PROJECT_RUN_DEADLINE_MS;
+  const modelTurn = tc.draw(gs.optional(nearStart)) ?? null;
+
+  const signs = {
+    modelTurnAt: modelTurn === null ? null : startedAt + modelTurn,
+    supervisorStartedAt: startedAt + tc.draw(nearStart),
+  };
+
   apply(
     world,
-    RunEvent.Reported({ report, errorCode: code, instance: by, now: world.now }),
-    expectedReport(world.open, seen, code, by, world.now),
+    RunEvent.Reported({ report, errorCode: code, instance: by, now: world.now, ...signs }),
+    expectedReport(world.open, seen, code, by, world.now, signs),
   );
 }
 
@@ -179,5 +208,49 @@ const initial = gs.composite<World>((tc) => {
 test("a run settles exactly once before the next starts, whatever the facet reports and however it is ended", () => {
   hegel.test((tc) => {
     hegel.stateful.run(tc, machine, tc.draw(initial), { stepCount: 30 });
+  });
+});
+
+test("a run aborted at its deadline is stalled only when its instance asked no model turn since it started and the Supervisor did not restart", () => {
+  hegel.test((tc) => {
+    const startedAt = tc.draw(gs.integers({ minValue: 0, maxValue: PROJECT_RUN_DEADLINE_MS }));
+    const by = tc.draw(instance);
+    const modelTurn = tc.draw(gs.optional(gs.integers({ minValue: -2, maxValue: 2 }))) ?? null;
+    const restart = tc.draw(gs.integers({ minValue: -2, maxValue: 2 }));
+
+    const signs = {
+      modelTurnAt: modelTurn === null ? null : startedAt + modelTurn,
+      supervisorStartedAt: startedAt + restart,
+    };
+
+    const running = transition(
+      RunState.cases.Idle.make({}),
+      RunEvent.Reported({
+        report: { conversationId: "c" },
+        errorCode: null,
+        instance: by,
+        now: startedAt,
+        ...signs,
+      }),
+    ).state;
+
+    const aborted = transition(running, RunEvent.Ended({ ending: "interrupted" })).state;
+    const now = startedAt + PROJECT_RUN_DEADLINE_MS;
+
+    const { commands } = transition(
+      aborted,
+      RunEvent.Reported({ report: undefined, errorCode: null, instance: by, now, ...signs }),
+    );
+
+    const stalled = (modelTurn === null || modelTurn < 0) && restart <= 0;
+
+    expect(commands).toEqual([
+      {
+        _tag: "Settled",
+        outcome: stalled ? "stalled" : "interrupted",
+        errorCode: null,
+        deadline: now,
+      },
+    ]);
   });
 });

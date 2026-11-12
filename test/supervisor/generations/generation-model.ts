@@ -190,7 +190,7 @@ export function settle(
 
   if (active === null || proven === null || proven === active) return none;
 
-  if (outcome !== "failed" && outcome !== "interrupted") return none;
+  if (outcome !== "failed" && outcome !== "stalled") return none;
 
   const fallback = generationLabel(proven);
   const label = generationLabel(active);

@@ -65,7 +65,8 @@ export class ServingConversations {
   admitModelTurn(instance: number): boolean {
     const admitted = this.serves(instance);
 
-    if (!admitted) this.#workspaces.flushRetirement();
+    if (admitted) this.#runs.modelTurn(instance, Date.now());
+    else this.#workspaces.flushRetirement();
 
     return admitted;
   }
