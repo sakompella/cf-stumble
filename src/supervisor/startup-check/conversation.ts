@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
-import type { MainFacetTarget } from "../../facet/index.js";
+import type { MainFacetModel, MainFacetTarget } from "../../facet/index.js";
 import type { GenerationControl } from "../../generation-requests.js";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
+import { attachFacet, type AttachableFacet } from "../artifacts/index.js";
 import {
   ConversationHostTarget,
   heldWorkspace,
@@ -40,7 +41,8 @@ const resumedTurn = (conversationId: string): ScriptedTurn => ({
 export type ResumeCandidate = () => Effect.Effect<Fetcher<MainFacetTarget>, string>;
 
 export function checkConversation(
-  writer: Fetcher<MainFacetTarget>,
+  writer: AttachableFacet,
+  model: MainFacetModel,
   resumeCandidate: ResumeCandidate,
   obtainWorkspace: ScopedWorkspace,
   generations: GenerationControl,
@@ -61,16 +63,20 @@ export function checkConversation(
   });
 
   return Effect.gen(function* () {
-    yield* candidateCall("the candidate did not attach", () => writer.attach(host, generations));
-
-    const conversationId = yield* candidateCall("the candidate did not open a conversation", () =>
-      writer.createConversation(WORKSPACE_ROOT),
+    yield* candidateCall("the candidate did not attach", () =>
+      attachFacet(writer, host, model, generations),
     );
 
-    yield* scriptedTurn(writer, freshTurn(conversationId));
+    const conversationId = yield* candidateCall("the candidate did not open a conversation", () =>
+      writer.facet.createConversation(WORKSPACE_ROOT),
+    );
+
+    yield* scriptedTurn(writer.facet, freshTurn(conversationId));
     const candidate = yield* resumeCandidate();
 
-    yield* candidateCall("the candidate did not attach", () => candidate.attach(host, generations));
+    yield* candidateCall("the candidate did not attach", () =>
+      candidate.attach(host, model, generations),
+    );
     yield* scriptedTurn(candidate, resumedTurn(conversationId));
 
     return PASSED;

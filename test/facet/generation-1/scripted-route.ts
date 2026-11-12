@@ -1,6 +1,6 @@
 import { createModels } from "@earendil-works/pi-ai";
 import type { Context } from "@earendil-works/pi-ai";
-import type { ModelCapability } from "../../../src/facet/generation-1/capabilities.js";
+import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
 import type {
   ModelRouteRequest,

@@ -1,6 +1,7 @@
 import type { Wake } from "@earendil-works/pi-durable";
 import type { EntriesRequest } from "../entries-request.js";
 import type { GenerationControl } from "../generation-requests.js";
+import type { ModelRouteRequest, ValidationFailure } from "../model-route-wire/request.js";
 import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js";
 
 export type { GenerationControl };
@@ -22,9 +23,17 @@ export interface ConversationHost {
   workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable>;
 }
 
+export type ModelCapability = Readonly<{
+  runStream(request: ModelRouteRequest): Promise<ReadableStream<Uint8Array> | ValidationFailure>;
+}>;
+
 export interface ConversationFacet {
   compatibility(): string;
-  attach(host: ConversationHost, generations?: GenerationControl): Promise<void>;
+  attach(
+    host: ConversationHost,
+    model: ModelCapability,
+    generations?: GenerationControl,
+  ): Promise<void>;
   createConversation(cwd: string): Promise<string>;
   submit(conversationId: string, content: string, requestId: string): Promise<number>;
   events(conversationId: string, from?: number): Promise<ReadableStream<Uint8Array>>;

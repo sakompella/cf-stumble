@@ -26,7 +26,7 @@ async function blob(text: string): Promise<string> {
 }
 
 function patchedFacet(source: string): string {
-  const call = "model: this.env.MODEL,";
+  const call = "        model,\n";
 
   if (!source.includes(call) || !source.includes(IMPORT_AFTER)) {
     throw new Error(`${FACET_PATH} no longer matches the patch`);
@@ -34,7 +34,7 @@ function patchedFacet(source: string): string {
 
   return source
     .replace(IMPORT_AFTER, `${IMPORT_AFTER}import { scriptedModel } from "./scripted-model.js";\n`)
-    .replace(call, "model: scriptedModel(this.env.MODEL),");
+    .replace(call, "        model: scriptedModel(model),\n");
 }
 
 export async function scriptedCommit(): Promise<string> {

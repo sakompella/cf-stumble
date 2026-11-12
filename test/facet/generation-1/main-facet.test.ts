@@ -4,7 +4,7 @@ import { Harness } from "@earendil-works/pi-durable";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ConversationHost } from "../../../src/facet/index.js";
 import { MainFacet } from "../../../src/facet/generation-1/main-facet.js";
-import type { ModelCapability } from "../../../src/facet/generation-1/capabilities.js";
+import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
 import { workersAiTurn } from "../../../src/model-route-stream.js";
 import { modelEventStream } from "../../../src/model-route-turn.js";
 import { providerStreamOfLines, sseLine, DONE_LINE } from "../../model-route-provider-stream.js";
@@ -51,12 +51,12 @@ test("an attach after a failed open opens the session and arms the host", async 
           return storage;
         },
       });
-      const facet = new MainFacet(state, { MODEL: noModelRun });
+      const facet = new MainFacet(state, env);
 
-      await expect(facet.attach(host)).rejects.toThrow("the storage is unavailable");
+      await expect(facet.attach(host, noModelRun)).rejects.toThrow("the storage is unavailable");
       expect(armed).toBe(0);
 
-      await expect(facet.attach(host)).resolves.toBeUndefined();
+      await expect(facet.attach(host, noModelRun)).resolves.toBeUndefined();
       expect(armed).toBeGreaterThan(0);
     },
   );
@@ -76,9 +76,9 @@ test("an idle events stream beats every two seconds, and cancelling it leaves no
   await runInDurableObject(
     env.SUPERVISOR.getByName("main-facet-events"),
     async (_instance, state) => {
-      const facet = new MainFacet(state, { MODEL: noModelRun });
+      const facet = new MainFacet(state, env);
 
-      await facet.attach(host);
+      await facet.attach(host, noModelRun);
 
       const id = await facet.createConversation("/workspace");
       const reader = (await facet.events(id)).getReader();
@@ -129,9 +129,9 @@ test("a session that failed on a storage error is reopened by the next attach an
 
         return exec(...args);
       });
-      const facet = new MainFacet(state, { MODEL: noModelRun });
+      const facet = new MainFacet(state, env);
 
-      await facet.attach(host);
+      await facet.attach(host, noModelRun);
       expect(opened).toBe(1);
 
       broken = true;
@@ -142,7 +142,7 @@ test("a session that failed on a storage error is reopened by the next attach an
       expect(faults[0]).toContain("storage reset");
 
       broken = false;
-      await facet.attach(host);
+      await facet.attach(host, noModelRun);
       expect(opened).toBe(2);
       await expect(facet.createConversation("/workspace")).resolves.toBeTypeOf("string");
     },
@@ -167,9 +167,9 @@ test("a turn whose model fails is reported to the host as failed with the reason
   await runInDurableObject(
     env.SUPERVISOR.getByName("main-facet-turn-failed"),
     async (_instance, state) => {
-      const facet = new MainFacet(state, { MODEL: noModelRun });
+      const facet = new MainFacet(state, env);
 
-      await facet.attach(host);
+      await facet.attach(host, noModelRun);
 
       const id = await facet.createConversation("/workspace");
 
@@ -201,9 +201,9 @@ test("a host that refuses the first running report aborts the facet", async () =
     env.SUPERVISOR.getByName("main-facet-first-report"),
     async (_instance, state) => {
       const aborted = vi.spyOn(state, "abort").mockImplementation(() => {});
-      const facet = new MainFacet(state, { MODEL: noModelRun });
+      const facet = new MainFacet(state, env);
 
-      await expect(facet.attach(host)).rejects.toThrow("supervisor gone");
+      await expect(facet.attach(host, noModelRun)).rejects.toThrow("supervisor gone");
       expect(aborted).toHaveBeenCalledTimes(1);
     },
   );
@@ -240,9 +240,9 @@ test("a submit that fails re-arms the plain wake", async () => {
   await runInDurableObject(
     env.SUPERVISOR.getByName("main-facet-failed-submit"),
     async (_instance, state) => {
-      const facet = new MainFacet(state, { MODEL: noModelRun });
+      const facet = new MainFacet(state, env);
 
-      await facet.attach(host);
+      await facet.attach(host, noModelRun);
       const id = await facet.createConversation("/workspace");
 
       await expect(facet.submit(id, "hello", "r1")).rejects.toThrow("busy");
@@ -292,10 +292,11 @@ test("a Workers AI capacity error (3040) is retried by Pi and the turn answers",
   await runInDurableObject(
     env.SUPERVISOR.getByName("main-facet-3040"),
     async (_instance, state) => {
-      const facet = new MainFacet(state, { MODEL: capacityOnceModel(calls) });
+      const facet = new MainFacet(state, env);
+      const model = capacityOnceModel(calls);
 
-      alarm = () => void facet.attach(host);
-      await facet.attach(host);
+      alarm = () => void facet.attach(host, model);
+      await facet.attach(host, model);
       const id = await facet.createConversation("/workspace");
 
       await facet.submit(id, "hello", "r1");

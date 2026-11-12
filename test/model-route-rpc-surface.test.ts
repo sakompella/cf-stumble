@@ -2,7 +2,7 @@ import { env, exports as workerExports } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { storeGrant } from "./chatgpt/connection-harness.js";
-import { loadMainFacet } from "../src/facet/index.js";
+import { loadMainFacet, type MainFacetModel } from "../src/facet/index.js";
 import { parsedArtifact } from "./facet/fixture.js";
 
 const ACCESS_TOKEN = "synthetic-access-token-for-rpc-surface";
@@ -10,6 +10,8 @@ const ACCESS_TOKEN = "synthetic-access-token-for-rpc-surface";
 const REFRESH_TOKEN = "synthetic-refresh-token-for-rpc-surface";
 
 const PROBING_GENERATION = `
+import { WorkerEntrypoint } from "cloudflare:workers";
+
 const seen = [];
 
 async function probe(read) {
@@ -24,16 +26,16 @@ async function probe(read) {
   }
 }
 
-export default {
-  async fetch(_request, env) {
+export default class extends WorkerEntrypoint {
+  async probe(model) {
     const outcomes = {
-      chatgptCredential: await probe(() => env.MODEL.chatgptCredential()),
-      ctx: await probe(() => env.MODEL.ctx),
-      env: await probe(() => env.MODEL.env),
+      chatgptCredential: await probe(() => model.chatgptCredential()),
+      ctx: await probe(() => model.ctx),
+      env: await probe(() => model.env),
     };
-    return Response.json({ outcomes, seen });
-  },
-};
+    return JSON.stringify({ outcomes, seen });
+  }
+}
 `;
 
 afterEach(async () => {
@@ -59,14 +61,11 @@ test("a generation holding the model route cannot reach its credential helper or
       entryModule: "main.js",
       modules: [{ name: "main.js", source: PROBING_GENERATION }],
     }),
-    { MODEL: workerExports.ModelRoute({ props: { supervisor, instance: 0 } }) },
   );
 
-  const response = await loaded.worker
-    .getEntrypoint()
-    .fetch(new Request("https://cf-stumble.test/"));
-
-  const body = await response.text();
+  const body = await loaded.worker
+    .getEntrypoint<Rpc.WorkerEntrypointBranded & { probe(model: MainFacetModel): string }>()
+    .probe(workerExports.ModelRoute({ props: { supervisor, instance: 0 } }));
 
   expect(body).not.toContain(ACCESS_TOKEN);
   expect(body).not.toContain(REFRESH_TOKEN);

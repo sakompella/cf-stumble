@@ -13,9 +13,9 @@ import {
   hostLog,
   type ConversationHost,
   type GenerationControl,
+  type ModelCapability,
   type RunFailures,
 } from "../conversation-protocol.js";
-import type { ModelCapability } from "./capabilities.js";
 import { CodingTools } from "./coding-tools.js";
 import { computerEnv } from "./computer-env.js";
 import { CfStumblePrompt } from "./prompt.js";
