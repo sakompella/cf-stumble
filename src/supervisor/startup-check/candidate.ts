@@ -1,15 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { logRedactedCause, redactedExcerpt } from "../../diagnostics.js";
-import { FACET_COMPATIBILITY } from "../../facet/index.js";
+import { FACET_COMPATIBILITY, loadMainFacet } from "../../facet/index.js";
 import type { MainFacetTarget, MainHarnessArtifact } from "../../facet/index.js";
-import {
-  candidateFacetName,
-  mountFacet,
-  OLD_PROTOCOL_COMPATIBILITY,
-  type AttachableFacet,
-  type OldProtocolLoad,
-} from "../artifacts/index.js";
+import { candidateFacetName, type MountedFacet } from "../artifacts/index.js";
 import { GenerationHostTarget } from "../conversations/index.js";
 import { checkConversation } from "./conversation.js";
 import type { StartupCheckHost } from "./index.js";
@@ -57,7 +51,7 @@ function checkCandidate(
 
     if (Result.isFailure(candidate)) return { stage: "mount-failed", reason: candidate.failure };
 
-    const incompatible = yield* compatibilityProblem(candidate.success.facet).pipe(
+    const incompatible = yield* compatibilityProblem(candidate.success).pipe(
       withinDeadline(
         deadlines.compatibilityMs,
         "the facet compatibility answer exceeded the deadline",
@@ -71,21 +65,16 @@ function checkCandidate(
     if (Result.isFailure(previous)) return previous.failure;
 
     const model = host.model();
-    const { artifact: written, oldProtocol } = previous.success;
+    const written = previous.success;
 
-    const writer = remount(
-      host,
-      written,
-      name,
-      oldProtocol ? { loaderName: candidateFacetName(written.harnessCommit), model } : undefined,
-    );
+    const writer = remount(host, written, name);
 
     if (Result.isFailure(writer)) return { stage: "mount-failed", reason: writer.failure };
 
     return yield* checkConversation(
       writer.success,
       model,
-      () => Effect.fromResult(remount(host, artifact, name)).pipe(Effect.map(({ facet }) => facet)),
+      () => Effect.fromResult(remount(host, artifact, name)),
       host.workspace(deadlines.conversationMs),
       statusOnlyGenerations(host),
     ).pipe(
@@ -113,19 +102,15 @@ function statusOnlyGenerations(host: StartupCheckHost): GenerationHostTarget {
   );
 }
 
-type PreviousArtifact = Readonly<{ artifact: MainHarnessArtifact; oldProtocol: boolean }>;
-
 function previousArtifact(
   host: StartupCheckHost,
   candidate: MainHarnessArtifact,
-): Effect.Effect<Result.Result<PreviousArtifact, StartupCheckOutcome>> {
+): Effect.Effect<Result.Result<MainHarnessArtifact, StartupCheckOutcome>> {
   const serving = host.generations.active().generation;
 
   if (serving === undefined) {
-    return Effect.succeed(Result.succeed({ artifact: candidate, oldProtocol: false }));
+    return Effect.succeed(Result.succeed(candidate));
   }
-
-  const oldProtocol = host.generations.activeCompatibility() === OLD_PROTOCOL_COMPATIBILITY;
 
   return host.artifacts.prepare(serving.harnessCommit).pipe(
     Effect.match({
@@ -134,20 +119,15 @@ function previousArtifact(
           stage: "mount-failed",
           reason: `the serving generation's artifact could not be prepared, so the resume check has no writer`,
         }),
-      onSuccess: (artifact) => Result.succeed({ artifact, oldProtocol }),
+      onSuccess: (artifact) => Result.succeed(artifact),
     }),
   );
 }
 
-function remount(
-  host: StartupCheckHost,
-  artifact: MainHarnessArtifact,
-  name: string,
-  oldProtocol?: OldProtocolLoad,
-) {
+function remount(host: StartupCheckHost, artifact: MainHarnessArtifact, name: string) {
   host.ctx.facets.abort(name, "the startup check remounts");
 
-  return mountCandidateFacet(host, artifact, name, oldProtocol);
+  return mountCandidateFacet(host, artifact, name);
 }
 
 function compatibilityProblem(
@@ -181,11 +161,12 @@ function mountCandidateFacet(
   host: StartupCheckHost,
   artifact: MainHarnessArtifact,
   facetName: string,
-  oldProtocol?: OldProtocolLoad,
-): Result.Result<AttachableFacet, string> {
+): Result.Result<MountedFacet, string> {
   try {
     return Result.succeed(
-      mountFacet(host.loader, host.ctx.facets, facetName, artifact, oldProtocol),
+      host.ctx.facets.get(facetName, () => ({
+        class: loadMainFacet(host.loader, artifact).facetClass,
+      })),
     );
   } catch {
     return Result.fail("candidate facet could not mount");

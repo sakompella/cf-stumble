@@ -9,7 +9,7 @@ import { generationHistory } from "./history/wiring.js";
 import { FACET_COMPATIBILITY, type MainFacetModel } from "../facet/index.js";
 import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
-import { HarnessArtifacts, OLD_PROTOCOL_COMPATIBILITY } from "./artifacts/index.js";
+import { HarnessArtifacts } from "./artifacts/index.js";
 import { ServingConversations } from "./conversations/index.js";
 import { ProvisionFence, WorkspaceReadiness } from "./readiness/index.js";
 import { supervisorNames, type SupervisorEnv } from "./supervisor-env.js";
@@ -57,24 +57,6 @@ function projectParts(
   return { github, connections, readiness };
 }
 
-function servingMount(
-  artifacts: HarnessArtifacts,
-  generations: Generations,
-  loader: WorkerLoader,
-  facets: DurableObjectState["facets"],
-  model: (instance: number) => MainFacetModel,
-) {
-  return (instance: number) =>
-    artifacts.mount(
-      generations.active(),
-      loader,
-      facets,
-      generations.activeCompatibility() === OLD_PROTOCOL_COMPATIBILITY
-        ? { instance, model: model(instance) }
-        : undefined,
-    );
-}
-
 export function supervisorParts(
   ctx: DurableObjectState,
   env: SupervisorEnv,
@@ -112,7 +94,7 @@ export function supervisorParts(
     ...projects,
     serving: new ServingConversations({
       ctx,
-      mount: servingMount(artifacts, generations, env.LOADER, ctx.facets, model),
+      mount: () => artifacts.mount(generations.active(), env.LOADER, ctx.facets),
       model,
       catalog: () => projects.connections.catalog(),
       resetting,
