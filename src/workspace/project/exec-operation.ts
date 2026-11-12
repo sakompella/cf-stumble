@@ -26,8 +26,6 @@ type Ending = TerminalEvent extends infer Event
 
 type BackendRead = Awaited<ReturnType<ExecBackendHandle["reader"]["read"]>>;
 
-const WRITE_FORM_REFUSAL = "the workspace git does not support this form";
-
 const ISOLATE_REFUSED_EXIT_CODE = 129;
 
 function failure(restarted: boolean): Ending {
@@ -71,7 +69,6 @@ class ExecRun implements ExecOperation {
   #handle: ExecBackendHandle | undefined;
   #settled = false;
   #cause: unknown;
-  #writeFormRefused = false;
 
   constructor(
     execBackend: ExecBackend,
@@ -138,10 +135,6 @@ class ExecRun implements ExecOperation {
     if (event !== undefined && event.name !== "exit") {
       const text = this.#decoders[event.name].decode(event.data, { stream: true });
 
-      if (event.name === "stderr" && text.includes(WRITE_FORM_REFUSAL)) {
-        this.#writeFormRefused = true;
-      }
-
       enqueueOutput(this.#frames, this.#controller, event.name, text);
 
       return;
@@ -194,7 +187,6 @@ class ExecRun implements ExecOperation {
         isolateRefused:
           this.#handle?.isolateRefused === true ||
           (backend === "isolate" && exitCode === ISOLATE_REFUSED_EXIT_CODE),
-        writeFormRefused: this.#writeFormRefused,
         errorCode: terminal.outcome === "failed" ? terminal.error.code : null,
         cause: this.#cause === undefined ? null : causeText(this.#cause),
       },

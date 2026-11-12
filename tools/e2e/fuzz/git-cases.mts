@@ -23,7 +23,7 @@ type World = {
 };
 
 function setup(command: string, oracle: string = command): Case {
-  return { kind: "setup", backend: "isolate", command, oracle };
+  return { kind: "setup", backend: "container", command, oracle };
 }
 
 export class Generator {
@@ -56,7 +56,7 @@ export class Generator {
       : [];
 
     return [
-      setup("git init", "git init && git config core.fileMode false"),
+      setup("git init && git config core.fileMode false"),
       setup("git config user.name fuzz"),
       setup("git config user.email fuzz@example.invalid"),
       setup(
@@ -170,10 +170,8 @@ export class Generator {
     return r.pick(forms)();
   }
 
-  #git(kind: string, command: string, writes = true): Case {
-    const container = this.#random.chance(writes ? 0.35 : 0.5);
-
-    return { kind, backend: container ? "container" : "isolate", command: `git ${command}` };
+  #git(kind: string, command: string): Case {
+    return { kind, backend: "container", command: `git ${command}` };
   }
 
   #index(): Case {
@@ -274,7 +272,7 @@ export class Generator {
       `diff HEAD~1 HEAD --stat`,
     ];
 
-    return this.#git("read", r.pick(forms), false);
+    return this.#git("read", r.pick(forms));
   }
 
   #history(): Case {
@@ -282,7 +280,7 @@ export class Generator {
     const forms = HISTORY;
     const form = r.pick(forms);
 
-    return this.#git(form.startsWith("log") ? "read" : "reset", form, !form.startsWith("log"));
+    return this.#git(form.startsWith("log") ? "read" : "reset", form);
   }
 
   #branchName(): string {

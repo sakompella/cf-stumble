@@ -52,13 +52,10 @@ async function finished(backend: ExecBackend, command: string): Promise<LogField
 
 const COMMIT = "git commit -m 'deploy key ghp_0123456789abcdefghijklmnopqrstuvwxyzAB'";
 
-test("an isolate refusal whose container fallback refuses the write form is logged as both", async () => {
+test("an isolate refusal that falls back to the container is logged with both backends", async () => {
   const backend = isolateWithContainerFallback(
     scripted("isolate", [err("git commit: unsupported option\n"), exit(129)]),
-    scripted("container", [
-      err("git commit: the workspace git does not support this form. Use another form.\n"),
-      exit(1),
-    ]),
+    scripted("container", [exit(0)]),
   );
 
   const entry = await finished(backend, COMMIT);
@@ -68,7 +65,6 @@ test("an isolate refusal whose container fallback refuses the write form is logg
     backend: "container",
     fellBackFrom: "isolate",
     isolateRefused: true,
-    writeFormRefused: true,
   });
   expect(JSON.stringify(entry)).not.toContain("ghp_");
 });
@@ -81,7 +77,6 @@ test("a git command the isolate runs is logged without refusals", async () => {
     backend: "isolate",
     fellBackFrom: null,
     isolateRefused: false,
-    writeFormRefused: false,
   });
 });
 

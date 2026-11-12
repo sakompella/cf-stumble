@@ -119,7 +119,7 @@ test.each([127, 129])("an isolate exit %i reruns the command in the container", 
   expect(containerRuns).toEqual([
     expect.objectContaining({
       backend: "container",
-      command: "export CF_STUMBLE_GIT_FALLBACK=1; grep foo file",
+      command: "grep foo file",
     }),
   ]);
   expect(text).toContain("* main");
@@ -139,7 +139,7 @@ test("an isolate that hits a just-bash limit reruns the command in the container
   expect(containerRuns).toEqual([
     expect.objectContaining({
       backend: "container",
-      command: "export CF_STUMBLE_GIT_FALLBACK=1; grep foo file",
+      command: "grep foo file",
     }),
   ]);
   expect(text).toContain("1\\n2\\n3");

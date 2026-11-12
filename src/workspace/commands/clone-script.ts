@@ -22,7 +22,7 @@ export function reconcileClone(
     ...beforeClone,
     '  rm -rf "$staging"',
     ...cloneIntoStaging,
-    '  CF_STUMBLE_CONTAINER_GIT_WRITE=1 git -C "$staging" config core.fileMode false',
+    '  git -C "$staging" config core.fileMode false',
     '  rmdir "$repository" 2>/dev/null || true',
     '  mv "$staging" "$repository"',
     "fi",

@@ -16,11 +16,11 @@ import type { ComputerEnv } from "./execution-env.js";
 
 const BACKEND_DESCRIPTION = [
   "Optional override; leave it out. The host routes each command by itself.",
-  "A command whose programs are all simple file tools, git, or curl runs in a fast Worker isolate that starts at once and costs little:",
-  "ls, cat, head, tail, grep, find, sed, awk, sort, wc, diff, jq, yq, echo, mkdir, cp, mv, rm, and git, including fetch, pull and push to GitHub over HTTPS. Run git as its own command, not mixed with container programs.",
+  "A command whose programs are all simple file tools or curl runs in a fast Worker isolate that starts at once and costs little:",
+  "ls, cat, head, tail, grep, find, sed, awk, sort, wc, diff, jq, yq, echo, mkdir, cp, mv, and rm.",
   "curl also runs there for web requests to any host over http(s) with any method and headers; api.github.com gets the workspace's GitHub token automatically, and redirects are followed.",
-  "Anything else runs in the container, a Linux machine with the project's toolchain and the internet: node, npm, pnpm, python, gh, builds, tests, subshells, $(...), env assignments.",
-  "isolate: ask for the isolate; a command it cannot run goes to the container instead.",
+  "Anything else runs in the container, a Linux machine with the project's toolchain and the internet: git, node, npm, pnpm, python, gh, builds, tests, subshells, $(...), env assignments.",
+  "isolate: ask for the isolate; a command it cannot run goes to the container instead, except git, which is refused there.",
   "container: always the container.",
   "Both see the same workspace files.",
 ].join(" ");

@@ -11,7 +11,6 @@ export interface GitExec {
   readonly backend: string;
   readonly fellBack: boolean;
   readonly isolateRefused: boolean;
-  readonly writeFormRefused: boolean;
 }
 
 export interface GitExecs {
@@ -26,7 +25,6 @@ const ExecFinishedRow = Schema.Struct({
     backend: Schema.NullOr(Schema.String),
     fellBackFrom: Schema.NullOr(Schema.String),
     isolateRefused: Schema.Boolean,
-    writeFormRefused: Schema.Boolean,
   }),
 });
 
@@ -38,8 +36,7 @@ export function parseGitExecs(response: JsonValue): GitExecs {
 
     if (Option.isNone(parsed)) return [];
 
-    const { event, program, backend, fellBackFrom, isolateRefused, writeFormRefused } =
-      parsed.value.source;
+    const { event, program, backend, fellBackFrom, isolateRefused } = parsed.value.source;
 
     if (event !== EXEC_FINISHED_EVENT || (program !== "git" && !program.startsWith("git "))) {
       return [];
@@ -51,7 +48,6 @@ export function parseGitExecs(response: JsonValue): GitExecs {
         backend: backend ?? "none",
         fellBack: fellBackFrom !== null,
         isolateRefused,
-        writeFormRefused,
       },
     ];
   });
@@ -110,10 +106,6 @@ export function gitExecLine({ execs, sample }: GitExecs): readonly string[] {
     part(
       "isolate refused",
       execs.filter((exec) => exec.isolateRefused),
-    ),
-    part(
-      "write form refused",
-      execs.filter((exec) => exec.writeFormRefused),
     ),
   ];
 

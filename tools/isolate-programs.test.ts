@@ -9,7 +9,7 @@ describe("isolate programs", () => {
 
     assert.deepEqual(
       [...ISOLATE_PROGRAMS].filter((program) => !registered.has(program)),
-      ["cd", "test", "git", "curl"],
+      ["cd", "test", "curl"],
     );
   });
 });

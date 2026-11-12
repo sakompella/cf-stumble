@@ -150,14 +150,8 @@ function transition(phase: Phase, event: FallbackEvent): Step {
   });
 }
 
-const GIT_FALLBACK_VARIABLE = "CF_STUMBLE_GIT_FALLBACK";
-
 function fallbackInput(input: ExecBackendInput): ExecBackendInput {
-  return {
-    ...input,
-    command: `export ${GIT_FALLBACK_VARIABLE}=1; ${input.command}`,
-    backend: "container",
-  };
+  return { ...input, backend: "container" };
 }
 
 function stopHandle(handle: ExecBackendHandle): Promise<void> {

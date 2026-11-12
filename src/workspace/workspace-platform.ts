@@ -19,7 +19,7 @@ import {
 } from "./container-lifecycle.js";
 import { ProviderContainerAPI } from "./provider-container.js";
 import { ProviderLink } from "./provider-link.js";
-import { gitForwardToken, routeFetch } from "./route-fetch.js";
+import { routeFetch } from "./route-fetch.js";
 
 type WorkspaceHostBackend = HostedBackend<Parameters<WorkspaceBackend["connect"]>[0]>;
 
@@ -71,15 +71,9 @@ export class WorkspacePlatform {
     this.#platformContainer = state.container;
     this.provider = new ProviderLink(state);
     this.#providerContainer = new ProviderContainerAPI(this.provider, state.id.toString());
-    const gitToken = () => gitForwardToken(state.storage.kv);
 
     this.#containerBackend = new ContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#cloudflareContainer() }),
-      containerEnv: {
-        get COMPUTER_VAR_CF_STUMBLE_GIT_TOKEN() {
-          return gitToken();
-        },
-      },
       workspace: { binding: "WORKSPACE_HOST", id: state.id.toString() },
       egress: { mode: "direct" },
       instance: WORKSPACE_CONTAINER_INSTANCE,
@@ -168,11 +162,6 @@ export class WorkspacePlatform {
     return routeFetch(request, {
       token: this.#providerToken,
       provider: this.provider,
-      git: {
-        token: gitForwardToken(this.#state.storage.kv),
-        workspace: this.workspace,
-        backendId: this.#containerBackend.id,
-      },
       container: this.#containerBackend,
       computerd: this.#providerBackend?.backend,
     });

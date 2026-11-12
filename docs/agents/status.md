@@ -25,7 +25,7 @@ Each item is a merge on `main` that production now runs. The facet changes reach
 - **Runtime parity and the startup check.** The deploy of `2caaafcb` failed with `FinalizationRegistry is not defined` (fixed in `157b6799`). After a five-whys review, production runs with the compatibility features that the tests run with (`be08fab2`), and `pnpm verify` builds the Alchemy Worker bundle and starts it in Miniflare with production settings (`cefcdfb2`).
 - **Immediate Durable Object updates** (`d492735e`), described above.
 - **End-to-end runs.** `pnpm e2e` deploys a throwaway stage and runs the page, product-loop and self-modification workflows (`8eef679e`). `pnpm e2e:fuzz` fuzzes a real stage by area: HTTP (`0f919e71`), page (`abeef105`), exec (`b9ac892a`), lifecycle (`057f1ea7`) and git (`76bc5438`). Fixes from its findings merged in `436d8bbe`, `80d3d991` and `8e5a800b`.
-- **Property and mutation tests.** Property tests cover exec routing, the state machines, the parsers, and isolate `git status` against real Git; `pnpm test:mutation` runs StrykerJS (`cd5e8931`).
+- **Property and mutation tests.** Property tests cover exec routing, the state machines and the parsers; `pnpm test:mutation` runs StrykerJS (`cd5e8931`).
 - **Improve plans 001 to 007.** A ChatGPT refresh keeps the rotated token (`e75ccc0a`). The idle and backend stops pull the container disk first (`ac461395`). A daily Ops check workflow runs `ops:check` on production (`1a971bae`). The decoded module map is cached (`94b2f9df`). A refused events stream waits before it asks again (`813206a0`). The Supervisor no longer carries one-shot migrations (`bda2bbe3`). The orb provider ignores redirects and closes on missed pongs (`f7bf9d7b`).
 
 ## Decided outside an ADR
