@@ -290,22 +290,30 @@ test("a binding call that throws before it returns a Promise becomes one termina
   ]);
 });
 
-test("a binding capacity error (3040) carries Workers AI's documented status 429", async () => {
-  const capacity = Object.assign(
-    new Error("3040: Capacity temporarily exceeded, please try again."),
-    { name: "AiError" },
-  );
+test.each([
+  "3021: rate limiting: inference request per min rate reached",
+  "3036: You have used up your daily free allocation of 10,000 neurons.",
+  "3040: Capacity temporarily exceeded, please try again.",
+])(
+  "a binding rate limit or capacity error carries status 429 so Pi retries it",
+  async (message) => {
+    const throttled = Object.assign(new Error(message), { name: "AiError" });
 
-  const full: ModelStreamInference = { run: () => Promise.reject(capacity) };
+    const full: ModelStreamInference = { run: () => Promise.reject(throttled) };
+
+    await expect(collectEvents(streamModelEvents(full, REQUEST))).resolves.toEqual([
+      { type: "error", error: { code: "model-unavailable", detail: `429 ${message}` } },
+    ]);
+  },
+);
+
+test("a binding error with another Workers AI code stays a plain model-unavailable error", async () => {
+  const missing = Object.assign(new Error("5007: No such model or task"), { name: "AiError" });
+
+  const full: ModelStreamInference = { run: () => Promise.reject(missing) };
 
   await expect(collectEvents(streamModelEvents(full, REQUEST))).resolves.toEqual([
-    {
-      type: "error",
-      error: {
-        code: "model-unavailable",
-        detail: "429 3040: Capacity temporarily exceeded, please try again.",
-      },
-    },
+    { type: "error", error: { code: "model-unavailable", detail: "5007: No such model or task" } },
   ]);
 });
 

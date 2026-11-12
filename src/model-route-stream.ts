@@ -168,13 +168,13 @@ export function finishedTurn(
   return accumulator.truncated ? { ...answer, truncated: true } : answer;
 }
 
-const CAPACITY_EXCEEDED_CODE = "3040:";
+const RATE_LIMITED_CODES = new Set(["3021", "3036", "3040"]);
 
-const CAPACITY_EXCEEDED_STATUS = 429;
+const RATE_LIMITED_STATUS = 429;
 
 function bindingFailure(cause: unknown): ModelTurnFailed {
-  return cause instanceof Error && cause.message.startsWith(CAPACITY_EXCEEDED_CODE)
-    ? modelUnavailableBecause(`${CAPACITY_EXCEEDED_STATUS} ${cause.message}`)
+  return cause instanceof Error && RATE_LIMITED_CODES.has(/^(\d+):/u.exec(cause.message)?.[1] ?? "")
+    ? modelUnavailableBecause(`${RATE_LIMITED_STATUS} ${cause.message}`)
     : modelUnavailable(cause);
 }
 
