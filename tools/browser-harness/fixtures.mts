@@ -1,9 +1,11 @@
+import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 import type { JsonValue } from "../json.mjs";
 
 export type HarnessScenario =
   | "ready"
   | "ready-paused"
   | "model-error"
+  | "cut-off"
   | "github-disconnected"
   | "github-awaiting-authorization";
 
@@ -18,6 +20,18 @@ export const HARNESS_SELF_PROJECT_ID = "harness";
 export const CONNECTED_PROJECT_ID = "octocat-new-repo";
 
 export const CONNECTED_PROJECT_URL = "https://github.com/octocat/new-repo";
+
+export function projectLocation(projectId: string): string {
+  if (projectId === HARNESS_SELF_PROJECT_ID) {
+    return HARNESS_DIRECTORY;
+  }
+
+  if (projectId === HARNESS_PROJECT_ID) {
+    return HARNESS_PROJECT_URL;
+  }
+
+  return CONNECTED_PROJECT_URL;
+}
 
 export type ProjectEntry = Readonly<{
   kind: "repository" | "harness";

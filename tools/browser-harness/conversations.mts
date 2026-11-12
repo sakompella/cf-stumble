@@ -23,14 +23,8 @@ import {
 import { setTimeout as sleep } from "node:timers/promises";
 import type { EntriesRequest } from "../../src/entries-request.js";
 import { entriesQuery, entryId } from "../../src/facet/entries-query.js";
-import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
-import {
-  CONNECTED_PROJECT_URL,
-  HARNESS_PROJECT_ID,
-  HARNESS_PROJECT_URL,
-  HARNESS_SELF_PROJECT_ID,
-  type HarnessScenario,
-} from "./fixtures.mjs";
+import { RunNotices } from "../../src/facet/generation-1/run-notices.js";
+import { HARNESS_SELF_PROJECT_ID, projectLocation, type HarnessScenario } from "./fixtures.mjs";
 
 export const OPENING_TEXT = "I will run the checks before I change anything.";
 
@@ -42,21 +36,11 @@ export const TOOL_OUTPUT = ["tests: 12 passed\n", "lint: clean\n"] as const;
 
 export const MODEL_ERROR = "model-error";
 
+export const CUT_OFF_TEXT = "Here is the first half of my answer";
+
 export const HARNESS_THREAD_MARKER = "HARNESS-THREAD";
 
 export const EARLIER_EDIT_MARKER = "EARLIER-EDIT-KEPT";
-
-export function projectLocation(projectId: string): string {
-  if (projectId === HARNESS_SELF_PROJECT_ID) {
-    return HARNESS_DIRECTORY;
-  }
-
-  if (projectId === HARNESS_PROJECT_ID) {
-    return HARNESS_PROJECT_URL;
-  }
-
-  return CONNECTED_PROJECT_URL;
-}
 
 export function seedExchange(projectId: string) {
   const location = projectLocation(projectId);
@@ -97,6 +81,10 @@ function answer(scenario: HarnessScenario, messages: readonly Message[]): Assist
 
   if (seeded !== undefined) {
     return fauxAssistantMessage(seedExchange(seeded).reply);
+  }
+
+  if (scenario === "cut-off") {
+    return fauxAssistantMessage(CUT_OFF_TEXT, { stopReason: "length" });
   }
 
   return fauxAssistantMessage(
@@ -171,6 +159,7 @@ async function openHarness(scenario: HarnessScenario, barrier: Barrier) {
   models.setProvider(faux.provider);
   const registry = createRegistry();
   registry.install(stubTools(scenario, barrier));
+  registry.install(RunNotices);
   const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
   const model = faux.getModel();
 

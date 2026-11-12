@@ -20,6 +20,7 @@ import { CodingTools } from "./coding-tools.js";
 import { computerEnv } from "./computer-env.js";
 import { CfStumblePrompt } from "./prompt.js";
 import { ROUTE_MODEL, routeProvider } from "./route-provider.js";
+import { RunNotices } from "./run-notices.js";
 
 const CONTEXT_BUDGET_TOKENS = 64_000;
 
@@ -53,6 +54,7 @@ export async function openSession(input: SessionInput): Promise<Session> {
   const registry = createRegistry();
   registry.install(CodingTools);
   registry.install(CfStumblePrompt);
+  registry.install(RunNotices);
 
   const harness = await Harness.open(
     await openDurableObjectSqliteStorage(input.storage),
