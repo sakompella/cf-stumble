@@ -5,6 +5,7 @@ import type {
   ExecBackendHandle,
   ExecBackendInput,
 } from "./exec-backend.js";
+import { commandMayWrite } from "./exec-routing.js";
 import type { ExecBackendChoice } from "./protocol.js";
 
 type BackendRead = Awaited<ReturnType<ExecBackendHandle["reader"]["read"]>>;
@@ -62,6 +63,13 @@ const ISOLATE_LIMIT_MARKERS: readonly RegExp[] = [
 
 const ISOLATE_DEADLINE_MARKER = /exceeded (?:its )?execution deadline/u;
 
+const ENCODER = new TextEncoder();
+
+const RERUN_NOTE: StderrEvent = {
+  name: "stderr",
+  data: ENCODER.encode("rerun with backend: container\n"),
+};
+
 function isolateLimitExceeded(held: readonly StderrEvent[], exitCode: number): boolean {
   const stderr = held.map((event) => DECODER.decode(event.data)).join("");
 
@@ -80,15 +88,24 @@ function startingContainer(isolate: ExecBackendHandle): Step {
   );
 }
 
+function passingIsolate(isolate: ExecBackendHandle, events: readonly BackendExecEvent[]): Step {
+  return step(
+    Phase.Passing({ handle: isolate, fellBack: false }),
+    FallbackCommand.Deliver({ events }),
+  );
+}
+
 function holdingRead(
   isolate: ExecBackendHandle,
   held: readonly StderrEvent[],
   read: BackendRead,
+  mayWrite: boolean,
 ): Step {
-  const passing = (events: readonly BackendExecEvent[]) =>
-    step(Phase.Passing({ handle: isolate, fellBack: false }), FallbackCommand.Deliver({ events }));
+  const passing = (events: readonly BackendExecEvent[]) => passingIsolate(isolate, events);
 
-  if (read.done) return startingContainer(isolate);
+  if (read.done) {
+    return mayWrite ? passing([...held, RERUN_NOTE]) : startingContainer(isolate);
+  }
 
   const event = read.value;
 
@@ -99,13 +116,15 @@ function holdingRead(
   }
 
   if (event.name === "exit" && isolateLimitExceeded(held, event.exitCode)) {
-    return step(Phase.StartingContainer(), FallbackCommand.StartContainer());
+    return mayWrite
+      ? passing([...held, RERUN_NOTE, event])
+      : step(Phase.StartingContainer(), FallbackCommand.StartContainer());
   }
 
   return passing([...held, event]);
 }
 
-function transition(phase: Phase, event: FallbackEvent): Step {
+function transition(phase: Phase, event: FallbackEvent, mayWrite: boolean): Step {
   const stay = step(phase);
 
   const stopLate = (handle: ExecBackendHandle) => step(phase, FallbackCommand.Stop({ handle }));
@@ -113,8 +132,9 @@ function transition(phase: Phase, event: FallbackEvent): Step {
   return Phase.$match(phase, {
     Holding: ({ isolate, held }) =>
       FallbackEvent.$match(event, {
-        IsolateRead: ({ read }) => holdingRead(isolate, held, read),
-        IsolateBroke: () => startingContainer(isolate),
+        IsolateRead: ({ read }) => holdingRead(isolate, held, read, mayWrite),
+        IsolateBroke: () =>
+          mayWrite ? passingIsolate(isolate, [...held, RERUN_NOTE]) : startingContainer(isolate),
         ContainerStarted: ({ handle }) => stopLate(handle),
         Abandon: () =>
           step(
@@ -161,6 +181,7 @@ function stopHandle(handle: ExecBackendHandle): Promise<void> {
 class FallbackExec implements ExecBackendHandle {
   readonly #container: ExecBackend;
   readonly #input: ExecBackendInput;
+  readonly #mayWrite: boolean;
   readonly #ready: BackendExecEvent[] = [];
   #phase: Phase;
   #starting: Promise<void> = Promise.resolve();
@@ -175,6 +196,7 @@ class FallbackExec implements ExecBackendHandle {
     this.#phase = Phase.Holding({ isolate, held: [] });
     this.#container = container;
     this.#input = input;
+    this.#mayWrite = commandMayWrite(input.command);
   }
 
   kill(): Promise<void> {
@@ -206,7 +228,7 @@ class FallbackExec implements ExecBackendHandle {
   }
 
   #dispatch(event: FallbackEvent): Promise<void> {
-    const { phase, commands } = transition(this.#phase, event);
+    const { phase, commands } = transition(this.#phase, event, this.#mayWrite);
     this.#phase = phase;
 
     return Promise.all(commands.map((command) => this.#perform(command))).then(() => {});

@@ -87,7 +87,11 @@ async function drain(events: ReadableStream<Uint8Array>): Promise<string> {
   return text;
 }
 
-async function run(isolateEvents: BackendExecEvent[], containerEvents: BackendExecEvent[]) {
+async function run(
+  isolateEvents: BackendExecEvent[],
+  containerEvents: BackendExecEvent[],
+  command = "grep foo file",
+) {
   const container = new ScriptedBackend("container", containerEvents);
 
   const backend = isolateWithContainerFallback(
@@ -95,14 +99,11 @@ async function run(isolateEvents: BackendExecEvent[], containerEvents: BackendEx
     container,
   );
 
-  const handle = await backend.exec({ command: "grep foo file", cwd: "/", timeoutMs: 1_000 });
+  const input = { command, cwd: "/", timeoutMs: 1_000 };
+  const handle = await backend.exec(input);
 
   const text = await drain(
-    startExecOperation(
-      { exec: () => Promise.resolve(handle) },
-      { command: "grep foo file", cwd: "/", timeoutMs: 1_000 },
-      () => {},
-    ).events,
+    startExecOperation({ exec: () => Promise.resolve(handle) }, input, () => {}).events,
   );
 
   return { text, containerRuns: container.seen, handle };
@@ -245,6 +246,89 @@ test("an isolate stream that breaks after output is not rerun", async () => {
   expect(containerRuns).toEqual([]);
   expect(text).toContain('"data":"a');
   expect(text).toContain("backend-unavailable");
+});
+
+test("an isolate limit on a command with a write form is returned with a rerun note", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const { text, containerRuns, handle } = await run(
+    [err("bash: sed: iteration limit exceeded (100000)\n"), exit(126)],
+    [out("never\n"), exit(0)],
+    "sed -i s/a/b/ file",
+  );
+
+  expect(containerRuns).toEqual([]);
+  expect(text).toContain("iteration limit exceeded");
+  expect(text).toContain("rerun with backend: container");
+  expect(handle.backend).toBe("isolate");
+  expect(handle.fellBackFrom).toBeUndefined();
+});
+
+test("an isolate deadline on an append is not rerun", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const { text, containerRuns } = await run(
+    [err("bash: grep exceeded execution deadline (30000ms)\n"), exit(124)],
+    [out("never\n"), exit(0)],
+    "grep foo file >> log",
+  );
+
+  expect(containerRuns).toEqual([]);
+  expect(text).toContain("execution deadline");
+  expect(text).toContain("rerun with backend: container");
+});
+
+test("an isolate stream that ends without an exit on a write command is not rerun", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const { text, containerRuns } = await run(
+    [err("partial failure\n")],
+    [out("never\n"), exit(0)],
+    "rm -rf build",
+  );
+
+  expect(containerRuns).toEqual([]);
+  expect(text).toContain("partial failure");
+  expect(text).toContain("rerun with backend: container");
+  expect(text).toContain("backend-unavailable");
+});
+
+test("an isolate stream that breaks on a write command is not rerun", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const container = new ScriptedBackend("container", [out("never\n"), exit(0)]);
+  const broken = new ScriptedBackend("isolate", []);
+
+  const isolate: ExecBackend = {
+    exec: async (input) => {
+      const handle = await broken.exec(input);
+
+      return {
+        ...handle,
+        reader: { ...handle.reader, read: () => Promise.reject(new Error("CPU time limit")) },
+      };
+    },
+  };
+
+  const handle = await isolateWithContainerFallback(isolate, container).exec({
+    command: "cp a b",
+    cwd: "/",
+    timeoutMs: 1_000,
+  });
+
+  const text = await drain(
+    startExecOperation(
+      { exec: () => Promise.resolve(handle) },
+      { command: "cp a b", cwd: "/", timeoutMs: 1_000 },
+      () => {},
+    ).events,
+  );
+
+  expect(container.seen).toEqual([]);
+  expect(text).toContain("rerun with backend: container");
+  expect(broken.killed).toBe(1);
 });
 
 test("a kill while the container fallback starts kills that container once it exists", async () => {

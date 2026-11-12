@@ -92,6 +92,46 @@ function segmentRunsInIsolate(words: readonly string[]): boolean {
   return program !== "awk" || !rest.some((word) => AWK_LOOP.test(word));
 }
 
+const WRITE_PROGRAMS: ReadonlySet<string> = new Set([
+  "chmod",
+  "cp",
+  "gunzip",
+  "gzip",
+  "ln",
+  "mkdir",
+  "mv",
+  "rm",
+  "rmdir",
+  "split",
+  "tar",
+  "tee",
+  "touch",
+]);
+
+function sedInPlace(word: string): boolean {
+  return word.startsWith("--in-place") || (/^-[^-]/u.test(word) && word.includes("i"));
+}
+
+function segmentMayWrite(words: readonly string[]): boolean {
+  const remaining = withoutAssignments(words);
+
+  if (remaining === undefined) return true;
+
+  const [program = "", ...rest] = remaining;
+
+  return program === "sed" ? rest.some(sedInPlace) : WRITE_PROGRAMS.has(program);
+}
+
+export function commandMayWrite(command: string): boolean {
+  const segments = firstWords(command);
+
+  if (segments === undefined) return true;
+
+  if (segments.some((words) => words.some((word) => word.startsWith(">")))) return true;
+
+  return segments.some(segmentMayWrite);
+}
+
 const OUTSIDE_WORKSPACE_PREFIXES = [
   "/bin",
   "/dev",

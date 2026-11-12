@@ -1,7 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { routedBackend } from "../../../src/workspace/project/exec-routing.js";
+import { commandMayWrite, routedBackend } from "../../../src/workspace/project/exec-routing.js";
 import { ISOLATE_PROGRAMS } from "../../../src/workspace/project/isolate-programs.js";
 
 const SYSTEM_DIRECTORIES = [
@@ -251,4 +251,44 @@ const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefine
 
 test.each(ROUTES)("%j (%s) goes to %s", (command, requested, expected) => {
   expect(routedBackend(command, requested)).toBe(expected);
+});
+
+const MAY_WRITE: ReadonlyArray<readonly [string, boolean]> = [
+  ["cat a b", false],
+  ["grep foo file", false],
+  ["seq 1 300000", false],
+  ["FOO=1 seq 5", false],
+  ["sed s/a/b/ file", false],
+  ["sed -n s/a/b/ file", false],
+  ["sed s/a/b/ a-b.txt", false],
+  ["sed --expression s/a/b/ file", false],
+  ["sed -i s/a/b/ file", true],
+  ["sed -nri s/a/b/ file", true],
+  ["sed --in-place s/a/b/ file", true],
+  ["sed --in-place=bak s/a/b/ file", true],
+  ["echo hi > log", true],
+  ["echo hi >> log", true],
+  ["echo hi >& log", true],
+  ["cat a; echo hi > log", true],
+  ["grep foo file 2>err", true],
+  ["PATH=x seq 5", true],
+  ["grep $(id) file", true],
+  ["chmod +x run.sh", true],
+  ["cp a b", true],
+  ["gunzip a.gz", true],
+  ["gzip a", true],
+  ["ln -s a b", true],
+  ["mkdir d", true],
+  ["mv a b", true],
+  ["rm -rf build", true],
+  ["rmdir d", true],
+  ["split -b 1M a", true],
+  ["tar xf a.tgz", true],
+  ["tee out", true],
+  ["touch f", true],
+  ["grep foo file; rm bar", true],
+];
+
+test.each(MAY_WRITE)("%s may write: %s", (command, mayWrite) => {
+  expect(commandMayWrite(command)).toBe(mayWrite);
 });
