@@ -73,7 +73,7 @@ export function durableObjectTransactions(storage: DurableObjectStorage): Projec
 }
 
 function processGroupCommand(command: string): string {
-  const body = `trap 'kill -s KILL 0' TERM INT HUP; /bin/sh -c ${shellQuote(command)} & wait $!`;
+  const body = `trap 'kill -s KILL 0' TERM INT HUP; bash -c ${shellQuote(command)} & wait $!`;
 
   return `exec setsid /bin/sh -c ${shellQuote(body)}`;
 }
