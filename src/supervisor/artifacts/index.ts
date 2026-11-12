@@ -1,11 +1,14 @@
 import * as Effect from "effect/Effect";
-import type { MainFacetModel, MainFacetTarget, MainHarnessArtifact } from "../../facet/index.js";
+import {
+  loadMainFacet,
+  type MainFacetTarget,
+  type MainHarnessArtifact,
+} from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { ModuleMapStore } from "./store.js";
 import type { StoredModuleMapProblem } from "./store.js";
 import { buildModuleMap, type HarnessBuildProblem } from "./build.js";
-import { SERVING_FACET_NAME, servingLoaderName } from "./facet-name.js";
-import { mountFacet, type AttachableFacet } from "./old-protocol.js";
+import { SERVING_FACET_NAME } from "./facet-name.js";
 import type { ActiveGeneration } from "../generations.js";
 import type { WorkspaceHostRpc } from "../../workspace/index.js";
 
@@ -49,22 +52,12 @@ export class HarnessArtifacts {
     active: ActiveGeneration,
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
-    oldProtocol?: Readonly<{ instance: number; model: MainFacetModel }>,
-  ): Effect.Effect<AttachableFacet, MainFacetMountProblem> {
+  ): Effect.Effect<MountedFacet, MainFacetMountProblem> {
     return this.load(active).pipe(
       Effect.map((artifact) =>
-        mountFacet(
-          loader,
-          facets,
-          SERVING_FACET_NAME,
-          artifact,
-          oldProtocol === undefined
-            ? undefined
-            : {
-                loaderName: servingLoaderName(artifact.harnessCommit, oldProtocol.instance),
-                model: oldProtocol.model,
-              },
-        ),
+        facets.get(SERVING_FACET_NAME, () => ({
+          class: loadMainFacet(loader, artifact).facetClass,
+        })),
       ),
     );
   }
@@ -115,14 +108,6 @@ export class HarnessArtifacts {
 }
 
 export type { MainFacetModel } from "../../facet/index.js";
-
-export {
-  attachFacet,
-  mountFacet,
-  OLD_PROTOCOL_COMPATIBILITY,
-  type AttachableFacet,
-  type OldProtocolLoad,
-} from "./old-protocol.js";
 
 export { candidateFacetName, SERVING_FACET_NAME } from "./facet-name.js";
 

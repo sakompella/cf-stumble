@@ -2,7 +2,6 @@ import * as Effect from "effect/Effect";
 import type { MainFacetModel, MainFacetTarget } from "../../facet/index.js";
 import type { GenerationControl } from "../../generation-requests.js";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
-import { attachFacet, type AttachableFacet } from "../artifacts/index.js";
 import {
   ConversationHostTarget,
   heldWorkspace,
@@ -41,7 +40,7 @@ const resumedTurn = (conversationId: string): ScriptedTurn => ({
 export type ResumeCandidate = () => Effect.Effect<Fetcher<MainFacetTarget>, string>;
 
 export function checkConversation(
-  writer: AttachableFacet,
+  writer: Fetcher<MainFacetTarget>,
   model: MainFacetModel,
   resumeCandidate: ResumeCandidate,
   obtainWorkspace: ScopedWorkspace,
@@ -64,14 +63,14 @@ export function checkConversation(
 
   return Effect.gen(function* () {
     yield* candidateCall("the candidate did not attach", () =>
-      attachFacet(writer, host, model, generations),
+      writer.attach(host, model, generations),
     );
 
     const conversationId = yield* candidateCall("the candidate did not open a conversation", () =>
-      writer.facet.createConversation(WORKSPACE_ROOT),
+      writer.createConversation(WORKSPACE_ROOT),
     );
 
-    yield* scriptedTurn(writer.facet, freshTurn(conversationId));
+    yield* scriptedTurn(writer, freshTurn(conversationId));
     const candidate = yield* resumeCandidate();
 
     yield* candidateCall("the candidate did not attach", () =>

@@ -2,9 +2,7 @@ import * as Effect from "effect/Effect";
 import { answered, fail, parseMessage, type ConversationProblem } from "./conversation-result.js";
 import { logEvent, logRedactedCause } from "../../diagnostics.js";
 import {
-  attachFacet,
   SERVING_FACET_NAME,
-  type AttachableFacet,
   type MainFacetModel,
   type MainFacetMountProblem,
   type MountedFacet,
@@ -28,7 +26,7 @@ import { ConversationRuns, type FacetReplacement, type Settlement } from "./runs
 
 type ServingPorts = Readonly<{
   ctx: DurableObjectState;
-  mount: (instance: number) => Effect.Effect<AttachableFacet, MainFacetMountProblem>;
+  mount: (instance: number) => Effect.Effect<MountedFacet, MainFacetMountProblem>;
   model: (instance: number) => MainFacetModel;
   catalog: () => SelectableCatalog;
   resetting: () => boolean;
@@ -282,16 +280,15 @@ export class ServingConversations {
         code: problem.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
       })),
       Effect.tap((mounted) => this.#call(() => this.#attach(mounted))),
-      Effect.map(({ facet }) => facet),
     );
   }
 
-  #attach(mounted: AttachableFacet): Promise<void> {
+  #attach(mounted: MountedFacet): Promise<void> {
     const instance = this.#instance();
     const existing = this.#hosts.get(instance);
 
     if (existing !== undefined) {
-      return attachFacet(mounted, existing.host, existing.model, existing.generations);
+      return mounted.attach(existing.host, existing.model, existing.generations);
     }
 
     const targets = servingHosts(
@@ -314,7 +311,7 @@ export class ServingConversations {
 
     this.#hosts.set(instance, { ...targets, model });
 
-    return attachFacet(mounted, targets.host, model, targets.generations);
+    return mounted.attach(targets.host, model, targets.generations);
   }
 
   async #running(report: RunReport, instance: number): Promise<void> {
