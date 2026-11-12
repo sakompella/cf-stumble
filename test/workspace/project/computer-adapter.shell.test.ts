@@ -135,3 +135,95 @@ test("cancelling a running command kills the wrapper, its command and the comman
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+function outputRuntime() {
+  let child: ChildProcess | undefined;
+  let exitCode = 137;
+  let sent = 0;
+  let exitSent = false;
+  const stdout: Uint8Array[] = [];
+  let closed: (() => void) | undefined;
+
+  const closedPromise = new Promise<void>((resolve) => {
+    closed = resolve;
+  });
+
+  const runtime = {
+    exec(source: string) {
+      child = spawn("dash", ["-c", source], { stdio: ["ignore", "pipe", "ignore"] });
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdout.push(new Uint8Array(chunk));
+      });
+      child.on("close", (code) => {
+        exitCode = code ?? 137;
+        closed?.();
+      });
+
+      return Promise.resolve({
+        getReader: () => ({
+          read: async () => {
+            await closedPromise;
+
+            const chunk = stdout.shift();
+
+            if (chunk !== undefined) {
+              return { done: false, value: { id: "1", seq: sent++, name: "stdout", value: chunk } };
+            }
+
+            if (!exitSent) {
+              exitSent = true;
+
+              return { done: false, value: { id: "1", seq: sent++, name: "exit", code: exitCode } };
+            }
+
+            return { done: true };
+          },
+          cancel: () => Promise.resolve(),
+        }),
+        kill: () => {
+          child?.kill("SIGTERM");
+
+          return Promise.resolve();
+        },
+      });
+    },
+  } satisfies ExecWorkspace["runtime"];
+
+  return { runtime, child: () => child };
+}
+
+test("the container backend runs the command with bash", async () => {
+  const { runtime, child } = outputRuntime();
+
+  const backend = computerExecBackend(
+    { runtime, pull: completePull() },
+    CONTAINER_BACKEND_ID,
+    null,
+  );
+
+  const handle = await backend.exec({
+    command:
+      "true | false; echo pipe:${PIPESTATUS[0]}:${PIPESTATUS[1]}; [[ a == a ]] && echo brackets",
+    cwd: "/",
+    timeoutMs: 30_000,
+  });
+
+  const output: string[] = [];
+  let exitCode: number | undefined;
+
+  for (;;) {
+    const read = await handle.reader.read();
+
+    if (read.done) break;
+
+    if (read.value.name === "stdout") output.push(new TextDecoder().decode(read.value.data));
+    else if (read.value.name === "exit") exitCode = read.value.exitCode;
+  }
+
+  try {
+    expect(output.join("")).toBe("pipe:0:1\nbrackets\n");
+    expect(exitCode).toBe(0);
+  } finally {
+    child()?.kill("SIGKILL");
+  }
+});
