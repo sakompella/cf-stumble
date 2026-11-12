@@ -1,6 +1,6 @@
 # Status
 
-What runs in production, what was decided outside an ADR, and what is still open. Edit it in place when the state changes; Git keeps the history.
+What runs in production, what was decided outside an ADR, and what is still open. The deployed values change with every deploy, so this file says how to read them instead of recording them. Edit it in place when a decision or an open item changes; Git keeps the history.
 
 ## What is deployed
 
@@ -8,25 +8,11 @@ Production is the Worker `cf-stumble`, deployed by Alchemy since 2026-11-03: the
 
 The workspace image is published to GHCR by CI and pulled by the deploy and by the provider machines; no machine builds it. The isolate backend exists beside the container: a `bash` call goes to the isolate when the isolate can run every program in it, and to the container otherwise or when the model asks for the container.
 
-On 2026-11-11 at about 11:51Z, the Deploy workflow (run 43015149799) deployed `aaedd0df` to production after Verify passed on it. Generation 27 (`aaedd0df`, key `pi-durable@1.5.0/host-5`, status `ready`) is active at epoch 86, and a test turn on it completed. `pnpm ops:check --since 1d` on hp after that deploy was clean; the model cache hit rate was 67.5% over 12 calls. Runs that do not use ChatGPT answer from the Workers AI model `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (`src/model-route-stream.ts`). It replaces `@cf/zai-org/glm-5.3-flash`, which Workers AI stops serving on 2026-11-20 ([planned deprecations](https://developers.cloudflare.com/changelog/post/2026-11-05-planned-model-deprecations/)). The newer models refuse an assistant tool call without `type: "function"`, so the route adds it to every tool call it sends. Read `pnpm exec cf workers deployments list --worker cf-stumble` and `stumble gen status` before you rely on these values. Do not take the active generation from R2 history: `wasActive` in `history/generations/<n>.json` means that the generation was active at some point, not that it is active now.
+The deployed commit, the active generation, its epoch and its compatibility key change with every deploy, so this file does not record them. Read the live values instead: `GET /api/status` (with Basic auth) returns the active generation's label, commit and status and its epoch; `stumble gen status` prints the same status from inside a conversation; `pnpm exec cf workers deployments list --worker cf-stumble` lists the Worker's deployments. For what merged, read `git log --first-parent` on `main`. Do not take the active generation from R2 history: `wasActive` in `history/generations/<n>.json` means that the generation was active at some point, not that it is active now.
 
 The stack sets `codeUpdateStrategy: { mode: "immediate" }` (`infra/alchemy.run.ts`), so every `pnpm run deploy`, locally and in CI, restarts both Durable Object classes on the new version within seconds. A restart interrupts what the object is serving. `cf workers secrets update` still creates its version with the default `deferred` strategy, so after a secret change an active object can keep its old code for up to 300 seconds; run `pnpm run deploy <stage> --force` to apply the new version at once. See `docs/deploy.md`, "Durable Objects and new versions". `ops:check` reports a Durable Object that still runs an old version with the `do-version-skew` rule.
 
 Every request except `GET /health` needs HTTP Basic auth with the `OWNER_PASSWORD` secret (ADR-0051), and then reaches one Supervisor named `owner`. GitHub is connected through the `GH_TOKEN` secret, and only the harness project exists. On 2026-11-03 ChatGPT was not connected. Checked on production on 2026-11-03: a run with a `bash` tool call saved; a retried `requestId` returned the same submission; an abort answered in 0.9 s and killed a running `sleep 120` within about 2 s; the container stopped 600 s after the last run settled.
-
-### Changes merged from 2026-11-09 to 2026-11-11
-
-Each item is a merge on `main` that production now runs. The facet changes reach production through a new generation; generation 27 includes all of them.
-
-- **State machines.** Conversation runs and generation selection with probation (`b6c0d6cd`), the GitHub connection and project rows (`9dfa601e`), the exec fallback and the idle stop (`4ed9f4e9`), and the owner page and the orb provider (`0fccdcbe`) are typed state machines. Probation fails a generation only on a generation fault.
-- **Effect refactors.** Held workspaces are released by closing a Scope, and one keyed lock serves the provision fence and project lifecycles (`9b36b281`). RPC and HTTP boundaries return typed failures (`5a913ec2`). The serving events stream ends through Effect Stream (`c51c766e`).
-- **R2 history.** Module maps and generation history are in the R2 bucket `MODULE_MAPS`; the generation transaction stays in the Supervisor (`dc03a4a2`). The Supervisor caches the decoded module map per commit (`94b2f9df`, improve plan 004).
-- **Supervisor storage reset fixed.** A facet delete after the startup check reset the Supervisor Durable Object when two submissions ran at once (`f66f543b`), and the delete before the check did the same for same-commit submissions (`057f1ea7`). The Supervisor no longer deletes candidate facets.
-- **Runtime parity and the startup check.** The deploy of `2caaafcb` failed with `FinalizationRegistry is not defined` (fixed in `157b6799`). After a five-whys review, production runs with the compatibility features that the tests run with (`be08fab2`), and `pnpm verify` builds the Alchemy Worker bundle and starts it in Miniflare with production settings (`cefcdfb2`).
-- **Immediate Durable Object updates** (`d492735e`), described above.
-- **End-to-end runs.** `pnpm e2e` deploys a throwaway stage and runs the page, product-loop and self-modification workflows (`8eef679e`). `pnpm e2e:fuzz` fuzzes a real stage by area: HTTP (`0f919e71`), page (`abeef105`), exec (`b9ac892a`), lifecycle (`057f1ea7`) and git (`76bc5438`). Fixes from its findings merged in `436d8bbe`, `80d3d991` and `8e5a800b`.
-- **Property and mutation tests.** Property tests cover exec routing, the state machines and the parsers; `pnpm test:mutation` runs StrykerJS (`cd5e8931`).
-- **Improve plans 001 to 007.** A ChatGPT refresh keeps the rotated token (`e75ccc0a`). The idle and backend stops pull the container disk first (`ac461395`). A daily Ops check workflow runs `ops:check` on production (`1a971bae`). The decoded module map is cached (`94b2f9df`). A refused events stream waits before it asks again (`813206a0`). The Supervisor no longer carries one-shot migrations (`bda2bbe3`). The orb provider ignores redirects and closes on missed pongs (`f7bf9d7b`).
 
 ## Decided outside an ADR
 
@@ -46,4 +32,3 @@ Each item is a merge on `main` that production now runs. The facet changes reach
 5. **Token usage can be undercounted.** When a provider reports no usage, or a negative or fractional count, the model route estimates usage from bytes.
 6. **The Computer `ExecutionEnv` conformance suite has not run against a real container.** It runs over a local shell and filesystem; production runs use the real one.
 7. **The e2e workflow cannot run until `E2E_GH_TOKEN` exists.** `.github/workflows/e2e.yml` runs by hand only (the Monday schedule was removed on 2026-11-11). It reads the repository secret `E2E_GH_TOKEN`, a user token, which is not set (`gh secret list` on 2026-11-11 shows only `CLOUDFLARE_API_TOKEN`).
-8. **The scheduled Ops check has no proof of access.** Its one probe run (43004899414, 2026-11-11) failed with HTTP 403 from the Workers Observability telemetry query: the CI `CLOUDFLARE_API_TOKEN` lacks the read permission it needs.

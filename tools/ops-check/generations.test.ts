@@ -41,7 +41,7 @@ describe("generationLine", () => {
     assert.equal(parseEvent(OLD_EVENT).actor, "unknown");
   });
 
-  it("names the active generation's actor and counts the window's events by actor", () => {
+  it("names the last recorded activation and counts the window's events by actor", () => {
     const line = generationLine({
       status: "ok",
       data: {
@@ -57,7 +57,7 @@ describe("generationLine", () => {
     });
 
     assert.deepEqual(line, [
-      "i generations: generation 27 active (rolled-back by probation); in the window activated owner 0, conversation 1, unknown 1; proven 1; rolled back 1 (probation 1)",
+      "i generations: last recorded activation: generation 27 (rolled-back by probation); in the window activated owner 0, conversation 1, unknown 1; proven 1; rolled back 1 (probation 1)",
     ]);
   });
 

@@ -197,7 +197,7 @@ export function generationLine(history: Source<GenerationHistory>): readonly str
   const serving =
     active === null
       ? "no activation in the history"
-      : `generation ${active.label} active (${active.kind} by ${active.actor})`;
+      : `last recorded activation: generation ${active.label} (${active.kind} by ${active.actor})`;
 
   const rollbacks = rolledBack.length === 0 ? "" : ` (${byActor(rolledBack, [])})`;
 

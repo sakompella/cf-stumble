@@ -97,9 +97,9 @@ says the rate is a sample. A second informational line, `i git commands`, counts
 from the isolate or that the isolate refused. It is fetched and reported the
 same way. A third informational line, `i generations`, reads the R2 generation history (see the overview) through the
 R2 REST API: it finds the Worker's `MODULE_MAPS` bucket in the Worker's settings, lists `history/events/`, and reads the
-activation or rollback with the highest epoch and the events written in the window. It prints the generation that event
-made active and its actor, the window's activations by actor (`owner`, `conversation`, and `unknown` for events written
-before actors existed), and its `proven` and `rolled-back` counts. A missed history write leaves this line behind the
+activation or rollback with the highest epoch and the events written in the window. It prints the last recorded
+activation: the generation that event made active and its actor, the window's activations by actor (`owner`,
+`conversation`, and `unknown` for events written before actors existed), and its `proven` and `rolled-back` counts. A missed history write leaves this line behind the
 Supervisor, so `stumble gen status` stays the authority for the active generation. When a call fails, the line says
 `i generations unknown:` with the reason; it never changes the exit code.
 
