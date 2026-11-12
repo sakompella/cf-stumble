@@ -11,7 +11,7 @@ const MODEL_PATH = "src/facet/generation-1/scripted-model.ts";
 
 const FACET_PATH = "src/facet/generation-1/main-facet.ts";
 
-const IMPORT_AFTER = 'import { ROUTE_MODEL } from "./route-provider.js";\n';
+const IMPORT_AFTER = 'import { ROUTE_AGENT } from "./route-provider.js";\n';
 
 const RESULTS_PREFIX = "fuzz-results ";
 

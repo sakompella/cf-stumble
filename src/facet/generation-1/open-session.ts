@@ -1,7 +1,6 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai";
 import {
-  createRegistry,
   Harness,
   type HarnessSettings,
   type SubmissionId,
@@ -16,12 +15,9 @@ import {
   type ModelCapability,
   type RunFailures,
 } from "../conversation-protocol.js";
-import { CodingTools } from "./coding-tools.js";
 import { computerEnv } from "./computer-env.js";
-import { CfStumblePrompt } from "./prompt.js";
-import { RepeatedCallNote } from "./repeated-call-note.js";
+import { harnessRegistry } from "./registry.js";
 import { ROUTE_MODEL, routeProvider } from "./route-provider.js";
-import { RunNotices } from "./run-notices.js";
 
 const CONTEXT_BUDGET_TOKENS = 131_072;
 
@@ -50,17 +46,12 @@ export async function openSession(input: SessionInput): Promise<Session> {
   const log = hostLog(host);
   const models = createModels();
   models.setProvider(routeProvider(input.model));
-  const registry = createRegistry();
-  registry.install(CodingTools);
-  registry.install(CfStumblePrompt);
-  registry.install(RunNotices);
-  registry.install(RepeatedCallNote);
 
   const harness = await Harness.open(
     await openDurableObjectSqliteStorage(input.storage),
     {
       models,
-      registry,
+      registry: harnessRegistry(),
       settings: SETTINGS,
       env: ({ conversationId, cwd }, invocation) =>
         cwd === undefined
