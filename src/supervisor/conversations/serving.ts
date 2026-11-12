@@ -198,7 +198,7 @@ export class ServingConversations {
 
       for (const conversationId of this.#runs.expired(now)) {
         logEvent("warn", "run.deadline-aborted", { generation: this.#generationLabel() });
-        yield* this.#call(() => facet.abort(this.#runs.interrupted(conversationId)));
+        yield* this.#call(() => facet.abort(this.#runs.interrupted(conversationId), "deadline"));
       }
     }).pipe(
       Effect.tapError((problem) =>

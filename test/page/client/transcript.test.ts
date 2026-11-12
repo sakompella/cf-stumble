@@ -1,5 +1,6 @@
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
+import { RUN_NOTICE_KIND } from "../../../src/run-notice.js";
 import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
 import type { PiMessage } from "../../../src/page/client/pi-message.js";
 import { Outgoing } from "../../../src/page/client/outgoing.js";
@@ -90,6 +91,28 @@ test("an aborted or failed answer ends with what stopped it", () => {
   expect(transcriptOf(conversation, [], "repo")).toMatchObject([
     { _tag: "Terminal", wording: "cancelled", isProblem: true },
     { _tag: "Terminal", wording: "failed: model-call-limit", isProblem: true },
+  ]);
+});
+
+test("a harness run notice shows as the run's own entry, not as the owner's message", () => {
+  const conversation: Conversation = {
+    ...EMPTY_CONVERSATION,
+    items: [
+      entryItem(1, answer([{ type: "text", text: "plan" }], "length")),
+      {
+        kind: "entry",
+        entry: {
+          id: 2,
+          kind: RUN_NOTICE_KIND,
+          model: [{ role: "user", content: "Harness notice: cut off." }],
+        },
+      },
+    ],
+  };
+
+  expect(transcriptOf(conversation, [], "repo")).toMatchObject([
+    { _tag: "Text", role: "assistant", text: "plan" },
+    { _tag: "Terminal", wording: "Harness notice: cut off.", isProblem: true },
   ]);
 });
 

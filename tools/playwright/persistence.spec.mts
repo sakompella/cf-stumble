@@ -1,4 +1,9 @@
-import { ANSWER_TEXT, MODEL_ERROR, TOOL_OUTPUT } from "../browser-harness/conversations.mjs";
+import {
+  ANSWER_TEXT,
+  CUT_OFF_TEXT,
+  MODEL_ERROR,
+  TOOL_OUTPUT,
+} from "../browser-harness/conversations.mjs";
 import {
   expect,
   messagePosts,
@@ -57,5 +62,22 @@ test.describe("a run whose model fails", () => {
 
     await expect(transcriptTexts(owner, "user").last()).toHaveText(PROMPT);
     await expect(transcriptTexts(owner, "terminal").last()).toHaveText(`failed: ${MODEL_ERROR}`);
+  });
+});
+
+test.describe("a run whose reply is cut off at the output limit", () => {
+  test.use({ scenario: "cut-off" });
+
+  test("ends with a notice to send a message, which a reload keeps", async ({ owner }) => {
+    const notice = /output length limit.*Send a message to continue/u;
+
+    await sendMessage(owner, PROMPT);
+    await expect(transcriptTexts(owner, "terminal").last()).toHaveText(notice);
+    await expect(transcriptTexts(owner, "assistant").last()).toHaveText(CUT_OFF_TEXT);
+
+    await owner.reload();
+
+    await expect(transcriptTexts(owner, "user").last()).toHaveText(PROMPT);
+    await expect(transcriptTexts(owner, "terminal").last()).toHaveText(notice);
   });
 });

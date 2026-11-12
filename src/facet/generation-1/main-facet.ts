@@ -1,18 +1,19 @@
 import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Conversation, ConversationId } from "@earendil-works/pi-durable";
-import { REASONING_EFFORT } from "../../model-route-wire/events.js";
 import { FACET_COMPATIBILITY } from "../runtime-contract.js";
 import { PacedStream } from "./paced-stream.js";
 import { entriesQuery, entryId } from "../entries-query.js";
 import type {
+  AbortReason,
   ConversationFacet,
   ConversationHost,
   GenerationControl,
   ModelCapability,
 } from "../conversation-protocol.js";
 import { openSession, type Session } from "./open-session.js";
-import { ROUTE_MODEL } from "./route-provider.js";
+import { ROUTE_AGENT } from "./route-provider.js";
+import { noticeDeadlineAbort } from "./run-notices.js";
 
 const context = BACKGROUND_CONTEXT;
 
@@ -70,11 +71,7 @@ export class MainFacet extends DurableObject implements ConversationFacet {
     const conversation = await harness.createConversation(
       {
         ownership: { kind: "ownerless" },
-        agent: {
-          model: { provider: ROUTE_MODEL.provider, modelId: ROUTE_MODEL.id },
-          thinkingLevel: REASONING_EFFORT,
-          cwd,
-        },
+        agent: { ...ROUTE_AGENT, cwd },
       },
       context,
     );
@@ -148,12 +145,13 @@ export class MainFacet extends DurableObject implements ConversationFacet {
     return JSON.stringify(page);
   }
 
-  async abort(conversationId: string): Promise<void> {
+  async abort(conversationId: string, reason?: AbortReason): Promise<void> {
     const conversation = await this.#conversation(conversationId);
     const endWork = await this.#beginWork();
 
     void conversation
       .abort(context)
+      .then(() => (reason === "deadline" ? noticeDeadlineAbort(conversation, context) : undefined))
       .catch(() => {})
       .finally(endWork);
   }

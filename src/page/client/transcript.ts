@@ -4,7 +4,8 @@ import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import type { Conversation } from "./conversation.js";
 import { Outgoing, undisplayedOutgoing } from "./outgoing.js";
-import { blocksText, type AssistantMessage, type PiMessage } from "./pi-message.js";
+import { RUN_NOTICE_KIND } from "../../run-notice.js";
+import { blocksText, type AssistantMessage, type Entry, type PiMessage } from "./pi-message.js";
 
 export const TranscriptEntry = defineTaggedUnion({
   Text: { role: Schema.String, who: Schema.String, text: Schema.String },
@@ -121,6 +122,19 @@ function assistantEntries(message: AssistantMessage): readonly TranscriptEntry[]
   ];
 }
 
+function messageText(message: PiMessage): string {
+  if (!("content" in message)) return "";
+
+  return Predicate.isString(message.content) ? message.content : blocksText(message.content);
+}
+
+function runNotice(entry: Entry): TranscriptEntry {
+  return TranscriptEntry.Terminal({
+    wording: (entry.model ?? []).map(messageText).join("\n"),
+    isProblem: true,
+  });
+}
+
 function withLiveOutput(entry: TranscriptEntry, conversation: Conversation): TranscriptEntry {
   if (!Predicate.isTagged(entry, "Tool") || Option.isSome(entry.maybeOutput)) {
     return entry;
@@ -203,7 +217,9 @@ export function transcriptOf(
   };
 
   for (const [itemIndex, item] of conversation.items.entries()) {
-    if (item.kind === "entry") {
+    if (item.kind === "entry" && item.entry.kind === RUN_NOTICE_KIND) {
+      entries.push(runNotice(item.entry));
+    } else if (item.kind === "entry") {
       item.entry.model?.forEach(add);
     } else if (item.kind === "gap") {
       entries.push(TranscriptEntry.Gap({ itemIndex }));

@@ -121,3 +121,22 @@ test("an alarm after a Supervisor reset aborts only the run past its own deadlin
 
   for (const answer of answers) answer.release(says("late"));
 });
+
+test("a run aborted at its deadline leaves a notice that the next turn's model reads", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const stuck = held();
+  const model = scriptModel(stuck.respond, says("continuing"));
+  const control = await servingGeneration1("generation-1-deadline-notice", new ProjectWorkspace());
+
+  await submitted(control, project, "work", "r1");
+  await model.asked(1);
+  advanceSupervisorClock(PROJECT_RUN_DEADLINE_MS + 1_000);
+
+  expect(await runDurableObjectAlarm(control)).toBe(true);
+  await vi.waitUntil(async () => !(await hasRun(control, project)), { timeout: 10_000 });
+  await submitted(control, project, "continue", "r2");
+  await model.asked(2);
+
+  expect(JSON.stringify(model.inputs[1])).toContain("8-minute time limit");
+  stuck.release(says("late"));
+});

@@ -6,7 +6,11 @@ import type {
   StreamOptions,
   TranscriptContext,
 } from "@earendil-works/pi-ai";
-import { MAX_OUTPUT_TOKENS, MAX_STREAM_EVENT_BYTES } from "../../model-route-wire/events.js";
+import {
+  MAX_OUTPUT_TOKENS,
+  MAX_STREAM_EVENT_BYTES,
+  REASONING_EFFORT,
+} from "../../model-route-wire/events.js";
 import type { ModelCapability } from "../conversation-protocol.js";
 import { LineReader } from "./line-reader.js";
 import { isModelStreamEvent } from "./route-events.js";
@@ -96,6 +100,11 @@ async function pump(
     cancel();
   }
 }
+
+export const ROUTE_AGENT = {
+  model: { provider: ROUTE_MODEL.provider, modelId: ROUTE_MODEL.id },
+  thinkingLevel: REASONING_EFFORT,
+} as const;
 
 export function routeProvider(model: ModelCapability): Provider {
   const stream: ProviderStreams["stream"] = (routeModel, context, options?: StreamOptions) => {

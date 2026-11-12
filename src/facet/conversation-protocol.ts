@@ -10,6 +10,8 @@ export type RunningConversation = Readonly<{ conversationId: string; run?: numbe
 
 export type RunFailures = Readonly<Record<string, string>>;
 
+export type AbortReason = "deadline";
+
 export type FacetLogLevel = "info" | "error";
 
 export type FacetLogFields = Readonly<Record<string, string | number | boolean | null>>;
@@ -38,7 +40,7 @@ export interface ConversationFacet {
   submit(conversationId: string, content: string, requestId: string): Promise<number>;
   events(conversationId: string, from?: number): Promise<ReadableStream<Uint8Array>>;
   entries(conversationId: string, request: EntriesRequest): Promise<string>;
-  abort(conversationId: string): Promise<void>;
+  abort(conversationId: string, reason?: AbortReason): Promise<void>;
 }
 
 export function hostLog(host: ConversationHost): FacetLog {
