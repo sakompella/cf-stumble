@@ -30,6 +30,11 @@ export function installCredentialSource(): string {
     "fi",
     `gh auth login --hostname ${GITHUB_HOSTNAME} --with-token`,
     `gh auth setup-git --hostname ${GITHUB_HOSTNAME}`,
+    'login="$(gh api user --jq .login 2>/dev/null || true)"',
+    'if [ -n "$login" ]; then',
+    '  git config --global user.name "$login"',
+    '  git config --global user.email "${login}@users.noreply.github.com"',
+    "fi",
     "printf 'installed\\n'",
   ].join("\n");
 }
