@@ -20,7 +20,13 @@ const TEST_RUNNER_FEATURES = [
 
 export const compatibility = {
   date: "2025-01-01",
-  flags: ["enable_ctx_exports", "legacy_module_registry", "nodejs_compat", ...TEST_RUNNER_FEATURES],
+  flags: [
+    "enable_ctx_exports",
+    "legacy_module_registry",
+    "nodejs_compat",
+    "unhandled_rejection_after_microtask_checkpoint",
+    ...TEST_RUNNER_FEATURES,
+  ],
 };
 
 export const durableObjectClasses = {

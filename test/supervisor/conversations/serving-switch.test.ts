@@ -47,3 +47,23 @@ test("a message is refused when the generation still fails after the retry", asy
     problem: { code: "generation-failed" },
   });
 });
+
+test("an events stream from the replaced facet ends when another generation activates", async () => {
+  const control = await servingScripted("conversations-switch-events");
+  const second = await readyScripted(control, SCRIPTED_COMMITS[1]);
+  await control.submitProjectMessage("harness", "hold the events open", "r1");
+  await control.abortProjectRun("harness");
+  const result = await control.projectEvents("harness");
+
+  if (!result.ok) throw new Error(`the events must open: ${result.problem.code}`);
+  const reader = result.events.getReader();
+  await reader.read();
+
+  await activateGeneration(control, second);
+
+  let next = await reader.read();
+
+  while (!next.done) next = await reader.read();
+
+  expect(next.done).toBe(true);
+});
