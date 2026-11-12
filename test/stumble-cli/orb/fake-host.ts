@@ -148,6 +148,9 @@ export async function startFakeHost(link?: FakeLink): Promise<FakeHost> {
       .digest("base64");
 
     answerFrames(upgraded, link, received);
+    upgraded.on("error", () => {
+      upgraded.destroy();
+    });
     upgraded.on("close", () => {
       closedLinks += 1;
     });
