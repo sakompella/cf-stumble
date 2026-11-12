@@ -189,6 +189,40 @@ test("the env reports no spill for output that fits and the runtime did not cut"
   expect(result.spillPath).toBeUndefined();
 });
 
+test.each([
+  { code: "not-found", fileCode: "not_found", message: "no such file: /workspace/project/secret" },
+  {
+    code: "permission-denied",
+    fileCode: "permission_denied",
+    message: "permission denied: /workspace/project/secret",
+  },
+  {
+    code: "is-directory",
+    fileCode: "is_directory",
+    message: "is a directory: /workspace/project/secret",
+  },
+] as const)(
+  "a $code capability failure reads back as its plain meaning",
+  async ({ code, fileCode, message }) => {
+    const readFile = (path: string): Promise<ProjectResult<Uint8Array>> =>
+      Promise.resolve({ ok: false, error: { code, path } });
+
+    const env = createComputerEnv({
+      cwd: "/workspace/project",
+      target: { ...streamingTarget([]), readFile },
+    });
+
+    const result = await env.readTextFile("secret", BACKGROUND_CONTEXT);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? "" : result.error).toMatchObject({
+      code: fileCode,
+      message,
+      path: "/workspace/project/secret",
+    });
+  },
+);
+
 test("a command the container restart ended names container-restarted to the model", async () => {
   const env = createComputerEnv({
     cwd: "/workspace/project",

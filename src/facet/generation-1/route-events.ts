@@ -41,7 +41,7 @@ const AssistantMessageSchema = obj(
 );
 
 const UsageSchema = obj(
-  { inputTokens: num(), outputTokens: num(), estimated: bool() },
+  { inputTokens: num(), outputTokens: num(), cachedTokens: opt(num()), estimated: bool() },
   { open: true },
 );
 

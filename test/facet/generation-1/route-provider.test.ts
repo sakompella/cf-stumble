@@ -44,6 +44,23 @@ test("text deltas stream into one text block, and done carries the route's usage
   });
 });
 
+test("cached prompt tokens become cacheRead, and input keeps only the uncached part", async () => {
+  const { capability } = scriptedRoute(
+    replies([
+      {
+        type: "done",
+        message: { role: "assistant", content: "ok", tool_calls: [] },
+        usage: { inputTokens: 100, outputTokens: 4, cachedTokens: 64, estimated: false },
+      },
+    ]),
+  );
+
+  expect(await stream(capability, GO).result()).toMatchObject({
+    stopReason: "stop",
+    usage: { input: 36, output: 4, cacheRead: 64, cacheWrite: 0, totalTokens: 104 },
+  });
+});
+
 test("a tool call assembles from streamed argument deltas", async () => {
   const { capability } = scriptedRoute(
     replies([

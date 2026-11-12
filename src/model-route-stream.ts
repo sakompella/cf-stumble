@@ -6,12 +6,14 @@ import {
   type TokenUsage,
 } from "./model-route-stream-parse.js";
 import type { AssistantMessage, ModelRouteRequest } from "./model-route-wire/request.js";
-import type {
-  ModelStreamEvent,
-  ModelStreamInference,
-  ModelUsage,
-  StreamingProviderPayload,
-  ToolCallDelta,
+import {
+  MAX_OUTPUT_TOKENS,
+  REASONING_EFFORT,
+  type ModelStreamEvent,
+  type ModelStreamInference,
+  type ModelUsage,
+  type StreamingProviderPayload,
+  type ToolCallDelta,
 } from "./model-route-wire/events.js";
 import {
   modelUnavailable,
@@ -23,10 +25,6 @@ import {
 } from "./model-route-turn.js";
 
 const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
-
-const REASONING_EFFORT = "low" as const;
-
-const MAX_OUTPUT_TOKENS = 4096;
 
 function buildStreamingProviderPayload(request: ModelRouteRequest): StreamingProviderPayload {
   const fixed = {
@@ -121,7 +119,9 @@ function estimateTokens(byteLength: number): number {
 }
 
 function resolveUsage(
-  reported: Readonly<{ inputTokens: number; outputTokens: number }> | undefined,
+  reported:
+    | Readonly<{ inputTokens: number; outputTokens: number; cachedTokens?: number | undefined }>
+    | undefined,
   request: ModelRouteRequest,
   message: AssistantMessage,
 ): ModelUsage {
@@ -129,6 +129,7 @@ function resolveUsage(
     return {
       inputTokens: reported.inputTokens,
       outputTokens: reported.outputTokens,
+      cachedTokens: reported.cachedTokens,
       estimated: false,
     };
   }

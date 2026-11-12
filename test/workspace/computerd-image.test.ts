@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
 import {
+  CARGO_TARGET_DIRECTORY,
   GITHUB_CLI_CONFIG_DIRECTORY,
   GIT_GLOBAL_CONFIG_PATH,
   WORKSPACE_SYNC_IGNORES,
@@ -42,6 +43,10 @@ test("the workspace image does not poll the disk every 250 ms", () => {
 test("the workspace image keeps gh and Git global configuration in the durable workspace", () => {
   expect(dockerEnv("COMPUTER_VAR_GH_CONFIG_DIR")).toBe(GITHUB_CLI_CONFIG_DIRECTORY);
   expect(dockerEnv("COMPUTER_VAR_GIT_CONFIG_GLOBAL")).toBe(GIT_GLOBAL_CONFIG_PATH);
+});
+
+test("the workspace image sends cargo build output where the managed instructions say", () => {
+  expect(dockerEnv("COMPUTER_VAR_CARGO_TARGET_DIR")).toBe(CARGO_TARGET_DIRECTORY);
 });
 
 test("every base image is pinned by digest", () => {

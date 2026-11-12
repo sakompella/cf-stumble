@@ -90,6 +90,29 @@ test("estimates non-zero usage, and marks it as an estimate, when the provider r
   expect(done.usage.outputTokens).toBeGreaterThan(0);
 });
 
+test("the provider's cached prompt tokens ride along in the done usage", async () => {
+  const lines = [
+    sseLine({ response: "ok" }),
+    sseLine({
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 7,
+        prompt_tokens_details: { cached_tokens: 64 },
+      },
+    }),
+    DONE_LINE,
+  ];
+
+  const events = await collectEvents(
+    streamModelEvents(fakeStreamInference(providerStreamOfLines(lines)), REQUEST),
+  );
+
+  expect(events.at(-1)).toMatchObject({
+    type: "done",
+    usage: { inputTokens: 100, outputTokens: 7, cachedTokens: 64, estimated: false },
+  });
+});
+
 test("a stream that completes with no text or tool call is an empty answer, not an error", async () => {
   const provider = providerStreamOfLines([
     sseLine({ choices: [{ delta: { reasoning_content: "thinking" } }] }),
