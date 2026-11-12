@@ -81,7 +81,9 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 
 COPY --from=computerd /usr/local/bin/computerd /usr/local/bin/computerd
-RUN git config --system init.defaultBranch main
+RUN git config --system init.defaultBranch main \
+ && git config --system user.name cf-stumble \
+ && git config --system user.email cf-stumble@users.noreply.github.com
 
 ENV PORT=8080
 ENV MOUNT_POINT=/workspace
