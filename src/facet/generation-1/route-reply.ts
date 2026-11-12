@@ -14,10 +14,12 @@ import type { ModelStreamEvent, ModelUsage, ToolCallDelta } from "../../model-ro
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 
 function usageOf(usage: ModelUsage): Usage {
+  const cacheRead = usage.cachedTokens ?? 0;
+
   return {
-    input: usage.inputTokens,
+    input: usage.inputTokens - cacheRead,
     output: usage.outputTokens,
-    cacheRead: 0,
+    cacheRead,
     cacheWrite: 0,
     totalTokens: usage.inputTokens + usage.outputTokens,
     cost: ZERO_COST,

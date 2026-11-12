@@ -36,6 +36,7 @@ export type WorkersAiBinding = {
 export type ModelUsage = Readonly<{
   inputTokens: number;
   outputTokens: number;
+  cachedTokens?: number | undefined;
   estimated: boolean;
 }>;
 
