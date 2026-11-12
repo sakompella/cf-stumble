@@ -2,10 +2,14 @@ import type { AssistantMessage, RouteMessage, ToolDefinition } from "./request.j
 
 export const MAX_STREAM_EVENT_BYTES = 8_388_608;
 
+export const MAX_OUTPUT_TOKENS = 32_768;
+
+export const REASONING_EFFORT = "low";
+
 export type StreamingProviderPayload = Readonly<{
   messages: ReadonlyArray<RouteMessage>;
   tools?: ReadonlyArray<ToolDefinition>;
-  reasoning_effort: "low";
+  reasoning_effort: typeof REASONING_EFFORT;
   max_tokens: number;
   stream: true;
 }>;

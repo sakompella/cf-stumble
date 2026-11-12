@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Conversation, ConversationId } from "@earendil-works/pi-durable";
+import { REASONING_EFFORT } from "../../model-route-wire/events.js";
 import { FACET_COMPATIBILITY } from "../runtime-contract.js";
 import { PacedStream } from "./paced-stream.js";
 import { entriesQuery, entryId } from "../entries-query.js";
@@ -71,7 +72,7 @@ export class MainFacet extends DurableObject implements ConversationFacet {
         ownership: { kind: "ownerless" },
         agent: {
           model: { provider: ROUTE_MODEL.provider, modelId: ROUTE_MODEL.id },
-          thinkingLevel: "off",
+          thinkingLevel: REASONING_EFFORT,
           cwd,
         },
       },

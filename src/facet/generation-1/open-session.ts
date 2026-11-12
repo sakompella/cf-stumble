@@ -19,16 +19,15 @@ import {
 import { CodingTools } from "./coding-tools.js";
 import { computerEnv } from "./computer-env.js";
 import { CfStumblePrompt } from "./prompt.js";
+import { RepeatedCallNote } from "./repeated-call-note.js";
 import { ROUTE_MODEL, routeProvider } from "./route-provider.js";
 
-const CONTEXT_BUDGET_TOKENS = 64_000;
-
-const ANSWER_RESERVE_TOKENS = 16_384;
+const CONTEXT_BUDGET_TOKENS = 131_072;
 
 const SETTINGS: HarnessSettings = {
   compaction: {
-    reserveTokens: ROUTE_MODEL.contextWindow - CONTEXT_BUDGET_TOKENS + ANSWER_RESERVE_TOKENS,
-    keepRecentTokens: 8_000,
+    reserveTokens: ROUTE_MODEL.contextWindow - CONTEXT_BUDGET_TOKENS + ROUTE_MODEL.maxTokens,
+    keepRecentTokens: 20_000,
     backgroundTokens: 0,
   },
 };
@@ -53,6 +52,7 @@ export async function openSession(input: SessionInput): Promise<Session> {
   const registry = createRegistry();
   registry.install(CodingTools);
   registry.install(CfStumblePrompt);
+  registry.install(RepeatedCallNote);
 
   const harness = await Harness.open(
     await openDurableObjectSqliteStorage(input.storage),
