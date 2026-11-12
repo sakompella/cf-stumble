@@ -6,7 +6,7 @@ import type {
   StreamOptions,
   TranscriptContext,
 } from "@earendil-works/pi-ai";
-import { MAX_STREAM_EVENT_BYTES } from "../../model-route-wire/events.js";
+import { MAX_OUTPUT_TOKENS, MAX_STREAM_EVENT_BYTES } from "../../model-route-wire/events.js";
 import type { ModelCapability } from "../conversation-protocol.js";
 import { LineReader } from "./line-reader.js";
 import { isModelStreamEvent } from "./route-events.js";
@@ -19,11 +19,11 @@ export const ROUTE_MODEL: Model<"host-model-route"> = {
   api: "host-model-route",
   provider: "host-model-route",
   baseUrl: "",
-  reasoning: false,
+  reasoning: true,
   input: ["text"],
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 128_000,
-  maxTokens: 4096,
+  contextWindow: 1_048_576,
+  maxTokens: MAX_OUTPUT_TOKENS,
 };
 
 const CANCELLED = "the turn was cancelled";
