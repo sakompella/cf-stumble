@@ -58,7 +58,7 @@ cancel. A replaced instance's `running` and `arm` calls are refused before they 
 A reset, a disconnect, or an owner activation or rollback refuses with `run-active` while a run is
 active.
 
-**The generation reaches nothing else.** Its model provider calls only the `MODEL` binding, and its
+**The generation reaches nothing else.** Its model provider calls only the model capability that `attach` passes, and its
 `ExecutionEnv` runs file and command operations only through the project capability. The Worker
 Loader starts it with `enable_weak_ref`, which `chord` needs. `FACET_RUNTIME`, beside the key in
 `src/facet/runtime-contract.ts`, holds the loader's compatibility date and flags.

@@ -1,7 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import type { ModelCapability } from "../../../src/facet/generation-1/capabilities.js";
+import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
 import type { ModelStreamEvent } from "../../../src/model-route-wire/events.js";
 import { GO, NO_USAGE, streamThroughProvider } from "./scripted-route.js";
 

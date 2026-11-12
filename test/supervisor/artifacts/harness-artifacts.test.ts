@@ -1,4 +1,4 @@
-import { env, exports as workerExports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import * as Result from "effect/Result";
@@ -8,8 +8,6 @@ import { HarnessArtifacts, ModuleMapStore } from "../../../src/supervisor/artifa
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import { BuildHost, unreachableHost } from "./build-hosts.js";
 import { generationLabel, readyArtifact, storeModuleMap, testHarnessCommit } from "../helpers.js";
-
-const modelRoute = workerExports.ModelRoute({});
 
 const commits = {
   built: testHarnessCommit("1000000000000000000000000000000000000001"),
@@ -51,9 +49,7 @@ function mounted(artifacts: HarnessArtifacts, harnessCommit: Commit): Promise<st
   return runInDurableObject(
     env.SUPERVISOR.getByName("harness-artifacts-mount"),
     async (_instance, state) => {
-      const facet = await resultOf(
-        artifacts.mount(active, env.LOADER, state.facets, () => workerExports.ModelRoute({}), 0),
-      );
+      const facet = await resultOf(artifacts.mount(active, env.LOADER, state.facets));
 
       return Result.isSuccess(facet) ? "mounted" : facet.failure.code;
     },
@@ -84,7 +80,7 @@ test("builds, stores in R2, then loads a module map when nothing is stored", asy
   );
   expect(Result.isSuccess(stored) && stored.success.kind).toBe("stored");
 
-  const loaded = loadMainFacet(env.LOADER, artifact.success, { MODEL: modelRoute });
+  const loaded = loadMainFacet(env.LOADER, artifact.success);
   const response = await loaded.worker.getEntrypoint().fetch("https://main-facet.invalid/");
 
   expect(response.status).toBe(200);

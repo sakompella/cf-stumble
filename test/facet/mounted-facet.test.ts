@@ -47,6 +47,6 @@ afterEach(async () => {
   await reset();
 });
 
-test("runs the main facet with only the model capability and no ambient outbound", async () => {
-  expect(await servedReport("mounted-facet-capabilities")).toBe("bindings MODEL; outbound blocked");
+test("runs the main facet with an empty env and no ambient outbound", async () => {
+  expect(await servedReport("mounted-facet-capabilities")).toBe("bindings ; outbound blocked");
 });

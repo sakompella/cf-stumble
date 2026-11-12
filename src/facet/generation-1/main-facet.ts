@@ -8,8 +8,8 @@ import type {
   ConversationFacet,
   ConversationHost,
   GenerationControl,
+  ModelCapability,
 } from "../conversation-protocol.js";
-import type { ModelCapability } from "./capabilities.js";
 import { openSession, type Session } from "./open-session.js";
 import { ROUTE_MODEL } from "./route-provider.js";
 
@@ -34,10 +34,7 @@ type SessionSlot =
 
 const CLOSED: SessionSlot = { kind: "closed" };
 
-export class MainFacet
-  extends DurableObject<Readonly<{ MODEL: ModelCapability }>>
-  implements ConversationFacet
-{
+export class MainFacet extends DurableObject implements ConversationFacet {
   #slot: SessionSlot = CLOSED;
   #activeWork = 0;
 
@@ -47,6 +44,7 @@ export class MainFacet
 
   async attach(
     host: Received<ConversationHost>,
+    model: ModelCapability,
     generations?: Received<GenerationControl>,
   ): Promise<void> {
     const session = await this.#openedOr(() =>
@@ -54,7 +52,7 @@ export class MainFacet
         storage: this.ctx.storage,
         host: host.dup(),
         generations: generations?.dup(),
-        model: this.env.MODEL,
+        model,
         abort: (reason) => {
           this.ctx.abort(reason);
         },

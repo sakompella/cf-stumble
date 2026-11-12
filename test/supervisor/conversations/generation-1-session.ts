@@ -22,7 +22,7 @@ export async function commitNamed(name: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function servingGeneration1(
+export async function grantedSupervisor(
   name: string,
   workspace: ProjectWorkspace,
 ): Promise<Control> {
@@ -42,6 +42,14 @@ export async function servingGeneration1(
     });
   });
 
+  return control;
+}
+
+export async function servingGeneration1(
+  name: string,
+  workspace: ProjectWorkspace,
+): Promise<Control> {
+  const control = await grantedSupervisor(name, workspace);
   const commit = await commitNamed(name);
   const label = await submitCandidate(control, commit);
   const checked = await prepareWithModuleMap(control, label, await builtGeneration(commit));

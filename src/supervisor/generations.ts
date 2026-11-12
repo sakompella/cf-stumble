@@ -201,6 +201,13 @@ export class Generations {
     return { generation: current === undefined ? undefined : wireGeneration(current), epoch };
   }
 
+  activeCompatibility(): string | undefined {
+    const { active } = this.#selection().serving;
+    const current = active === null ? undefined : this.#generation(active);
+
+    return current === undefined ? undefined : wireRecord(current).compatibility;
+  }
+
   byLabel(label: GenerationLabel): Generation | undefined {
     const found = this.#generation(label);
 

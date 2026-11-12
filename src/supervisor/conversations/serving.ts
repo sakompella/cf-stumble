@@ -2,7 +2,10 @@ import * as Effect from "effect/Effect";
 import { answered, fail, parseMessage, type ConversationProblem } from "./conversation-result.js";
 import { logEvent, logRedactedCause } from "../../diagnostics.js";
 import {
+  attachFacet,
   SERVING_FACET_NAME,
+  type AttachableFacet,
+  type MainFacetModel,
   type MainFacetMountProblem,
   type MountedFacet,
 } from "../artifacts/index.js";
@@ -25,7 +28,8 @@ import { ConversationRuns, type FacetReplacement, type Settlement } from "./runs
 
 type ServingPorts = Readonly<{
   ctx: DurableObjectState;
-  mount: (instance: number) => Effect.Effect<MountedFacet, MainFacetMountProblem>;
+  mount: (instance: number) => Effect.Effect<AttachableFacet, MainFacetMountProblem>;
+  model: (instance: number) => MainFacetModel;
   catalog: () => SelectableCatalog;
   resetting: () => boolean;
   obtainWorkspace: ObtainWorkspace;
@@ -43,7 +47,7 @@ const INSTANCE_KEY = "serving-instance";
 export class ServingConversations {
   readonly #ports: ServingPorts;
   readonly #projects: ProjectThreads;
-  readonly #hosts = new Map<number, HostTargets>();
+  readonly #hosts = new Map<number, HostTargets & Readonly<{ model: MainFacetModel }>>();
   readonly #workspaces: HeldWorkspaces;
   readonly #runs: ConversationRuns;
 
@@ -277,15 +281,18 @@ export class ServingConversations {
       Effect.mapError((problem): ConversationProblem => ({
         code: problem.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
       })),
-      Effect.tap((facet) => this.#call(() => this.#attach(facet))),
+      Effect.tap((mounted) => this.#call(() => this.#attach(mounted))),
+      Effect.map(({ facet }) => facet),
     );
   }
 
-  #attach(facet: MountedFacet): Promise<void> {
+  #attach(mounted: AttachableFacet): Promise<void> {
     const instance = this.#instance();
     const existing = this.#hosts.get(instance);
 
-    if (existing !== undefined) return facet.attach(existing.host, existing.generations);
+    if (existing !== undefined) {
+      return attachFacet(mounted, existing.host, existing.model, existing.generations);
+    }
 
     const targets = servingHosts(
       {
@@ -303,9 +310,11 @@ export class ServingConversations {
       () => this.serves(instance),
     );
 
-    this.#hosts.set(instance, targets);
+    const model = this.#ports.model(instance);
 
-    return facet.attach(targets.host, targets.generations);
+    this.#hosts.set(instance, { ...targets, model });
+
+    return attachFacet(mounted, targets.host, model, targets.generations);
   }
 
   async #running(report: RunReport, instance: number): Promise<void> {

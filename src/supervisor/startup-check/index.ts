@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import type { MainFacetCapabilities } from "../../facet/index.js";
+import type { MainFacetModel } from "../../facet/index.js";
 import { FACET_COMPATIBILITY } from "../../facet/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
 import type { ProjectCapabilityStub } from "../../workspace/index.js";
@@ -22,7 +22,7 @@ export type StartupCheckHost = Readonly<{
   loader: WorkerLoader;
   artifacts: HarnessArtifacts;
   generations: Generations;
-  model: () => MainFacetCapabilities["MODEL"];
+  model: () => MainFacetModel;
   workspace: (
     remainingMs: number,
   ) => Effect.Effect<ProjectCapabilityStub | null, never, Scope.Scope>;

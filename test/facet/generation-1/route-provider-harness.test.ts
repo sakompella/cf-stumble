@@ -10,7 +10,7 @@ import {
   MemoryStorage,
 } from "@earendil-works/pi-durable";
 import { expect, test } from "vitest";
-import type { ModelCapability } from "../../../src/facet/generation-1/capabilities.js";
+import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
 import { NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
 

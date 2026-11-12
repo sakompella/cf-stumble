@@ -22,23 +22,19 @@ function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] 
   return [module.name, { js: module.source }];
 }
 
-export type MainFacetCapabilities = Readonly<{
-  MODEL: Fetcher<ModelRoute> | Fetcher<StartupCheckModel>;
-}>;
+export type MainFacetModel = Fetcher<ModelRoute> | Fetcher<StartupCheckModel>;
 
-export function loadMainFacet(
-  loader: WorkerLoader,
-  artifact: MainHarnessArtifact,
-  capabilities: MainFacetCapabilities,
-  workerName: string = artifact.harnessCommit,
-) {
-  const worker = loader.get(workerName, () => ({
+export function mainFacetCode(artifact: MainHarnessArtifact): WorkerLoaderWorkerCode {
+  return {
     ...FACET_RUNTIME,
     mainModule: artifact.modules[0].name,
     modules: Object.fromEntries(artifact.modules.map(workerModuleEntry)),
-    env: capabilities,
     globalOutbound: null,
-  }));
+  };
+}
+
+export function loadMainFacet(loader: WorkerLoader, artifact: MainHarnessArtifact) {
+  const worker = loader.get(artifact.harnessCommit, () => mainFacetCode(artifact));
 
   return { worker, facetClass: worker.getDurableObjectClass<MainFacetTarget>("MainFacet") };
 }

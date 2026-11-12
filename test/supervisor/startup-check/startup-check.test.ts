@@ -101,7 +101,7 @@ test("a generation in its startup check may read the generation status but not c
     servingFacetSource(
       "status-only generation control",
       FACET_COMPATIBILITY_METHOD,
-      `async attach(host, generations) {
+      `async attach(host, model, generations) {
     await generations.generationStatus();
     const activated = await generations
       .controlGeneration({ kind: "activate", label: 0, observedEpoch: 0 })

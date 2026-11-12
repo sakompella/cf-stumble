@@ -1,11 +1,9 @@
-import { env, exports as workerExports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { loadMainFacet, type MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/artifact.js";
 import { parsedArtifact } from "./fixture.js";
-
-const modelRoute = workerExports.ModelRoute({});
 
 function artifact(
   harnessCommit: string,
@@ -56,7 +54,6 @@ test("loads a multi-module main harness whose entry module uses an imported valu
         source: 'export const responseText = "from an imported module";',
       },
     ]),
-    { MODEL: modelRoute },
   );
 
   expect(await responseText(loadedHarness.worker)).toBe("from an imported module");
@@ -71,7 +68,6 @@ test("a SHA-1 harness commit and a SHA-256 harness commit each serve their own c
         source: facetModule('"first harness"'),
       },
     ]),
-    { MODEL: modelRoute },
   );
 
   const secondHarness = loadMainFacet(
@@ -82,7 +78,6 @@ test("a SHA-1 harness commit and a SHA-256 harness commit each serve their own c
         source: facetModule('"second harness"'),
       },
     ]),
-    { MODEL: modelRoute },
   );
 
   expect(await responseText(firstHarness.worker)).toBe("first harness");
@@ -97,7 +92,6 @@ test("reuses the cached Worker Loader entry when the same harness commit is load
     artifact(harnessCommit, "main.js", [
       { name: "main.js", source: facetModule('"code the commit was labeled with"') },
     ]),
-    { MODEL: modelRoute },
   );
 
   const rebuiltHarness = loadMainFacet(
@@ -105,7 +99,6 @@ test("reuses the cached Worker Loader entry when the same harness commit is load
     artifact(harnessCommit, "main.js", [
       { name: "main.js", source: facetModule('"code the commit was not labeled with"') },
     ]),
-    { MODEL: modelRoute },
   );
 
   expect(await responseText(firstHarness.worker)).toBe("code the commit was labeled with");
@@ -139,7 +132,6 @@ export default {
 `,
       },
     ]),
-    { MODEL: modelRoute },
   );
 
   expect(await responseText(loadedHarness.worker)).toBe("hopped");

@@ -1,15 +1,11 @@
 import * as Effect from "effect/Effect";
-import { loadMainFacet } from "../../facet/index.js";
-import type {
-  MainFacetCapabilities,
-  MainFacetTarget,
-  MainHarnessArtifact,
-} from "../../facet/index.js";
+import type { MainFacetModel, MainFacetTarget, MainHarnessArtifact } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { ModuleMapStore } from "./store.js";
 import type { StoredModuleMapProblem } from "./store.js";
 import { buildModuleMap, type HarnessBuildProblem } from "./build.js";
 import { SERVING_FACET_NAME, servingLoaderName } from "./facet-name.js";
+import { mountFacet, type AttachableFacet } from "./old-protocol.js";
 import type { ActiveGeneration } from "../generations.js";
 import type { WorkspaceHostRpc } from "../../workspace/index.js";
 
@@ -53,20 +49,23 @@ export class HarnessArtifacts {
     active: ActiveGeneration,
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
-    modelRoute: (instance: number) => MainFacetCapabilities["MODEL"],
-    instance: number,
-  ): Effect.Effect<MountedFacet, MainFacetMountProblem> {
+    oldProtocol?: Readonly<{ instance: number; model: MainFacetModel }>,
+  ): Effect.Effect<AttachableFacet, MainFacetMountProblem> {
     return this.load(active).pipe(
-      Effect.map((artifact) => {
-        const { facetClass } = loadMainFacet(
+      Effect.map((artifact) =>
+        mountFacet(
           loader,
+          facets,
+          SERVING_FACET_NAME,
           artifact,
-          { MODEL: modelRoute(instance) },
-          servingLoaderName(artifact.harnessCommit, instance),
-        );
-
-        return facets.get<MainFacetTarget>(SERVING_FACET_NAME, () => ({ class: facetClass }));
-      }),
+          oldProtocol === undefined
+            ? undefined
+            : {
+                loaderName: servingLoaderName(artifact.harnessCommit, oldProtocol.instance),
+                model: oldProtocol.model,
+              },
+        ),
+      ),
     );
   }
 
@@ -115,7 +114,15 @@ export class HarnessArtifacts {
   }
 }
 
-export type { MainFacetCapabilities } from "../../facet/index.js";
+export type { MainFacetModel } from "../../facet/index.js";
+
+export {
+  attachFacet,
+  mountFacet,
+  OLD_PROTOCOL_COMPATIBILITY,
+  type AttachableFacet,
+  type OldProtocolLoad,
+} from "./old-protocol.js";
 
 export { candidateFacetName, SERVING_FACET_NAME } from "./facet-name.js";
 
