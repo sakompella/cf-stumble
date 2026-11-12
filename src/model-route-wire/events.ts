@@ -6,8 +6,15 @@ export const MAX_OUTPUT_TOKENS = 32_768;
 
 export const REASONING_EFFORT = "low";
 
+export type ProviderMessage =
+  | Exclude<RouteMessage, AssistantMessage>
+  | (Omit<AssistantMessage, "tool_calls"> &
+      Readonly<{
+        tool_calls: ReadonlyArray<AssistantMessage["tool_calls"][number] & { type: "function" }>;
+      }>);
+
 export type StreamingProviderPayload = Readonly<{
-  messages: ReadonlyArray<RouteMessage>;
+  messages: ReadonlyArray<ProviderMessage>;
   tools?: ReadonlyArray<ToolDefinition>;
   reasoning_effort: typeof REASONING_EFFORT;
   max_tokens: number;

@@ -55,7 +55,7 @@ const MULTI_TURN_REQUEST: ModelRouteRequest = {
   ],
 };
 
-test("sends the whole conversation and its tools to the model, as a stream", async () => {
+test("sends the whole conversation, each tool call typed as a function, and its tools to the model, as a stream", async () => {
   const calls: Array<{ model: string; input: StreamingProviderPayload }> = [];
 
   const ai: ModelStreamInference = {
@@ -68,9 +68,26 @@ test("sends the whole conversation and its tools to the model, as a stream", asy
 
   await collectEvents(streamModelEvents(ai, MULTI_TURN_REQUEST));
   expect(calls).toHaveLength(1);
-  expect(calls[0]?.input).toMatchObject({
-    messages: MULTI_TURN_REQUEST.messages,
+  expect(calls[0]?.input).toEqual({
+    messages: [
+      { role: "system", content: "You are a coding assistant." },
+      { role: "user", content: "Read file.txt" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_abc123",
+            type: "function",
+            function: { name: "read_file", arguments: '{"path":"file.txt"}' },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "call_abc123", content: "file contents here" },
+    ],
     tools: MULTI_TURN_REQUEST.tools,
+    reasoning_effort: "low",
+    max_tokens: 32_768,
     stream: true,
   });
 });
@@ -313,7 +330,7 @@ test("logs one model.call event with prompt, cached and completion tokens", asyn
 
   expect(named(events(), "model.call")).toMatchObject([
     {
-      model: "@cf/zai-org/glm-5.3-flash",
+      model: "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
       promptTokens: 100,
       cachedTokens: 64,
       completionTokens: 7,
