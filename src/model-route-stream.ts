@@ -5,13 +5,18 @@ import {
   type ParsedProviderChunk,
   type TokenUsage,
 } from "./model-route-stream-parse.js";
-import type { AssistantMessage, ModelRouteRequest } from "./model-route-wire/request.js";
+import type {
+  AssistantMessage,
+  ModelRouteRequest,
+  RouteMessage,
+} from "./model-route-wire/request.js";
 import {
   MAX_OUTPUT_TOKENS,
   REASONING_EFFORT,
   type ModelStreamEvent,
   type ModelStreamInference,
   type ModelUsage,
+  type ProviderMessage,
   type StreamingProviderPayload,
   type ToolCallDelta,
 } from "./model-route-wire/events.js";
@@ -24,18 +29,23 @@ import {
   type ModelTurnAnswer,
 } from "./model-route-turn.js";
 
-const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
+const MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017" as const;
+
+function providerMessage(message: RouteMessage): ProviderMessage {
+  return message.role === "assistant"
+    ? { ...message, tool_calls: message.tool_calls.map((call) => ({ ...call, type: "function" })) }
+    : message;
+}
 
 function buildStreamingProviderPayload(request: ModelRouteRequest): StreamingProviderPayload {
   const fixed = {
+    messages: request.messages.map(providerMessage),
     reasoning_effort: REASONING_EFFORT,
     max_tokens: MAX_OUTPUT_TOKENS,
     stream: true,
   } as const;
 
-  return request.tools === undefined
-    ? { messages: request.messages, ...fixed }
-    : { messages: request.messages, tools: request.tools, ...fixed };
+  return request.tools === undefined ? fixed : { tools: request.tools, ...fixed };
 }
 
 type ToolCallAccumulator = { id: string; name: string; args: string[] };

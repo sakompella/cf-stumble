@@ -92,7 +92,7 @@ test("a usage limit before any output is answered by Workers AI after one fallba
   const events = await route.events();
 
   expect(fetchSpy).toHaveBeenCalledOnce();
-  expect(binding.calls).toEqual(["@cf/zai-org/glm-5.3-flash"]);
+  expect(binding.calls).toEqual(["@cf/deepseek-ai/deepseek-v4.1-flash-1017"]);
   expect(route.limited).toEqual([[READY.accessToken, null]]);
   expect(events.slice(0, 2)).toEqual([
     { type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil: null },
