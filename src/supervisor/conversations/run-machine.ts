@@ -27,6 +27,7 @@ export type RunOutcome =
   | "completed"
   | "failed"
   | "interrupted"
+  | "stalled"
   | "cancelled"
   | "unanswered"
   | "replaced";
@@ -37,6 +38,8 @@ export type RunEvent = Data.TaggedEnum<{
     readonly errorCode: string | null;
     readonly instance: number;
     readonly now: number;
+    readonly modelTurnAt: number | null;
+    readonly supervisorStartedAt: number;
   };
   Ended: { readonly ending: RunEnding };
 }>;
@@ -88,23 +91,36 @@ function continues(active: ActiveRun, report: RunningConversation): boolean {
   return report.run === undefined || active.run === null || report.run === active.run;
 }
 
-function adopted(active: ActiveRun, report: RunningConversation, instance: number): RunState {
-  const fields = {
-    run: active.run ?? report.run ?? null,
-    deadline: active.deadline,
-    instance: active.instance ?? instance,
-  };
+function adopted(active: ActiveRun, report: RunningConversation, event: Reported): RunState {
+  const { instance, now } = event;
+  const run = active.run ?? report.run ?? null;
+
+  if (RunState.guards.Running(active) && active.instance !== null && active.instance !== instance) {
+    return RunState.cases.Running.make({ run, deadline: now + PROJECT_RUN_DEADLINE_MS, instance });
+  }
+
+  const fields = { run, deadline: active.deadline, instance: active.instance ?? instance };
 
   return RunState.guards.Ending(active)
     ? RunState.cases.Ending.make({ ...fields, ending: active.ending })
     : RunState.cases.Running.make(fields);
 }
 
+function deadlineOutcome(
+  active: ActiveRun,
+  { modelTurnAt, supervisorStartedAt }: Reported,
+): RunOutcome {
+  const startedAt = active.deadline - PROJECT_RUN_DEADLINE_MS;
+  const askedModel = modelTurnAt !== null && modelTurnAt >= startedAt;
+
+  return askedModel || supervisorStartedAt > startedAt ? "interrupted" : "stalled";
+}
+
 function reportedOn(active: ActiveRun, event: Reported, outcome: RunOutcome): RunStep {
   const { report, errorCode, instance } = event;
 
   if (report !== undefined && continues(active, report)) {
-    return stay(adopted(active, report, instance));
+    return stay(adopted(active, report, event));
   }
 
   const owned = active.instance === null || active.instance === instance;
@@ -147,7 +163,12 @@ export function transition(state: RunState, event: RunEvent): RunStep {
       }),
     Ending: (ending) =>
       RunEvent.$match(event, {
-        Reported: (reported) => reportedOn(ending, reported, ending.ending),
+        Reported: (reported) =>
+          reportedOn(
+            ending,
+            reported,
+            ending.ending === "interrupted" ? deadlineOutcome(ending, reported) : ending.ending,
+          ),
         Ended: () => stay(state),
       }),
   });

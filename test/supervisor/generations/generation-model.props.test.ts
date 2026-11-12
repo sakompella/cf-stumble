@@ -46,6 +46,7 @@ const outcome = gs.sampledFrom([
   "failed",
   "failed",
   "interrupted",
+  "stalled",
   "cancelled",
   "unanswered",
   "replaced",

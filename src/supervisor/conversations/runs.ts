@@ -18,6 +18,10 @@ const HEARTBEAT_MS = 60_000;
 
 const WAKE_KEY = "conversations.wake";
 
+const MODEL_TURN_KEY = "conversations.model-turn";
+
+type ModelTurn = Readonly<{ instance: number; at: number }>;
+
 type RunRow = Readonly<{
   conversation_id: string;
   run: number | null;
@@ -51,6 +55,7 @@ function stateFromRow(row: RunRow): ActiveRun {
 
 export class ConversationRuns {
   readonly #storage: DurableObjectStorage;
+  readonly #startedAt = Date.now();
 
   constructor(storage: DurableObjectStorage) {
     this.#storage = storage;
@@ -71,6 +76,10 @@ export class ConversationRuns {
 
   interrupted(conversationId: string): string {
     return this.#ends(conversationId, "interrupted");
+  }
+
+  modelTurn(instance: number, now: number): void {
+    this.#storage.kv.put(MODEL_TURN_KEY, { instance, at: now } satisfies ModelTurn);
   }
 
   #ends(conversationId: string, ending: RunEnding): string {
@@ -107,6 +116,7 @@ export class ConversationRuns {
   ): readonly Settlement[] {
     const steps = this.#storage.transactionSync(() => {
       const runs = this.#runs();
+      const modelTurn = this.#storage.kv.get<ModelTurn>(MODEL_TURN_KEY);
 
       const conversations = new Set([
         ...runs.keys(),
@@ -121,6 +131,8 @@ export class ConversationRuns {
             errorCode: failed[conversationId] ?? null,
             instance,
             now,
+            modelTurnAt: modelTurn?.instance === instance ? modelTurn.at : null,
+            supervisorStartedAt: this.#startedAt,
           }),
         );
 

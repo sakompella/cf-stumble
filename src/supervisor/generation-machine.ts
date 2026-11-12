@@ -61,7 +61,8 @@ type RunVerdict = "proves" | "fails" | "neutral";
 const RUN_VERDICT: Readonly<Record<RunOutcome, RunVerdict>> = {
   completed: "proves",
   failed: "fails",
-  interrupted: "fails",
+  interrupted: "neutral",
+  stalled: "fails",
   cancelled: "neutral",
   unanswered: "neutral",
   replaced: "neutral",
