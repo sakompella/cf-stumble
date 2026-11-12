@@ -28,6 +28,8 @@ export const GITHUB_CLI_CONFIG_DIRECTORY = `${WORKSPACE_ROOT}/.config/gh`;
 
 export const GIT_GLOBAL_CONFIG_PATH = `${WORKSPACE_ROOT}/.gitconfig`;
 
+export const CARGO_TARGET_DIRECTORY = "/tmp/cargo-target";
+
 export function projectDirectory(projectId: ProjectId): string {
   return `${PROJECTS_DIRECTORY}/${projectId}`;
 }
