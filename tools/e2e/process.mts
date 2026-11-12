@@ -37,6 +37,7 @@ export function execute(
     child.stdout.on("data", collect);
     child.stderr.on("data", collect);
     child.on("error", reject);
+    child.stdin.on("error", () => {});
     child.on("close", (code) => {
       running.delete(child);
       resolve({ code: code ?? 1, output: chunks.join("") });
