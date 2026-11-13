@@ -49,7 +49,7 @@ export interface ConversationFacet {
   ): Promise<number>;
   events(conversationId: string, from?: number): Promise<ReadableStream<Uint8Array>>;
   entries(conversationId: string, request: EntriesRequest): Promise<string>;
-  abort(conversationId: string, reason?: AbortReason): Promise<void>;
+  abort(conversationId: string, reason?: AbortReason): Promise<RunningConversation | null>;
 }
 
 export function hostLog(host: ConversationHost): FacetLog {

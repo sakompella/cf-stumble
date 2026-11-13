@@ -10,6 +10,7 @@ import type {
   ConversationHost,
   GenerationControl,
   ModelCapability,
+  RunningConversation,
 } from "../conversation-protocol.js";
 import { openSession, type Session } from "./open-session.js";
 import { ROUTE_AGENT } from "./route-provider.js";
@@ -153,15 +154,20 @@ export class MainFacet extends DurableObject implements ConversationFacet {
     return JSON.stringify(page);
   }
 
-  async abort(conversationId: string, reason?: AbortReason): Promise<void> {
+  async abort(conversationId: string, reason?: AbortReason): Promise<RunningConversation | null> {
     const conversation = await this.#conversation(conversationId);
     const endWork = await this.#beginWork();
 
-    void conversation
+    const ended = conversation
       .abort(context)
-      .then(() => (reason === "deadline" ? endDeadlineRun(conversation, context) : undefined))
-      .catch(() => {})
+      .then(() => (reason === "deadline" ? endDeadlineRun(conversation, context) : null))
       .finally(endWork);
+
+    if (reason === "deadline") return ended;
+
+    void ended.catch(() => {});
+
+    return null;
   }
 
   #opened(): Promise<Session> {

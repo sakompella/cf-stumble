@@ -142,7 +142,7 @@ test("a deadline abort after progress continues the run while another run fits i
     await vi.waitFor(() => {
       expect(requests).toHaveLength(2);
     });
-    await facet.abort(id, "deadline");
+    expect(await facet.abort(id, "deadline")).toMatchObject({ conversationId: id, continues: 1 });
 
     await vi.waitFor(() => {
       expect(requests).toHaveLength(3);
@@ -170,11 +170,8 @@ test("a deadline abort after progress only notices when the budget is one run", 
     await vi.waitFor(() => {
       expect(requests).toHaveLength(2);
     });
-    await facet.abort(id, "deadline");
-
-    await vi.waitFor(async () => {
-      expect(await noticeCount(facet, id)).toBe(1);
-    });
+    expect(await facet.abort(id, "deadline")).toBeNull();
+    expect(await noticeCount(facet, id)).toBe(1);
     expect(await entriesText(facet, id)).toContain("Send a message to continue");
     expect(requests).toHaveLength(2);
   });

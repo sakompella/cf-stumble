@@ -63,14 +63,19 @@ export class MainFacet extends DurableObject {
     }
     if (content === "refuse the next attach") this.ctx.storage.kv.put("refuse-attach", 1);
     if (content === "hold the events open") this.ctx.storage.kv.put("hold-events", 1);
-    await this.host.running([{ conversationId }]);
+    const continues = content === "continue at the deadline";
+    if (continues) this.ctx.storage.kv.put("continue", 1);
+    await this.host.running([continues ? { conversationId, run: 1 } : { conversationId }]);
     if (content === "fail the run") await this.host.running([], { [conversationId]: "model_error" });
     await this.host.arm({ active: true });
     const submitted = (this.ctx.storage.kv.get("submitted") ?? 0) + 1;
     this.ctx.storage.kv.put("submitted", submitted);
     return submitted;
   }
-  async abort() {
+  async abort(conversationId, reason) {
+    if (reason === "deadline" && this.ctx.storage.kv.get("continue") === 1) {
+      return { conversationId, run: 99, continues: 1 };
+    }
     await this.host.running([]);
     await this.host.arm({ active: false });
   }

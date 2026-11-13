@@ -13,6 +13,7 @@ import {
   type SubmissionId,
   type Tx,
 } from "@earendil-works/pi-durable";
+import type { RunningConversation } from "../conversation-protocol.js";
 import { RUN_DEADLINE_MINUTES } from "../../turn-budget.js";
 import { RUN_NOTICE_KIND } from "../../run-notice.js";
 import { noticeWrite } from "./run-notices.js";
@@ -124,7 +125,10 @@ async function startedContinue(
   (await tx.doc(RunBudgetsDoc, conversationId)).runs = { [String(id)]: chain };
 }
 
-export function endDeadlineRun(conversation: Conversation, context: Context): Promise<void> {
+export function endDeadlineRun(
+  conversation: Conversation,
+  context: Context,
+): Promise<RunningConversation | null> {
   return conversation.commit(async (tx) => {
     const failure = (await tx.doc(LiveDoc, conversation.id)).runFailure;
     const latest = await tx.latestEntryId(conversation.id);
@@ -134,7 +138,7 @@ export function endDeadlineRun(conversation: Conversation, context: Context): Pr
       failure?.reason !== "aborted" ||
       (last?.kind === RUN_NOTICE_KIND && last.data === failure.taskId)
     ) {
-      return;
+      return null;
     }
 
     const chain = await continuedChain(tx, conversation.id, failure);
@@ -142,7 +146,7 @@ export function endDeadlineRun(conversation: Conversation, context: Context): Pr
     if (chain === undefined) {
       await conversation.submit(tx, noticeWrite(DEADLINE_NOTICE, Date.now(), failure.taskId));
 
-      return;
+      return null;
     }
 
     const id = await conversation.submit(tx, {
@@ -152,6 +156,8 @@ export function endDeadlineRun(conversation: Conversation, context: Context): Pr
     });
 
     await startedContinue(tx, conversation.id, id, chain);
+
+    return { conversationId: String(conversation.id), run: id, continues: chain.continues };
   }, context);
 }
 

@@ -1,8 +1,8 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Wake } from "@earendil-works/pi-durable";
-import type { RunReport } from "./host-target.js";
-import { logEvent } from "../../diagnostics.js";
+import { isContinuedRun, type RunningConversation, type RunReport } from "./host-target.js";
+import { logEvent, logRedactedCause } from "../../diagnostics.js";
 import { PROJECT_RUN_DEADLINE_MS } from "../../turn-budget.js";
 import {
   RunCommand,
@@ -53,6 +53,30 @@ function addContinuesColumn(sql: SqlStorage): void {
 
   if (!columns.some((column) => column.name === "continues")) {
     sql.exec("ALTER TABLE conversation_runs ADD COLUMN continues INTEGER NOT NULL DEFAULT 0");
+  }
+}
+
+export class DeadlineAborts {
+  readonly #ending = new Set<string>();
+
+  waiting(expired: readonly string[]): readonly string[] {
+    return expired.filter((conversationId) => !this.#ending.has(conversationId));
+  }
+
+  end(
+    conversationId: string,
+    abort: () => Promise<RunningConversation | null>,
+    continued: (run: RunningConversation) => Promise<void>,
+  ): void {
+    this.#ending.add(conversationId);
+    void abort()
+      .then((run) => (isContinuedRun(run) ? continued(run) : undefined))
+      .catch((cause: unknown) => {
+        logRedactedCause("supervisor.conversations.facet-call", cause);
+      })
+      .finally(() => {
+        this.#ending.delete(conversationId);
+      });
   }
 }
 
@@ -127,7 +151,26 @@ export class ConversationRuns {
   }
 
   reconcile(
+    report: RunReport,
+    now: number,
+    instance: number,
+    generation: number | null,
+  ): readonly Settlement[] {
+    return this.#reported(report, (runs) => runs.keys(), now, instance, generation);
+  }
+
+  continued(
+    run: RunningConversation,
+    now: number,
+    instance: number,
+    generation: number | null,
+  ): readonly Settlement[] {
+    return this.#reported({ running: [run], failed: {} }, () => [], now, instance, generation);
+  }
+
+  #reported(
     { running, failed }: RunReport,
+    tracked: (runs: ReadonlyMap<string, ActiveRun>) => Iterable<string>,
     now: number,
     instance: number,
     generation: number | null,
@@ -137,7 +180,7 @@ export class ConversationRuns {
       const modelTurn = this.#storage.kv.get<ModelTurn>(MODEL_TURN_KEY);
 
       const conversations = new Set([
-        ...runs.keys(),
+        ...tracked(runs),
         ...running.map((reported) => reported.conversationId),
       ]);
 

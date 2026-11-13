@@ -1,10 +1,12 @@
-import { reset, runInDurableObject } from "cloudflare:test";
+import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { activateGeneration, connectedSupervisor, generationLabel } from "../helpers.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
+import { PROJECT_RUN_DEADLINE_MS } from "../../../src/turn-budget.js";
 import { readyScripted, SCRIPTED_COMMITS, servingScripted } from "./serving-fixture.js";
 
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   await reset();
 });
@@ -108,6 +110,28 @@ test("an active run keeps the recovery alarm armed and refuses a workspace reset
   expect(log).toHaveBeenCalledWith(
     expect.objectContaining({ event: "run.settled", outcome: "cancelled" }),
   );
+});
+
+test("a run the facet continues at its deadline gets its own deadline at once, so the next alarm does not abort it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const control = await servingScripted("conversations-continued-at-deadline");
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const events = (spy: typeof log, event: string) =>
+    spy.mock.calls.filter(([line]) => JSON.stringify(line).includes(`"event":"${event}"`));
+
+  await admitted(control, "sample-project-one", "continue at the deadline", "r1");
+  vi.setSystemTime(Date.now() + PROJECT_RUN_DEADLINE_MS + 1_000);
+
+  expect(await runDurableObjectAlarm(control)).toBe(true);
+  await vi.waitUntil(() => events(log, "run.settled").length === 1);
+  expect(await runDurableObjectAlarm(control)).toBe(true);
+
+  expect(events(warn, "run.deadline-aborted")).toHaveLength(1);
+  expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: "run.settled", continues: 0 }));
+  expect(events(log, "run.started")).toHaveLength(2);
+  expect(await control.resetWorkspace()).toEqual({ ok: false, problem: { code: "run-active" } });
 });
 
 test("a run the facet reports unanswered with a model error settles as unanswered with the error code", async () => {
