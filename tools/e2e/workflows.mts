@@ -118,11 +118,11 @@ export async function selfModification(run: Run): Promise<void> {
       "Do these steps in order, one tool call each, and stop at the first failure:",
       `1. Use the write tool to create the file /workspace/harness/${path} with exactly this one line: ${markerText(run, "-gen")}`,
       `2. Run in the container with the bash tool: cd /workspace/harness && git add ${path} && ${GIT_IDENTITY} commit -m "e2e: ${run.id} generation" && git rev-parse HEAD`,
-      `3. Run in the container with the bash tool: git -C /workspace/harness push origin HEAD:refs/heads/e2e/${run.id}-gen`,
+      `3. Run in the container with the bash tool: git -C /workspace/harness push origin HEAD:refs/heads/self-modify/${run.id}-gen`,
       "4. Run with the bash tool: stumble gen prepare <the commit id from step 2>",
       "5. When it reports the generation ready, run with the bash tool the exact stumble gen activate command it printed.",
       "6. If that command came back interrupted, run with the bash tool: stumble gen status",
-      "Do not open a pull request. Then reply with the active generation label.",
+      "This change is a throwaway for this run: skip the pull request. Then reply with the active generation label.",
     ].join("\n"),
   );
 
