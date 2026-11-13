@@ -1,16 +1,13 @@
 import { workerName } from "../../infra/worker-settings.ts";
 import {
   accountFrom,
-  deleteStageImages,
   deployEnv,
-  deployStage,
-  destroyStage,
-  setSecret,
-  stageLeftovers,
+  deployWithSecrets,
+  destroyAndCheck,
   stageUrl,
 } from "./cloudflare.mts";
 import { reportModelCalls } from "./cost.mts";
-import { GitHub, HARNESS_REMOTE } from "./github.mts";
+import { GitHub } from "./github.mts";
 import { Owner } from "./owner-api.mts";
 import { execute } from "./process.mts";
 import { markerPath } from "./workflows.mts";
@@ -61,19 +58,7 @@ export class Target {
     const { env, password } = this.#options;
 
     if (this.fresh && this.stage !== undefined) {
-      const tools = await deployEnv(env);
-
-      await deployStage(this.stage, tools);
-
-      for (const [name, value] of [
-        ["HARNESS_REPOSITORY_URL", HARNESS_REMOTE],
-        ["GH_TOKEN", env["GH_TOKEN"] ?? ""],
-        ["OWNER_PASSWORD", password],
-      ] as const) {
-        await setSecret(this.stage, name, value, env);
-      }
-
-      await deployStage(this.stage, tools, ["--force"]);
+      await deployWithSecrets(this.stage, password, await deployEnv(env));
     }
 
     const owner = await this.#owner();
@@ -141,17 +126,8 @@ export class Target {
   }
 
   async destroy(): Promise<void> {
-    const { env } = this.#options;
-
     if (this.stage === undefined) return;
 
-    const tools = await deployEnv(env);
-
-    await destroyStage(this.stage, tools);
-    await deleteStageImages(this.stage, tools);
-
-    const left = await stageLeftovers(accountFrom(env), this.stage, env);
-
-    if (left.length > 0) throw new Error(`left on the account: ${left.join(", ")}`);
+    await destroyAndCheck(this.stage, await deployEnv(this.#options.env));
   }
 }

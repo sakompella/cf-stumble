@@ -15,6 +15,10 @@ const Submitted = Schema.Struct({
   ]),
 });
 
+const ChatGPTConnection = Schema.Struct({
+  chatgpt: Schema.Struct({ connection: Schema.Struct({ state: Schema.String }) }),
+});
+
 const Connected = Schema.Struct({ project: Schema.Struct({ id: Schema.String }) });
 
 const Live = Schema.Struct({
@@ -153,6 +157,11 @@ export class Owner {
         if (!response.ok) throw new Error(`${kind} ${label} answered ${await response.text()}`);
       },
     );
+  }
+
+  async chatgptConnection(): Promise<string> {
+    return (await this.#json(this.get("/api/chatgpt/connection"), ChatGPTConnection)).chatgpt
+      .connection.state;
   }
 
   async connect(repositoryUrl: string): Promise<string> {

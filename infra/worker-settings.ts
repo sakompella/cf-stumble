@@ -36,7 +36,9 @@ export const durableObjectClasses = {
 
 export const MODULE_MAPS_BINDING = "MODULE_MAPS";
 
-export const plainTextBindings = { CHATGPT_MODEL: "gpt-6.1-sol" } as const;
+export function plainTextBindings(stage: string) {
+  return { CHATGPT_MODEL: stage === PRODUCTION_STAGE ? "gpt-6.1-sol" : "gpt-6.1-terra" };
+}
 
 export const shellModulesAssetDirectory = "build/shell-assets";
 

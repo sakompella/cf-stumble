@@ -7,11 +7,12 @@ export type ActivationAnswer = Readonly<{ ok: boolean; code: string | undefined 
 export type ReleaseOwner = Readonly<{
   active: () => Promise<ActiveCommit>;
   submit: (harnessCommit: string) => Promise<Submitted>;
-  activate: (label: number, observedEpoch: number) => Promise<ActivationAnswer>;
+  activate: (label: number, observedEpoch: number, force: boolean) => Promise<ActivationAnswer>;
 }>;
 
 export type ReleaseDeps = Readonly<{
   owner: ReleaseOwner;
+  force: boolean;
   facetChangedSince: (harnessCommit: string) => Promise<boolean>;
   wait: (ms: number) => Promise<void>;
   now: () => number;
@@ -43,7 +44,7 @@ export async function releaseGeneration(target: string, deps: ReleaseDeps): Prom
 
   for (;;) {
     const { epoch } = await owner.active();
-    const answer = await owner.activate(submitted.label, epoch);
+    const answer = await owner.activate(submitted.label, epoch, deps.force);
 
     if (answer.ok) return `Activated generation ${submitted.label} for ${target}.`;
 
