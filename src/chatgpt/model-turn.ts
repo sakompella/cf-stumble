@@ -145,9 +145,15 @@ function refused(
   );
 }
 
+type Outgoing = Readonly<{ body: string; sessionId: string | undefined }>;
+
+function sessionHeaders(sessionId: string | undefined): Record<string, string> {
+  return sessionId === undefined ? {} : { session_id: sessionId, "x-client-request-id": sessionId };
+}
+
 function send(
   input: ChatGPTTurnInput,
-  body: string,
+  { body, sessionId }: Outgoing,
   token: string,
 ): Effect.Effect<Response, ModelTurnFailed> {
   return Effect.tryPromise({
@@ -158,6 +164,7 @@ function send(
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
           accept: "text/event-stream",
+          ...sessionHeaders(sessionId),
         },
         body,
         redirect: "manual",
@@ -180,17 +187,20 @@ function refusedTwice(
 
 type Answer = Readonly<{ response: Response; token: string }>;
 
-function answered(input: ChatGPTTurnInput, body: string): Effect.Effect<Answer, ChatGPTRefusal> {
+function answered(
+  input: ChatGPTTurnInput,
+  outgoing: Outgoing,
+): Effect.Effect<Answer, ChatGPTRefusal> {
   return Effect.gen(function* () {
     const first = yield* accessToken(input.credential);
-    const response = yield* send(input, body, first);
+    const response = yield* send(input, outgoing, first);
 
     if (response.status !== 401) return { response, token: first };
     yield* Effect.promise(() => discardBody(response));
     logEvent("warn", "chatgpt.model-call", { outcome: "retrying", status: 401 });
 
     const second = yield* accessToken(input.credential, first);
-    const retried = yield* send(input, body, second);
+    const retried = yield* send(input, outgoing, second);
 
     if (retried.status !== 401) return { response: retried, token: second };
     yield* Effect.promise(() => discardBody(retried));
@@ -204,11 +214,11 @@ export function chatgptTurn(
   request: ModelRouteRequest,
 ): (emit: (event: ModelStreamEvent) => void) => Effect.Effect<ModelTurnAnswer, ChatGPTRefusal> {
   const requestBody = responsesRequest(input.model, request);
-  const body = JSON.stringify(requestBody);
+  const outgoing = { body: JSON.stringify(requestBody), sessionId: request.promptCacheKey };
 
   return (emit) =>
     Effect.gen(function* () {
-      const { response, token } = yield* answered(input, body);
+      const { response, token } = yield* answered(input, outgoing);
 
       if (!response.ok || response.body === null) {
         const error = yield* errorOf(response);
