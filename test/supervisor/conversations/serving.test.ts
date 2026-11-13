@@ -15,6 +15,19 @@ function alarm(control: DurableObjectStub<Supervisor>): Promise<number | null> {
   return runInDurableObject(control, (_instance, state) => state.storage.getAlarm());
 }
 
+async function rearmed(control: DurableObjectStub<Supervisor>): Promise<number> {
+  let at = await alarm(control);
+
+  while (at === null) {
+    await new Promise<void>((resume) => {
+      setTimeout(resume, 10);
+    });
+    at = await alarm(control);
+  }
+
+  return at;
+}
+
 async function admitted(
   control: DurableObjectStub<Supervisor>,
   projectId: string,
@@ -125,13 +138,13 @@ test("a run the facet continues at its deadline gets its own deadline and worksp
   vi.setSystemTime(Date.now() + PROJECT_RUN_DEADLINE_MS + 1_000);
 
   expect(await runDurableObjectAlarm(control)).toBe(true);
-  await vi.waitUntil(() => events(log, "run.settled").length === 1);
+  await rearmed(control);
   expect(await runDurableObjectAlarm(control)).toBe(true);
 
   expect(events(warn, "run.deadline-aborted")).toHaveLength(1);
   expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: "run.settled", continues: 0 }));
   expect(events(log, "run.started")).toHaveLength(2);
-  await vi.waitUntil(() => events(log, "facet.continued-workspace").length === 1);
+  expect(events(log, "facet.continued-workspace")).toHaveLength(1);
   expect(log).not.toHaveBeenCalledWith(
     expect.objectContaining({ refused: "this conversation has no running project workspace" }),
   );
