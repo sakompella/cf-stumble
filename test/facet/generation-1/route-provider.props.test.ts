@@ -25,6 +25,7 @@ function drawEvents(tc: hegel.TestCase): ModelStreamEvent[] {
 
   const done: ModelStreamEvent = {
     type: "done",
+    served: { provider: "workers-ai", model: "test-model" },
     message: { role: "assistant", content: null, tool_calls: [] },
     usage: NO_USAGE,
   };

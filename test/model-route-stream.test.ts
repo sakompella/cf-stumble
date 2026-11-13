@@ -139,7 +139,7 @@ test("a stream that completes with no text or tool call is an empty answer, not 
 
   const events = await collectEvents(streamModelEvents(fakeStreamInference(provider), REQUEST));
 
-  expect(events).toEqual([
+  expect(events).toMatchObject([
     {
       type: "done",
       message: { role: "assistant", content: null, tool_calls: [] },

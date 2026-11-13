@@ -51,10 +51,23 @@ export type ModelUsage = Readonly<{
   estimated: boolean;
 }>;
 
+export type ServedBy = Readonly<{
+  provider: string;
+  model: string;
+  effort?: string;
+  fallback?: "chatgpt-not-connected";
+}>;
+
 export type ModelStreamEvent =
   | Readonly<{ type: "text-delta"; delta: string }>
   | Readonly<{ type: "tool-call-delta"; delta: ToolCallDelta }>
-  | Readonly<{ type: "done"; message: AssistantMessage; usage: ModelUsage; truncated?: true }>
+  | Readonly<{
+      type: "done";
+      message: AssistantMessage;
+      usage: ModelUsage;
+      served?: ServedBy;
+      truncated?: true;
+    }>
   | Readonly<{ type: "error"; error: Readonly<{ code: ModelRouteErrorCode; detail?: string }> }>
   | ProviderFallback;
 

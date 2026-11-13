@@ -137,7 +137,8 @@ type Answer = Readonly<{
 
 function answerStream(message: Answer): ReadableStream<Uint8Array> {
   const usage = { inputTokens: 0, outputTokens: 0, estimated: true };
-  const line = `${JSON.stringify({ type: "done", message, usage })}\n`;
+  const served = { provider: "fuzz", model: "scripted" };
+  const line = `${JSON.stringify({ type: "done", message, usage, served })}\n`;
 
   return new ReadableStream({
     start(controller) {

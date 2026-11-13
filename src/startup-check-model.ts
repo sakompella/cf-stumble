@@ -24,6 +24,8 @@ import { WORKSPACE_ROOT } from "./workspace-layout.js";
 
 const USAGE = { inputTokens: 0, outputTokens: 0, estimated: true };
 
+const SERVED = { provider: "startup-check", model: "scripted" };
+
 type Edit = Readonly<{ oldText: string; newText: string }>;
 
 type Call = Readonly<{
@@ -164,6 +166,6 @@ export class StartupCheckModel extends WorkerEntrypoint {
     if (Result.isFailure(parsed)) return parsed.failure;
     const message = scriptedAnswer(parsed.success.messages);
 
-    return modelEventStream(() => Effect.succeed({ message, usage: USAGE }));
+    return modelEventStream(() => Effect.succeed({ message, usage: USAGE, served: SERVED }));
   }
 }

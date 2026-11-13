@@ -38,6 +38,7 @@ export interface RunSettlement {
 }
 
 export interface ModelCall {
+  readonly provider: string;
   readonly promptTokens: number;
   readonly cachedTokens: number;
 }
@@ -233,16 +234,24 @@ export function runChecks(input: CheckInput): readonly Finding[] {
   return [...failures, ...ranPastIdle(input.activity.data, input)];
 }
 
-export function cacheHitLine({ calls, sample }: ModelCalls): readonly string[] {
+function providerLine(provider: string, calls: readonly ModelCall[], sample: boolean): string {
   const prompt = calls.reduce((sum, call) => sum + call.promptTokens, 0);
-
-  if (prompt === 0) return [];
-
   const cached = calls.reduce((sum, call) => sum + call.cachedTokens, 0);
+  const rate = prompt === 0 ? "n/a" : `${((100 * cached) / prompt).toFixed(1)}%`;
 
-  return [
-    `i model cache hit rate ${((100 * cached) / prompt).toFixed(1)}% (${cached}/${prompt} prompt tokens, ${calls.length} calls${sample ? ", a sample: telemetry returned its row limit, use a shorter --since for all" : ""})`,
-  ];
+  return `i model calls ${provider}: ${calls.length}, cache hit rate ${rate} (${cached}/${prompt} prompt tokens${sample ? ", a sample: telemetry returned its row limit, use a shorter --since for all" : ""})`;
+}
+
+export function modelCallLines({ calls, sample }: ModelCalls): readonly string[] {
+  const providers = [...new Set(calls.map((call) => call.provider))].toSorted();
+
+  return providers.map((provider) =>
+    providerLine(
+      provider,
+      calls.filter((call) => call.provider === provider),
+      sample,
+    ),
+  );
 }
 
 export function formatReport(
@@ -252,7 +261,7 @@ export function formatReport(
 ): readonly string[] {
   return [
     ...reportFindings(input, findings),
-    ...(modelCalls === null ? [] : cacheHitLine(modelCalls)),
+    ...(modelCalls === null ? [] : modelCallLines(modelCalls)),
   ];
 }
 

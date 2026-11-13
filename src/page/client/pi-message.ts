@@ -15,7 +15,10 @@ export const Block = Schema.Union([TextBlock, ToolCallBlock, OtherBlock]);
 
 export type Block = typeof Block.Type;
 
-const Diagnostic = Schema.Struct({ type: Schema.String });
+const Diagnostic = Schema.Struct({
+  type: Schema.String,
+  details: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+});
 
 export const AssistantMessage = Schema.Struct({
   role: Schema.Literal("assistant"),

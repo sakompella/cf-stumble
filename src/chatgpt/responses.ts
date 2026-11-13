@@ -13,7 +13,7 @@ import type { ToolCallDelta } from "../model-route-wire/events.js";
 
 export const RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 
-const REASONING_EFFORT = "medium";
+export const REASONING_EFFORT = "medium";
 
 type InputItem =
   | Readonly<{ role: "user" | "assistant"; content: string }>
@@ -36,6 +36,7 @@ export type ResponsesRequestBody = Readonly<{
   input: readonly InputItem[];
   tools?: readonly FunctionTool[];
   reasoning: Readonly<{ effort: typeof REASONING_EFFORT }>;
+  prompt_cache_key?: string;
   store: false;
   stream: true;
 }>;
@@ -88,6 +89,8 @@ export function responsesRequest(model: string, request: ModelRouteRequest): Res
 
   if (instructions !== "") body.instructions = instructions;
 
+  if (request.promptCacheKey !== undefined) body.prompt_cache_key = request.promptCacheKey;
+
   if (request.tools !== undefined && request.tools.length > 0) {
     body.tools = request.tools.map((tool) => ({
       type: "function",
@@ -120,7 +123,11 @@ const ResponseFields = Schema.Struct({
   error: lenient(ProviderErrorFields),
   incomplete_details: lenient(Schema.Struct({ reason: lenient(Schema.String) })),
   usage: lenient(
-    Schema.Struct({ input_tokens: lenient(TokenCount), output_tokens: lenient(TokenCount) }),
+    Schema.Struct({
+      input_tokens: lenient(TokenCount),
+      input_tokens_details: lenient(Schema.Struct({ cached_tokens: lenient(TokenCount) })),
+      output_tokens: lenient(TokenCount),
+    }),
   ),
 });
 
@@ -181,12 +188,13 @@ export function retryAt(header: string | null, now: number): number | null {
 }
 
 function usageOf(event: StreamEvent): TokenUsage | undefined {
-  const inputTokens = event.response?.usage?.input_tokens;
-  const outputTokens = event.response?.usage?.output_tokens;
+  const usage = event.response?.usage;
+  const inputTokens = usage?.input_tokens;
+  const outputTokens = usage?.output_tokens;
 
   return inputTokens === undefined || outputTokens === undefined
     ? undefined
-    : { inputTokens, outputTokens };
+    : { inputTokens, outputTokens, cachedTokens: usage?.input_tokens_details?.cached_tokens };
 }
 
 export class ResponsesStreamReader {

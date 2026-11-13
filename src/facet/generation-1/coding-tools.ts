@@ -12,7 +12,10 @@ import {
   createWriteTool,
 } from "@earendil-works/pi-durable/tools";
 import { num, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
+import { MAX_EXEC_TIMEOUT_MS } from "../../workspace/project/protocol.js";
 import type { ComputerEnv } from "./execution-env.js";
+
+const LIMIT_SECONDS = MAX_EXEC_TIMEOUT_MS / 1_000;
 
 const BACKEND_DESCRIPTION = [
   "Optional override; leave it out. The host routes each command by itself.",
@@ -32,7 +35,11 @@ const bash = createBashTool();
 const parameters = obj(
   {
     command: str({ description: "Bash command to execute" }),
-    timeout: opt(num({ description: "Timeout in seconds (optional, no default timeout)" })),
+    timeout: opt(
+      num({
+        description: `Timeout in seconds (optional). A command is killed at its timeout or at ${LIMIT_SECONDS} s, whichever comes first.`,
+      }),
+    ),
     backend: opt(oneOf(["isolate", "container"], { description: BACKEND_DESCRIPTION })),
   },
   { open: true },
@@ -48,14 +55,55 @@ function onBackend<Api extends ToolExecutionApi>(api: Api, backend: "isolate" | 
   return isComputerEnv(env) ? { ...api, env: env.onBackend(backend) } : api;
 }
 
+function timeoutMessage(timeout: number | undefined, elapsedMs: number): string {
+  const elapsed = `${Math.round(elapsedMs / 1_000)} s`;
+
+  return timeout === undefined || timeout >= LIMIT_SECONDS
+    ? `killed at the ${LIMIT_SECONDS} s limit after ${elapsed}`
+    : `killed at your ${timeout} s timeout after ${elapsed}; the limit is ${LIMIT_SECONDS} s; rerun with a longer timeout`;
+}
+
+type TimedOut = { message?: string };
+
+function watchTimeout<Api extends ToolExecutionApi>(
+  api: Api,
+  timeout: number | undefined,
+  timedOut: TimedOut,
+): Api {
+  const { env } = api;
+
+  if (!isComputerEnv(env)) return api;
+
+  const exec: ExecutionEnv["exec"] = async (command, options, context) => {
+    const started = Date.now();
+    const result = await env.exec(command, options, context);
+
+    if (!result.ok && result.error.code === "timeout") {
+      timedOut.message = timeoutMessage(timeout, Date.now() - started);
+    }
+
+    return result;
+  };
+
+  return { ...api, env: { ...env, exec } };
+}
+
 const backendBash = defineTool({
   name: bash.name,
   description: bash.description,
   structuredOutputSchema: bash.structuredOutputSchema ?? {},
   outputLimits: bash.outputLimits ?? {},
   parameters,
-  execute: (args, api, context) =>
-    bash.execute(args, args.backend === undefined ? api : onBackend(api, args.backend), context),
+  execute: async (args, api, context) => {
+    const routed = args.backend === undefined ? api : onBackend(api, args.backend);
+    const timedOut: TimedOut = {};
+
+    try {
+      return await bash.execute(args, watchTimeout(routed, args.timeout, timedOut), context);
+    } catch (error) {
+      throw timedOut.message === undefined ? error : new Error(timedOut.message);
+    }
+  },
 });
 
 function logged(tool: ToolRegistration): ToolRegistration {

@@ -26,6 +26,7 @@ const callsEcho = (id: string, text: string) =>
   replies([
     {
       type: "done",
+      served: { provider: "workers-ai", model: "test-model" },
       message: {
         role: "assistant",
         content: null,
@@ -38,6 +39,7 @@ const callsEcho = (id: string, text: string) =>
 const answers = replies([
   {
     type: "done",
+    served: { provider: "workers-ai", model: "test-model" },
     message: { role: "assistant", content: "done", tool_calls: [] },
     usage: NO_USAGE,
   },

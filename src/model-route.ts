@@ -11,7 +11,7 @@ import {
 import { runAtEntryPoint } from "./run-entry-point.js";
 import { workersAiTurn } from "./model-route-stream.js";
 import type { WorkersAiBinding } from "./model-route-wire/events.js";
-import { modelEventStream, type ModelTurn } from "./model-route-turn.js";
+import { modelEventStream, type ModelTurn, type ModelTurnAnswer } from "./model-route-turn.js";
 
 type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{
@@ -31,6 +31,26 @@ type ModelRouteEnv = Readonly<{
 export type ModelRouteProps = Readonly<{ supervisor: string; instance: number }>;
 
 const SUPERVISOR_UNAVAILABLE = "the supervisor is unavailable";
+
+function withFallback(chatgpt: ReturnType<typeof chatgptTurn>, workersAi: ModelTurn): ModelTurn {
+  return (emit) =>
+    chatgpt(emit).pipe(
+      Effect.catchTags({
+        ChatGPTNotConnected: () =>
+          workersAi(emit).pipe(
+            Effect.map((answer): ModelTurnAnswer => ({
+              ...answer,
+              served: { ...answer.served, fallback: "chatgpt-not-connected" },
+            })),
+          ),
+        ChatGPTUsageLimited: ({ limitedUntil }) => {
+          emit({ type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil });
+
+          return workersAi(emit);
+        },
+      }),
+    );
+}
 
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps> {
   runStream(request: RouteWire): Promise<ReadableStream<Uint8Array> | ValidationFailure> {
@@ -60,17 +80,7 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
       validated,
     );
 
-    const turn: ModelTurn = (emit) =>
-      chatgpt(emit).pipe(
-        Effect.catchTags({
-          ChatGPTNotConnected: () => workersAi(emit),
-          ChatGPTUsageLimited: ({ limitedUntil }) => {
-            emit({ type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil });
-
-            return workersAi(emit);
-          },
-        }),
-      );
+    const turn = withFallback(chatgpt, workersAi);
 
     return runAtEntryPoint(
       Effect.tryPromise(() => holder.admitModelTurn(this.ctx.props.instance)).pipe(

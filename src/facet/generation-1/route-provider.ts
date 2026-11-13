@@ -11,6 +11,7 @@ import {
   MAX_STREAM_EVENT_BYTES,
   REASONING_EFFORT,
 } from "../../model-route-wire/events.js";
+import type { ModelRouteRequest } from "../../model-route-wire/request.js";
 import type { ModelCapability } from "../conversation-protocol.js";
 import { LineReader } from "./line-reader.js";
 import { isModelStreamEvent } from "./route-events.js";
@@ -36,13 +37,23 @@ function aborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
 }
 
+function routeRequest(
+  context: TranscriptContext,
+  sessionId: string | undefined,
+): ModelRouteRequest {
+  const request = transcriptToRouteRequest(context);
+
+  return sessionId === undefined ? request : { ...request, promptCacheKey: sessionId };
+}
+
 async function pump(
   capability: ModelCapability,
   context: TranscriptContext,
-  signal: AbortSignal | undefined,
+  options: StreamOptions | undefined,
   reply: ReplyAssembler,
 ): Promise<void> {
-  const route = await capability.runStream(transcriptToRouteRequest(context));
+  const signal = options?.signal;
+  const route = await capability.runStream(routeRequest(context, options?.sessionId));
 
   if (!(route instanceof ReadableStream)) {
     reply.fail("error", route.error.reason);
@@ -112,7 +123,7 @@ export function routeProvider(model: ModelCapability): Provider {
     const reply = new ReplyAssembler(out, routeModel);
     const signal = options?.signal;
 
-    pump(model, context, signal, reply).catch(() => {
+    pump(model, context, options, reply).catch(() => {
       reply.fail(signal?.aborted === true ? "aborted" : "error", "the model route did not answer");
     });
 

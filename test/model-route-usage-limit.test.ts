@@ -134,3 +134,23 @@ test("while a usage limit with a named end lasts, ChatGPT is not asked and the n
   });
   expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "ok" } });
 });
+
+test("without a ChatGPT connection, Workers AI answers and its served record names the fallback", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+  const binding = workersAi("ok");
+
+  const events = await supervisedRoute(binding.ai, { kind: "not-connected" }).events();
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+  expect(events.filter((event) => event.type === "provider-fallback")).toEqual([]);
+  expect(events.at(-1)).toMatchObject({
+    type: "done",
+    message: { content: "ok" },
+    served: {
+      provider: "workers-ai",
+      model: "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+      effort: "low",
+      fallback: "chatgpt-not-connected",
+    },
+  });
+});

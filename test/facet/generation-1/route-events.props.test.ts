@@ -53,7 +53,13 @@ const EVENT: Spec = union(
       }),
       usage: obj({ inputTokens: num, outputTokens: num, estimated: bool }),
     },
-    { truncated: lit(true) },
+    {
+      truncated: lit(true),
+      served: obj(
+        { provider: str, model: str },
+        { effort: str, fallback: lit("chatgpt-not-connected") },
+      ),
+    },
   ),
   obj({
     type: lit("error"),

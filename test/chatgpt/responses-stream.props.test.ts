@@ -93,6 +93,7 @@ test("an incomplete response ends the turn truncated with its usage only when th
             type: "done",
             message: { role: "assistant", content: text, tool_calls: [] },
             usage: { ...reported, estimated: false },
+            served: { provider: "chatgpt", model: "gpt-test", effort: "medium" },
             truncated: true,
           }
         : { type: "error", error: { code: "model-unavailable", detail: reason } },

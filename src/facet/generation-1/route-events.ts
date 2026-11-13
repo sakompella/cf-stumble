@@ -53,6 +53,17 @@ const ModelStreamEventSchema = union([
       type: lit("done"),
       message: AssistantMessageSchema,
       usage: UsageSchema,
+      served: opt(
+        obj(
+          {
+            provider: str(),
+            model: str(),
+            effort: opt(str()),
+            fallback: opt(lit("chatgpt-not-connected")),
+          },
+          { open: true },
+        ),
+      ),
       truncated: opt(lit(true)),
     },
     { open: true },

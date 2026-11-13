@@ -16,6 +16,7 @@ import { discardBody, type ProviderFetch } from "./oauth.js";
 import {
   isUsageLimit,
   providerErrorOfText,
+  REASONING_EFFORT,
   RESPONSES_ENDPOINT,
   ResponsesStreamReader,
   responsesRequest,
@@ -242,6 +243,21 @@ export function chatgptTurn(
         );
       }
 
-      return finishedTurn(accumulator, request);
+      const answer = finishedTurn(accumulator, request, {
+        provider: "chatgpt",
+        model: input.model,
+        effort: REASONING_EFFORT,
+      });
+
+      logEvent("info", "chatgpt.model-call", {
+        outcome: "ok",
+        model: input.model,
+        promptTokens: answer.usage.inputTokens,
+        cachedTokens: answer.usage.cachedTokens ?? 0,
+        completionTokens: answer.usage.outputTokens,
+        estimated: answer.usage.estimated,
+      });
+
+      return answer;
     });
 }
