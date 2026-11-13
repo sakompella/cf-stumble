@@ -163,3 +163,27 @@ test("a fresh thread needs a second click, then shows an empty conversation", as
   await expect(turnState(owner)).toHaveText("answered");
   await expect(transcriptTexts(owner, "user")).toHaveText([PROMPT]);
 });
+
+test("each message carries the time budget chosen in the composer", async ({ owner, server }) => {
+  const budget = owner.getByRole("group", { name: "time budget" });
+
+  await expect(budget.getByRole("button", { name: "30 min" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await sendMessage(owner, PROMPT);
+  await expect(turnState(owner)).toHaveText("answered");
+  await budget.getByRole("button", { name: "60 min" }).click();
+  await expect(budget.getByRole("button", { name: "60 min" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await sendMessage(owner, FOLLOW_UP);
+
+  await expect
+    .poll(() => messagePosts(server).map((request) => request.body))
+    .toMatchObject([
+      { content: PROMPT, budgetMinutes: 30 },
+      { content: FOLLOW_UP, budgetMinutes: 60 },
+    ]);
+});

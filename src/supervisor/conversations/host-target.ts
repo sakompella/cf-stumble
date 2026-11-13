@@ -58,11 +58,15 @@ const isLogFields = Schema.is(
   ),
 );
 
-const isRunningConversations = Schema.is(
-  Schema.Array(
-    Schema.Struct({ conversationId: Schema.String, run: Schema.optional(Schema.Finite) }),
-  ),
-);
+const ReportedRun = Schema.Struct({
+  conversationId: Schema.String,
+  run: Schema.optional(Schema.Finite),
+  continues: Schema.optional(Schema.Finite),
+});
+
+const isRunningConversations = Schema.is(Schema.Array(ReportedRun));
+
+export const isContinuedRun = Schema.is(ReportedRun);
 
 const isRunFailures = Schema.is(Schema.Record(Schema.String, Schema.String));
 

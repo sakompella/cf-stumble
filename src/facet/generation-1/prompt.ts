@@ -1,15 +1,13 @@
 import type { Context } from "@earendil-works/chord";
 import { defineExtension, section } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
-import { PROJECT_RUN_DEADLINE_MS } from "../../turn-budget.js";
+import { RUN_DEADLINE_MINUTES } from "../../turn-budget.js";
 import { HARNESS_DIRECTORY, MANAGED_AGENT_INSTRUCTIONS_PATH } from "../../workspace-layout.js";
 import systemText from "./SYSTEM.md";
 
 const SYSTEM = systemText.replaceAll("{{HARNESS_DIRECTORY}}", HARNESS_DIRECTORY).trim();
 
 const REPOSITORY_INSTRUCTIONS_FILE = "AGENTS.md";
-
-const RUN_DEADLINE_MINUTES = PROJECT_RUN_DEADLINE_MS / 60_000;
 
 async function readOptional(
   env: ExecutionEnv,

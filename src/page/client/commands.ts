@@ -150,13 +150,18 @@ export const MintRequestId = Command.define("MintRequestId", {
 });
 
 export const SendMessage = Command.define("SendMessage", {
-  args: { projectId: Schema.String, requestId: Schema.String, content: Schema.String },
+  args: {
+    projectId: Schema.String,
+    requestId: Schema.String,
+    content: Schema.String,
+    budgetMinutes: Schema.Number,
+  },
   messages: [Message.SucceededSend, Message.RejectedSend, Message.FailedSend],
-  execute: ({ projectId, requestId, content }) =>
+  execute: ({ projectId, requestId, content, budgetMinutes }) =>
     requestJson(
       "POST",
       projectPath(projectId, "/messages"),
-      Option.some({ content, requestId }),
+      Option.some({ content, requestId, budgetMinutes }),
       SentMessage,
     ).pipe(
       Effect.map((answered) =>

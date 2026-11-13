@@ -275,8 +275,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     );
   }
 
-  submitProjectMessage(projectId: string, content: string, requestId: string) {
-    return runAtEntryPoint(this.#parts.serving.submit(projectId, content, requestId));
+  submitProjectMessage(
+    projectId: string,
+    content: string,
+    requestId: string,
+    budgetMinutes: number,
+  ) {
+    return runAtEntryPoint(
+      this.#parts.serving.submit(projectId, content, requestId, budgetMinutes),
+    );
   }
 
   projectEvents(projectId: string, from?: number) {

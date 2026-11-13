@@ -18,7 +18,7 @@ test.each([
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const second = await readyScripted(control, SCRIPTED_COMMITS[1]);
 
-    const submitting = control.submitProjectMessage("harness", content, "r1");
+    const submitting = control.submitProjectMessage("harness", content, "r1", 30);
 
     await vi.waitFor(
       () => {
@@ -29,7 +29,7 @@ test.each([
     await activateGeneration(control, second);
 
     expect(await submitting).toEqual({ ok: true, submissionId: 1 });
-    expect(await control.submitProjectMessage("harness", "again", "r2")).toEqual({
+    expect(await control.submitProjectMessage("harness", "again", "r2", 30)).toEqual({
       ok: true,
       submissionId: 2,
     });
@@ -40,9 +40,9 @@ test("a message is refused when the generation still fails after the retry", asy
   vi.spyOn(console, "error").mockImplementation(() => {});
   const control = await servingScripted("conversations-switch-refused");
 
-  await control.submitProjectMessage("harness", "refuse the next attach", "r0");
+  await control.submitProjectMessage("harness", "refuse the next attach", "r0", 30);
 
-  expect(await control.submitProjectMessage("harness", "hello", "r1")).toEqual({
+  expect(await control.submitProjectMessage("harness", "hello", "r1", 30)).toEqual({
     ok: false,
     problem: { code: "generation-failed" },
   });
@@ -51,7 +51,7 @@ test("a message is refused when the generation still fails after the retry", asy
 test("an events stream from the replaced facet ends when another generation activates", async () => {
   const control = await servingScripted("conversations-switch-events");
   const second = await readyScripted(control, SCRIPTED_COMMITS[1]);
-  await control.submitProjectMessage("harness", "hold the events open", "r1");
+  await control.submitProjectMessage("harness", "hold the events open", "r1", 30);
   await control.abortProjectRun("harness");
   const result = await control.projectEvents("harness");
 

@@ -15,6 +15,7 @@ type Open = {
   run: number | null;
   deadline: number;
   instance: number | null;
+  continues: number;
   ending: RunEnding | null;
 };
 
@@ -27,7 +28,7 @@ type World = {
 
 type View = Open | null;
 
-type Seen = Readonly<{ run: number | undefined }>;
+type Seen = Readonly<{ run: number | undefined; continues: number | undefined }>;
 
 type Expected = Readonly<{ next: Open | null; commands: RunCommand[] }>;
 
@@ -47,6 +48,8 @@ const run = gs.optional(gs.integers({ minValue: 0, maxValue: 2 })).map((id) => i
 
 const instance = gs.integers({ minValue: 0, maxValue: 2 });
 
+const continues = gs.optional(gs.integers({ minValue: 0, maxValue: 6 })).map((n) => n ?? undefined);
+
 const nearStart = gs.sampledFrom([-1, 0, 1]);
 
 const ending = gs.sampledFrom(["cancelled", "interrupted"] as const);
@@ -64,6 +67,7 @@ function view(state: RunState): View {
     run: state.run,
     deadline: state.deadline,
     instance: state.instance,
+    continues: state.continues,
     ending: state._tag === "Ending" ? state.ending : null,
   };
 }
@@ -100,7 +104,7 @@ function expectedReport(
 
     return {
       next: takenOver
-        ? { run: kept, deadline: now + PROJECT_RUN_DEADLINE_MS, instance: by, ending: null }
+        ? { ...open, run: kept, deadline: now + PROJECT_RUN_DEADLINE_MS, instance: by }
         : { ...open, run: kept, instance: open.instance ?? by },
       commands,
     };
@@ -110,7 +114,13 @@ function expectedReport(
     const ours = open.instance === null || open.instance === by;
     const outcome = ours ? endedOutcome(open, code, signs) : "replaced";
 
-    commands.push({ _tag: "Settled", outcome, errorCode: code, deadline: open.deadline });
+    commands.push({
+      _tag: "Settled",
+      outcome,
+      errorCode: code,
+      deadline: open.deadline,
+      continues: open.continues,
+    });
   }
 
   if (report === null) return { next: null, commands };
@@ -119,7 +129,16 @@ function expectedReport(
 
   commands.push({ _tag: "Started", deadline });
 
-  return { next: { run: report.run ?? null, deadline, instance: by, ending: null }, commands };
+  return {
+    next: {
+      run: report.run ?? null,
+      deadline,
+      instance: by,
+      continues: report.continues ?? 0,
+      ending: null,
+    },
+    commands,
+  };
 }
 
 function apply(world: World, event: RunEvent, expected: Expected) {
@@ -149,7 +168,7 @@ function reported(tc: hegel.TestCase, world: World, seen: Seen | null) {
 
   const code = tc.draw(errorCode);
   const by = tc.draw(instance);
-  const report = seen === null ? undefined : { conversationId: "c", run: seen.run };
+  const report = seen === null ? undefined : { conversationId: "c", ...seen };
 
   const startedAt = (world.open?.deadline ?? world.now) - PROJECT_RUN_DEADLINE_MS;
   const modelTurn = tc.draw(gs.optional(nearStart)) ?? null;
@@ -169,7 +188,7 @@ function reported(tc: hegel.TestCase, world: World, seen: Seen | null) {
 const machine: hegel.stateful.StateMachine<World> = {
   rules: {
     stillRunning: (tc, world) => {
-      reported(tc, world, { run: tc.draw(run) });
+      reported(tc, world, { run: tc.draw(run), continues: tc.draw(continues) });
     },
     nothingRunning: (tc, world) => {
       reported(tc, world, null);
@@ -190,6 +209,7 @@ const initial = gs.composite<World>((tc) => {
     run: tc.draw(gs.optional(gs.integers({ minValue: 0, maxValue: 2 }))),
     deadline: tc.draw(gs.integers({ minValue: 0, maxValue: 2 * PROJECT_RUN_DEADLINE_MS })),
     instance: tc.draw(gs.optional(instance)),
+    continues: tc.draw(gs.integers({ minValue: 0, maxValue: 6 })),
   };
 
   const kind = tc.draw(gs.sampledFrom(["Idle", "Running", "Ending"] as const));
@@ -250,6 +270,7 @@ test("a run aborted at its deadline is stalled only when its instance asked no m
         outcome: stalled ? "stalled" : "interrupted",
         errorCode: null,
         deadline: now,
+        continues: 0,
       },
     ]);
   });

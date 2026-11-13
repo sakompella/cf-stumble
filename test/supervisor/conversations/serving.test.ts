@@ -1,10 +1,12 @@
-import { reset, runInDurableObject } from "cloudflare:test";
+import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { activateGeneration, connectedSupervisor, generationLabel } from "../helpers.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
+import { PROJECT_RUN_DEADLINE_MS } from "../../../src/turn-budget.js";
 import { readyScripted, SCRIPTED_COMMITS, servingScripted } from "./serving-fixture.js";
 
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   await reset();
 });
@@ -19,7 +21,7 @@ async function admitted(
   content: string,
   requestId: string,
 ): Promise<number> {
-  const result = await control.submitProjectMessage(projectId, content, requestId);
+  const result = await control.submitProjectMessage(projectId, content, requestId, 30);
 
   if (!result.ok) throw new Error(`the message must be admitted: ${result.problem.code}`);
 
@@ -71,11 +73,11 @@ test("a project's first message creates its conversation in the project director
 test("a message that is not a message reaches no generation", async () => {
   const control = await servingScripted("conversations-invalid-message");
 
-  expect(await control.submitProjectMessage("sample-project-one", "  ", "r1")).toEqual({
+  expect(await control.submitProjectMessage("sample-project-one", "  ", "r1", 30)).toEqual({
     ok: false,
     problem: { code: "invalid-message" },
   });
-  expect(await control.submitProjectMessage("project-nine", "hello", "r1")).toEqual({
+  expect(await control.submitProjectMessage("project-nine", "hello", "r1", 30)).toEqual({
     ok: false,
     problem: { code: "unknown-project-id" },
   });
@@ -84,7 +86,7 @@ test("a message that is not a message reaches no generation", async () => {
 test("a Supervisor with nothing serving refuses a message", async () => {
   const control = await connectedSupervisor("conversations-no-generation");
 
-  expect(await control.submitProjectMessage("sample-project-one", "hello", "r1")).toEqual({
+  expect(await control.submitProjectMessage("sample-project-one", "hello", "r1", 30)).toEqual({
     ok: false,
     problem: { code: "no-active-generation" },
   });
@@ -95,7 +97,7 @@ test("an active run keeps the recovery alarm armed and refuses a workspace reset
   const before = Date.now();
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
-  await control.submitProjectMessage("sample-project-one", "hello", "r1");
+  await control.submitProjectMessage("sample-project-one", "hello", "r1", 30);
 
   const armed = await alarm(control);
   expect(armed).toBeGreaterThan(before);
@@ -110,11 +112,37 @@ test("an active run keeps the recovery alarm armed and refuses a workspace reset
   );
 });
 
+test("a run the facet continues at its deadline gets its own deadline and workspace at once, so the next alarm does not abort it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const control = await servingScripted("conversations-continued-at-deadline");
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const events = (spy: typeof log, event: string) =>
+    spy.mock.calls.filter(([line]) => JSON.stringify(line).includes(`"event":"${event}"`));
+
+  await admitted(control, "sample-project-one", "continue at the deadline", "r1");
+  vi.setSystemTime(Date.now() + PROJECT_RUN_DEADLINE_MS + 1_000);
+
+  expect(await runDurableObjectAlarm(control)).toBe(true);
+  await vi.waitUntil(() => events(log, "run.settled").length === 1);
+  expect(await runDurableObjectAlarm(control)).toBe(true);
+
+  expect(events(warn, "run.deadline-aborted")).toHaveLength(1);
+  expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: "run.settled", continues: 0 }));
+  expect(events(log, "run.started")).toHaveLength(2);
+  await vi.waitUntil(() => events(log, "facet.continued-workspace").length === 1);
+  expect(log).not.toHaveBeenCalledWith(
+    expect.objectContaining({ refused: "this conversation has no running project workspace" }),
+  );
+  expect(await control.resetWorkspace()).toEqual({ ok: false, problem: { code: "run-active" } });
+});
+
 test("a run the facet reports unanswered with a model error settles as unanswered with the error code", async () => {
   const control = await servingScripted("conversations-failed-run");
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
-  await control.submitProjectMessage("sample-project-one", "fail the run", "r1");
+  await control.submitProjectMessage("sample-project-one", "fail the run", "r1", 30);
 
   expect(log).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -129,10 +157,10 @@ test("an abort while nothing runs does not mark the next run cancelled", async (
   const control = await servingScripted("conversations-idle-abort");
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
-  await control.submitProjectMessage("sample-project-one", "fail the run", "r1");
+  await control.submitProjectMessage("sample-project-one", "fail the run", "r1", 30);
   await control.abortProjectRun("sample-project-one");
   log.mockClear();
-  await control.submitProjectMessage("sample-project-one", "fail the run", "r2");
+  await control.submitProjectMessage("sample-project-one", "fail the run", "r2", 30);
 
   expect(log).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -174,7 +202,7 @@ test("an alarm whose attach fails throws, so the platform retries it, and the re
   vi.spyOn(console, "error").mockImplementation(() => {});
   const control = await servingScripted("conversations-alarm-retry");
 
-  await control.submitProjectMessage("harness", "refuse the next attach", "r1");
+  await control.submitProjectMessage("harness", "refuse the next attach", "r1", 30);
 
   await expect(runInDurableObject(control, (instance) => instance.alarm())).rejects.toThrow();
   await expect(
@@ -186,7 +214,7 @@ test("an alarm whose attach fails throws, so the platform retries it, and the re
 test("a message that was checked before its project was disconnected does not give the project a new conversation", async () => {
   const control = await servingScripted("conversations-disconnect-race", 200);
 
-  const submitting = control.submitProjectMessage("sample-project-one", "hello", "r1");
+  const submitting = control.submitProjectMessage("sample-project-one", "hello", "r1", 30);
   const disconnecting = control.disconnectProject("sample-project-one");
 
   expect((await disconnecting).ok).toBe(true);

@@ -73,6 +73,7 @@ function retried(model: Model, requestId: string): UpdateReturn {
                 projectId: before.projectId,
                 requestId,
                 content: before.text,
+                budgetMinutes: before.budgetMinutes,
               }),
             ],
           }
@@ -170,11 +171,12 @@ function mintedRequest(
     projectId,
     text: content,
     afterEntry: newestEntryId(model.conversation),
+    budgetMinutes: model.runBudget,
   });
 
   return {
     model: { ...model, runNote: "", outgoing: [...model.outgoing, item] },
-    commands: [SendMessage({ projectId, requestId, content })],
+    commands: [SendMessage({ projectId, requestId, content, budgetMinutes: model.runBudget })],
   };
 }
 

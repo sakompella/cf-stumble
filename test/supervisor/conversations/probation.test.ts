@@ -96,7 +96,7 @@ async function send(
   requestId: string,
   content = "hello",
 ): Promise<void> {
-  await control.submitProjectMessage("sample-project-one", content, requestId);
+  await control.submitProjectMessage("sample-project-one", content, requestId, 30);
 }
 
 async function serving(control: DurableObjectStub<Supervisor>): Promise<string> {

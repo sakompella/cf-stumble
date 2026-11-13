@@ -6,6 +6,9 @@ import { ChatGPT } from "./chatgpt.js";
 import { FreshThread } from "./fresh-thread.js";
 import { StreamPhase } from "./stream-phase.js";
 import { Outgoing } from "./outgoing.js";
+import { RUN_BUDGET_MINUTES } from "../../turn-budget.js";
+
+export { DEFAULT_RUN_BUDGET_MINUTES } from "../../turn-budget.js";
 
 export const Project = Schema.Struct({
   id: Schema.String,
@@ -31,6 +34,10 @@ export const GitHubReport = defineTaggedUnion({
 });
 
 export type GitHubReport = typeof GitHubReport.Type;
+
+export const RunBudget = Schema.Literals(RUN_BUDGET_MINUTES);
+
+export type RunBudget = typeof RunBudget.Type;
 
 export const ControlKind = Schema.Literals(["activate", "rollback"]);
 
@@ -111,6 +118,7 @@ export const Model = Schema.Struct({
   drafts: Schema.Record(Schema.String, Schema.String),
 
   prompt: Schema.String,
+  runBudget: RunBudget,
   runNote: Schema.String,
   freshThread: FreshThread,
 

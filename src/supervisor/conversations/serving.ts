@@ -9,12 +9,7 @@ import {
 } from "../artifacts/index.js";
 import { runAtEntryPoint } from "../../run-entry-point.js";
 import { HeldWorkspaces, type ObtainWorkspace } from "./held-workspaces.js";
-import {
-  servingHosts,
-  type EntriesRequest,
-  type HostTargets,
-  type RunReport,
-} from "./host-target.js";
+import { servingHosts, type EntriesRequest, type HostTargets } from "./host-target.js";
 import { ProjectThreads } from "./project-threads.js";
 import {
   createConversation,
@@ -22,7 +17,12 @@ import {
   type SelectableCatalog,
   type SelectableProject,
 } from "./project-selection.js";
-import { ConversationRuns, type FacetReplacement, type Settlement } from "./runs.js";
+import {
+  ConversationRuns,
+  DeadlineAborts,
+  type FacetReplacement,
+  type Settlement,
+} from "./runs.js";
 
 type ServingPorts = Readonly<{
   ctx: DurableObjectState;
@@ -48,6 +48,7 @@ export class ServingConversations {
   readonly #hosts = new Map<number, HostTargets & Readonly<{ model: MainFacetModel }>>();
   readonly #workspaces: HeldWorkspaces;
   readonly #runs: ConversationRuns;
+  readonly #deadlines = new DeadlineAborts();
 
   constructor(ports: ServingPorts) {
     this.#ports = ports;
@@ -95,7 +96,7 @@ export class ServingConversations {
     return this.#runs.running(Date.now());
   }
 
-  submit(projectId: string, content: string, requestId: string) {
+  submit(projectId: string, content: string, requestId: string, budgetMinutes: number) {
     return answered(
       Effect.gen({ self: this }, function* () {
         const message = parseMessage(content, requestId);
@@ -112,7 +113,7 @@ export class ServingConversations {
           (current) => this.#use(mounted, (facet) => createConversation(facet, current)),
           (conversationId) =>
             this.#use(mounted, (facet) =>
-              facet.submit(conversationId, message.content, message.requestId),
+              facet.submit(conversationId, message.content, message.requestId, budgetMinutes),
             ).pipe(Effect.map((submissionId) => ({ submissionId }))),
         );
       }),
@@ -193,13 +194,21 @@ export class ServingConversations {
 
   alarm(now: number): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      for (const conversationId of this.#runs.expired(now)) this.#workspaces.end(conversationId);
+      const expired = () => this.#deadlines.waiting(this.#runs.expired(now));
+
+      for (const conversationId of expired()) this.#workspaces.end(conversationId);
 
       const facet = yield* this.#facet();
+      const instance = this.#instance();
 
-      for (const conversationId of this.#runs.expired(now)) {
+      for (const conversationId of expired()) {
         logEvent("warn", "run.deadline-aborted", { generation: this.#generationLabel() });
-        yield* this.#call(() => facet.abort(this.#runs.interrupted(conversationId), "deadline"));
+        this.#deadlines.end(
+          conversationId,
+          () => facet.abort(this.#runs.interrupted(conversationId), "deadline"),
+          (run) =>
+            this.#settled(this.#runs.continued(run, Date.now(), instance, this.#generationLabel())),
+        );
       }
     }).pipe(
       Effect.tapError((problem) =>
@@ -301,7 +310,8 @@ export class ServingConversations {
             generation: this.#generationLabel(),
           });
         },
-        running: (report) => this.#running(report, instance),
+        running: (report) =>
+          this.#settle(this.#runs.reconcile(report, Date.now(), instance, this.#generationLabel())),
         workspace: (conversationId) => this.#workspace(conversationId),
       },
       this.#ports.generations,
@@ -315,24 +325,30 @@ export class ServingConversations {
     return mounted.attach(targets.host, model, targets.generations);
   }
 
-  async #running(report: RunReport, instance: number): Promise<void> {
-    const now = Date.now();
+  #settle(settlements: readonly Settlement[]): Promise<void> {
+    for (const settlement of settlements) this.#workspaces.end(settlement.conversationId);
 
-    for (const settlement of this.#runs.reconcile(report, now, instance, this.#generationLabel())) {
-      this.#workspaces.end(settlement.conversationId);
+    return this.#settled(settlements);
+  }
 
+  async #settled(settlements: readonly Settlement[]): Promise<void> {
+    for (const settlement of settlements) {
       const rollback = this.#ports.selection.settled(settlement);
 
       if (rollback !== undefined) this.replaceFacet(rollback.command, rollback.epoch);
     }
 
-    await runAtEntryPoint(this.#runs.setAlarm(now));
+    await runAtEntryPoint(this.#runs.setAlarm(Date.now()));
   }
 
   #workspace(conversationId: string) {
     const projectId = this.#projects.projectOf(conversationId);
     const project = this.#ports.catalog().find((candidate) => candidate.id === projectId);
-    const remainingMs = this.#runs.remainingMs(conversationId, Date.now());
+
+    const remainingMs = this.#deadlines.remainingMs(
+      conversationId,
+      this.#runs.remainingMs(conversationId, Date.now()),
+    );
 
     if (project === undefined || remainingMs === undefined || this.#ports.resetting()) {
       return Promise.reject(new Error("this conversation has no running project workspace"));
