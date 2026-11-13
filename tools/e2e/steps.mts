@@ -2,7 +2,15 @@ import { stopChildren } from "./process.mts";
 
 export const MINUTE_MS = 60_000;
 
-type Outcome = Readonly<{ name: string; ok: boolean; seconds: number; detail: string }>;
+type Outcome = Readonly<{
+  name: string;
+  ok: boolean;
+  skipped: boolean;
+  seconds: number;
+  detail: string;
+}>;
+
+export class Skip extends Error {}
 
 function describe(cause: unknown): string {
   if (!(cause instanceof Error)) return String(cause);
@@ -62,6 +70,7 @@ export class Steps {
     });
 
     let detail = "";
+    let skipped = false;
 
     console.error(`e2e: ${name} (limit ${limitMs / MINUTE_MS} min)`);
 
@@ -69,14 +78,18 @@ export class Steps {
       await Promise.race([work(signal), aborted]);
     } catch (cause) {
       detail = describe(cause);
+      skipped = cause instanceof Skip;
     }
 
     const seconds = Math.round((Date.now() - began) / 1000);
+    const ok = skipped || detail === "";
 
-    this.#outcomes.push({ name, ok: detail === "", seconds, detail });
-    console.error(`e2e: ${name} ${detail === "" ? "passed" : `failed: ${detail}`}`);
+    this.#outcomes.push({ name, ok, skipped, seconds, detail });
+    console.error(
+      `e2e: ${name} ${skipped ? `skipped: ${detail}` : ok ? "passed" : `failed: ${detail}`}`,
+    );
 
-    return detail === "";
+    return ok;
   }
 
   report(label: string): boolean {
@@ -85,8 +98,10 @@ export class Steps {
 
     console.error(`\n${label}: ${passed ? "PASS" : "FAIL"} in ${minutes} min`);
 
-    for (const { ok, name, seconds, detail } of this.#outcomes) {
-      console.error(`${ok ? "✓" : "✗"} ${name} (${seconds} s)${ok ? "" : `: ${detail}`}`);
+    for (const { ok, skipped, name, seconds, detail } of this.#outcomes) {
+      const mark = skipped ? "-" : ok ? "✓" : "✗";
+
+      console.error(`${mark} ${name} (${seconds} s)${detail === "" ? "" : `: ${detail}`}`);
     }
 
     return passed;

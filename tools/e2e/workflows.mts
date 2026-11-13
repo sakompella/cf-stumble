@@ -11,7 +11,7 @@ export type Run = Readonly<{
   signal: AbortSignal;
 }>;
 
-const HARNESS_PROJECT = "harness";
+export const HARNESS_PROJECT = "harness";
 
 const GIT_IDENTITY = "git -c user.name=cf-stumble-e2e -c user.email=e2e@cf-stumble.invalid";
 

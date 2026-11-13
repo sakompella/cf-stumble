@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { chatgptArea } from "./chatgpt.mts";
 import type { Owner } from "./owner-api.mts";
 import { MINUTE_MS, Steps } from "./steps.mts";
 import { Target } from "./target.mts";
@@ -20,7 +21,9 @@ const { values } = parseArgs({
 
 const steps = new Steps();
 
-const password = process.env["E2E_OWNER_PASSWORD"] ?? randomBytes(24).toString("base64url");
+const given = process.env["E2E_OWNER_PASSWORD"];
+
+const password = given ?? randomBytes(24).toString("base64url");
 
 const target = new Target({
   runId: values["run-id"] ?? randomBytes(4).toString("hex"),
@@ -49,6 +52,7 @@ async function workflows(owner: Owner): Promise<void> {
     }),
   );
   await step("self-modification", 20 * MINUTE_MS, (signal) => selfModification(run(signal)));
+  await step("chatgpt turn", 15 * MINUTE_MS, (signal) => chatgptArea(run(signal), target.stage));
 }
 
 async function cleanUp(): Promise<void> {
@@ -78,11 +82,13 @@ async function main(): Promise<void> {
 
   if (!values.cleanup) await step("ops:check", 5 * MINUTE_MS, () => target.checkOps());
 
-  if (values.keep) {
+  if (values.keep && target.fresh) {
     const file = join(tmpdir(), `cf-stumble-e2e-${target.runId}-password`);
 
-    writeFileSync(file, password, { mode: 0o600 });
-    console.error(`e2e: kept ${owner?.url ?? "the target"}; the owner password is in ${file}`);
+    if (given === undefined) writeFileSync(file, password, { mode: 0o600 });
+    console.error(
+      `e2e: kept ${owner?.url ?? "the target"}${given === undefined ? `; the owner password is in ${file}` : ""}`,
+    );
   } else {
     await cleanUp();
   }

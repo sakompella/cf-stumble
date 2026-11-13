@@ -6,6 +6,11 @@ on:
       - "e2e/**"
       - "self-modify/**"
   pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -15,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: cachix/install-nix-action@v31
       - uses: nix-community/cache-nix-action@v7
         with:

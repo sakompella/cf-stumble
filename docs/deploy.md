@@ -17,7 +17,7 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 
 ## Configuration files
 
-`infra/alchemy.run.ts` is the only description of the Worker. It is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.85, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that the stack, the test Worker and the Worker code read, so they cannot drift: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, the entry point, the route, the container instance size, the shell modules asset, the static assets settings (`runWorkerFirst`), the cache setting, the observability settings, and the one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"). It has no `node:` imports, because the Worker code imports it. `@cloudflare/vitest-plugin` also turns on features its test runner needs, `enable_weak_ref` and six Node.js module flags, when the compatibility date does not already imply them. The production flags include the same features, and `test/runtime-parity.test.ts` fails when the test Worker enables a compatibility feature that production lacks. When it fails after a plugin upgrade, add the new flag to the production flags; do not leave the tests running on features production does not have. Neither file declares per-instance values or secrets (see "Instance secrets").
+`infra/alchemy.run.ts` is the only description of the Worker. It is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.85, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that the stack, the test Worker and the Worker code read, so they cannot drift: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, the entry point, the route, the container instance size, the shell modules asset, the static assets settings (`runWorkerFirst`), the cache setting, the observability settings, and the one plain-text variable, `CHATGPT_MODEL`, which `plainTextBindings(stage)` sets per stage (see "Connect ChatGPT"). It has no `node:` imports, because the Worker code imports it. `@cloudflare/vitest-plugin` also turns on features its test runner needs, `enable_weak_ref` and six Node.js module flags, when the compatibility date does not already imply them. The production flags include the same features, and `test/runtime-parity.test.ts` fails when the test Worker enables a compatibility feature that production lacks. When it fails after a plugin upgrade, add the new flag to the production flags; do not leave the tests running on features production does not have. Neither file declares per-instance values or secrets (see "Instance secrets").
 
 `tools/worker-startup.test.ts`, part of `pnpm test:tools` and so of `pnpm verify`, starts the bundle that a deploy uploads. `infra/worker-bundle.ts` builds it through Alchemy's own source provider (`Cloudflare.Workers.resolveSource` and `makeSourceContext`, the calls the Worker provider makes before it uploads), so the check runs Alchemy's rolldown output, not an esbuild approximation. The test then starts those modules on local workerd through Miniflare with the production compatibility date and flags and the bindings of `infra/test-worker.ts`, requests `/health`, and makes one owner request that constructs the `Supervisor` and the `WorkspaceHost`. Cloudflare runs the same module load when it validates an upload, so a top-level throw, a global that the production flags lack (the `FinalizationRegistry` failure of the 2caaafcb deploy), or a missing Durable Object class fails here before the merge. The check needs no Cloudflare credentials. It does not see limits that only the platform enforces, such as the startup CPU time limit, and it has no Workers AI binding and no container.
 
@@ -48,7 +48,7 @@ Do not rename or remove `Supervisor` or `WorkspaceHost`, or their bindings. Alch
 
 ## Instance secrets
 
-Values that differ per instance are Worker secrets, set once per instance and never committed. No file declares them, and an Alchemy deploy keeps secrets that the stack does not declare: the staging rehearsal set `HARNESS_REPOSITORY_URL`, `GITHUB_OAUTH_CLIENT_ID` and `GH_TOKEN`, deployed a changed Worker, and found all three afterwards. The only plain-text variable the stack declares is `CHATGPT_MODEL`, which is the same for every deployment.
+Values that differ per instance are Worker secrets, set once per instance and never committed. No file declares them, and an Alchemy deploy keeps secrets that the stack does not declare: the staging rehearsal set `HARNESS_REPOSITORY_URL`, `GITHUB_OAUTH_CLIENT_ID` and `GH_TOKEN`, deployed a changed Worker, and found all three afterwards. The only plain-text variable the stack declares is `CHATGPT_MODEL`: `gpt-6.1-sol` on `prod` and `gpt-6.1-terra` on every other stage, so tests spend the cheaper model.
 
 | Secret                   | Required by the Worker | Purpose                                        |
 | ------------------------ | ---------------------- | ---------------------------------------------- |
@@ -252,7 +252,7 @@ To remove a connected project, send `POST /api/projects/{id}/disconnect`. The re
 
 ## Connect ChatGPT
 
-The model route answers from the fixed Workers AI model until you connect a ChatGPT account. After that it answers from OpenAI's Responses API with your ChatGPT subscription, using the model that `CHATGPT_MODEL` names in `infra/worker-settings.ts` (`gpt-6.1-sol`). The Supervisor keeps the access and refresh tokens in its SQLite and refreshes them itself, so you connect once per instance. Your browser and the harness never receive a token. See ADR-0047.
+The model route answers from the fixed Workers AI model until you connect a ChatGPT account. After that it answers from OpenAI's Responses API with your ChatGPT subscription, using the model that `CHATGPT_MODEL` names in `infra/worker-settings.ts` (`gpt-6.1-sol` on `prod`, `gpt-6.1-terra` on other stages). The Supervisor keeps the access and refresh tokens in its SQLite and refreshes them itself, so you connect once per instance. Your browser and the harness never receive a token. See ADR-0047.
 
 Connect from the owner page:
 
@@ -373,8 +373,10 @@ a machine you trust with that.
 `e2e-<run id>` from the checkout, sets its secrets, and submits and activates a generation from the
 tip of `main`. It sets `OWNER_PASSWORD` last and then deploys the stage again with
 `--force`: the first deploy starts the Durable Objects without the secrets, and the Supervisor did
-not see `GH_TOKEN` until a new version replaced it, so every push answered 401. Harness provisioning fetches only the default branch, so the facet code of an
-unmerged branch does not run in the first generation. Then it runs three workflows, each with a time limit:
+not see `GH_TOKEN` until a new version replaced it, so every push answered 401. Harness provisioning
+deepens the default branch first and then fetches every branch head, so a pushed branch's commit
+can be prepared as a generation. Then it runs three workflows and the ChatGPT turn, each with a time
+limit:
 
 1. Page: a Playwright spec opens the owner page, sends a message, waits for the streamed answer,
    reloads and finds the turn again, then sends a turn that runs `sleep 300` and cancels it. The run
@@ -385,6 +387,13 @@ unmerged branch does not run in the first generation. Then it runs three workflo
 3. Self-modification: the agent commits a marker file to the harness, pushes it, runs
    `stumble gen prepare` and activates the generation. The script waits for a new active generation
    in `/api/status` whose commit holds the marker, then checks that the next turn gets an answer.
+4. ChatGPT turn (`tools/e2e/chatgpt.mts`): it skips with a message unless
+   `/api/chatgpt/connection` is `connected` and the run targets a `--stage`. The agent reads three
+   files and answers. Every assistant entry of the turn must come from provider `chatgpt` with the
+   stage's `CHATGPT_MODEL` and carry no `provider-fallback` diagnostic. The script then reads the
+   stage's `chatgpt.model-call` ok events from Workers Logs, waits up to 5 minutes for one per
+   answer, checks that `instructionsHash` and `toolsHash` are the same on every call, and prints the
+   share of cached prompt tokens.
 
 Cleanup always runs, also after a failure or Ctrl-C. It runs `ops:check` for the stage, deletes the
 run's `e2e/` branches and any `self-modify/` branch that holds the run's marker, destroys the stage,
@@ -396,7 +405,9 @@ The script needs `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `GH_TOKEN` 
 the harness repository) in the environment. On a machine with only podman it puts a `docker` shim
 first in `PATH`. Set `CHROMIUM_PATH` where Playwright's own Chromium does not run, as on NixOS.
 
-- `--keep` skips the cleanup and writes the owner password to a file in the temporary directory.
+- `--keep` keeps a fresh stage: it skips the cleanup and writes a generated owner password to a
+  file in the temporary directory. On an existing `--stage` or `--url`, which the script never
+  destroys, the cleanup still deletes the run's branches and restores the target.
   `pnpm e2e --run-id <id> --cleanup` cleans up a kept run later.
 - `--stage <stage>` or `--url <url>` runs the workflows against an existing instance. The script
   then does not deploy or destroy; it disconnects the project and rolls back to the generation that
@@ -414,6 +425,28 @@ the `CLOUDFLARE_API_TOKEN` secret, the `CLOUDFLARE_ACCOUNT_ID` variable and an `
 secret, and runs `--cleanup` again when the job is cancelled. `E2E_GH_TOKEN` must be a user token
 with contents write on the harness repository. The job's `GITHUB_TOKEN` does not work: the stage's
 connection check calls `GET /user`, which an installation token cannot call.
+
+### Preview stage and `pnpm ci:local`
+
+The stage `preview` (Worker `cf-stumble-preview`) is persistent: no run destroys it, and you
+connect ChatGPT on its owner page once. `.github/workflows/preview.yml` runs on every pull request
+and by hand, one run at a time (concurrency group `preview`). It runs Verify and the workspace image
+build on the pull request's head, deploys that commit to `preview`, releases it as the active
+generation with `tools/release-generation.mts --force`, and runs
+`pnpm e2e --stage preview --keep`. `--force` lets the release replace a generation from another
+branch whose commit the new one does not contain. The workflow reads the secret
+`PREVIEW_OWNER_PASSWORD`, the preview's owner password, besides the e2e workflow's secrets.
+
+`pnpm ci:local [--stage <stage>]` (`tools/ci-local.mts`) runs the same chain from a machine: Verify
+in `nix develop`, the workspace image (pulled from GHCR, or built with docker or the podman shim
+when the tag is not published), the deploy, the release, the e2e run with the ChatGPT turn, and
+`ops:check` on the stage. It prints one pass or fail line per step. HEAD must be pushed, because the
+stage's harness fetches it from GitHub. Without `--stage` it targets `preview` and reads the owner
+password from `.audit/local/preview-owner-password` in the main checkout. Any other stage is a
+throwaway: it gets a generated password and its secrets, and it is destroyed at the end; `prod` is
+refused. When `CLOUDFLARE_API_TOKEN` is unset it refreshes the `cf` login and uses its token,
+`GH_TOKEN` defaults to `gh auth token`, and `CHROMIUM_PATH` defaults to `chromium` on `PATH` when
+Playwright's own browser is missing.
 
 ### Page fuzz
 
