@@ -57,14 +57,14 @@ function addContinuesColumn(sql: SqlStorage): void {
 }
 
 export class DeadlineAborts {
-  readonly #ending = new Map<string, Promise<void>>();
+  readonly #ending = new Set<string>();
 
   waiting(expired: readonly string[]): readonly string[] {
     return expired.filter((conversationId) => !this.#ending.has(conversationId));
   }
 
-  async settled(conversationId: string): Promise<void> {
-    await this.#ending.get(conversationId);
+  remainingMs(conversationId: string, running: number | undefined): number | undefined {
+    return this.#ending.has(conversationId) ? PROJECT_RUN_DEADLINE_MS : running;
   }
 
   end(
@@ -72,17 +72,15 @@ export class DeadlineAborts {
     abort: () => Promise<RunningConversation | null>,
     continued: (run: RunningConversation) => Promise<void>,
   ): void {
-    this.#ending.set(
-      conversationId,
-      abort()
-        .then((run) => (isContinuedRun(run) ? continued(run) : undefined))
-        .catch((cause: unknown) => {
-          logRedactedCause("supervisor.conversations.facet-call", cause);
-        })
-        .finally(() => {
-          this.#ending.delete(conversationId);
-        }),
-    );
+    this.#ending.add(conversationId);
+    void abort()
+      .then((run) => (isContinuedRun(run) ? continued(run) : undefined))
+      .catch((cause: unknown) => {
+        logRedactedCause("supervisor.conversations.facet-call", cause);
+      })
+      .finally(() => {
+        this.#ending.delete(conversationId);
+      });
   }
 }
 

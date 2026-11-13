@@ -38,12 +38,11 @@ function eventsMethod(harnessCommit: string): string {
 const ABORT_METHOD = `
   async abort(conversationId, reason) {
     if (reason === "deadline" && this.ctx.storage.kv.get("continue") === 1) {
-      const host = this.host;
-      void host.workspace(conversationId).then(
-        () => host.log("info", "continued-workspace", { refused: "" }),
-        (error) => host.log("info", "continued-workspace", { refused: error.message }),
+      const refused = await this.host.workspace(conversationId).then(
+        () => "",
+        (error) => error.message,
       );
-      await new Promise((resume) => setTimeout(resume, 50));
+      await this.host.log("info", "continued-workspace", { refused });
       return { conversationId, run: 99, continues: 1 };
     }
     await this.host.running([]);

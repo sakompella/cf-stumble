@@ -207,7 +207,7 @@ export class ServingConversations {
           conversationId,
           () => facet.abort(this.#runs.interrupted(conversationId), "deadline"),
           (run) =>
-            this.#settle(this.#runs.continued(run, Date.now(), instance, this.#generationLabel())),
+            this.#settled(this.#runs.continued(run, Date.now(), instance, this.#generationLabel())),
         );
       }
     }).pipe(
@@ -325,10 +325,14 @@ export class ServingConversations {
     return mounted.attach(targets.host, model, targets.generations);
   }
 
-  async #settle(settlements: readonly Settlement[]): Promise<void> {
-    for (const settlement of settlements) {
-      this.#workspaces.end(settlement.conversationId);
+  #settle(settlements: readonly Settlement[]): Promise<void> {
+    for (const settlement of settlements) this.#workspaces.end(settlement.conversationId);
 
+    return this.#settled(settlements);
+  }
+
+  async #settled(settlements: readonly Settlement[]): Promise<void> {
+    for (const settlement of settlements) {
       const rollback = this.#ports.selection.settled(settlement);
 
       if (rollback !== undefined) this.replaceFacet(rollback.command, rollback.epoch);
@@ -337,15 +341,17 @@ export class ServingConversations {
     await runAtEntryPoint(this.#runs.setAlarm(Date.now()));
   }
 
-  async #workspace(conversationId: string) {
-    await this.#deadlines.settled(conversationId);
-
+  #workspace(conversationId: string) {
     const projectId = this.#projects.projectOf(conversationId);
     const project = this.#ports.catalog().find((candidate) => candidate.id === projectId);
-    const remainingMs = this.#runs.remainingMs(conversationId, Date.now());
+
+    const remainingMs = this.#deadlines.remainingMs(
+      conversationId,
+      this.#runs.remainingMs(conversationId, Date.now()),
+    );
 
     if (project === undefined || remainingMs === undefined || this.#ports.resetting()) {
-      throw new Error("this conversation has no running project workspace");
+      return Promise.reject(new Error("this conversation has no running project workspace"));
     }
 
     return this.#workspaces.capability(conversationId, project, remainingMs);
