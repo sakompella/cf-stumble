@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import { logEvent, type LogFields } from "../diagnostics.js";
 
 const AUTH_ORIGIN = "https://auth.openai.com";
 
@@ -231,6 +232,28 @@ function statusFailure(status: number): TokenFailure {
   return status >= 400 ? "rejected" : "ambiguous";
 }
 
+const ErrorReply = Schema.Struct({
+  error: Schema.optionalKey(Schema.String),
+  error_description: Schema.optionalKey(Schema.String),
+});
+
+const decodeErrorReply = Schema.decodeUnknownOption(Schema.fromJsonString(ErrorReply));
+
+function errorBodyFields(body: string): LogFields {
+  const reply = decodeErrorReply(body);
+
+  if (Option.isNone(reply)) return {};
+
+  const { error, error_description } = reply.value;
+  const fields: Record<string, string> = {};
+
+  if (error !== undefined) fields.error = error;
+
+  if (error_description !== undefined) fields.error_description = error_description;
+
+  return fields;
+}
+
 export function requestTokens(
   fetcher: ProviderFetch,
   fields: Readonly<Record<string, string>>,
@@ -253,9 +276,15 @@ export function requestTokens(
     });
 
     if (response.status !== 200) {
-      yield* Effect.promise(() => discardBody(response));
+      const failure = statusFailure(response.status);
+      const body = yield* Effect.promise(() => response.text().catch(() => ""));
 
-      return yield* new TokenRequestFailed({ failure: statusFailure(response.status) });
+      logEvent(failure === "rejected" ? "error" : "warn", "chatgpt.token-request", {
+        status: response.status,
+        ...errorBodyFields(body),
+      });
+
+      return yield* new TokenRequestFailed({ failure });
     }
 
     const body = yield* Effect.tryPromise({

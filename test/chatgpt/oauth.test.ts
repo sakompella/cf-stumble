@@ -7,6 +7,7 @@ import {
   parseTokenGrant,
   requestTokens,
 } from "../../src/chatgpt/oauth.js";
+import { capturedEvents, named } from "../log-capture.js";
 import { ACCESS_ONE, grant, recordingFetch, REFRESH_ONE } from "./fixtures.js";
 
 const STATE = "state-FAKE-0123456789";
@@ -57,6 +58,55 @@ test("the token endpoint's status decides whether a failure consumed anything", 
   await Effect.runPromise(requestTokens(fetcher, { grant_type: "refresh_token" }, parseTokenGrant));
   expect(calls[0]?.url).toBe("https://auth.openai.com/api/accounts/oauth/token");
   expect(calls[0]?.init.redirect).toBe("manual");
+});
+
+test("a refused token request logs its status and only the error fields of its JSON body", async () => {
+  const logged = capturedEvents();
+
+  const { fetcher } = recordingFetch(() =>
+    Promise.resolve(
+      Response.json(
+        {
+          error: "invalid_grant",
+          error_description: "code already redeemed",
+          code: "code-FAKE",
+        },
+        { status: 400 },
+      ),
+    ),
+  );
+
+  await Effect.runPromise(Effect.result(requestTokens(fetcher, {}, parseTokenGrant)));
+
+  const [event] = named(logged(), "chatgpt.token-request");
+  const { ts: _ts, ...entry } = event ?? {};
+
+  expect(entry).toEqual({
+    event: "chatgpt.token-request",
+    level: "error",
+    status: 400,
+    error: "invalid_grant",
+    error_description: "code already redeemed",
+  });
+});
+
+test("a failed token request whose body is not JSON logs only its status", async () => {
+  const logged = capturedEvents();
+
+  const { fetcher } = recordingFetch(() =>
+    Promise.resolve(new Response("Bad Request", { status: 503 })),
+  );
+
+  await Effect.runPromise(Effect.result(requestTokens(fetcher, {}, parseTokenGrant)));
+
+  const [event] = named(logged(), "chatgpt.token-request");
+  const { ts: _ts, ...entry } = event ?? {};
+
+  expect(entry).toEqual({
+    event: "chatgpt.token-request",
+    level: "warn",
+    status: 503,
+  });
 });
 
 test("a sign-in reply without a scope does not connect", () => {
