@@ -47,7 +47,38 @@ async function turnOf(request: ModelRouteRequest) {
   return { events, body: bodyOf(calls[0]) };
 }
 
+async function hash12(text: string): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
+  );
+
+  return Array.from(digest.slice(0, 6), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 const HI: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
+
+test("the first answered call in an isolate logs the prompt fingerprints and the usage fields", async () => {
+  const logged = capturedEvents();
+  await turnOf(HI);
+  await turnOf({ ...HI, messages: [{ role: "system", content: "s" }, ...HI.messages] });
+
+  const rows = named(logged(), "chatgpt.model-call");
+
+  expect(rows[0]).toEqual(
+    expect.objectContaining({
+      instructionsHash: await hash12(""),
+      toolsHash: await hash12("[]"),
+      firstInputHash: await hash12('{"role":"user","content":"hi"}'),
+      inputItems: 1,
+      usageFields:
+        "input_tokens,input_tokens_details,input_tokens_details.cached_tokens,output_tokens",
+    }),
+  );
+  expect(rows[1]).toEqual(
+    expect.objectContaining({ instructionsHash: await hash12("s"), inputItems: 1 }),
+  );
+  expect(rows[1]).not.toHaveProperty("usageFields");
+});
 
 test("an answered call reports its cached tokens, names who served it, and is logged as ok", async () => {
   const logged = capturedEvents();

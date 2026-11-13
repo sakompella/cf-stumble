@@ -1,7 +1,8 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { retryAt } from "../../src/chatgpt/responses.js";
+import { responsesRequest, retryAt } from "../../src/chatgpt/responses.js";
+import type { ModelRouteRequest, RouteMessage } from "../../src/model-route-wire/request.js";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -47,5 +48,60 @@ test("an HTTP date ends at that second if it is ahead, capped at a week, and not
     expect(retryAt(new Date(sentAt).toUTCString(), now)).toBe(
       wholeSecond > now ? Math.min(wholeSecond, now + WEEK_MS) : null,
     );
+  });
+});
+
+const body = gs.text({ alphabet: "abc XYZ.", maxSize: 8 });
+
+const key = gs.text({ alphabet: "abc_", minSize: 1, maxSize: 8 });
+
+function drawSystem(tc: hegel.TestCase): RouteMessage {
+  return { role: "system", content: tc.draw(body) };
+}
+
+function drawAssistant(tc: hegel.TestCase): RouteMessage {
+  return { role: "assistant", content: tc.draw(gs.oneOf(body, gs.just(null))), tool_calls: [] };
+}
+
+function drawAny(tc: hegel.TestCase): RouteMessage {
+  const role = tc.draw(gs.sampledFrom(["system", "user", "assistant", "tool"] as const));
+
+  if (role === "system") return drawSystem(tc);
+
+  if (role === "user") return { role: "user", content: tc.draw(body) };
+
+  if (role === "assistant") return drawAssistant(tc);
+
+  return { role: "tool", tool_call_id: tc.draw(key), content: tc.draw(body) };
+}
+
+function requestOf(messages: readonly RouteMessage[], promptCacheKey: string | undefined) {
+  return promptCacheKey === undefined
+    ? ({ messages: [...messages] } satisfies ModelRouteRequest)
+    : { messages: [...messages], promptCacheKey };
+}
+
+test("a growing conversation keeps its instructions and extends its input", () => {
+  hegel.test((tc) => {
+    const leading = Array.from({ length: tc.draw(gs.integers({ maxValue: 2 })) }, () =>
+      drawSystem(tc),
+    );
+
+    const submission: RouteMessage = { role: "user", content: tc.draw(body) };
+    const conversation = [...leading, submission];
+    const promptCacheKey = tc.draw(gs.booleans()) ? tc.draw(key) : undefined;
+    const one = responsesRequest("gpt-test", requestOf(conversation, promptCacheKey));
+    const grown = [...conversation];
+
+    for (let index = 0; index < tc.draw(gs.integers({ maxValue: 4 })); index++) {
+      grown.push(drawAny(tc));
+    }
+
+    const two = responsesRequest("gpt-test", requestOf(grown, promptCacheKey));
+
+    expect(two.instructions).toBe(one.instructions);
+    expect(two.input.slice(0, one.input.length)).toEqual([...one.input]);
+    expect(two.prompt_cache_key).toBe(one.prompt_cache_key);
+    expect(two.tools).toBe(one.tools);
   });
 });
