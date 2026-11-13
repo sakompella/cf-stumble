@@ -1,4 +1,3 @@
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { logEvent } from "../diagnostics.js";
 import type { ModelRouteRequest } from "../model-route-wire/request.js";
@@ -13,6 +12,7 @@ import {
 } from "../model-route-turn.js";
 import type { ChatGPTAccess } from "./connection-view.js";
 import { discardBody, type ProviderFetch } from "./oauth.js";
+import { ChatGPTNotConnected, ChatGPTUsageLimited, logAnsweredCall } from "./call-diagnostics.js";
 import {
   isUsageLimit,
   providerErrorOfText,
@@ -30,12 +30,6 @@ export type ChatGPTCredential = Readonly<{
   markRefused(accessToken: string): Promise<void>;
   markUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
 }>;
-
-class ChatGPTNotConnected extends Data.TaggedError("ChatGPTNotConnected") {}
-
-class ChatGPTUsageLimited extends Data.TaggedError("ChatGPTUsageLimited")<{
-  readonly limitedUntil: number | null;
-}> {}
 
 type ChatGPTRefusal = ModelTurnFailed | ChatGPTNotConnected | ChatGPTUsageLimited;
 
@@ -209,7 +203,8 @@ export function chatgptTurn(
   input: ChatGPTTurnInput,
   request: ModelRouteRequest,
 ): (emit: (event: ModelStreamEvent) => void) => Effect.Effect<ModelTurnAnswer, ChatGPTRefusal> {
-  const body = JSON.stringify(responsesRequest(input.model, request));
+  const requestBody = responsesRequest(input.model, request);
+  const body = JSON.stringify(requestBody);
 
   return (emit) =>
     Effect.gen(function* () {
@@ -249,14 +244,9 @@ export function chatgptTurn(
         effort: REASONING_EFFORT,
       });
 
-      logEvent("info", "chatgpt.model-call", {
-        outcome: "ok",
-        model: input.model,
-        promptTokens: answer.usage.inputTokens,
-        cachedTokens: answer.usage.cachedTokens ?? 0,
-        completionTokens: answer.usage.outputTokens,
-        estimated: answer.usage.estimated,
-      });
+      yield* Effect.promise(() =>
+        logAnsweredCall(input.model, answer.usage, requestBody, reader.usageFields),
+      );
 
       return answer;
     });

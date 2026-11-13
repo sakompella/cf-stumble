@@ -10,13 +10,14 @@ import {
   type TokenUsage,
 } from "../model-route-stream-parse.js";
 import type { ToolCallDelta } from "../model-route-wire/events.js";
+import { usageFieldNames } from "./call-diagnostics.js";
 
 export const RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 
 export const REASONING_EFFORT = "medium";
 
 type InputItem =
-  | Readonly<{ role: "user" | "assistant"; content: string }>
+  | Readonly<{ role: "user" | "assistant" | "developer"; content: string }>
   | Readonly<{ type: "function_call"; call_id: string; name: string; arguments: string }>
   | Readonly<{ type: "function_call_output"; call_id: string; output: string }>;
 
@@ -41,10 +42,8 @@ export type ResponsesRequestBody = Readonly<{
   stream: true;
 }>;
 
-function inputItems(message: RouteMessage): readonly InputItem[] {
+function inputItems(message: Exclude<RouteMessage, { role: "system" }>): readonly InputItem[] {
   switch (message.role) {
-    case "system":
-      return [];
     case "user":
       return [{ role: "user", content: message.content }];
     case "assistant":
@@ -75,17 +74,33 @@ function inputItems(message: RouteMessage): readonly InputItem[] {
 }
 
 export function responsesRequest(model: string, request: ModelRouteRequest): ResponsesRequestBody {
+  const leading: string[] = [];
+  const input: InputItem[] = [];
+  let conversing = false;
+
+  for (const message of request.messages) {
+    if (message.role === "system") {
+      if (message.content === "") continue;
+
+      if (conversing) input.push({ role: "developer", content: message.content });
+      else leading.push(message.content);
+
+      continue;
+    }
+
+    conversing = true;
+    input.push(...inputItems(message));
+  }
+
   const body: Mutable<ResponsesRequestBody> = {
     model,
-    input: request.messages.flatMap((message) => inputItems(message)),
+    input,
     reasoning: { effort: REASONING_EFFORT },
     store: false,
     stream: true,
   };
 
-  const instructions = request.messages
-    .flatMap((message) => (message.role === "system" ? [message.content] : []))
-    .join("\n\n");
+  const instructions = leading.join("\n\n");
 
   if (instructions !== "") body.instructions = instructions;
 
@@ -197,9 +212,12 @@ function usageOf(event: StreamEvent): TokenUsage | undefined {
     : { inputTokens, outputTokens, cachedTokens: usage?.input_tokens_details?.cached_tokens };
 }
 
+const USAGE_EVENTS: ReadonlySet<string> = new Set(["response.completed", "response.incomplete"]);
+
 export class ResponsesStreamReader {
   private readonly accumulator: ProviderStreamAccumulator;
   failure: ProviderError | undefined;
+  usageFields: readonly string[] | undefined;
 
   constructor(accumulator: ProviderStreamAccumulator) {
     this.accumulator = accumulator;
@@ -208,7 +226,13 @@ export class ResponsesStreamReader {
   handleEvent(data: string): boolean {
     const event = decodeStreamEvent(data);
 
-    return Option.isSome(event) && this.apply(event.value);
+    if (!Option.isSome(event)) return false;
+
+    if (this.usageFields === undefined && USAGE_EVENTS.has(event.value.type ?? "")) {
+      this.usageFields = usageFieldNames(data);
+    }
+
+    return this.apply(event.value);
   }
 
   private apply(event: StreamEvent): boolean {

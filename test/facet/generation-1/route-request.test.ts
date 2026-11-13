@@ -1,6 +1,14 @@
+import { normalizeContext } from "@earendil-works/pi-ai";
+import type {
+  AssistantMessage,
+  Context,
+  Message,
+  SystemMessage,
+  Tool,
+} from "@earendil-works/pi-ai";
 import { obj, str } from "@earendil-works/pi-schema";
-import type { Context } from "@earendil-works/pi-ai";
 import { expect, test } from "vitest";
+import { transcriptToRouteRequest } from "../../../src/facet/generation-1/route-request.js";
 import { ROUTE_MODEL } from "../../../src/facet/generation-1/route-provider.js";
 import { NO_USAGE, replies, scriptedRoute, streamThroughProvider } from "./scripted-route.js";
 
@@ -95,4 +103,96 @@ test("a transcript becomes one route request: system prompt, tools, tool results
       ],
     },
   ]);
+});
+
+function systemMessage(
+  fields: Omit<SystemMessage, "role" | "content" | "timestamp">,
+): SystemMessage {
+  return { role: "system", content: "", timestamp: 0, ...fields };
+}
+
+function user(text: string): Message {
+  return { role: "user", content: text, timestamp: 0 };
+}
+
+function assistant(text: string): AssistantMessage {
+  return {
+    role: "assistant",
+    content: text === "" ? [] : [{ type: "text", text }],
+    api: ROUTE_MODEL.api,
+    provider: ROUTE_MODEL.provider,
+    model: ROUTE_MODEL.id,
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: ZERO_COST },
+    stopReason: "stop",
+    timestamp: 0,
+  };
+}
+
+function tool(name: string): Tool {
+  return { name, description: `The ${name} tool.`, parameters: {} };
+}
+
+function contextOf(messages: readonly Message[]) {
+  return normalizeContext({ messages: [...messages] });
+}
+
+test("the baseline leads and later system messages stay in place", () => {
+  const request = transcriptToRouteRequest(
+    contextOf([
+      systemMessage({ sections: { preamble: "You are cf-stumble." } }),
+      user("run the checks"),
+      assistant("running"),
+      systemMessage({ sections: { todo: "- fix the bug" } }),
+      systemMessage({ sections: { todo: null } }),
+      assistant("done"),
+    ]),
+  );
+
+  expect(request).toEqual({
+    messages: [
+      { role: "system", content: "You are cf-stumble." },
+      { role: "user", content: "run the checks" },
+      { role: "assistant", content: "running", tool_calls: [] },
+      { role: "system", content: 'Updated system prompt section "todo":\n\n- fix the bug' },
+      { role: "system", content: 'Removed system prompt section "todo".' },
+      { role: "assistant", content: "done", tool_calls: [] },
+    ],
+  });
+});
+
+test("a system message with no text of its own is dropped and tool changes ride the tool list", () => {
+  const request = transcriptToRouteRequest(
+    contextOf([
+      systemMessage({ toolsAdded: [tool("read")] }),
+      user("hi"),
+      systemMessage({ toolsAdded: [tool("write")] }),
+    ]),
+  );
+
+  expect(request).toEqual({
+    messages: [{ role: "user", content: "hi" }],
+    tools: [
+      {
+        type: "function",
+        function: { name: "read", description: "The read tool.", parameters: {} },
+      },
+      {
+        type: "function",
+        function: { name: "write", description: "The write tool.", parameters: {} },
+      },
+    ],
+  });
+});
+
+test("a system message that does not lead is rendered as an update, not a new prompt", () => {
+  const request = transcriptToRouteRequest(
+    contextOf([assistant("earlier"), systemMessage({ sections: { preamble: "You are." } })]),
+  );
+
+  expect(request).toEqual({
+    messages: [
+      { role: "assistant", content: "earlier", tool_calls: [] },
+      { role: "system", content: 'Updated system prompt section "preamble":\n\nYou are.' },
+    ],
+  });
 });
