@@ -112,7 +112,7 @@ test("an active run keeps the recovery alarm armed and refuses a workspace reset
   );
 });
 
-test("a run the facet continues at its deadline gets its own deadline at once, so the next alarm does not abort it", async () => {
+test("a run the facet continues at its deadline gets its own deadline and workspace at once, so the next alarm does not abort it", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   const control = await servingScripted("conversations-continued-at-deadline");
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -131,6 +131,10 @@ test("a run the facet continues at its deadline gets its own deadline at once, s
   expect(events(warn, "run.deadline-aborted")).toHaveLength(1);
   expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: "run.settled", continues: 0 }));
   expect(events(log, "run.started")).toHaveLength(2);
+  await vi.waitUntil(() => events(log, "facet.continued-workspace").length === 1);
+  expect(log).not.toHaveBeenCalledWith(
+    expect.objectContaining({ refused: "this conversation has no running project workspace" }),
+  );
   expect(await control.resetWorkspace()).toEqual({ ok: false, problem: { code: "run-active" } });
 });
 

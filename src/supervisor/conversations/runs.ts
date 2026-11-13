@@ -57,10 +57,14 @@ function addContinuesColumn(sql: SqlStorage): void {
 }
 
 export class DeadlineAborts {
-  readonly #ending = new Set<string>();
+  readonly #ending = new Map<string, Promise<void>>();
 
   waiting(expired: readonly string[]): readonly string[] {
     return expired.filter((conversationId) => !this.#ending.has(conversationId));
+  }
+
+  async settled(conversationId: string): Promise<void> {
+    await this.#ending.get(conversationId);
   }
 
   end(
@@ -68,15 +72,17 @@ export class DeadlineAborts {
     abort: () => Promise<RunningConversation | null>,
     continued: (run: RunningConversation) => Promise<void>,
   ): void {
-    this.#ending.add(conversationId);
-    void abort()
-      .then((run) => (isContinuedRun(run) ? continued(run) : undefined))
-      .catch((cause: unknown) => {
-        logRedactedCause("supervisor.conversations.facet-call", cause);
-      })
-      .finally(() => {
-        this.#ending.delete(conversationId);
-      });
+    this.#ending.set(
+      conversationId,
+      abort()
+        .then((run) => (isContinuedRun(run) ? continued(run) : undefined))
+        .catch((cause: unknown) => {
+          logRedactedCause("supervisor.conversations.facet-call", cause);
+        })
+        .finally(() => {
+          this.#ending.delete(conversationId);
+        }),
+    );
   }
 }
 

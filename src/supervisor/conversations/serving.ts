@@ -337,13 +337,15 @@ export class ServingConversations {
     await runAtEntryPoint(this.#runs.setAlarm(Date.now()));
   }
 
-  #workspace(conversationId: string) {
+  async #workspace(conversationId: string) {
+    await this.#deadlines.settled(conversationId);
+
     const projectId = this.#projects.projectOf(conversationId);
     const project = this.#ports.catalog().find((candidate) => candidate.id === projectId);
     const remainingMs = this.#runs.remainingMs(conversationId, Date.now());
 
     if (project === undefined || remainingMs === undefined || this.#ports.resetting()) {
-      return Promise.reject(new Error("this conversation has no running project workspace"));
+      throw new Error("this conversation has no running project workspace");
     }
 
     return this.#workspaces.capability(conversationId, project, remainingMs);

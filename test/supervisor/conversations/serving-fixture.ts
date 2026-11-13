@@ -35,6 +35,21 @@ function eventsMethod(harnessCommit: string): string {
   }`;
 }
 
+const ABORT_METHOD = `
+  async abort(conversationId, reason) {
+    if (reason === "deadline" && this.ctx.storage.kv.get("continue") === 1) {
+      const host = this.host;
+      void host.workspace(conversationId).then(
+        () => host.log("info", "continued-workspace", { refused: "" }),
+        (error) => host.log("info", "continued-workspace", { refused: error.message }),
+      );
+      await new Promise((resume) => setTimeout(resume, 50));
+      return { conversationId, run: 99, continues: 1 };
+    }
+    await this.host.running([]);
+    await this.host.arm({ active: false });
+  }`;
+
 export function scriptedFacet(harnessCommit: string, attachDelayMs = 0): string {
   return `
 import { DurableObject } from "cloudflare:workers";
@@ -72,13 +87,7 @@ export class MainFacet extends DurableObject {
     this.ctx.storage.kv.put("submitted", submitted);
     return submitted;
   }
-  async abort(conversationId, reason) {
-    if (reason === "deadline" && this.ctx.storage.kv.get("continue") === 1) {
-      return { conversationId, run: 99, continues: 1 };
-    }
-    await this.host.running([]);
-    await this.host.arm({ active: false });
-  }
+  ${ABORT_METHOD}
   ${eventsMethod(harnessCommit)}
 }
 `;
