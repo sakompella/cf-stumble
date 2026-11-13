@@ -37,6 +37,7 @@ const answers = replies([
   { type: "text-delta", delta: "done" },
   {
     type: "done",
+    served: { provider: "workers-ai", model: "test-model" },
     message: { role: "assistant", content: "done", tool_calls: [] },
     usage: NO_USAGE,
   },
@@ -47,6 +48,7 @@ test("a reply cut off at the output limit is followed by a notice the model read
     { type: "text-delta", delta: "Here is my plan" },
     {
       type: "done",
+      served: { provider: "workers-ai", model: "test-model" },
       message: { role: "assistant", content: "Here is my plan", tool_calls: [] },
       usage: NO_USAGE,
       truncated: true,
@@ -109,6 +111,7 @@ test("a deadline abort leaves one notice however often it repeats, and an owner 
 const toolCall = replies([
   {
     type: "done",
+    served: { provider: "workers-ai", model: "test-model" },
     message: {
       role: "assistant",
       content: null,

@@ -18,6 +18,8 @@ import {
   type RecordedCall,
 } from "./fixtures.js";
 
+const SERVED = { provider: "chatgpt", model: "gpt-test", effort: "medium" };
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -105,6 +107,7 @@ test("a Responses stream becomes text deltas, one assembled tool call, and the p
         tool_calls: [{ id: "call_9", function: { name: "bash", arguments: '{"cmd":"ls"}' } }],
       },
       usage: { inputTokens: 12, outputTokens: 3, estimated: false },
+      served: SERVED,
     },
   ]);
 });
@@ -127,6 +130,7 @@ test("a Responses event split across several data lines arrives as one event", a
       type: "done",
       message: { role: "assistant", content: "hello!", tool_calls: [] },
       usage: { inputTokens: 12, outputTokens: 3, estimated: false },
+      served: SERVED,
     },
   ]);
 });

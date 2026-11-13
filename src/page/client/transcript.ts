@@ -89,9 +89,13 @@ function finishedTool(
   });
 }
 
-function isFallbackAnswer(message: AssistantMessage): boolean {
+function isUsageLimitFallback(message: AssistantMessage): boolean {
   return (
-    message.diagnostics?.some((diagnostic) => diagnostic.type === "provider-fallback") === true
+    message.diagnostics?.some(
+      (diagnostic) =>
+        diagnostic.type === "provider-fallback" &&
+        diagnostic.details?.["reason"] === "chatgpt-usage-limit",
+    ) === true
   );
 }
 
@@ -99,7 +103,7 @@ function assistantEntries(message: AssistantMessage): readonly TranscriptEntry[]
   const text = blocksText(message.content);
 
   return [
-    ...(isFallbackAnswer(message)
+    ...(isUsageLimitFallback(message)
       ? [textEntry("system", "notice", "ChatGPT usage limit reached; answered with Workers AI")]
       : []),
     ...(text === "" ? [] : [textEntry("assistant", "assistant", text)]),

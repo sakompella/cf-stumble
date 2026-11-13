@@ -54,6 +54,7 @@ test("a transcript becomes one route request: system prompt, tools, tool results
     replies([
       {
         type: "done",
+        served: { provider: "workers-ai", model: "test-model" },
         message: { role: "assistant", content: "", tool_calls: [] },
         usage: NO_USAGE,
       },

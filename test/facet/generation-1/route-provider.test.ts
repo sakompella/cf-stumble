@@ -26,6 +26,7 @@ test("text deltas stream into one text block, and done carries the route's usage
       { type: "text-delta", delta: "there" },
       {
         type: "done",
+        served: { provider: "workers-ai", model: "test-model" },
         message: { role: "assistant", content: "Hello there", tool_calls: [] },
         usage: { inputTokens: 12, outputTokens: 3, estimated: false },
       },
@@ -49,6 +50,7 @@ test("cached prompt tokens become cacheRead, and input keeps only the uncached p
     replies([
       {
         type: "done",
+        served: { provider: "workers-ai", model: "test-model" },
         message: { role: "assistant", content: "ok", tool_calls: [] },
         usage: { inputTokens: 100, outputTokens: 4, cachedTokens: 64, estimated: false },
       },
@@ -71,6 +73,7 @@ test("a tool call assembles from streamed argument deltas", async () => {
       { type: "tool-call-delta", delta: { index: 0, argumentsDelta: '"ls"}' } },
       {
         type: "done",
+        served: { provider: "workers-ai", model: "test-model" },
         message: {
           role: "assistant",
           content: null,
@@ -95,10 +98,52 @@ test("a tool call assembles from streamed argument deltas", async () => {
   });
 });
 
-test("a provider fallback stays on the final message as a diagnostic", async () => {
+test("a usage-limit fallback stays on the final message as a diagnostic", async () => {
   const { capability } = scriptedRoute(
     replies([
       { type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil: 1_000 },
+      {
+        type: "done",
+        served: { provider: "workers-ai", model: "test-model" },
+        message: { role: "assistant", content: "ok", tool_calls: [] },
+        usage: NO_USAGE,
+      },
+    ]),
+  );
+
+  expect(await stream(capability, GO).result()).toMatchObject({
+    provider: "workers-ai",
+    model: "test-model",
+    diagnostics: [
+      {
+        type: "provider-fallback",
+        details: { reason: "chatgpt-usage-limit", limitedUntil: 1_000 },
+      },
+    ],
+  });
+});
+
+test("a not-connected fallback named in served becomes the same diagnostic", async () => {
+  const { capability } = scriptedRoute(
+    replies([
+      {
+        type: "done",
+        served: { provider: "workers-ai", model: "test-model", fallback: "chatgpt-not-connected" },
+        message: { role: "assistant", content: "ok", tool_calls: [] },
+        usage: NO_USAGE,
+      },
+    ]),
+  );
+
+  expect(await stream(capability, GO).result()).toMatchObject({
+    provider: "workers-ai",
+    diagnostics: [{ type: "provider-fallback", details: { reason: "chatgpt-not-connected" } }],
+  });
+});
+
+test("a done event without served, from an older Worker, keeps the route's own model name", async () => {
+  const { capability } = scriptedRoute(
+    replies([
       {
         type: "done",
         message: { role: "assistant", content: "ok", tool_calls: [] },
@@ -108,12 +153,8 @@ test("a provider fallback stays on the final message as a diagnostic", async () 
   );
 
   expect(await stream(capability, GO).result()).toMatchObject({
-    diagnostics: [
-      {
-        type: "provider-fallback",
-        details: { reason: "chatgpt-usage-limit", limitedUntil: 1_000 },
-      },
-    ],
+    provider: "host-model-route",
+    model: "host-model-route",
   });
 });
 

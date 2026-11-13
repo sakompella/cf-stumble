@@ -21,6 +21,8 @@ const RESULTS_PREFIX = "fuzz-results ";
 
 const USAGE = { inputTokens: 0, outputTokens: 0, estimated: true };
 
+const SERVED = { provider: "fuzz", model: "scripted" };
+
 const encoder = new TextEncoder();
 
 function isStep(entry: unknown): entry is Step {
@@ -70,7 +72,9 @@ function stream(message: Message): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(
-        encoder.encode(`${JSON.stringify({ type: "done", message, usage: USAGE })}\n`),
+        encoder.encode(
+          `${JSON.stringify({ type: "done", message, usage: USAGE, served: SERVED })}\n`,
+        ),
       );
       controller.close();
     },

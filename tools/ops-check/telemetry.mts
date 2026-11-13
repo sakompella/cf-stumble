@@ -20,7 +20,9 @@ const RUN_SETTLED_EVENT = "run.settled";
 
 const SESSION_FAILED_EVENT = "facet.session-failed";
 
-const MODEL_CALL_EVENT = "model.call";
+const MODEL_CALL_EVENTS = { "model.call": "workers-ai", "chatgpt.model-call": "chatgpt" } as const;
+
+type ModelCallEvent = keyof typeof MODEL_CALL_EVENTS;
 
 const TelemetryEnvelope = Schema.Struct({
   result: Schema.Struct({ events: Schema.Struct({ events: Schema.Array(Schema.Json) }) }),
@@ -145,15 +147,16 @@ export function pageRows(response: JsonValue) {
   return { rows: events, sample: events.length >= TELEMETRY_ROW_LIMIT };
 }
 
-export function parseModelCalls(response: JsonValue): ModelCalls {
+export function parseModelCalls(response: JsonValue, event: ModelCallEvent): ModelCalls {
   const { rows, sample } = pageRows(response);
 
   const calls = rows.flatMap((row) => {
     const parsed = decodeOption(ModelCallRow)(row);
 
-    return Option.isSome(parsed) && parsed.value.source.event === MODEL_CALL_EVENT
+    return Option.isSome(parsed) && parsed.value.source.event === event
       ? [
           {
+            provider: MODEL_CALL_EVENTS[event],
             promptTokens: parsed.value.source.promptTokens,
             cachedTokens: parsed.value.source.cachedTokens ?? 0,
           },
@@ -254,5 +257,16 @@ export async function fetchModelCalls(
   worker: string,
   window: TimeWindow,
 ): Promise<ModelCalls> {
-  return parseModelCalls(await queryEvents(token, account, worker, window, MODEL_CALL_EVENT));
+  const events: readonly ModelCallEvent[] = ["model.call", "chatgpt.model-call"];
+
+  const pages = await Promise.all(
+    events.map(async (event) =>
+      parseModelCalls(await queryEvents(token, account, worker, window, event), event),
+    ),
+  );
+
+  return {
+    calls: pages.flatMap((page) => page.calls),
+    sample: pages.some((page) => page.sample),
+  };
 }

@@ -69,7 +69,7 @@ test("an answer that holds only tool calls adds no empty entry, and a running ca
 test("an answer Workers AI gave after ChatGPT's usage limit is preceded by a notice", () => {
   const conversation = conversationOf({
     ...answer([{ type: "text", text: "from Workers AI" }]),
-    diagnostics: [{ type: "provider-fallback" }],
+    diagnostics: [{ type: "provider-fallback", details: { reason: "chatgpt-usage-limit" } }],
   });
 
   expect(transcriptOf(conversation, [], "repo")).toMatchObject([
@@ -80,6 +80,18 @@ test("an answer Workers AI gave after ChatGPT's usage limit is preceded by a not
     },
     { role: "assistant", text: "from Workers AI" },
   ]);
+});
+
+test("an answer Workers AI gave because ChatGPT is not connected has no notice", () => {
+  const conversation = conversationOf({
+    ...answer([{ type: "text", text: "from Workers AI" }]),
+    diagnostics: [{ type: "provider-fallback", details: { reason: "chatgpt-not-connected" } }],
+  });
+
+  expect(transcriptOf(conversation, [], "repo")).toMatchObject([
+    { role: "assistant", text: "from Workers AI" },
+  ]);
+  expect(transcriptOf(conversation, [], "repo")).toHaveLength(1);
 });
 
 test("an aborted or failed answer ends with what stopped it", () => {

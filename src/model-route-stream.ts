@@ -17,6 +17,7 @@ import {
   type ModelStreamInference,
   type ModelUsage,
   type ProviderMessage,
+  type ServedBy,
   type StreamingProviderPayload,
   type ToolCallDelta,
 } from "./model-route-wire/events.js";
@@ -30,6 +31,8 @@ import {
 } from "./model-route-turn.js";
 
 const MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017" as const;
+
+const SERVED: ServedBy = { provider: "workers-ai", model: MODEL, effort: REASONING_EFFORT };
 
 function providerMessage(message: RouteMessage): ProviderMessage {
   return message.role === "assistant"
@@ -160,10 +163,11 @@ function resolveUsage(
 export function finishedTurn(
   accumulator: ProviderStreamAccumulator,
   request: ModelRouteRequest,
+  served: ServedBy,
 ): ModelTurnAnswer {
   const message = accumulator.result();
 
-  const answer = { message, usage: resolveUsage(accumulator.usage(), request, message) };
+  const answer = { message, usage: resolveUsage(accumulator.usage(), request, message), served };
 
   return accumulator.truncated ? { ...answer, truncated: true } : answer;
 }
@@ -211,7 +215,7 @@ export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteReque
 
         logModelCall(accumulator.usage());
 
-        return Effect.succeed(finishedTurn(accumulator, request));
+        return Effect.succeed(finishedTurn(accumulator, request, SERVED));
       }),
     );
   };

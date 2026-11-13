@@ -9,6 +9,7 @@ import {
   type ModelRouteErrorCode,
   type ModelStreamEvent,
   type ModelUsage,
+  type ServedBy,
 } from "./model-route-wire/events.js";
 import { runResponseBody } from "./run-entry-point.js";
 import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";
@@ -90,6 +91,7 @@ export function pumpSseStream<Chunk extends Uint8Array>(
 export type ModelTurnAnswer = Readonly<{
   message: AssistantMessage;
   usage: ModelUsage;
+  served: ServedBy;
   truncated?: true;
 }>;
 

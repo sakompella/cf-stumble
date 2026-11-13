@@ -25,6 +25,7 @@ const echo = defineTool({
 const callsEcho = replies([
   {
     type: "done",
+    served: { provider: "workers-ai", model: "test-model" },
     message: {
       role: "assistant",
       content: null,
@@ -38,6 +39,7 @@ const answers = replies([
   { type: "text-delta", delta: "The tool said echoed hi" },
   {
     type: "done",
+    served: { provider: "workers-ai", model: "test-model" },
     message: { role: "assistant", content: "The tool said echoed hi", tool_calls: [] },
     usage: NO_USAGE,
   },
@@ -91,6 +93,7 @@ test("a tool call the route reports as cut off is not run, and the run ends with
     { type: "text-delta", delta: "Writing the file" },
     {
       type: "done",
+      served: { provider: "workers-ai", model: "test-model" },
       message: {
         role: "assistant",
         content: "Writing the file",

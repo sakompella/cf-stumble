@@ -58,6 +58,7 @@ const ToolDefinitionSchema = Schema.Struct({
 const RequestSchema = Schema.Struct({
   messages: Schema.Array(RouteMessageSchema),
   tools: Schema.optionalKey(Schema.Array(ToolDefinitionSchema)),
+  promptCacheKey: Schema.optionalKey(Schema.NonEmptyString),
 });
 
 export type AssistantMessage = typeof AssistantMessageSchema.Type;

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   activityWindow,
   BUCKET_MS,
-  cacheHitLine,
+  modelCallLines,
   formatReport,
   isoMinute,
   METRICS_LAG_MS,
@@ -223,21 +223,26 @@ describe("facet.session-failed", () => {
   });
 });
 
-describe("cacheHitLine", () => {
-  it("sums cached over prompt tokens and says nothing without calls", () => {
+describe("modelCallLines", () => {
+  it("counts calls and sums cached over prompt tokens for each provider, and says nothing without calls", () => {
     const calls = [
-      { promptTokens: 1000, cachedTokens: 900 },
-      { promptTokens: 1000, cachedTokens: 500 },
+      { provider: "workers-ai", promptTokens: 1000, cachedTokens: 900 },
+      { provider: "chatgpt", promptTokens: 0, cachedTokens: 0 },
+      { provider: "workers-ai", promptTokens: 1000, cachedTokens: 500 },
     ];
 
-    assert.deepEqual(cacheHitLine({ calls, sample: false }), [
-      "i model cache hit rate 70.0% (1400/2000 prompt tokens, 2 calls)",
+    assert.deepEqual(modelCallLines({ calls, sample: false }), [
+      "i model calls chatgpt: 1, cache hit rate n/a (0/0 prompt tokens)",
+      "i model calls workers-ai: 2, cache hit rate 70.0% (1400/2000 prompt tokens)",
     ]);
-    assert.deepEqual(cacheHitLine({ calls: [], sample: false }), []);
+    assert.deepEqual(modelCallLines({ calls: [], sample: false }), []);
   });
 
-  it("says when a full page makes the rate a sample", () => {
-    const [line] = cacheHitLine({ calls: [{ promptTokens: 10, cachedTokens: 5 }], sample: true });
+  it("says when a full page makes the counts a sample", () => {
+    const [line] = modelCallLines({
+      calls: [{ provider: "chatgpt", promptTokens: 10, cachedTokens: 5 }],
+      sample: true,
+    });
 
     assert.match(line ?? "", /a sample/u);
   });

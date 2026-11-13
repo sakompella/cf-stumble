@@ -9,7 +9,12 @@ import type {
   ToolCall,
   Usage,
 } from "@earendil-works/pi-ai";
-import type { ModelStreamEvent, ModelUsage, ToolCallDelta } from "../../model-route-wire/events.js";
+import type {
+  ModelStreamEvent,
+  ModelUsage,
+  ServedBy,
+  ToolCallDelta,
+} from "../../model-route-wire/events.js";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 
@@ -27,6 +32,16 @@ function usageOf(usage: ModelUsage): Usage {
 }
 
 const ZERO_USAGE = usageOf({ inputTokens: 0, outputTokens: 0, estimated: false });
+
+function servedFields(served: ServedBy | undefined): Partial<AssistantMessage> {
+  if (served === undefined) return {};
+
+  return {
+    provider: served.provider,
+    model: served.model,
+    ...(served.effort !== undefined && { providerThinkingLevel: served.effort }),
+  };
+}
 
 export class ReplyAssembler {
   readonly #out: AssistantMessageEventStream;
@@ -67,12 +82,10 @@ export class ReplyAssembler {
         );
 
         return;
-      case "provider-fallback":
-        this.#fallback = {
-          type: event.type,
-          timestamp: Date.now(),
-          details: { reason: event.reason, limitedUntil: event.limitedUntil },
-        };
+      case "provider-fallback": {
+        const { type, ...details } = event;
+        this.#fallback = { type, timestamp: Date.now(), details };
+      }
     }
   }
 
@@ -166,7 +179,7 @@ export class ReplyAssembler {
     }
   }
 
-  #done({ message, usage, truncated }: Extract<ModelStreamEvent, { type: "done" }>): void {
+  #done({ message, usage, served, truncated }: Extract<ModelStreamEvent, { type: "done" }>): void {
     this.#start();
     this.#closeBlocks();
 
@@ -185,10 +198,18 @@ export class ReplyAssembler {
     const reason =
       truncated === true ? "length" : message.tool_calls.length > 0 ? "toolUse" : "stop";
 
+    if (served?.fallback !== undefined) {
+      this.#fallback ??= {
+        type: "provider-fallback",
+        timestamp: Date.now(),
+        details: { reason: served.fallback },
+      };
+    }
+
     this.#out.push({
       type: "done",
       reason,
-      message: this.#message(reason, content, usageOf(usage)),
+      message: { ...this.#message(reason, content, usageOf(usage)), ...servedFields(served) },
     });
   }
 }

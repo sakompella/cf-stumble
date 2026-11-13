@@ -100,10 +100,27 @@ describe("parseModelCalls", () => {
 
     const other: JsonRecord = { timestamp: 4, source: { event: "run.settled" } };
 
-    assert.deepEqual(parseModelCalls({ result: { events: { events: [other, call] } } }), {
-      calls: [{ promptTokens: 100, cachedTokens: 80 }],
-      sample: false,
-    });
+    assert.deepEqual(
+      parseModelCalls({ result: { events: { events: [other, call] } } }, "model.call"),
+      { calls: [{ provider: "workers-ai", promptTokens: 100, cachedTokens: 80 }], sample: false },
+    );
+  });
+
+  it("names ChatGPT as the provider of an answered chatgpt.model-call and skips its failures", () => {
+    const ok: JsonRecord = {
+      timestamp: 3,
+      source: { event: "chatgpt.model-call", outcome: "ok", promptTokens: 50, cachedTokens: 40 },
+    };
+
+    const refused: JsonRecord = {
+      timestamp: 4,
+      source: { event: "chatgpt.model-call", outcome: "refused" },
+    };
+
+    assert.deepEqual(
+      parseModelCalls({ result: { events: { events: [refused, ok] } } }, "chatgpt.model-call"),
+      { calls: [{ provider: "chatgpt", promptTokens: 50, cachedTokens: 40 }], sample: false },
+    );
   });
 
   it("marks a full page as a sample instead of failing", () => {
@@ -114,6 +131,9 @@ describe("parseModelCalls", () => {
 
     const page = Array.from({ length: 2000 }, () => call);
 
-    assert.equal(parseModelCalls({ result: { events: { events: page } } }).sample, true);
+    assert.equal(
+      parseModelCalls({ result: { events: { events: page } } }, "model.call").sample,
+      true,
+    );
   });
 });
