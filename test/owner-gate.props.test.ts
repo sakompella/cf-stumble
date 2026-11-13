@@ -126,6 +126,38 @@ test("without the secret every route but the exempt GETs answers 503, and an exe
   });
 });
 
+test("a mutation through the Worker's workers.dev URL passes only with its own origin and a credential", async () => {
+  const own = "https://cf-stumble.example-subdomain.workers.dev";
+  const headers = { authorization: basic("aditya", "pw"), origin: own };
+
+  const accepted = await Effect.runPromise(
+    ownerGateRefusal(
+      new Request(`${own}/api/generations/submit`, { method: "POST", headers }),
+      "pw",
+    ),
+  );
+
+  expect(accepted).toBeUndefined();
+
+  const refused = await Effect.runPromise(
+    ownerGateRefusal(
+      new Request(`${own}/api/generations/submit`, {
+        method: "POST",
+        headers: { ...headers, origin: "https://stumble.akompella.dev" },
+      }),
+      "pw",
+    ),
+  );
+
+  expect(refused?.status).toBe(403);
+
+  const unauthorized = await Effect.runPromise(
+    ownerGateRefusal(new Request(`${own}/api/generations/submit`, { method: "POST" }), "pw"),
+  );
+
+  expect(unauthorized?.status).toBe(401);
+});
+
 test("an authorized state-changing request is refused 403 exactly when a browser says it came from another origin", async () => {
   await hegel.testAsync(async (tc) => {
     const own = tc.draw(originOf);

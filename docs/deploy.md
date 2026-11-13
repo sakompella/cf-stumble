@@ -23,7 +23,7 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 
 The stack is a function of the stage:
 
-- The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, no `workers.dev` subdomain, a `standard-3` container, and traces on.
+- The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, a `workers.dev` subdomain without preview URLs, a `standard-3` container, and traces on.
 - Any other stage `<stage>` is a separate Worker, `cf-stumble-<stage>`, with its own container application attached to its `WorkspaceHost` namespace, a `workers.dev` subdomain without preview URLs, no route, and traces off. Every stage boots the production instance size, which the Durable Object requests at launch.
 - Vitest builds its Worker, `cf-stumble-test`, from `infra/worker-settings.ts` through the Miniflare options in `infra/test-worker.ts`, which `vitest.config.ts` passes to the Workers Vitest plugin. It leaves out the Workers AI binding and the container, because the test runtime has no AI service to reach.
 
@@ -129,6 +129,8 @@ After a production deploy of `main`, the deploy job runs `tools/release-generati
 
 The step authenticates as the owner with the repository secret `OWNER_PASSWORD`, the same password as the Worker secret. Set it once with `gh secret set OWNER_PASSWORD --repo <owner>/<repository>`, which reads it from standard input. Deploys of other stages do not run the release.
 
+The step reaches the owner API at the Worker's `workers.dev` URL, not the routed hostname: the zone's Bot Fight Mode challenges GitHub Actions runners, and a WAF skip rule cannot bypass it, while zone bot rules do not cover `workers.dev`. The first release on the routed hostname failed with Cloudflare's challenge page. The workflow derives the URL from the account's `workers.dev` subdomain through the Cloudflare API with the deploy token, the same lookup Alchemy makes for the state store. Every request sends `Origin` with the URL's own origin, which the owner gate accepts for mutations; Basic auth applies on `workers.dev` as on the routed hostname.
+
 A runner has no terminal, so Alchemy cannot ask you to approve its plan. `--yes` approves it, and a push to `main` applies whatever the plan contains. Review changes to `infra/` in the pull request, and read the plan in the job log afterwards.
 
 ### Credentials
@@ -230,9 +232,7 @@ As the owner, send `POST /api/workspace/reset` to recover. Projects and the harn
 
 ## One entry point
 
-The stage `prod` has no `workers.dev` subdomain. Your instance answers on the hostname you gave the Worker a route for, and nowhere else.
-
-If you want the subdomain as well, set `workersDev` for production in `infra/alchemy.run.ts`.
+The stage `prod` answers on the hostname you gave the Worker a route for, and on its `workers.dev` URL, `https://cf-stumble.<account subdomain>.workers.dev`. The `workers.dev` URL exists for CI: the zone's Bot Fight Mode challenges GitHub Actions runners on the routed hostname and a WAF skip rule cannot bypass it, so the release step reaches the owner API on `workers.dev` (see "Release of main as a generation"). Zone bot rules do not cover `workers.dev`, and the owner gate still requires Basic auth there. Preview URLs stay off on every stage.
 
 ## Connect a project
 

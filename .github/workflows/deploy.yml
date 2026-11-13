@@ -87,10 +87,17 @@ jobs:
           STAGE: ${{ inputs.stage || 'prod' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Find the production Worker's workers.dev URL
+        if: (inputs.stage || 'prod') == 'prod'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          subdomain="$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" | jq -r '.result.subdomain')"
+          echo "STUMBLE_URL=https://cf-stumble.$subdomain.workers.dev" >> "$GITHUB_ENV"
       - name: Release main as the active generation
         if: (inputs.stage || 'prod') == 'prod'
         run: pnpm exec tsx tools/release-generation.mts
         env:
-          STUMBLE_URL: https://stumble.akompella.dev
           TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
