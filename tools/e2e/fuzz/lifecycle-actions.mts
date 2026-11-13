@@ -89,6 +89,7 @@ const REFUSALS = new Set([
   "not-previously-active",
   "facet-compatibility-mismatch",
   "run-active",
+  "drops-active-commit",
 ]);
 
 export type EpochMode = "fresh" | "stale" | "future";

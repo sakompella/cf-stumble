@@ -67,6 +67,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -86,3 +87,10 @@ jobs:
           STAGE: ${{ inputs.stage || 'prod' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Release main as the active generation
+        if: (inputs.stage || 'prod') == 'prod'
+        run: pnpm exec tsx tools/release-generation.mts
+        env:
+          STUMBLE_URL: https://stumble.akompella.dev
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}

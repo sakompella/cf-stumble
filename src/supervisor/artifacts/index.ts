@@ -12,6 +12,8 @@ import { SERVING_FACET_NAME } from "./facet-name.js";
 import type { ActiveGeneration } from "../generations.js";
 import type { WorkspaceHostRpc } from "../../workspace/index.js";
 
+export { MainLineage } from "./main-lineage.js";
+
 export type ModuleMapProblem = StoredModuleMapProblem | HarnessBuildProblem;
 
 export type MainFacetMountProblem = { readonly code: "no-active-generation" } | ModuleMapProblem;

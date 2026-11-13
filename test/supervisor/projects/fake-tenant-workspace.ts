@@ -1,5 +1,10 @@
 import * as Effect from "effect/Effect";
-import { executeHarnessBuildRequest } from "../../../src/workspace/commands/build-harness.js";
+import {
+  executeHarnessBuildRequest,
+  readHarnessLineage,
+  type HarnessLineage,
+  type HarnessLineageRequest,
+} from "../../../src/workspace/commands/index.js";
 import { executeProjectProvisionRequest } from "../../../src/workspace/commands/provision-project.js";
 import { executeProjectRemovalRequest } from "../../../src/workspace/commands/remove-project.js";
 import {
@@ -65,6 +70,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
   login = "octocat";
   repositoryAccess: "granted" | "denied" = "granted";
   cloneExitCode = 0;
+  lineageOutput = "contains unknown\nactive \ntarget ";
   cloneNeedsCredential = false;
   unavailable = false;
   private readonly held: HeldCommand[] = [];
@@ -178,6 +184,8 @@ export class FakeTenantWorkspace implements PromiseOperations {
       );
     }
 
+    if (source.includes("merge-base --is-ancestor")) return this.output(this.lineageOutput);
+
     if (source.includes("git ls-remote")) {
       return this.output(
         this.repositoryAccess === "granted" ? "granted" : "denied fatal: repository not found",
@@ -245,6 +253,10 @@ export class FakeTenantWorkspace implements PromiseOperations {
         request,
       }),
     );
+  }
+
+  lineage(request: HarnessLineageRequest): Promise<HarnessLineage> {
+    return Effect.runPromise(readHarnessLineage(workspaceEffects(this), request));
   }
 
   removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult> {

@@ -296,6 +296,7 @@ test("activation sends nothing until the page has rendered an epoch", () => {
       reading: {
         maybeActive: Option.some({ label: 1, harnessCommit: "abc", status: "ready" }),
         epoch: 3,
+        maybeMainAhead: Option.none(),
       },
     }),
   ]);
@@ -311,7 +312,7 @@ test("a second click while an activation or a submission is running sends nothin
     Message.UpdatedControlLabelInput({ kind: "activate", value: "2" }),
     Message.UpdatedCandidateCommitInput({ value: "abc" }),
     Message.SucceededFetchStatus({
-      reading: { maybeActive: Option.none(), epoch: 3 },
+      reading: { maybeActive: Option.none(), epoch: 3, maybeMainAhead: Option.none() },
     }),
     Message.ClickedControl({ kind: "activate" }),
     Message.ClickedSubmitCandidate(),
@@ -338,14 +339,18 @@ test("a generation label names one whole generation or nothing", () => {
 test("the status answer is read into a numeric label and epoch, or refused", () => {
   const generation = { label: 2, harnessCommit: "abc", status: "ready" };
 
-  expect(generationReading({ activeGeneration: { generation, epoch: 4 } })).toEqual({
+  expect(generationReading({ activeGeneration: { generation, epoch: 4 }, mainAhead: 3 })).toEqual({
     maybeActive: Option.some(generation),
     epoch: 4,
+    maybeMainAhead: Option.some(3),
   });
 
-  expect(generationReading({ activeGeneration: { generation: null, epoch: 0 } })).toEqual({
+  expect(
+    generationReading({ activeGeneration: { generation: null, epoch: 0 }, mainAhead: null }),
+  ).toEqual({
     maybeActive: Option.none(),
     epoch: 0,
+    maybeMainAhead: Option.none(),
   });
 
   expect(

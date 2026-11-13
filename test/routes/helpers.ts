@@ -33,8 +33,8 @@ export function ownerApiSupervisor(
   overrides: Partial<OwnerApiSupervisor> = {},
 ): OwnerApiSupervisor {
   return {
-    getActiveGeneration() {
-      return Promise.resolve({ generation: undefined, epoch: 0 });
+    getStatus() {
+      return Promise.resolve({ activeGeneration: { generation: null, epoch: 0 }, mainAhead: null });
     },
     submitProjectMessage: notCalled("submit a message"),
     projectEvents: notCalled("watch a conversation"),

@@ -122,7 +122,7 @@ export async function selfModification(run: Run): Promise<void> {
       "4. Run with the bash tool: stumble gen prepare <the commit id from step 2>",
       "5. When it reports the generation ready, run with the bash tool the exact stumble gen activate command it printed.",
       "6. If that command came back interrupted, run with the bash tool: stumble gen status",
-      "Then reply with the active generation label.",
+      "Do not open a pull request. Then reply with the active generation label.",
     ].join("\n"),
   );
 

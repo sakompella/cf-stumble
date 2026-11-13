@@ -19,6 +19,8 @@ import type {
   WorkspaceBackendChange,
 } from "./supervisor-env.js";
 
+const RUN_ACTIVE = { ok: false, problem: { code: "run-active" } } as const;
+
 export class Supervisor extends DurableObject<SupervisorEnv> {
   readonly #parts: SupervisorParts;
   readonly #preparations = new Map<GenerationLabel, Promise<StartupCheckResult>>();
@@ -31,7 +33,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       submitGeneration: (harnessCommit) =>
         this.#parts.generations.submit(harnessCommit, "conversation"),
       prepareGeneration: (label) => this.#prepare(label, "conversation"),
-      controlGeneration: (command) => this.#activate(command, "conversation"),
+      controlGeneration: (command) => this.#activate(command, "conversation", true, () => false),
     });
     this.#parts.serving.started(env.CF_VERSION_METADATA?.id ?? null);
   }
@@ -47,13 +49,29 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
     const checking = runAtEntryPoint(
       checkGenerationStartup(this.#parts.startupCheckHost, label, actor),
-    ).finally(() => {
-      this.#preparations.delete(label);
-    });
+    )
+      .then(async (result) => {
+        await this.#recordMainAhead(label);
+
+        return result;
+      })
+      .finally(() => {
+        this.#preparations.delete(label);
+      });
 
     this.#preparations.set(label, checking);
 
     return checking;
+  }
+
+  async #recordMainAhead(label: GenerationLabel): Promise<void> {
+    const { generations, lineage } = this.#parts;
+    const active = generations.active().generation?.harnessCommit;
+    const target = generations.byLabel(label)?.harnessCommit;
+
+    if (active === undefined || target === undefined) return;
+
+    lineage.record(active, (await lineage.read(active, target)).mainAheadOfActive);
   }
 
   getActiveGeneration() {
@@ -64,13 +82,60 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.#parts.generations.submit(harnessCommit, "owner");
   }
 
-  controlGeneration(command: ActivationCommand): GenerationControlResult {
-    if (this.#parts.serving.running()) return { ok: false, problem: { code: "run-active" } };
-
-    return this.#activate(command, "owner");
+  getStatus() {
+    return this.#parts.lineage.status(this.#parts.generations.active());
   }
 
-  #activate(command: ActivationCommand, actor: GenerationActor): GenerationControlResult {
+  controlGeneration(command: ActivationCommand, force = false): Promise<GenerationControlResult> {
+    const running = () => this.#parts.serving.running();
+
+    if (running()) return Promise.resolve(RUN_ACTIVE);
+
+    return this.#activate(command, "owner", force, running);
+  }
+
+  async #activate(
+    command: ActivationCommand,
+    actor: GenerationActor,
+    force: boolean,
+    running: () => boolean,
+  ): Promise<GenerationControlResult> {
+    const { generations, lineage } = this.#parts;
+    const active = generations.active().generation?.harnessCommit;
+    const target = generations.byLabel(command.label)?.harnessCommit;
+
+    if (command.kind === "rollback" || active === undefined || target === undefined) {
+      return this.#switch(command, actor, running);
+    }
+
+    const known = active === target ? undefined : await lineage.read(active, target);
+
+    if (known !== undefined) lineage.record(active, known.mainAheadOfActive);
+
+    const dropped = known?.containsActive === false ? active : undefined;
+
+    if (dropped !== undefined && !force) {
+      return running() ? RUN_ACTIVE : { ok: false, problem: { code: "drops-active-commit" } };
+    }
+
+    const result = this.#switch(command, actor, running);
+
+    if (known !== undefined && result.ok && result.outcome.effect === "activated") {
+      lineage.record(target, known.mainAheadOfTarget);
+    }
+
+    return result.ok && dropped !== undefined
+      ? { ok: true, outcome: { ...result.outcome, droppedCommit: dropped } }
+      : result;
+  }
+
+  #switch(
+    command: ActivationCommand,
+    actor: GenerationActor,
+    running: () => boolean,
+  ): GenerationControlResult {
+    if (running()) return RUN_ACTIVE;
+
     const result = this.#parts.generations.activate(command, actor);
 
     if (result.ok && result.outcome.effect === "activated") {

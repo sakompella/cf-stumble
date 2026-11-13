@@ -19,7 +19,7 @@ function thrown(): Promise<never> {
 }
 
 const throwingRoutes: readonly (readonly [string, Request, Partial<OwnerApiSupervisor>])[] = [
-  ["GET /api/status", new Request(`${ORIGIN}/api/status`), { getActiveGeneration: thrown }],
+  ["GET /api/status", new Request(`${ORIGIN}/api/status`), { getStatus: thrown }],
   ["GET /api/projects", new Request(`${ORIGIN}/api/projects`), { listProjects: thrown }],
   [
     "GET /api/github/connection",
@@ -117,7 +117,7 @@ test("a thrown Supervisor error is logged under its code, redacted", async () =>
 
   const response = await ownerApiResponse(
     new Request(`${ORIGIN}/api/status`),
-    ownerApiSupervisor({ getActiveGeneration: thrown }),
+    ownerApiSupervisor({ getStatus: thrown }),
   );
 
   expect(response.status).toBe(500);

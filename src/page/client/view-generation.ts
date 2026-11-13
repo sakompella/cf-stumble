@@ -190,6 +190,19 @@ function detailsView(model: Model, h: HtmlBuilder<Message>): Html {
   );
 }
 
+function mainAheadView(maybeReading: Option.Option<GenerationReading>, h: HtmlBuilder<Message>) {
+  return Option.match(
+    Option.flatMap(maybeReading, (reading) => reading.maybeMainAhead),
+    {
+      onNone: () => [],
+      onSome: (count) => [
+        " · main ",
+        h.span([h.Class("value"), h.Id(ID.mainAhead)], [`+${count}`]),
+      ],
+    },
+  );
+}
+
 export function generationBarView(model: Model, h: HtmlBuilder<Message>): Html {
   const reading = readingShown(model.maybeReading);
 
@@ -203,6 +216,7 @@ export function generationBarView(model: Model, h: HtmlBuilder<Message>): Html {
           h.span([h.Class("value"), h.Id(ID.activeGenerationLabel)], [reading.label]),
           " · ",
           h.span([h.Class("value"), h.Id(ID.activeGenerationStatus)], [reading.status]),
+          ...mainAheadView(model.maybeReading, h),
           h.button(
             [
               h.Id(ID.refreshStatusButton),

@@ -34,6 +34,7 @@ export const KNOWN_CODES: ReadonlySet<string> = new Set([
   "not-ready",
   "not-previously-active",
   "facet-compatibility-mismatch",
+  "drops-active-commit",
   "no-sign-in",
   "expired",
   "bad-address",
