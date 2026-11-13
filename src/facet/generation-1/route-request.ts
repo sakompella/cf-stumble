@@ -1,7 +1,7 @@
 import {
-  getCurrentSystemMessage,
   getCurrentTools,
   getSystemMessageText,
+  renderSystemMessageUpdate,
   toToolDeclaration,
 } from "@earendil-works/pi-ai";
 import type {
@@ -59,13 +59,20 @@ function routeMessage(message: Exclude<Message, SystemMessage>): RouteMessage {
   return { role: "tool", tool_call_id: message.toolCallId, content: contentText(message.content) };
 }
 
-export function transcriptToRouteRequest(context: TranscriptContext): ModelRouteRequest {
-  const head = getCurrentSystemMessage(context.messages);
-  const system = head === undefined ? "" : getSystemMessageText(head);
+function routeSystemMessage(message: SystemMessage, leading: boolean): RouteMessage | null {
+  const text = leading ? getSystemMessageText(message) : renderSystemMessageUpdate(message);
 
-  const messages = context.messages.flatMap((message) =>
-    message.role === "system" ? [] : [routeMessage(message)],
-  );
+  return text === "" ? null : { role: "system", content: text };
+}
+
+export function transcriptToRouteRequest(context: TranscriptContext): ModelRouteRequest {
+  const messages = context.messages.flatMap((message, index) => {
+    if (message.role !== "system") return [routeMessage(message)];
+
+    const routed = routeSystemMessage(message, index === 0);
+
+    return routed === null ? [] : [routed];
+  });
 
   const tools = getCurrentTools(context.messages).map((tool): ToolDefinition => ({
     type: "function",
@@ -77,7 +84,7 @@ export function transcriptToRouteRequest(context: TranscriptContext): ModelRoute
   }));
 
   return {
-    messages: system === "" ? messages : [{ role: "system", content: system }, ...messages],
+    messages,
     ...(tools.length > 0 && { tools }),
   };
 }
