@@ -35,7 +35,7 @@ export default Alchemy.Stack(
         date: compatibility.date,
         flags: [...compatibility.flags],
       },
-      workersDev: isProduction ? false : { enabled: true, previewsEnabled: false },
+      workersDev: { enabled: true, previewsEnabled: false },
       routes: isProduction
         ? [{ pattern: productionRoute.pattern, zoneName: productionRoute.zone }]
         : [],

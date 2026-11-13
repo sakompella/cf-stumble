@@ -47,6 +47,7 @@ const headers = {
   authorization,
   "content-type": "application/json",
   "user-agent": "cf-stumble-release",
+  origin: new URL(url).origin,
 };
 
 async function answered(response: Promise<Response>): Promise<Answer> {
