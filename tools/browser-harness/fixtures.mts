@@ -123,6 +123,7 @@ export const STATUS_PAYLOAD: JsonValue = {
     generation: { label: 1, harnessCommit: "abc123", status: "ready" },
     epoch: 3,
   },
+  mainAhead: 2,
 };
 
 export const CHATGPT_PAYLOAD: JsonValue = {

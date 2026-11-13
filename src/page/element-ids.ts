@@ -47,6 +47,7 @@ export const OWNER_PAGE_IDS = {
   activeGenerationLabel: "active-generation-label",
   activeGenerationCommit: "active-generation-commit",
   activeGenerationStatus: "active-generation-status",
+  mainAhead: "main-ahead",
   generationEpoch: "generation-epoch",
   statusStatus: "status-status",
 

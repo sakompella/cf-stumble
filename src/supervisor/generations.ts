@@ -79,7 +79,8 @@ export type ControlProblemCode =
   | "not-previously-active"
   | "facet-compatibility-mismatch"
   | "stale-epoch"
-  | "run-active";
+  | "run-active"
+  | "drops-active-commit";
 
 export type GenerationControlResult =
   | Readonly<{
@@ -89,6 +90,7 @@ export type GenerationControlResult =
         generation: Generation;
         epoch: number;
         effect: "activated" | "no-op";
+        droppedCommit?: HarnessCommit;
       }>;
     }>
   | Readonly<{ ok: false; problem: Readonly<{ code: ControlProblemCode }> }>;

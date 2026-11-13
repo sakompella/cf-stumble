@@ -52,6 +52,7 @@ const ActiveGeneration = Schema.Struct({
 export const GenerationReading = Schema.Struct({
   maybeActive: Schema.Option(ActiveGeneration),
   epoch: Schema.Number,
+  maybeMainAhead: Schema.Option(Schema.Number),
 });
 
 export type GenerationReading = typeof GenerationReading.Type;

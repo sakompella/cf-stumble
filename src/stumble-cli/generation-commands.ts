@@ -80,12 +80,17 @@ async function control(
   const result = await generations.controlGeneration({ kind, ...target });
 
   if (result.ok) {
-    const { generation, epoch, effect } = result.outcome;
+    const { generation, epoch, effect, droppedCommit } = result.outcome;
 
-    return printed(
+    const activated =
       effect === "no-op"
         ? `generation ${generation.label} is already active, epoch ${epoch}`
-        : `generation ${generation.label} is now active, epoch ${epoch}`,
+        : `generation ${generation.label} is now active, epoch ${epoch}`;
+
+    return printed(
+      droppedCommit === undefined
+        ? activated
+        : `warning: ${generation.harnessCommit} does not contain ${droppedCommit}, the commit of the generation it replaced; changes only in that commit are no longer served\n${activated}`,
     );
   }
 

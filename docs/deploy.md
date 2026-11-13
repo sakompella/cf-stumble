@@ -23,7 +23,7 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 
 The stack is a function of the stage:
 
-- The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, no `workers.dev` subdomain, a `standard-3` container, and traces on.
+- The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, a `workers.dev` subdomain without preview URLs, a `standard-3` container, and traces on.
 - Any other stage `<stage>` is a separate Worker, `cf-stumble-<stage>`, with its own container application attached to its `WorkspaceHost` namespace, a `workers.dev` subdomain without preview URLs, no route, and traces off. Every stage boots the production instance size, which the Durable Object requests at launch.
 - Vitest builds its Worker, `cf-stumble-test`, from `infra/worker-settings.ts` through the Miniflare options in `infra/test-worker.ts`, which `vitest.config.ts` passes to the Workers Vitest plugin. It leaves out the Workers AI binding and the container, because the test runtime has no AI service to reach.
 
@@ -117,6 +117,19 @@ GitHub Actions deploys production. Two workflows in `.github/workflows/` do the 
 The normal deploy path is therefore a push or merge to `main`. The runner has Docker, so it pulls the Container image that CI published and pushes it to the account's registry. Pushing that image from the Mac through OrbStack failed with "use of closed network connection" during the staging rehearsal, which is why deploys moved to CI.
 
 You can also start a deploy by hand from `main`: open **Actions** > **Deploy** > **Run workflow**, or run `gh workflow run deploy.yml --ref main`. Set `stage` (`-f stage=<stage>`) to deploy a staging copy, the Worker `cf-stumble-<stage>`, from CI; destroy it from a machine afterwards, which needs no Docker. The workflow skips the job when you start it from any other branch.
+
+### Release of main as a generation
+
+After a production deploy of `main`, the deploy job runs `tools/release-generation.mts`. It reads the active generation from `GET /api/status` and makes main's commit the active generation, so a merge to `main` reaches the agent without a manual submit and activate. It skips the release when the active generation already runs that commit, or when `git diff` between the active commit and main's commit shows no change in the files the facet bundles (the module map's esbuild inputs, `package.json`, `pnpm-lock.yaml`, and the module map build scripts). Otherwise it submits the commit, and when the startup check answers `ready` it activates the new generation with the epoch it just read:
+
+- 409 `run-active`: the job tries again every 30 seconds for 15 minutes, then reports in the job summary that the generation is ready and stops without failing the deploy.
+- 409 `stale-epoch`: it reads the epoch again and resends.
+- 409 `drops-active-commit`: `main` does not contain the active generation's commit, usually an agent change whose pull request is not merged yet. The job reports this in the job summary and leaves the active generation in place. Merge the pull request, or activate the new generation with `"force":true` to drop that change.
+- A startup check that does not answer `ready` fails the job; the deploy itself has already finished.
+
+The step authenticates as the owner with the repository secret `OWNER_PASSWORD`, the same password as the Worker secret. Set it once with `gh secret set OWNER_PASSWORD --repo <owner>/<repository>`, which reads it from standard input. Deploys of other stages do not run the release.
+
+The step reaches the owner API at the Worker's `workers.dev` URL, not the routed hostname: the zone's Bot Fight Mode challenges GitHub Actions runners, and a WAF skip rule cannot bypass it, while zone bot rules do not cover `workers.dev`. The first release on the routed hostname failed with Cloudflare's challenge page. The workflow derives the URL from the account's `workers.dev` subdomain through the Cloudflare API with the deploy token, the same lookup Alchemy makes for the state store. Every request sends `Origin` with the URL's own origin, which the owner gate accepts for mutations; Basic auth applies on `workers.dev` as on the routed hostname.
 
 A runner has no terminal, so Alchemy cannot ask you to approve its plan. `--yes` approves it, and a push to `main` applies whatever the plan contains. Review changes to `infra/` in the pull request, and read the plan in the job log afterwards.
 
@@ -219,9 +232,7 @@ As the owner, send `POST /api/workspace/reset` to recover. Projects and the harn
 
 ## One entry point
 
-The stage `prod` has no `workers.dev` subdomain. Your instance answers on the hostname you gave the Worker a route for, and nowhere else.
-
-If you want the subdomain as well, set `workersDev` for production in `infra/alchemy.run.ts`.
+The stage `prod` answers on the hostname you gave the Worker a route for, and on its `workers.dev` URL, `https://cf-stumble.<account subdomain>.workers.dev`. The `workers.dev` URL exists for CI: the zone's Bot Fight Mode challenges GitHub Actions runners on the routed hostname and a WAF skip rule cannot bypass it, so the release step reaches the owner API on `workers.dev` (see "Release of main as a generation"). Zone bot rules do not cover `workers.dev`, and the owner gate still requires Basic auth there. Preview URLs stay off on every stage.
 
 ## Connect a project
 
@@ -267,7 +278,9 @@ Before you submit a generation, `GET /api/status` returns `{"activeGeneration":{
 The first generation does not happen by itself. Submit it, then activate it. With `curl`, send each request as `curl -u "aditya:$CF_STUMBLE_PASSWORD" -H 'content-type: application/json' -d '<body>' https://<your-hostname>/api/generations/submit`:
 
 1. Send `POST /api/generations/submit` with `{"harnessCommit":"<full commit ID>"}`. Read `outcome.generation.label` from its response. The Supervisor creates the workspace as part of this submission and clones or reconciles the harness repository in `/workspace/harness`.
-2. Read the epoch from `GET /api/status`, then send `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`. Use the label from the submission response and the epoch from the status response. A refused activation answers with a 4xx status and `{"ok":false,"problem":{"code":...}}`: 409 `stale-epoch` means the epoch moved, so read it again and resend; 409 `not-ready` means that generation has not passed its startup check; 404 `unknown-generation` means no generation has that label; 409 `run-active` means a run is active, so wait for it to settle or cancel it, then resend.
+2. Read the epoch from `GET /api/status`, then send `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`. Use the label from the submission response and the epoch from the status response. A refused activation answers with a 4xx status and `{"ok":false,"problem":{"code":...}}`: 409 `stale-epoch` means the epoch moved, so read it again and resend; 409 `not-ready` means that generation has not passed its startup check; 404 `unknown-generation` means no generation has that label; 409 `run-active` means a run is active, so wait for it to settle or cancel it, then resend; 409 `drops-active-commit` means the new commit does not contain the active generation's commit (checked with `git merge-base --is-ancestor` in the workspace's harness checkout), so changes made only in that commit would stop being served. Add `"force":true` to the body to activate it anyway. When the check cannot run, for example because a commit is not in the checkout, the activation goes ahead.
+
+`GET /api/status` also returns `mainAhead`: how many commits `origin/main` in the harness checkout has that the active generation's commit does not, as of the last submit or activation, or `null` when it is not known. The page shows it as "main +N" next to the generation. The count comes from the checkout's last fetch, which every submission makes, so status never starts the container.
 
 One submission extracts the requested commit, installs dependencies, bundles the module map, and stores that map in the Supervisor's SQLite storage. These are separate build steps, so a failure reports its phase. The startup check then cold-starts the candidate and asks it for its facet compatibility key. It fails the candidate unless the answer equals the key the deployed Worker holds: the pinned Pi Durable version and the host protocol revision (ADR-0048). The candidate must then answer a scripted conversation: a scripted model asks it to run parallel bash calls in the isolate and the container, `stumble gen status`, and a write, edit and read on a scratch file, then the candidate must finish with the scripted reply. A failure names the step that failed. That conversation never reaches ChatGPT or Workers AI. A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
 

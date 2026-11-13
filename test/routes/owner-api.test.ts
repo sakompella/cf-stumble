@@ -3,16 +3,19 @@ import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label } from "../supervisor/generations/fixtures.js";
 import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
-test("returns the active generation", async () => {
+test("returns the active generation and how far main is ahead of it", async () => {
   const response = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/status"),
     supervisor({
-      getActiveGeneration() {
+      getStatus() {
         const harnessCommit = testHarnessCommit("f53a0e1c1bdbe213ab700a84b1db23615cc24b02");
 
         return Promise.resolve({
-          generation: { label: label(0), harnessCommit, status: "ready" },
-          epoch: 2,
+          activeGeneration: {
+            generation: { label: label(0), harnessCommit, status: "ready" },
+            epoch: 2,
+          },
+          mainAhead: 3,
         });
       },
     }),
@@ -29,6 +32,7 @@ test("returns the active generation", async () => {
       },
       epoch: 2,
     },
+    mainAhead: 3,
   });
 });
 

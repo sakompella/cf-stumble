@@ -9,7 +9,7 @@ import { generationHistory } from "./history/wiring.js";
 import { FACET_COMPATIBILITY, type MainFacetModel } from "../facet/index.js";
 import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
-import { HarnessArtifacts } from "./artifacts/index.js";
+import { HarnessArtifacts, MainLineage } from "./artifacts/index.js";
 import { ServingConversations } from "./conversations/index.js";
 import { ProvisionFence, WorkspaceReadiness } from "./readiness/index.js";
 import { supervisorNames, type SupervisorEnv } from "./supervisor-env.js";
@@ -83,6 +83,7 @@ export function supervisorParts(
   return {
     workspaceName,
     generations,
+    lineage: new MainLineage(ctx.storage.kv, () => env.WORKSPACE_HOST.getByName(workspaceName)),
     startupCheckHost: {
       ctx,
       loader: env.LOADER,
