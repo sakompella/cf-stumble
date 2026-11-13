@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import { workerName } from "../../infra/worker-settings.ts";
 import { send } from "../ops-check/fetch.mts";
+import { HARNESS_REMOTE } from "./github.mts";
 import { execute, succeed } from "./process.mts";
 
 const API = "https://api.cloudflare.com/client/v4";
@@ -85,7 +86,7 @@ export async function deployStage(
   });
 }
 
-export async function setSecret(
+async function setSecret(
   stage: string,
   name: string,
   value: string,
@@ -109,7 +110,7 @@ export async function setSecret(
   );
 }
 
-export async function destroyStage(stage: string, env: NodeJS.ProcessEnv): Promise<void> {
+async function destroyStage(stage: string, env: NodeJS.ProcessEnv): Promise<void> {
   await succeed(
     "pnpm",
     [
@@ -140,7 +141,7 @@ async function stageImages(stage: string, env: NodeJS.ProcessEnv) {
   );
 }
 
-export async function deleteStageImages(stage: string, env: NodeJS.ProcessEnv): Promise<void> {
+async function deleteStageImages(stage: string, env: NodeJS.ProcessEnv): Promise<void> {
   for (const image of await stageImages(stage, env)) {
     for (const tag of image.tags) {
       await succeed(
@@ -162,7 +163,7 @@ export async function deleteStageImages(stage: string, env: NodeJS.ProcessEnv): 
   if (tags.length > 0) await execute("docker", ["rmi", ...tags], { env });
 }
 
-export async function stageLeftovers(
+async function stageLeftovers(
   account: Account,
   stage: string,
   env: NodeJS.ProcessEnv,
@@ -188,4 +189,31 @@ export async function stageLeftovers(
     ...buckets.result.buckets.map((bucket) => `r2 bucket ${bucket.name}`),
     ...images.map((image) => `image ${image.name}`),
   ].filter((entry) => ours(entry.slice(entry.lastIndexOf(" ") + 1)));
+}
+
+export async function deployWithSecrets(
+  stage: string,
+  password: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  await deployStage(stage, env);
+
+  for (const [name, value] of [
+    ["HARNESS_REPOSITORY_URL", HARNESS_REMOTE],
+    ["GH_TOKEN", env["GH_TOKEN"] ?? ""],
+    ["OWNER_PASSWORD", password],
+  ] as const) {
+    await setSecret(stage, name, value, env);
+  }
+
+  await deployStage(stage, env, ["--force"]);
+}
+
+export async function destroyAndCheck(stage: string, env: NodeJS.ProcessEnv): Promise<void> {
+  await destroyStage(stage, env);
+  await deleteStageImages(stage, env);
+
+  const left = await stageLeftovers(accountFrom(env), stage, env);
+
+  if (left.length > 0) throw new Error(`left on the account: ${left.join(", ")}`);
 }

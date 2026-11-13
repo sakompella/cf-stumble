@@ -18,6 +18,8 @@ function commitAt(index: number): HarnessCommit {
   return history[index] ?? testHarnessCommit("7".repeat(40));
 }
 
+const OTHER_BRANCH_TIP = testHarnessCommit("b".repeat(40));
+
 const person = { name: "a", email: "a@example.com", timestamp: 0, timezoneOffset: 0 };
 
 type Repository = { origin: string; commits: Set<string>; head: string };
@@ -113,10 +115,14 @@ class FakeHarnessWorkspace {
             committer: person,
           })
         : Promise.reject(new Error("missing commit")),
-    fetch: (options: { depth?: number } = {}) => {
-      this.calls.push(`fetch ${String(options.depth)}`);
+    fetch: (options: { depth?: number; singleBranch?: boolean } = {}) => {
+      this.calls.push(
+        `fetch ${String(options.depth)}${options.singleBranch === false ? " all" : ""}`,
+      );
 
       for (const commit of history.slice(0, options.depth ?? 1)) this.present().commits.add(commit);
+
+      if (options.singleBranch === false) this.present().commits.add(OTHER_BRANCH_TIP);
 
       return Promise.resolve({ defaultBranch: null, fetchHead: null });
     },
@@ -189,6 +195,19 @@ test("deepens the fetch until the pinned commit is present", async () => {
   expect(workspace.calls.filter((call) => call.startsWith("fetch"))).toEqual([
     "fetch 500",
     "fetch 5000",
+    "fetch undefined",
+  ]);
+});
+
+test("fetches every branch when the default branch lacks the commit", async () => {
+  const workspace = new FakeHarnessWorkspace().cloned();
+
+  await expect(provision(workspace, OTHER_BRANCH_TIP)).resolves.toEqual(ok);
+  expect(workspace.calls.filter((call) => call.startsWith("fetch"))).toEqual([
+    "fetch 500",
+    "fetch 5000",
+    "fetch 100000",
+    "fetch 50 all",
     "fetch undefined",
   ]);
 });

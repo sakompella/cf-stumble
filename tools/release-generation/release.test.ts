@@ -11,17 +11,24 @@ const ACTIVE = "a".repeat(40);
 
 const MAIN = "b".repeat(40);
 
-type Fake = Readonly<{ deps: ReleaseDeps; submitted: string[]; activations: number[] }>;
+type Fake = Readonly<{
+  deps: ReleaseDeps;
+  submitted: string[];
+  activations: number[];
+  forced: boolean[];
+}>;
 
 function fake(answers: readonly ActivationAnswer[], changed = true, ready = true): Fake {
   const submitted: string[] = [];
   const activations: number[] = [];
+  const forced: boolean[] = [];
   let clock = 0;
   let epoch = 4;
 
   return {
     submitted,
     activations,
+    forced,
     deps: {
       owner: {
         active: () => Promise.resolve({ harnessCommit: ACTIVE, epoch }),
@@ -30,13 +37,15 @@ function fake(answers: readonly ActivationAnswer[], changed = true, ready = true
 
           return Promise.resolve({ label: 7, ready, reason: "conversation-failed: no answer" });
         },
-        activate: (_label, observedEpoch) => {
+        activate: (_label, observedEpoch, force) => {
           activations.push(observedEpoch);
+          forced.push(force);
           epoch += 1;
 
           return Promise.resolve(answers[activations.length - 1] ?? { ok: true, code: undefined });
         },
       },
+      force: false,
       facetChangedSince: () => Promise.resolve(changed),
       wait: (ms) => {
         clock += ms;
@@ -84,6 +93,13 @@ describe("release of main's commit as a generation", () => {
     const { deps } = fake([{ ok: false, code: "drops-active-commit" }]);
 
     assert.match(await releaseGeneration(MAIN, deps), /does not contain/u);
+  });
+
+  it("sends force when asked, so a preview can replace another branch's generation", async () => {
+    const { deps, forced } = fake([]);
+
+    assert.match(await releaseGeneration(MAIN, { ...deps, force: true }), /Activated/u);
+    assert.deepEqual(forced, [true]);
   });
 
   it("fails when the startup check is not ready", async () => {

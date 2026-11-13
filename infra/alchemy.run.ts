@@ -44,7 +44,7 @@ export default Alchemy.Stack(
       codeUpdateStrategy: { mode: "immediate" },
       observability: observability(isProduction),
       env: {
-        ...plainTextBindings,
+        ...plainTextBindings(stage),
         SUPERVISOR: Cloudflare.DurableObject(durableObjectClasses.SUPERVISOR),
         WORKSPACE_HOST: Cloudflare.DurableObject(durableObjectClasses.WORKSPACE_HOST, {
           containers: [

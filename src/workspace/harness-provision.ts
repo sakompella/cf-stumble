@@ -68,6 +68,16 @@ async function obtainCommit(git: Git, dir: string, commit: HarnessCommit): Promi
     await git.fetch({ dir, remote: "origin", depth, singleBranch: true, tags: false });
   }
 
+  if (await hasCommit(git, dir, commit)) return true;
+
+  await git.fetch({
+    dir,
+    remote: "origin",
+    depth: HARNESS_CLONE_DEPTH,
+    singleBranch: false,
+    tags: false,
+  });
+
   return hasCommit(git, dir, commit);
 }
 

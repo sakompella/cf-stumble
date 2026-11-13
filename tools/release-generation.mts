@@ -1,5 +1,6 @@
 import { appendFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
+import { parseArgs } from "node:util";
 import * as Schema from "effect/Schema";
 import { execute } from "./e2e/process.mts";
 import { GENERATION_1_MODULE_MAP, moduleMapSourceFiles } from "./module-map-build.mts";
@@ -33,6 +34,8 @@ function required(name: string): string {
   return value;
 }
 
+const { values } = parseArgs({ options: { force: { type: "boolean", default: false } } });
+
 const url = required("STUMBLE_URL");
 
 const target = required("TARGET_SHA");
@@ -41,7 +44,7 @@ const authorization = `Basic ${Buffer.from(`aditya:${required("OWNER_PASSWORD")}
 
 type Answer = Readonly<{ status: number; text: string }>;
 
-type RequestBody = Readonly<Record<string, string | number>>;
+type RequestBody = Readonly<Record<string, string | number | boolean>>;
 
 const headers = {
   authorization,
@@ -98,8 +101,13 @@ const owner: ReleaseOwner = {
         : preparation.problem.code,
     };
   },
-  async activate(label, observedEpoch) {
-    const { status, text } = await post("/api/generations/activate", { label, observedEpoch });
+  async activate(label, observedEpoch, force) {
+    const { status, text } = await post("/api/generations/activate", {
+      label,
+      observedEpoch,
+      force,
+    });
+
     const refusal = Schema.decodeUnknownOption(Schema.fromJsonString(Refusal))(text);
 
     return {
@@ -130,6 +138,7 @@ async function facetChangedSince(harnessCommit: string): Promise<boolean> {
 
 const summary = await releaseGeneration(target, {
   owner,
+  force: values.force,
   facetChangedSince,
   wait: (ms) => sleep(ms),
   now: Date.now,
