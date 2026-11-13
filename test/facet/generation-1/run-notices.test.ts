@@ -105,3 +105,77 @@ test("a deadline abort leaves one notice however often it repeats, and an owner 
     expect(await noticeCount(facet, cancelled)).toBe(0);
   });
 });
+
+const toolCall = replies([
+  {
+    type: "done",
+    message: {
+      role: "assistant",
+      content: null,
+      tool_calls: [{ id: "call_1", function: { name: "echo", arguments: '{"text":"hi"}' } }],
+    },
+    usage: NO_USAGE,
+  },
+]);
+
+test("a deadline abort after progress continues the run while another run fits in its budget", async () => {
+  const { capability, requests } = scriptedRoute(toolCall, silent, answers);
+  const reports: Array<Parameters<ConversationHost["running"]>[0]> = [];
+
+  const reporting: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
+    ...host,
+    running: (conversations) => {
+      reports.push(conversations);
+
+      return Promise.resolve();
+    },
+    dup: () => reporting,
+  };
+
+  await runInDurableObject(env.SUPERVISOR.getByName("run-continue"), async (_i, state) => {
+    const facet = new MainFacet(state, env);
+
+    await facet.attach(reporting, capability);
+    const id = await facet.createConversation("/workspace");
+
+    await facet.submit(id, "work", "r1", 30);
+    await vi.waitFor(() => {
+      expect(requests).toHaveLength(2);
+    });
+    await facet.abort(id, "deadline");
+
+    await vi.waitFor(() => {
+      expect(requests).toHaveLength(3);
+    });
+    expect(requests[2]?.messages.at(-1)).toMatchObject({ role: "user" });
+    expect(JSON.stringify(requests[2]?.messages.at(-1))).toContain("8 of 30 minutes used");
+    expect(reports).toContainEqual([expect.objectContaining({ conversationId: id, continues: 1 })]);
+    await vi.waitFor(async () => {
+      expect(await entriesText(facet, id)).toContain('"done"');
+    });
+    expect(await noticeCount(facet, id)).toBe(1);
+  });
+});
+
+test("a deadline abort after progress only notices when the budget is one run", async () => {
+  const { capability, requests } = scriptedRoute(toolCall, silent, answers);
+
+  await runInDurableObject(env.SUPERVISOR.getByName("run-continue-spent"), async (_i, state) => {
+    const facet = new MainFacet(state, env);
+
+    await facet.attach(host, capability);
+    const id = await facet.createConversation("/workspace");
+
+    await facet.submit(id, "work", "r1", 8);
+    await vi.waitFor(() => {
+      expect(requests).toHaveLength(2);
+    });
+    await facet.abort(id, "deadline");
+
+    await vi.waitFor(async () => {
+      expect(await noticeCount(facet, id)).toBe(1);
+    });
+    expect(await entriesText(facet, id)).toContain("Send a message to continue");
+    expect(requests).toHaveLength(2);
+  });
+});

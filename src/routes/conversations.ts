@@ -9,6 +9,7 @@ import {
   type SupervisorCallFailed,
 } from "./json.js";
 import { projectIdFromPath, type ProjectRouteSuffix } from "./route-pattern.js";
+import { DEFAULT_RUN_BUDGET_MINUTES, RUN_BUDGET_MINUTES } from "../turn-budget.js";
 import type {
   ConversationProblem,
   ConversationResult,
@@ -19,6 +20,7 @@ export type ConversationApiSupervisor = Readonly<{
     projectId: string,
     content: string,
     requestId: string,
+    budgetMinutes: number,
   ) => Promise<ConversationResult<{ submissionId: number }>>;
   projectEvents: (
     projectId: string,
@@ -44,7 +46,11 @@ const PROBLEM_STATUS = {
   "generation-failed": 503,
 } as const satisfies Record<ConversationProblem["code"], number>;
 
-const MessageBody = Schema.Struct({ content: Schema.String, requestId: Schema.String });
+const MessageBody = Schema.Struct({
+  content: Schema.String,
+  requestId: Schema.String,
+  budgetMinutes: Schema.optional(Schema.Literals(RUN_BUDGET_MINUTES)),
+});
 
 function problemResponse(problem: ConversationProblem): Response {
   return Response.json({ ok: false, problem }, { status: PROBLEM_STATUS[problem.code] });
@@ -84,9 +90,16 @@ const messageResponse = Effect.fnUntraced(function* (
   supervisor: ConversationApiSupervisor,
   projectId: string,
 ) {
-  const { content, requestId } = yield* decodeRequestBody(request, MessageBody);
+  const {
+    content,
+    requestId,
+    budgetMinutes = DEFAULT_RUN_BUDGET_MINUTES,
+  } = yield* decodeRequestBody(request, MessageBody);
 
-  return yield* answer(() => supervisor.submitProjectMessage(projectId, content, requestId), 202);
+  return yield* answer(
+    () => supervisor.submitProjectMessage(projectId, content, requestId, budgetMinutes),
+    202,
+  );
 }, invalidRequestBody("invalid-message-request"));
 
 function routeFor(

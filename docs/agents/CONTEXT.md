@@ -36,6 +36,15 @@ run notice: a harness entry in the conversation that says what happened and that
 the run. The model reads it on the next turn, and the owner page shows it
 (`src/facet/generation-1/run-notices.ts`). An owner cancel leaves no notice.
 
+**Run budget**:
+The time the owner gives one message, chosen in the page composer: 8, 30 or 60 minutes, 30 by
+default. When the deadline aborts a run that got at least one model reply, and another 8-minute run
+still fits in the budget, the facet submits the run notice as a new message, which starts the next
+run at once; the notice then says how many of the budget's minutes are used. This is an auto-continue.
+With 30 minutes a message gets up to three runs, with 60 up to seven. When the budget is spent, or
+the run got no reply, the notice asks for a message as before. A cancel stops the chain, and a new
+owner message starts its own budget (`src/facet/generation-1/run-budget.ts`).
+
 ## Repositories and files
 
 **Commit**:

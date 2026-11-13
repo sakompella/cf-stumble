@@ -6,7 +6,11 @@ import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js"
 
 export type { GenerationControl };
 
-export type RunningConversation = Readonly<{ conversationId: string; run?: number | undefined }>;
+export type RunningConversation = Readonly<{
+  conversationId: string;
+  run?: number | undefined;
+  continues?: number | undefined;
+}>;
 
 export type RunFailures = Readonly<Record<string, string>>;
 
@@ -37,7 +41,12 @@ export interface ConversationFacet {
     generations?: GenerationControl,
   ): Promise<void>;
   createConversation(cwd: string): Promise<string>;
-  submit(conversationId: string, content: string, requestId: string): Promise<number>;
+  submit(
+    conversationId: string,
+    content: string,
+    requestId: string,
+    budgetMinutes?: number,
+  ): Promise<number>;
   events(conversationId: string, from?: number): Promise<ReadableStream<Uint8Array>>;
   entries(conversationId: string, request: EntriesRequest): Promise<string>;
   abort(conversationId: string, reason?: AbortReason): Promise<void>;

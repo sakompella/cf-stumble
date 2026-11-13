@@ -123,7 +123,7 @@ test("sending trims the prompt, clears it, and posts it under a minted request i
   const minted = update(clicked.model, Message.MintedRequestId(MINTED));
 
   expect(minted.commands?.[0]?.name).toBe("SendMessage");
-  expect(minted.commands?.[0]?.args).toEqual(MINTED);
+  expect(minted.commands?.[0]?.args).toEqual({ ...MINTED, budgetMinutes: 30 });
   expect(whoShown(minted.model)).toEqual(["you · sending"]);
 });
 

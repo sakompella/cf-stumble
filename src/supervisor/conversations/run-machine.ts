@@ -11,6 +11,7 @@ const runFields = {
   run: Schema.NullOr(Schema.Number),
   deadline: Schema.Number,
   instance: Schema.NullOr(Schema.Number),
+  continues: Schema.Number,
 };
 
 export const RunState = Schema.TaggedUnion({
@@ -54,6 +55,7 @@ export type RunCommand = Data.TaggedEnum<{
     readonly outcome: RunOutcome;
     readonly errorCode: string | null;
     readonly deadline: number;
+    readonly continues: number;
   };
 }>;
 
@@ -82,7 +84,12 @@ function started({ report, instance, now }: Reported & { report: RunningConversa
   const deadline = now + PROJECT_RUN_DEADLINE_MS;
 
   return {
-    state: RunState.cases.Running.make({ run: report.run ?? null, deadline, instance }),
+    state: RunState.cases.Running.make({
+      run: report.run ?? null,
+      deadline,
+      instance,
+      continues: report.continues ?? 0,
+    }),
     commands: [RunCommand.Started({ deadline })],
   };
 }
@@ -96,10 +103,20 @@ function adopted(active: ActiveRun, report: RunningConversation, event: Reported
   const run = active.run ?? report.run ?? null;
 
   if (RunState.guards.Running(active) && active.instance !== null && active.instance !== instance) {
-    return RunState.cases.Running.make({ run, deadline: now + PROJECT_RUN_DEADLINE_MS, instance });
+    return RunState.cases.Running.make({
+      run,
+      deadline: now + PROJECT_RUN_DEADLINE_MS,
+      instance,
+      continues: active.continues,
+    });
   }
 
-  const fields = { run, deadline: active.deadline, instance: active.instance ?? instance };
+  const fields = {
+    run,
+    deadline: active.deadline,
+    instance: active.instance ?? instance,
+    continues: active.continues,
+  };
 
   return RunState.guards.Ending(active)
     ? RunState.cases.Ending.make({ ...fields, ending: active.ending })
@@ -129,6 +146,7 @@ function reportedOn(active: ActiveRun, event: Reported, outcome: RunOutcome): Ru
     outcome: owned ? outcome : "replaced",
     errorCode,
     deadline: active.deadline,
+    continues: active.continues,
   });
 
   if (report === undefined) return { state: RunState.cases.Idle.make({}), commands: [settled] };
@@ -157,6 +175,7 @@ export function transition(state: RunState, event: RunEvent): RunStep {
               run: running.run,
               deadline: running.deadline,
               instance: running.instance,
+              continues: running.continues,
               ending,
             }),
           ),

@@ -29,7 +29,7 @@ const BODY_ROUTES: readonly BodyRoute[] = [
   {
     path: "/api/projects/p/messages",
     good: { content: "hi", requestId: "r" },
-    badBodies: [],
+    badBodies: ['{"content":"hi","requestId":"r","budgetMinutes":45}'],
     refusalCode: "invalid-message-request",
     reachedStatus: 409,
     supervisorReached: (reached) => ({
@@ -148,7 +148,7 @@ test.each(BODY_ROUTES)("$path refuses each bad body before the Supervisor", asyn
   }
 });
 
-test("the message route hands the Supervisor its project id, content and request id unchanged", async () => {
+test("the message route hands the Supervisor its project id, content, request id and budget", async () => {
   await hegel.testAsync(async (tc) => {
     const projectId = tc.draw(
       gs.oneOf(gs.text({ minSize: 1 }), gs.text({ alphabet: "%2541/ .-é", minSize: 1 })),
@@ -158,12 +158,17 @@ test("the message route hands the Supervisor its project id, content and request
 
     const content = tc.draw(gs.text());
     const requestId = tc.draw(gs.text());
-    const received: string[] = [];
+
+    const budgetMinutes = tc.draw(
+      gs.optional(gs.sampledFrom([8, 30, 60])).map((minutes) => minutes ?? undefined),
+    );
+
+    const received: Array<string | number> = [];
 
     await ownerApiResponse(
       post(
         `/api/projects/${encodeURIComponent(projectId)}/messages`,
-        JSON.stringify({ content, requestId }),
+        JSON.stringify({ content, requestId, budgetMinutes }),
       ),
       supervisor({
         submitProjectMessage: (...args) => {
@@ -174,6 +179,6 @@ test("the message route hands the Supervisor its project id, content and request
       }),
     );
 
-    expect(received).toEqual([projectId, content, requestId]);
+    expect(received).toEqual([projectId, content, requestId, budgetMinutes ?? 30]);
   });
 });

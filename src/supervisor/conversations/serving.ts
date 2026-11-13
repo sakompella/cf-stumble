@@ -95,7 +95,7 @@ export class ServingConversations {
     return this.#runs.running(Date.now());
   }
 
-  submit(projectId: string, content: string, requestId: string) {
+  submit(projectId: string, content: string, requestId: string, budgetMinutes: number) {
     return answered(
       Effect.gen({ self: this }, function* () {
         const message = parseMessage(content, requestId);
@@ -112,7 +112,7 @@ export class ServingConversations {
           (current) => this.#use(mounted, (facet) => createConversation(facet, current)),
           (conversationId) =>
             this.#use(mounted, (facet) =>
-              facet.submit(conversationId, message.content, message.requestId),
+              facet.submit(conversationId, message.content, message.requestId, budgetMinutes),
             ).pipe(Effect.map((submissionId) => ({ submissionId }))),
         );
       }),

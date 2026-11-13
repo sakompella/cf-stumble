@@ -10,6 +10,7 @@ const sent = {
   projectId: Schema.String,
   text: Schema.String,
   afterEntry: Schema.Number,
+  budgetMinutes: Schema.Number,
 };
 
 export const Outgoing = defineTaggedUnion({
@@ -30,23 +31,22 @@ export const OutgoingEvent = defineTaggedUnion({
 export type OutgoingEvent = typeof OutgoingEvent.Type;
 
 function advance(item: Outgoing, event: OutgoingEvent): Option.Option<Outgoing> {
-  const { requestId, projectId, text, afterEntry } = item;
+  const { requestId, projectId, text, afterEntry, budgetMinutes } = item;
+  const fields = { requestId, projectId, text, afterEntry, budgetMinutes };
 
   return Outgoing.match(item, {
     Sending: () =>
       OutgoingEvent.match(event, {
-        Admitted: ({ submissionId }) =>
-          Option.some(Outgoing.Queued({ requestId, projectId, text, afterEntry, submissionId })),
-        Lost: () => Option.some(Outgoing.Unconfirmed({ requestId, projectId, text, afterEntry })),
+        Admitted: ({ submissionId }) => Option.some(Outgoing.Queued({ ...fields, submissionId })),
+        Lost: () => Option.some(Outgoing.Unconfirmed(fields)),
         Retried: () => Option.some(item),
         Refused: () => Option.none(),
       }),
     Unconfirmed: () =>
       OutgoingEvent.match(event, {
-        Admitted: ({ submissionId }) =>
-          Option.some(Outgoing.Queued({ requestId, projectId, text, afterEntry, submissionId })),
+        Admitted: ({ submissionId }) => Option.some(Outgoing.Queued({ ...fields, submissionId })),
         Lost: () => Option.some(item),
-        Retried: () => Option.some(Outgoing.Sending({ requestId, projectId, text, afterEntry })),
+        Retried: () => Option.some(Outgoing.Sending(fields)),
         Refused: () => Option.none(),
       }),
     Queued: () =>

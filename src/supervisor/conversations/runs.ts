@@ -28,6 +28,7 @@ type RunRow = Readonly<{
   deadline: number;
   ending: RunEnding | null;
   instance: number | null;
+  continues: number;
 }>;
 
 export type FacetReplacement = Readonly<{
@@ -45,8 +46,23 @@ export type Settlement = Readonly<{
   errorCode: string | null;
 }>;
 
+function addContinuesColumn(sql: SqlStorage): void {
+  const columns = sql
+    .exec<{ readonly name: string }>("PRAGMA table_info(conversation_runs)")
+    .toArray();
+
+  if (!columns.some((column) => column.name === "continues")) {
+    sql.exec("ALTER TABLE conversation_runs ADD COLUMN continues INTEGER NOT NULL DEFAULT 0");
+  }
+}
+
 function stateFromRow(row: RunRow): ActiveRun {
-  const fields = { run: row.run, deadline: row.deadline, instance: row.instance };
+  const fields = {
+    run: row.run,
+    deadline: row.deadline,
+    instance: row.instance,
+    continues: row.continues,
+  };
 
   return row.ending === null
     ? RunState.cases.Running.make(fields)
@@ -65,9 +81,11 @@ export class ConversationRuns {
         run INTEGER,
         deadline INTEGER NOT NULL,
         ending TEXT CHECK (ending IN ('cancelled', 'interrupted')),
-        instance INTEGER
+        instance INTEGER,
+        continues INTEGER NOT NULL DEFAULT 0
       );
     `);
+    addContinuesColumn(storage.sql);
   }
 
   cancelled(conversationId: string): string {
@@ -182,16 +200,17 @@ export class ConversationRuns {
 
     const upsert = (run: ActiveRun, ending: RunEnding | null) =>
       sql.exec(
-        `INSERT INTO conversation_runs (conversation_id, run, deadline, ending, instance)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO conversation_runs (conversation_id, run, deadline, ending, instance, continues)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT (conversation_id) DO UPDATE SET
-           run = excluded.run, deadline = excluded.deadline,
-           ending = excluded.ending, instance = excluded.instance`,
+           run = excluded.run, deadline = excluded.deadline, ending = excluded.ending,
+           instance = excluded.instance, continues = excluded.continues`,
         conversationId,
         run.run,
         run.deadline,
         ending,
         run.instance,
+        run.continues,
       );
 
     RunState.match(state, {
@@ -205,7 +224,7 @@ export class ConversationRuns {
   #runs(): ReadonlyMap<string, ActiveRun> {
     const rows = this.#storage.sql
       .exec<RunRow>(
-        "SELECT conversation_id, run, deadline, ending, instance FROM conversation_runs",
+        "SELECT conversation_id, run, deadline, ending, instance, continues FROM conversation_runs",
       )
       .toArray();
 
@@ -225,12 +244,13 @@ function perform(
 
       return [];
     },
-    Settled: ({ outcome, errorCode, deadline }) => {
+    Settled: ({ outcome, errorCode, deadline, continues }) => {
       logEvent("info", "run.settled", {
         totalMs: now - (deadline - PROJECT_RUN_DEADLINE_MS),
         generation,
         outcome,
         errorCode,
+        continues,
       });
 
       return [{ conversationId, outcome, errorCode }];

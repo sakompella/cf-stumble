@@ -3,7 +3,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { BackendSetting } from "../../backend-setting.js";
 import { ChatGPT } from "./chatgpt.js";
 import { Conversation } from "./conversation.js";
-import { ControlKind, GenerationReading, GitHubReport, Project } from "./model.js";
+import { ControlKind, GenerationReading, GitHubReport, Project, RunBudget } from "./model.js";
 
 export const Message = defineMessageUnion({
   ClickedSidebarToggle: {},
@@ -19,6 +19,7 @@ export const Message = defineMessageUnion({
   ClickedBackend: { backend: BackendSetting },
 
   UpdatedPrompt: { value: Schema.String },
+  ChoseRunBudget: { minutes: RunBudget },
   ClickedSendTurn: {},
   PressedSendShortcut: {},
   ClickedCancelTurn: {},

@@ -3,7 +3,7 @@ import * as Option from "effect/Option";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import { Message } from "./message.js";
 import { FreshThread, freshThreadWording } from "./fresh-thread.js";
-import type { Model } from "./model.js";
+import { RunBudget, type Model } from "./model.js";
 import { streamWording } from "./stream-phase.js";
 import { statusText } from "./view-parts.js";
 import { transcriptOf } from "./transcript.js";
@@ -69,6 +69,25 @@ function turnButtons(model: Model, h: HtmlBuilder<Message>): Html {
   );
 }
 
+function budgetButtons(model: Model, h: HtmlBuilder<Message>): Html {
+  return h.div(
+    [h.Class("row"), h.Role("group"), h.AriaLabel("time budget")],
+    [
+      h.span([h.Class("field-label")], ["time budget"]),
+      ...RunBudget.literals.map((minutes) =>
+        h.button(
+          [
+            h.Type("button"),
+            h.AriaPressed(model.runBudget === minutes ? "true" : "false"),
+            h.OnClick(Message.ChoseRunBudget({ minutes })),
+          ],
+          [`${minutes} min`],
+        ),
+      ),
+    ],
+  );
+}
+
 function composerView(model: Model, h: HtmlBuilder<Message>): Html {
   return h.div(
     [h.Class("composer")],
@@ -82,6 +101,7 @@ function composerView(model: Model, h: HtmlBuilder<Message>): Html {
         h.OnInput((value) => Message.UpdatedPrompt({ value })),
         h.OnKeyDownPreventDefault(sendShortcut),
       ]),
+      budgetButtons(model, h),
       turnButtons(model, h),
       h.p([h.Class("note"), h.Id(ID.freshThreadStatus)], [freshThreadWording(model.freshThread)]),
     ],

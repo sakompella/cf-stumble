@@ -13,7 +13,7 @@ import type {
 } from "../conversation-protocol.js";
 import { openSession, type Session } from "./open-session.js";
 import { ROUTE_AGENT } from "./route-provider.js";
-import { noticeDeadlineAbort } from "./run-notices.js";
+import { endDeadlineRun, submitWithBudget } from "./run-budget.js";
 
 const context = BACKGROUND_CONTEXT;
 
@@ -79,14 +79,22 @@ export class MainFacet extends DurableObject implements ConversationFacet {
     return String(conversation.id);
   }
 
-  async submit(conversationId: string, content: string, requestId: string): Promise<number> {
+  async submit(
+    conversationId: string,
+    content: string,
+    requestId: string,
+    budgetMinutes?: number,
+  ): Promise<number> {
     const conversation = await this.#conversation(conversationId);
     const endWork = await this.#beginWork();
 
     try {
-      const submission = await conversation.submit({ type: "input", content, requestId }, context);
-
-      return submission.id;
+      return await submitWithBudget(
+        conversation,
+        { type: "input", content, requestId },
+        budgetMinutes,
+        context,
+      );
     } finally {
       endWork();
     }
@@ -151,7 +159,7 @@ export class MainFacet extends DurableObject implements ConversationFacet {
 
     void conversation
       .abort(context)
-      .then(() => (reason === "deadline" ? noticeDeadlineAbort(conversation, context) : undefined))
+      .then(() => (reason === "deadline" ? endDeadlineRun(conversation, context) : undefined))
       .catch(() => {})
       .finally(endWork);
   }

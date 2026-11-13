@@ -128,11 +128,30 @@ test("the streaming answer and the messages this page has not seen placed follow
       projectId: "repo",
       text: "queued one",
       afterEntry: 0,
+      budgetMinutes: 30,
       submissionId: 9,
     }),
-    Outgoing.Sending({ requestId: "b", projectId: "repo", text: "sending one", afterEntry: 0 }),
-    Outgoing.Unconfirmed({ requestId: "c", projectId: "repo", text: "lost one", afterEntry: 0 }),
-    Outgoing.Sending({ requestId: "d", projectId: "other", text: "elsewhere", afterEntry: 0 }),
+    Outgoing.Sending({
+      requestId: "b",
+      projectId: "repo",
+      text: "sending one",
+      afterEntry: 0,
+      budgetMinutes: 30,
+    }),
+    Outgoing.Unconfirmed({
+      requestId: "c",
+      projectId: "repo",
+      text: "lost one",
+      afterEntry: 0,
+      budgetMinutes: 30,
+    }),
+    Outgoing.Sending({
+      requestId: "d",
+      projectId: "other",
+      text: "elsewhere",
+      afterEntry: 0,
+      budgetMinutes: 30,
+    }),
   ];
 
   expect(transcriptOf(conversation, outgoing, "repo")).toMatchObject([

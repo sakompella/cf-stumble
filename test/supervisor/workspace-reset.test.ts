@@ -71,7 +71,7 @@ test("while a reset runs, messages, connects, disconnects, and a second reset ar
     await fake.started;
 
     await expect(
-      supervisor.submitProjectMessage("sample-project-one", "a message during the reset", "r1"),
+      supervisor.submitProjectMessage("sample-project-one", "a message during the reset", "r1", 30),
     ).resolves.toEqual(busy);
     await expect(supervisor.resetWorkspace()).resolves.toEqual(busy);
     await expect(supervisor.connectProject(sampleProjectTwo.repositoryUrl, "")).resolves.toEqual({

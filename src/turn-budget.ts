@@ -1,1 +1,7 @@
 export const PROJECT_RUN_DEADLINE_MS = 8 * 60 * 1_000;
+
+export const RUN_DEADLINE_MINUTES = PROJECT_RUN_DEADLINE_MS / 60_000;
+
+export const RUN_BUDGET_MINUTES = [RUN_DEADLINE_MINUTES, 30, 60] as const;
+
+export const DEFAULT_RUN_BUDGET_MINUTES = 30 satisfies (typeof RUN_BUDGET_MINUTES)[number];

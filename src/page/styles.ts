@@ -66,6 +66,7 @@ export const OWNER_PAGE_STYLES = `
   textarea { box-sizing: border-box; width: 100%; }
   button { cursor: pointer; padding: 0.3rem 0.7rem; }
   button:disabled { cursor: default; opacity: 0.55; }
+  button[aria-pressed="true"] { font-weight: 600; }
   :focus-visible { outline: 2px solid rgba(90, 140, 220, 0.9); outline-offset: 2px; }
   .messages {
     list-style: none;

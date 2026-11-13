@@ -17,6 +17,7 @@ import {
 } from "../conversation-protocol.js";
 import { computerEnv } from "./computer-env.js";
 import { harnessRegistry } from "./registry.js";
+import { continuesOf } from "./run-budget.js";
 import { ROUTE_MODEL, routeProvider } from "./route-provider.js";
 
 const CONTEXT_BUDGET_TOKENS = 131_072;
@@ -29,7 +30,11 @@ const SETTINGS: HarnessSettings = {
   },
 };
 
-type Reported = Readonly<{ conversationId: string; run?: SubmissionId | undefined }>;
+type Reported = Readonly<{
+  conversationId: string;
+  run?: SubmissionId | undefined;
+  continues: number;
+}>;
 
 export type Session = Readonly<{ harness: Harness; host: ConversationHost }>;
 
@@ -165,13 +170,22 @@ async function runningConversations(
     .filter((task) => !task.background)
     .map((task) => task.conversationId);
 
-  return [...new Set(conversations)]
-    .toSorted((a, b) => a - b)
-    .map((conversationId) => ({
-      conversationId: String(conversationId),
-      run: submissions.find(
-        (submission) =>
-          submission.conversationId === conversationId && submission.status === "placed",
-      )?.id,
-    }));
+  return Promise.all(
+    [...new Set(conversations)]
+      .toSorted((a, b) => a - b)
+      .map(async (conversationId) => {
+        const placed = submissions
+          .filter(
+            (submission) =>
+              submission.conversationId === conversationId && submission.status === "placed",
+          )
+          .map((submission) => submission.id);
+
+        return {
+          conversationId: String(conversationId),
+          run: placed[0],
+          continues: await continuesOf(harness, conversationId, placed, BACKGROUND_CONTEXT),
+        };
+      }),
+  );
 }
