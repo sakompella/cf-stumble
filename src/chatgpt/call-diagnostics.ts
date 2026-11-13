@@ -45,6 +45,7 @@ export async function logAnsweredCall(
   usage: ModelUsage,
   body: ResponsesRequestBody,
   usageFields: readonly string[] | undefined,
+  cacheWriteTokens: number | undefined,
 ): Promise<void> {
   const fingerprints = await promptFingerprints(body);
 
@@ -53,6 +54,7 @@ export async function logAnsweredCall(
     model,
     promptTokens: usage.inputTokens,
     cachedTokens: usage.cachedTokens ?? 0,
+    cacheWriteTokens: cacheWriteTokens ?? null,
     completionTokens: usage.outputTokens,
     estimated: usage.estimated,
     ...fingerprints,

@@ -245,7 +245,13 @@ export function chatgptTurn(
       });
 
       yield* Effect.promise(() =>
-        logAnsweredCall(input.model, answer.usage, requestBody, reader.usageFields),
+        logAnsweredCall(
+          input.model,
+          answer.usage,
+          requestBody,
+          reader.usageFields,
+          reader.cacheWriteTokens,
+        ),
       );
 
       return answer;

@@ -18,7 +18,11 @@ import {
 const CACHED = responsesEvent({
   type: "response.completed",
   response: {
-    usage: { input_tokens: 100, input_tokens_details: { cached_tokens: 64 }, output_tokens: 3 },
+    usage: {
+      input_tokens: 100,
+      input_tokens_details: { cached_tokens: 64, cache_write_tokens: 32 },
+      output_tokens: 3,
+    },
   },
 });
 
@@ -71,7 +75,7 @@ test("the first answered call in an isolate logs the prompt fingerprints and the
       firstInputHash: await hash12('{"role":"user","content":"hi"}'),
       inputItems: 1,
       usageFields:
-        "input_tokens,input_tokens_details,input_tokens_details.cached_tokens,output_tokens",
+        "input_tokens,input_tokens_details,input_tokens_details.cached_tokens,input_tokens_details.cache_write_tokens,output_tokens",
     }),
   );
   expect(rows[1]).toEqual(
@@ -96,6 +100,7 @@ test("an answered call reports its cached tokens, names who served it, and is lo
       model: "gpt-test",
       promptTokens: 100,
       cachedTokens: 64,
+      cacheWriteTokens: 32,
       completionTokens: 3,
       estimated: false,
     }),
