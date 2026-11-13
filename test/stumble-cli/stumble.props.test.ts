@@ -211,3 +211,29 @@ test("a control command reaches the Supervisor only with a decimal label and epo
     expect(ran.exitCode === 2).toBe(!wellFormed);
   });
 });
+
+test("an activation that drops the replaced generation's commit warns and still activates", async () => {
+  const { ports } = generationControl({ label: 1, epoch: 3 });
+  const dropped = testHarnessCommit("b".repeat(40));
+
+  const ran = await runStumble(["gen", "activate", "2", "--epoch", "3"], {
+    generations: {
+      ...ports.generations,
+      controlGeneration: () =>
+        Promise.resolve({
+          ok: true as const,
+          outcome: {
+            kind: "activated" as const,
+            generation: generation(2),
+            epoch: 4,
+            effect: "activated" as const,
+            droppedCommit: dropped,
+          },
+        }),
+    },
+  });
+
+  expect(ran.exitCode).toBe(0);
+  expect(ran.stdout).toContain(`does not contain ${dropped}`);
+  expect(ran.stdout).toContain("generation 2 is now active, epoch 4");
+});

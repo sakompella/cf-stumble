@@ -31,6 +31,11 @@ export const GenerationControlRequest = Schema.Struct({
 
 export type GenerationStatusView = Readonly<{ generation: Generation | null; epoch: number }>;
 
+export type OwnerStatus = Readonly<{
+  activeGeneration: GenerationStatusView;
+  mainAhead: number | null;
+}>;
+
 export function generationStatusView(active: ActiveGeneration): GenerationStatusView {
   return { generation: active.generation ?? null, epoch: active.epoch };
 }

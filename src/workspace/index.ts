@@ -1,5 +1,7 @@
 export {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
+  UNKNOWN_LINEAGE,
+  type HarnessLineage,
   type WorkspaceCommandResult,
   type WorkspaceFailure,
 } from "./commands/index.js";

@@ -50,6 +50,16 @@ test("the page renders every stable element id, and none twice", () => {
       model: "gpt",
     }),
     withChatGPT({ connection: { state: "connected" }, login: null, model: "gpt" }),
+    update(
+      init().model,
+      Message.SucceededFetchStatus({
+        reading: {
+          maybeActive: Option.some({ label: 1, harnessCommit: "abc", status: "ready" }),
+          epoch: 3,
+          maybeMainAhead: Option.some(2),
+        },
+      }),
+    ).model,
   ].map((model) => idsRendered(model));
 
   for (const id of Object.values(ID)) {

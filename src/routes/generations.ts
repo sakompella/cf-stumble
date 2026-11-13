@@ -2,11 +2,11 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { logRedactedCause } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
+import * as Schema from "effect/Schema";
 import {
-  generationStatusView,
   GenerationControlTarget,
   GenerationSubmissionRequest,
-  type ActiveGeneration,
+  type OwnerStatus,
 } from "../generation-requests.js";
 import {
   type ActivationCommand,
@@ -25,20 +25,28 @@ import {
 } from "./json.js";
 
 export type GenerationStatusSupervisor = {
-  readonly getActiveGeneration: () => Promise<ActiveGeneration>;
+  readonly getStatus: () => Promise<OwnerStatus>;
 };
 
 export function statusResponse(
   supervisor: GenerationStatusSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
-  return callSupervisor(() => supervisor.getActiveGeneration()).pipe(
-    Effect.map((active) => Response.json({ activeGeneration: generationStatusView(active) })),
+  return callSupervisor(() => supervisor.getStatus()).pipe(
+    Effect.map((status) => Response.json(status)),
   );
 }
 
 export type GenerationControlSupervisor = {
-  readonly controlGeneration: (command: ActivationCommand) => Promise<GenerationControlResult>;
+  readonly controlGeneration: (
+    command: ActivationCommand,
+    force: boolean,
+  ) => Promise<GenerationControlResult>;
 };
+
+const OwnerControlTarget = Schema.Struct({
+  ...GenerationControlTarget.fields,
+  force: Schema.optional(Schema.Boolean),
+});
 
 export type GenerationSubmissionSupervisor = {
   readonly submitGeneration: (harnessCommit: HarnessCommit) => Promise<Submission>;
@@ -58,6 +66,7 @@ const CONTROL_REFUSAL_STATUS = {
   "not-previously-active": 409,
   "facet-compatibility-mismatch": 409,
   "run-active": 409,
+  "drops-active-commit": 409,
 } as const satisfies Record<ControlProblemCode, number>;
 
 function refusalResponse(
@@ -70,10 +79,13 @@ type ControlCommandKind = "activate" | "rollback";
 
 export const handleGenerationControl = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {
-    const body = yield* decodeRequestBody(request, GenerationControlTarget);
+    const body = yield* decodeRequestBody(request, OwnerControlTarget);
 
     const result = yield* callSupervisor(() =>
-      supervisor.controlGeneration({ kind, label: body.label, observedEpoch: body.observedEpoch }),
+      supervisor.controlGeneration(
+        { kind, label: body.label, observedEpoch: body.observedEpoch },
+        body.force === true,
+      ),
     );
 
     return result.ok ? Response.json(result) : refusalResponse(result);

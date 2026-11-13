@@ -44,7 +44,7 @@ The harness source is TypeScript, and Dynamic Workers execute Worker-compatible 
 
 ## Not built
 
-- automatic promotion, or activating a fallback automatically;
+- automatic promotion of an agent's own change, or activating a fallback automatically. A deploy of `main` does release main's commit as a generation (`docs/deploy.md`, "Release of main as a generation"); an agent's change reaches `main` only through a pull request that Aditya merges;
 - the agent repairing itself after a broken generation, or a check of its changes beyond the startup check;
 - steering a running turn;
 - combined project and harness views;

@@ -37,9 +37,13 @@ import {
   executeProjectProvisionRequest,
   executeProjectRemovalRequest,
   harnessBuildConfiguration,
+  readHarnessLineage,
+  UNKNOWN_LINEAGE,
   type GitHubCredentialRequest,
   type GitHubCredentialResult,
   type HarnessBuildRequest,
+  type HarnessLineage,
+  type HarnessLineageRequest,
   type InstructionsWriteResult,
   type ProjectProvisionRequest,
   type ProjectRemovalRequest,
@@ -128,6 +132,12 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
         operations: this.#lenient(),
         request,
       }),
+    );
+  }
+
+  lineage(request: HarnessLineageRequest): Promise<HarnessLineage> {
+    return this.#unlessResetting(UNKNOWN_LINEAGE, () =>
+      readHarnessLineage(this.#lenient(), request),
     );
   }
 

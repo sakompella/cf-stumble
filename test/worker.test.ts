@@ -24,6 +24,7 @@ test("with the owner's credential a request reaches the Supervisor and reads the
   expect(response.headers.get("cache-control")).toBe("no-store");
   await expect(response.json()).resolves.toEqual({
     activeGeneration: { generation: null, epoch: 0 },
+    mainAhead: null,
   });
 });
 

@@ -9,6 +9,7 @@ type HostRpc = Readonly<
   Pick<
     WorkspaceHost,
     | "build"
+    | "lineage"
     | "provision"
     | "removeProject"
     | "ensureManagedInstructions"

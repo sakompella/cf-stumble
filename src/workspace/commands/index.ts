@@ -3,6 +3,13 @@ export type { HarnessBuildRequest } from "../../harness-build.js";
 export { executeHarnessBuildRequest, harnessBuildConfiguration } from "./build-harness.js";
 
 export {
+  readHarnessLineage,
+  UNKNOWN_LINEAGE,
+  type HarnessLineage,
+  type HarnessLineageRequest,
+} from "./harness-lineage.js";
+
+export {
   executeProjectProvisionRequest,
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
   type ProjectProvisionRequest,

@@ -139,6 +139,7 @@ export const StatusAnswer = Schema.Struct({
     generation: Schema.NullOr(GenerationView),
     epoch: Schema.Number,
   }),
+  mainAhead: Schema.NullOr(Schema.Number),
 });
 
 export type StatusAnswer = typeof StatusAnswer.Type;
@@ -151,6 +152,7 @@ export function generationReading(answer: StatusAnswer): GenerationReading {
   return {
     epoch,
     maybeActive: generation === null ? Option.none() : Option.some(generation),
+    maybeMainAhead: Option.fromNullishOr(answer.mainAhead),
   };
 }
 

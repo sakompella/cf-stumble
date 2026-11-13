@@ -15,10 +15,16 @@ type BuiltModuleMapFile = {
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
-export async function writeModuleMap(target: ModuleMapBuild): Promise<void> {
-  const bundled = await build({
-    entryPoints: [resolve(repoRoot, target.entryPoint)],
-    outfile: target.entryModule,
+export const GENERATION_1_MODULE_MAP: ModuleMapBuild = {
+  entryPoint: "src/facet/generation-1/main-facet.ts",
+  entryModule: "main-facet.js",
+  outputPath: "build/module-map.json",
+};
+
+function bundleModuleMap(entryPoint: string, entryModule: string) {
+  return build({
+    entryPoints: [resolve(repoRoot, entryPoint)],
+    outfile: entryModule,
     bundle: true,
     write: false,
     format: "esm",
@@ -29,7 +35,18 @@ export async function writeModuleMap(target: ModuleMapBuild): Promise<void> {
     loader: { ".md": "text" },
     legalComments: "none",
     sourcemap: false,
+    metafile: true,
   });
+}
+
+export async function moduleMapSourceFiles(target: ModuleMapBuild): Promise<readonly string[]> {
+  const bundled = await bundleModuleMap(target.entryPoint, target.entryModule);
+
+  return Object.keys(bundled.metafile.inputs).filter((path) => !path.includes("node_modules/"));
+}
+
+export async function writeModuleMap(target: ModuleMapBuild): Promise<void> {
+  const bundled = await bundleModuleMap(target.entryPoint, target.entryModule);
 
   const output = bundled.outputFiles.at(0);
 
