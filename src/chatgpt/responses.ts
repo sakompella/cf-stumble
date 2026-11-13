@@ -140,7 +140,12 @@ const ResponseFields = Schema.Struct({
   usage: lenient(
     Schema.Struct({
       input_tokens: lenient(TokenCount),
-      input_tokens_details: lenient(Schema.Struct({ cached_tokens: lenient(TokenCount) })),
+      input_tokens_details: lenient(
+        Schema.Struct({
+          cached_tokens: lenient(TokenCount),
+          cache_write_tokens: lenient(TokenCount),
+        }),
+      ),
       output_tokens: lenient(TokenCount),
     }),
   ),
@@ -218,6 +223,7 @@ export class ResponsesStreamReader {
   private readonly accumulator: ProviderStreamAccumulator;
   failure: ProviderError | undefined;
   usageFields: readonly string[] | undefined;
+  cacheWriteTokens: number | undefined;
 
   constructor(accumulator: ProviderStreamAccumulator) {
     this.accumulator = accumulator;
@@ -230,6 +236,7 @@ export class ResponsesStreamReader {
 
     if (this.usageFields === undefined && USAGE_EVENTS.has(event.value.type ?? "")) {
       this.usageFields = usageFieldNames(data);
+      this.cacheWriteTokens = event.value.response?.usage?.input_tokens_details?.cache_write_tokens;
     }
 
     return this.apply(event.value);
