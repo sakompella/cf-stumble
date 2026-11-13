@@ -46,9 +46,10 @@ const REQUEST: ModelRouteRequest = {
 function run(
   credential: ChatGPTCredential,
   reply: (call: RecordedCall) => Promise<Response>,
+  request: ModelRouteRequest = REQUEST,
 ): Promise<Readonly<{ events: Awaited<ReturnType<typeof collectEvents>>; calls: RecordedCall[] }>> {
   const { fetcher, calls } = recordingFetch(reply);
-  const turn = chatgptTurn({ credential, fetcher, model: "gpt-test" }, REQUEST);
+  const turn = chatgptTurn({ credential, fetcher, model: "gpt-test" }, request);
 
   const stream = modelEventStream((emit) =>
     turn(emit).pipe(
@@ -158,6 +159,28 @@ test("the request carries the conversation as Responses input, with the token on
     ],
     tools: [{ type: "function", name: "read", parameters: { type: "object" } }],
   });
+});
+
+function sessionHeaders(calls: readonly RecordedCall[]): readonly (string | null)[] {
+  const sent = new Headers(calls[0]?.init.headers);
+
+  return [sent.get("session_id"), sent.get("x-client-request-id")];
+}
+
+test("the prompt cache key also travels as the session headers, which route the call to its cache", async () => {
+  const keyed = await run(
+    fakeCredential([ready(ACCESS_ONE)]),
+    () => Promise.resolve(sseResponse([COMPLETED])),
+    { ...REQUEST, promptCacheKey: "session-7" },
+  );
+
+  const unkeyed = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
+    Promise.resolve(sseResponse([COMPLETED])),
+  );
+
+  expect(sessionHeaders(keyed.calls)).toEqual(["session-7", "session-7"]);
+  expect(JSON.parse(bodyOf(keyed.calls[0]))).toMatchObject({ prompt_cache_key: "session-7" });
+  expect(sessionHeaders(unkeyed.calls)).toEqual([null, null]);
 });
 
 test("a 401 is retried once with the token the holder gives for the refused one", async () => {

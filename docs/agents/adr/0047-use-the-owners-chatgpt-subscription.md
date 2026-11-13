@@ -79,8 +79,11 @@ refusals, such as `subscription_sharing_user_not_eligible` or
 (`gpt-6.1-sol`, the model OpenAI's token sharing documentation uses in its examples). The request
 uses medium reasoning effort, `store: false` and streaming, and passes system messages as
 `instructions`, because the token sharing preview accepts only that shape. It sends the facet's
-per-conversation provider session id as `prompt_cache_key`, so the calls of one conversation share a
-prompt cache. A caller still cannot select the model, effort, or endpoint.
+per-conversation provider session id as `prompt_cache_key` and as the `session_id` and
+`x-client-request-id` headers, as pi's own OpenAI provider does. The key alone did not keep a
+conversation on its cache: on the preview, terra reused the previous call's prompt on none of 17 calls
+of a 30k-token thread without the headers and on all 10 with them, and sol cached 0 tokens without
+them. A caller still cannot select the model, effort, or endpoint.
 
 **Disconnect forgets the credential without revoking it.** OpenAI documents no revocation endpoint
 for this grant. The owner can revoke it in ChatGPT's settings.
