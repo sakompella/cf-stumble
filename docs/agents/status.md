@@ -19,7 +19,7 @@ Done does not need a public service, a harness that is hostile, a complete codin
 Several limits are part of this contract and are not unfinished work:
 
 - **Trust.** The system trusts the owner and a harness the owner approved. It is one shared development machine without isolation between repositories. See `design/overview.md`, "Who is trusted".
-- **Self-modification.** The startup check proves compatibility and a scripted tool sequence. Probation rolls back a generation that fails its first real turns. Neither undoes an edit that returns successfully, so a lasting change goes through a pull request that the owner reviews.
+- **Self-modification.** The startup check proves compatibility and a scripted tool sequence. Probation rolls back a generation only when its first real run fails because of the generation or stalls before its first model turn; a generation whose tools all return errors completes that run and is proven, and a model error leaves it unjudged, so the owner rolls those back by hand (staging check on 2026-11-14). Neither undoes an edit that returns successfully, so a lasting change goes through a pull request that the owner reviews.
 - **Rollback.** A rollback loads stored code. It does not restore project files, conversation history or the Supervisor's database, and it refuses a generation whose facet compatibility differs from the current one.
 - **Reset.** A workspace reset or a project disconnect destroys uncommitted work on purpose. Commit and push first. An ordinary stop or restart must not lose acknowledged writes.
 - **Cost.** The idle stop and run budgets bound one run chain, not a day's spend. Nothing caps the account's bill. The owner checks `pnpm ops:check`, billing alerts and the container's state.
