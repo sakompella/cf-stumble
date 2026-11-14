@@ -174,6 +174,8 @@ Before you deploy:
 
 Then run `pnpm run deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
 
+When several deploys run within a few minutes, the Cloudflare API can rate-limit Alchemy's state store. The deploy then stops at "Loading stack state" with `Could not determine whether Cloudflare State Store 'alchemy-state-store' exists, so it was left untouched: Rate limited`, before it changes anything. Wait about ten minutes and run the same command again. On 2026-11-13 three preview deploys stopped this way; the later deploys succeeded, and the account still held one Worker, one container application, one pair of Durable Object namespaces and one module-map bucket for the stage.
+
 After the deploy, compare against what you had before:
 
 - The deployment list (`pnpm exec cf workers deployments list --worker <worker>`) shows a new version at 100%.
