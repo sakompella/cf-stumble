@@ -23,10 +23,6 @@ const person = { name: "a", email: "a@example.com", timestamp: 0, timezoneOffset
 type Repository = {
   origin: string;
   commits: Set<string>;
-  head: string;
-  upstream: string;
-  ancestry: string[];
-  upstreamAncestry: string[];
 };
 
 function notFound(): Promise<never> {
@@ -112,52 +108,17 @@ class FakeHarnessWorkspace {
             committer: person,
           })
         : Promise.reject(new Error("missing commit")),
-    fetch: () => {
-      this.calls.push("fetch");
-
-      return Promise.resolve({ defaultBranch: null, fetchHead: null });
-    },
-    revParse: (options: { ref: string }) =>
-      Promise.resolve(
-        options.ref === "origin/main" ? this.present().upstream : this.present().head,
-      ),
-    currentBranch: () => Promise.resolve("main"),
-    log: (options: { ref?: string; depth?: number }) =>
-      Promise.resolve(
-        (options.ref === this.present().head
-          ? this.present().ancestry
-          : this.present().upstreamAncestry
-        )
-          .slice(0, options.depth)
-          .map((oid) => ({
-            oid,
-            message: "",
-            tree: "",
-            parent: [],
-            author: person,
-            committer: person,
-          })),
-      ),
   };
 
   readonly container = (source: string) => {
-    this.calls.push(
-      source.includes("merge --ff-only") ? "container fast-forward" : "container fetch",
-    );
+    this.calls.push(source.includes("merge --ff-only") ? "container advance" : "container fetch");
 
     return Effect.succeed(this.containerOutput);
   };
 }
 
 function repository(origin: string, depth: number): Repository {
-  return {
-    origin,
-    commits: new Set(history.slice(0, depth)),
-    head: commitAt(0),
-    upstream: commitAt(0),
-    ancestry: history.slice(0, depth),
-    upstreamAncestry: history.slice(0, depth),
-  };
+  return { origin, commits: new Set(history.slice(0, depth)) };
 }
 
 function provision(workspace: FakeHarnessWorkspace, commit: HarnessCommit) {
@@ -168,7 +129,7 @@ function provision(workspace: FakeHarnessWorkspace, commit: HarnessCommit) {
 
 const ok = { stdout: "", stderr: "", exitCode: 0 };
 
-test("clones a missing harness through a staging directory and leaves a current checkout alone", async () => {
+test("clones a missing harness through a staging directory, then advances it in the container", async () => {
   const workspace = new FakeHarnessWorkspace();
 
   await expect(provision(workspace, commitAt(3))).resolves.toEqual(ok);
@@ -178,7 +139,7 @@ test("clones a missing harness through a staging directory and leaves a current 
     `clone ${REMOTE} ${ROOT}.provisioning 50`,
     "config core.fileMode=false",
     `rename ${ROOT}.provisioning ${ROOT}`,
-    "fetch",
+    "container advance",
   ]);
 });
 
@@ -210,7 +171,7 @@ test("fetches a commit the checkout lacks by its id in the container", async () 
   const workspace = new FakeHarnessWorkspace().cloned();
 
   await expect(provision(workspace, commitAt(600))).resolves.toEqual(ok);
-  expect(workspace.calls).toEqual(["container fetch", "fetch"]);
+  expect(workspace.calls).toEqual(["container fetch", "container advance"]);
 });
 
 test("fails naming the commit, the remote and Git's reason when the container cannot fetch it", async () => {
@@ -229,56 +190,15 @@ test("fails naming the commit, the remote and Git's reason when the container ca
   });
 });
 
-test("leaves a checkout that already contains its upstream to the container", async () => {
+test("reports what the container's advance of the checkout says", async () => {
   const workspace = new FakeHarnessWorkspace().cloned();
-  const present = workspace.repository;
-
-  if (present === undefined) throw new Error("the fake has no repository");
-
-  present.head = testHarnessCommit("c".repeat(40));
-  present.ancestry = [present.head, ...present.ancestry];
-
-  await expect(provision(workspace, commitAt(0))).resolves.toEqual(ok);
-  expect(workspace.calls).toEqual(["fetch"]);
-});
-
-test("fast-forwards in the container when the upstream moved ahead and reports what the container says", async () => {
-  const workspace = new FakeHarnessWorkspace().cloned();
-  const present = workspace.repository;
-
-  if (present === undefined) throw new Error("the fake has no repository");
-
-  present.upstream = testHarnessCommit("d".repeat(40));
-  present.upstreamAncestry = [present.upstream, ...present.ancestry];
-  workspace.containerOutput = {
-    stdout: "",
-    stderr: `harness checkout has local changes; left at ${commitAt(0).slice(0, 7)}\n`,
-    exitCode: 0,
-  };
+  const message = `harness checkout has local changes; left at ${commitAt(0).slice(0, 7)}\n`;
+  workspace.containerOutput = { stdout: "", stderr: message, exitCode: 0 };
 
   await expect(provision(workspace, commitAt(0))).resolves.toEqual({
     stdout: "",
-    stderr: `harness checkout has local changes; left at ${commitAt(0).slice(0, 7)}\n`,
+    stderr: message,
     exitCode: 0,
   });
-  expect(workspace.calls).toEqual(["fetch", "container fast-forward"]);
-});
-
-test("leaves a checkout that diverged from its upstream without starting the container", async () => {
-  const workspace = new FakeHarnessWorkspace().cloned();
-  const present = workspace.repository;
-
-  if (present === undefined) throw new Error("the fake has no repository");
-
-  present.head = testHarnessCommit("c".repeat(40));
-  present.ancestry = [present.head, ...history.slice(1, 50)];
-  present.upstream = testHarnessCommit("d".repeat(40));
-  present.upstreamAncestry = [present.upstream, ...history.slice(1, 50)];
-
-  await expect(provision(workspace, commitAt(1))).resolves.toEqual({
-    stdout: "",
-    stderr: `harness checkout not updated: cannot fast-forward from ${present.head.slice(0, 7)}\n`,
-    exitCode: 0,
-  });
-  expect(workspace.calls).toEqual(["fetch"]);
+  expect(workspace.calls).toEqual(["container advance"]);
 });
