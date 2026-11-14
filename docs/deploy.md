@@ -420,7 +420,10 @@ with `model_error`, and that workflow fails.
 Prefer a fresh stage. On an existing instance, a turn that failed in an earlier run stays in the
 harness conversation, and the agent can carry out its steps in the next turn, which then delays the
 page turn. If a run was killed before cleanup finished, `pnpm e2e --run-id <id> --cleanup` finishes
-it; the run id is in the first output line. No GitHub workflow runs the e2e script on a throwaway
+it; the run id is in the first output line. On an existing instance it disconnects the run's project and rolls
+back to the generation that was active before the run, which the run recorded in
+`cf-stumble-e2e-<id>-restore.json` in the temporary directory, so run it on the same machine or in
+the same job. No GitHub workflow runs the e2e script on a throwaway
 stage: a fresh stage needs a user token as its `GH_TOKEN`, because the Workspace's GitHub credential
 check calls `GET /user`, which the job's `GITHUB_TOKEN` cannot call. Run a throwaway-stage e2e from
 a machine with `pnpm ci:local --stage <stage>`.

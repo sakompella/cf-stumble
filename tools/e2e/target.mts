@@ -10,6 +10,7 @@ import { reportModelCalls } from "./cost.mts";
 import { GitHub } from "./github.mts";
 import { Owner } from "./owner-api.mts";
 import { execute } from "./process.mts";
+import { forgetRestoreState, loadRestoreState, saveRestoreState } from "./restore-state.mts";
 import { markerPath } from "./workflows.mts";
 
 const MINUTE_MS = 60_000;
@@ -33,11 +34,16 @@ export class Target {
   readonly #options: TargetOptions;
   readonly #startedMs = Date.now();
   #restoreLabel: number | undefined;
-  connectedProject: string | undefined;
+  #connectedProject: string | undefined;
 
   constructor(options: TargetOptions) {
     this.#options = options;
     this.runId = options.runId;
+
+    const saved = loadRestoreState(options.runId);
+
+    this.#restoreLabel = saved.label;
+    this.#connectedProject = saved.project;
     this.fresh = options.url === undefined && options.stage === undefined;
     this.stage =
       options.stage ?? (this.fresh ? `${options.prefix ?? "e2e"}-${options.runId}` : undefined);
@@ -68,6 +74,7 @@ export class Target {
     const active = (await owner.status()).generation;
 
     this.#restoreLabel = active?.label;
+    this.#saveRestoreState();
 
     if (active === null || this.fresh) {
       await owner.control("activate", await owner.submit(await this.github.mainHead()));
@@ -117,17 +124,33 @@ export class Target {
     if (left.length > 0) throw new Error(`branches left on GitHub: ${left.join(", ")}`);
   }
 
+  get connectedProject(): string | undefined {
+    return this.#connectedProject;
+  }
+
+  set connectedProject(projectId: string | undefined) {
+    this.#connectedProject = projectId;
+    this.#saveRestoreState();
+  }
+
+  #saveRestoreState(): void {
+    saveRestoreState(this.runId, { label: this.#restoreLabel, project: this.#connectedProject });
+  }
+
   async restore(): Promise<void> {
     const owner = await this.#owner();
 
-    if (this.connectedProject !== undefined) await owner.disconnect(this.connectedProject);
+    if (this.#connectedProject !== undefined) await owner.disconnect(this.#connectedProject);
 
     if (this.#restoreLabel !== undefined) await owner.control("rollback", this.#restoreLabel);
+
+    forgetRestoreState(this.runId);
   }
 
   async destroy(): Promise<void> {
     if (this.stage === undefined) return;
 
     await destroyAndCheck(this.stage, await deployEnv(this.#options.env));
+    forgetRestoreState(this.runId);
   }
 }
