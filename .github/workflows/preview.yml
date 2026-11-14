@@ -31,12 +31,15 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: write
+      packages: read
     env:
       RUN_ID: pv${{ github.run_id }}
       TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      GH_TOKEN: ${{ secrets.E2E_GH_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
         with:

@@ -420,11 +420,10 @@ with `model_error`, and that workflow fails.
 Prefer a fresh stage. On an existing instance, a turn that failed in an earlier run stays in the
 harness conversation, and the agent can carry out its steps in the next turn, which then delays the
 page turn. If a run was killed before cleanup finished, `pnpm e2e --run-id <id> --cleanup` finishes
-it; the run id is in the first output line. `.github/workflows/e2e.yml` runs it by hand only (workflow_dispatch); it has no schedule. It reads
-the `CLOUDFLARE_API_TOKEN` secret, the `CLOUDFLARE_ACCOUNT_ID` variable and an `E2E_GH_TOKEN`
-secret, and runs `--cleanup` again when the job is cancelled. `E2E_GH_TOKEN` must be a user token
-with contents write on the harness repository. The job's `GITHUB_TOKEN` does not work: the stage's
-connection check calls `GET /user`, which an installation token cannot call.
+it; the run id is in the first output line. No GitHub workflow runs the e2e script on a throwaway
+stage: a fresh stage needs a user token as its `GH_TOKEN`, because the Workspace's GitHub credential
+check calls `GET /user`, which the job's `GITHUB_TOKEN` cannot call. Run a throwaway-stage e2e from
+a machine with `pnpm ci:local --stage <stage>`.
 
 ### Preview stage and `pnpm ci:local`
 
@@ -434,8 +433,10 @@ and by hand, one run at a time (concurrency group `preview`). It runs Verify and
 build on the pull request's head, deploys that commit to `preview`, releases it as the active
 generation with `tools/release-generation.mts --force`, and runs
 `pnpm e2e --stage preview --keep`. `--force` lets the release replace a generation from another
-branch whose commit the new one does not contain. The workflow reads the secret
-`PREVIEW_OWNER_PASSWORD`, the preview's owner password, besides the e2e workflow's secrets.
+branch whose commit the new one does not contain. The workflow reads the secrets `CLOUDFLARE_API_TOKEN` and
+`PREVIEW_OWNER_PASSWORD` (the preview's owner password) and the `CLOUDFLARE_ACCOUNT_ID` variable.
+The e2e step lists and deletes the run's branches with the job's `GITHUB_TOKEN` (contents write);
+the agent on the preview pushes with the preview Worker's own `GH_TOKEN` secret.
 
 `pnpm ci:local [--stage <stage>]` (`tools/ci-local.mts`) runs the same chain from a machine: Verify
 in `nix develop`, the workspace image (pulled from GHCR, or built with docker or the podman shim
