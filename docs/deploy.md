@@ -230,7 +230,7 @@ Use a custom domain when the hostname has no record and you want Cloudflare to c
 
 If workspace operations hang, runs fail their tool calls, routes answer `internal-error`, or GitHub status times out after a large `npm install`, a large dependency tree may be inside the durable workspace. Installing one there makes the workspace unresponsive because its files live in Durable Object storage. The managed instructions steer the agent to copy projects to container-local scratch before installing dependencies or running checks.
 
-As the owner, send `POST /api/workspace/reset` to recover. Projects and the harness re-clone on the next use. The reset loses uncommitted work in the workspace.
+As the owner, send `POST /api/workspace/reset` to recover. Projects and the harness re-clone on the next use. The reset deletes everything in the workspace that is not pushed to GitHub: uncommitted changes, unpushed commits and local branches in every clone, the GitHub login (a `GH_TOKEN` secret is installed again), and the container with its `/tmp`, `node_modules` and Nix store. Conversations, projects, generations and the ChatGPT login stay. Commit and push first; afterwards, `git fetch origin <branch>` in the new clone brings pushed work back.
 
 ## One entry point
 
@@ -270,6 +270,8 @@ The page shows one of three states:
 - **connected** (with the model name): model calls use your subscription. When OpenAI refuses a call for the plan's usage limit, the page adds **usage limit reached**, with the time the limit ends when OpenAI gave one. A call the limit refuses before it sends any output is answered by Workers AI instead, and the saved conversation shows a notice before that answer. The connection stays connected.
 - **reconnect required** (with the reason): OpenAI refused the refresh token or the access token. Every model call fails with `chatgpt-reconnect-required` until you connect again or disconnect. The route does not fall back to Workers AI here, so a broken subscription is visible.
 - **not connected (Workers AI fallback)**: model calls use Workers AI.
+
+When the page shows **reconnect required**, reconnect the same way: select **Log in with ChatGPT**, sign in, paste the callback address and select **Finish**. The panel then says **connected** and the next turn uses ChatGPT. Until you do, every turn fails with `chatgpt-reconnect-required`. To use Workers AI in the meantime, send `POST /api/chatgpt/disconnect`; the page shows no **Disconnect** button in this state. Unit tests cover a refused refresh and a repeated 401; no deployed check has produced this state, because only a real sign-in stores a credential that OpenAI can refuse.
 
 **Disconnect** deletes the stored tokens and returns the route to Workers AI. It does not revoke the grant at OpenAI. To revoke it, remove cf-stumble from your ChatGPT account's settings.
 
@@ -462,6 +464,23 @@ stage with [Bombadil](https://github.com/antithesishq/bombadil) (`tools/e2e/fuzz
 sends a few capped hostile prompts, some while the network is offline, slow or dropping, and checks
 that no error is uncaught, no send is duplicated or lost, and the transcript matches the stored
 conversation after it settles. A failing round prints its seed and keeps its trace.
+
+## Stop paying for the container
+
+The container costs money while it runs. The page, `GET /api/status`, the project list and the connection views answer from the Supervisor's record and never start it. A message, a project connect or disconnect, a generation submit, activate or rollback, `POST /api/github/connection/refresh` and a workspace reset reach the workspace and start or keep it running.
+
+When you finish work:
+
+1. Let every run settle, or press **Cancel turn**. A run keeps the container until it settles or its 8-minute deadline passes, and a 30- or 60-minute budget continues it in new 8-minute runs.
+2. Close the page or any script that sends messages or refreshes the GitHub connection. The page itself keeps only an event stream open, which does not keep the container running.
+3. Wait for the idle stop, or stop the container at once. The Workspace Host stops it ten minutes after the last workspace work and logs `workspace.container.idle-stop` with `outcome: "stopped"`. To stop it at once, switch the page's **Workspace container** control to **Provider** and back to **Cloudflare**, or send `POST /api/workspace/backend` with `{"backend":"provider"}` and then `{"backend":"cloudflare"}`. Each change copies the container's files into the store and destroys the container, and the next command starts a new one. The Host refuses the change while a run is active.
+4. Check that it stopped. `GET /accounts/<account-id>/containers/applications/<container-app-id>/instances` lists the instance with `status.state` `running` while it runs. `pnpm ops:check --since 2h` reports a container that ran past the idle stop (`ran-past-idle`).
+
+Do not use `POST /api/workspace/reset` to stop the container: it also deletes the workspace. To stop all cost of an instance, destroy it as described in "Cost and cleanup".
+
+The account has one notification policy, the auto-created billing budget alert (email when total spend reaches 10 dollars). It warns; it stops nothing. The Ops check workflow runs `pnpm ops:check` on production once a day at 13:41 UTC.
+
+Observed on a staging stage on 2026-11-14 with Workers AI and a three-step task (write a file, run it with `node` in the container, answer): the first model answer came after 3.1 to 3.5 seconds in every case. The first shell result came after 8.8 seconds with the container stopped (an image start), 9.4 seconds after an idle stop (a snapshot restore) and 7.1 seconds with the container running. A switch of the backend stopped the container in under a second; the idle stop came 600 seconds after the last run settled.
 
 ## Cost and cleanup
 
