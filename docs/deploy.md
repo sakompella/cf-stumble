@@ -174,6 +174,8 @@ Before you deploy:
 
 Then run `pnpm run deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
 
+When several deploys run within a few minutes, the Cloudflare API can rate-limit Alchemy's state store. The deploy then stops at "Loading stack state" with `Could not determine whether Cloudflare State Store 'alchemy-state-store' exists, so it was left untouched: Rate limited`, before it changes anything. Wait about ten minutes and run the same command again. On 2026-11-13 three preview deploys stopped this way; the later deploys succeeded, and the account still held one Worker, one container application, one pair of Durable Object namespaces and one module-map bucket for the stage.
+
 After the deploy, compare against what you had before:
 
 - The deployment list (`pnpm exec cf workers deployments list --worker <worker>`) shows a new version at 100%.
@@ -422,11 +424,13 @@ with `model_error`, and that workflow fails.
 Prefer a fresh stage. On an existing instance, a turn that failed in an earlier run stays in the
 harness conversation, and the agent can carry out its steps in the next turn, which then delays the
 page turn. If a run was killed before cleanup finished, `pnpm e2e --run-id <id> --cleanup` finishes
-it; the run id is in the first output line. `.github/workflows/e2e.yml` runs it by hand only (workflow_dispatch); it has no schedule. It reads
-the `CLOUDFLARE_API_TOKEN` secret, the `CLOUDFLARE_ACCOUNT_ID` variable and an `E2E_GH_TOKEN`
-secret, and runs `--cleanup` again when the job is cancelled. `E2E_GH_TOKEN` must be a user token
-with contents write on the harness repository. The job's `GITHUB_TOKEN` does not work: the stage's
-connection check calls `GET /user`, which an installation token cannot call.
+it; the run id is in the first output line. On an existing instance it disconnects the run's project and rolls
+back to the generation that was active before the run, which the run recorded in
+`cf-stumble-e2e-<id>-restore.json` in the temporary directory, so run it on the same machine or in
+the same job. No GitHub workflow runs the e2e script on a throwaway
+stage: a fresh stage needs a user token as its `GH_TOKEN`, because the Workspace's GitHub credential
+check calls `GET /user`, which the job's `GITHUB_TOKEN` cannot call. Run a throwaway-stage e2e from
+a machine with `pnpm ci:local --stage <stage>`.
 
 ### Preview stage and `pnpm ci:local`
 
@@ -436,8 +440,10 @@ and by hand, one run at a time (concurrency group `preview`). It runs Verify and
 build on the pull request's head, deploys that commit to `preview`, releases it as the active
 generation with `tools/release-generation.mts --force`, and runs
 `pnpm e2e --stage preview --keep`. `--force` lets the release replace a generation from another
-branch whose commit the new one does not contain. The workflow reads the secret
-`PREVIEW_OWNER_PASSWORD`, the preview's owner password, besides the e2e workflow's secrets.
+branch whose commit the new one does not contain. The workflow reads the secrets `CLOUDFLARE_API_TOKEN` and
+`PREVIEW_OWNER_PASSWORD` (the preview's owner password) and the `CLOUDFLARE_ACCOUNT_ID` variable.
+The e2e step lists and deletes the run's branches with the job's `GITHUB_TOKEN` (contents write);
+the agent on the preview pushes with the preview Worker's own `GH_TOKEN` secret.
 
 `pnpm ci:local [--stage <stage>]` (`tools/ci-local.mts`) runs the same chain from a machine: Verify
 in `nix develop`, the workspace image (pulled from GHCR, or built with docker or the podman shim
