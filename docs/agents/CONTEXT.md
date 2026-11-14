@@ -1,6 +1,6 @@
 # cf-stumble
 
-cf-stumble is a personal agent with a mutable main harness. This glossary names concepts that must remain distinct; implementation choices belong in design documents and ADRs.
+cf-stumble is a personal agent with a mutable main harness, built for one owner. This glossary names concepts that must remain distinct; implementation choices belong in design documents and ADRs.
 
 ## Harness and execution
 
@@ -92,3 +92,20 @@ The supervisor's check of a prepared generation before it may become ready. The 
 **Self-activation**:
 The main harness activating a generation from its own conversation with `stumble gen activate`. The serving facet ends, and the conversation resumes under the new generation.
 _Avoid_: self-deploy
+
+## Authority and scope
+
+**Owner**:
+The one person who uses a cf-stumble instance. The owner holds the `OWNER_PASSWORD` Basic credential, the GitHub credential in the workspace and the ChatGPT connection, and decides which harness changes stay. The product has no other kind of user.
+_Avoid_: tenant, team member, guest
+
+**Owner-approved harness**:
+A main-harness generation that the owner submitted and activated, or that the owner's own conversation submitted and activated with `stumble gen`. The Supervisor checks compatibility and a scripted tool sequence, not intent or quality.
+
+**Authority boundary**:
+The statement of who is trusted: the owner and an owner-approved harness, on one shared development machine, with no isolation between repositories. It is not a boundary between projects or against a guest. The boundary that does hold is between the immutable host and the harness: a facet receives capabilities, not account secrets. See `design/overview.md`, "Who is trusted".
+_Avoid_: sandbox, multi-tenant isolation
+
+**Done**:
+Single-owner version 1 works: the owner can use one connected project, reload the browser without losing accepted work, cancel a run, try and undo a harness change, deploy and recover from a failed update, and stop paying for the container when work ends. It does not include public access, guests, teams or isolation between projects. The multi-person service in the README is a long-term aspiration, not part of done. See `status.md`, "What done means".
+_Avoid_: complete, production-ready for several users
