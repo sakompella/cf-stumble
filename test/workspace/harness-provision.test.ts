@@ -1,9 +1,9 @@
-import type { StatusEntry } from "@cloudflare/computer/git";
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 import type { HarnessCommit } from "../../src/harness-commit.js";
 import { provisionHarness } from "../../src/workspace/harness-provision.js";
+import type { CommandOutput } from "../../src/workspace/operations.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 
 const ROOT = HARNESS_BUILD_CONFIGURATION.harnessRepositoryRoot;
@@ -18,11 +18,12 @@ function commitAt(index: number): HarnessCommit {
   return history[index] ?? testHarnessCommit("7".repeat(40));
 }
 
-const OTHER_BRANCH_TIP = testHarnessCommit("b".repeat(40));
-
 const person = { name: "a", email: "a@example.com", timestamp: 0, timezoneOffset: 0 };
 
-type Repository = { origin: string; commits: Set<string>; head: string };
+type Repository = {
+  origin: string;
+  commits: Set<string>;
+};
 
 function notFound(): Promise<never> {
   return Promise.reject(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
@@ -45,14 +46,10 @@ class FakeHarnessWorkspace {
   repository: Repository | undefined;
   staged: Repository | undefined;
   strayFiles: string[] = [];
-  changes: StatusEntry[] = [];
+  containerOutput: CommandOutput = { stdout: "", stderr: "", exitCode: 0 };
 
   cloned(origin: string = REMOTE, depth = 50): this {
-    this.repository = {
-      origin,
-      commits: new Set(history.slice(0, depth)),
-      head: commitAt(0),
-    };
+    this.repository = repository(origin, depth);
 
     return this;
   }
@@ -90,11 +87,7 @@ class FakeHarnessWorkspace {
   readonly git = {
     clone: (options: { url: string; dir?: string; depth?: number }) => {
       this.calls.push(`clone ${options.url} ${options.dir ?? ""} ${String(options.depth)}`);
-      this.staged = {
-        origin: options.url,
-        commits: new Set(history.slice(0, options.depth)),
-        head: commitAt(0),
-      };
+      this.staged = repository(options.url, options.depth ?? 1);
 
       return Promise.resolve();
     },
@@ -115,40 +108,28 @@ class FakeHarnessWorkspace {
             committer: person,
           })
         : Promise.reject(new Error("missing commit")),
-    fetch: (options: { depth?: number; singleBranch?: boolean } = {}) => {
-      this.calls.push(
-        `fetch ${String(options.depth)}${options.singleBranch === false ? " all" : ""}`,
-      );
+  };
 
-      for (const commit of history.slice(0, options.depth ?? 1)) this.present().commits.add(commit);
+  readonly container = (source: string) => {
+    this.calls.push(source.includes("merge --ff-only") ? "container advance" : "container fetch");
 
-      if (options.singleBranch === false) this.present().commits.add(OTHER_BRANCH_TIP);
-
-      return Promise.resolve({ defaultBranch: null, fetchHead: null });
-    },
-    revParse: () => Promise.resolve(this.present().head),
-    status: () => Promise.resolve(this.changes),
-    currentBranch: () => Promise.resolve("main"),
-    merge: (options: { theirs: string }) => {
-      this.calls.push(`merge ${options.theirs}`);
-
-      return Promise.resolve({ fastForward: true });
-    },
-    checkout: (options: { ref: string }) => {
-      this.calls.push(`checkout ${options.ref}`);
-
-      return Promise.resolve();
-    },
+    return Effect.succeed(this.containerOutput);
   };
 }
 
+function repository(origin: string, depth: number): Repository {
+  return { origin, commits: new Set(history.slice(0, depth)) };
+}
+
 function provision(workspace: FakeHarnessWorkspace, commit: HarnessCommit) {
-  return Effect.runPromise(provisionHarness(workspace, HARNESS_BUILD_CONFIGURATION, commit));
+  return Effect.runPromise(
+    provisionHarness(workspace, workspace.container, HARNESS_BUILD_CONFIGURATION, commit),
+  );
 }
 
 const ok = { stdout: "", stderr: "", exitCode: 0 };
 
-test("clones a missing harness through a staging directory and fast-forwards it", async () => {
+test("clones a missing harness through a staging directory, then advances it in the container", async () => {
   const workspace = new FakeHarnessWorkspace();
 
   await expect(provision(workspace, commitAt(3))).resolves.toEqual(ok);
@@ -158,9 +139,7 @@ test("clones a missing harness through a staging directory and fast-forwards it"
     `clone ${REMOTE} ${ROOT}.provisioning 50`,
     "config core.fileMode=false",
     `rename ${ROOT}.provisioning ${ROOT}`,
-    "fetch undefined",
-    "merge origin/main",
-    "checkout main",
+    "container advance",
   ]);
 });
 
@@ -188,52 +167,38 @@ test("refuses a checkout whose origin is another repository", async () => {
   expect(workspace.calls).toEqual([]);
 });
 
-test("deepens the fetch until the pinned commit is present", async () => {
+test("fetches a commit the checkout lacks by its id in the container", async () => {
   const workspace = new FakeHarnessWorkspace().cloned();
 
   await expect(provision(workspace, commitAt(600))).resolves.toEqual(ok);
-  expect(workspace.calls.filter((call) => call.startsWith("fetch"))).toEqual([
-    "fetch 500",
-    "fetch 5000",
-    "fetch undefined",
-  ]);
+  expect(workspace.calls).toEqual(["container fetch", "container advance"]);
 });
 
-test("fetches every branch when the default branch lacks the commit", async () => {
-  const workspace = new FakeHarnessWorkspace().cloned();
-
-  await expect(provision(workspace, OTHER_BRANCH_TIP)).resolves.toEqual(ok);
-  expect(workspace.calls.filter((call) => call.startsWith("fetch"))).toEqual([
-    "fetch 500",
-    "fetch 5000",
-    "fetch 100000",
-    "fetch 50 all",
-    "fetch undefined",
-  ]);
-});
-
-test("fails naming the commit and the remote when no depth finds the commit", async () => {
+test("fails naming the commit, the remote and Git's reason when the container cannot fetch it", async () => {
   const workspace = new FakeHarnessWorkspace().cloned();
   const absent = testHarnessCommit("f".repeat(40));
+  workspace.containerOutput = {
+    stdout: "",
+    stderr: "fatal: remote error: upload-pack: not our ref\n",
+    exitCode: 128,
+  };
 
   await expect(provision(workspace, absent)).resolves.toEqual({
     stdout: "",
-    stderr: `harness commit ${absent} is not in ${REMOTE}\n`,
+    stderr: `harness commit ${absent} is not in ${REMOTE}: fatal: remote error: upload-pack: not our ref\n`,
     exitCode: 1,
   });
 });
 
-test("leaves a checkout with local tracked changes where it is", async () => {
+test("reports what the container's advance of the checkout says", async () => {
   const workspace = new FakeHarnessWorkspace().cloned();
-  workspace.changes = [
-    { path: "scratch.txt", index: " ", worktree: "?" },
-    { path: "src/edited.ts", index: " ", worktree: "M" },
-  ];
+  const message = `harness checkout has local changes; left at ${commitAt(0).slice(0, 7)}\n`;
+  workspace.containerOutput = { stdout: "", stderr: message, exitCode: 0 };
 
   await expect(provision(workspace, commitAt(0))).resolves.toEqual({
     stdout: "",
-    stderr: `harness checkout has local changes; left at ${commitAt(0).slice(0, 7)}\n`,
+    stderr: message,
     exitCode: 0,
   });
-  expect(workspace.calls).toEqual([]);
+  expect(workspace.calls).toEqual(["container advance"]);
 });

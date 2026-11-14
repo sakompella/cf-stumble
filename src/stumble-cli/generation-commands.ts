@@ -1,4 +1,5 @@
 import type { GenerationControl } from "../generation-requests.js";
+import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
 import { isHarnessCommit } from "../harness-commit.js";
 import { failureText, printed, refused, type CommandNode, type CommandOutput } from "./tree.js";
 
@@ -33,6 +34,20 @@ async function status({ generations }: GenerationPorts): Promise<CommandOutput> 
   );
 }
 
+type PreparationProblem = Extract<StartupCheckResult, { ok: false }>["problem"];
+
+function problemText(problem: PreparationProblem): string {
+  if (problem.code === "build-workspace-unavailable") {
+    return `${problem.code}: the workspace did not finish the build; nothing changed, prepare the same commit again`;
+  }
+
+  if (problem.code !== "build-step-failed") return problem.code;
+
+  const reason = problem.diagnostics.stderrTail.trim().split("\n").at(-1) ?? "";
+
+  return `${problem.code} at ${problem.step} (exit ${problem.exitCode})${reason && `: ${reason}`}`;
+}
+
 async function prepare(harnessCommit: string, ports: GenerationPorts): Promise<CommandOutput> {
   const { generation } = await ports.generations.submitGeneration(harnessCommit);
   const submitted = `submitted generation ${generation.label} for ${harnessCommit}`;
@@ -50,7 +65,9 @@ async function startupCheck(
   const checked = await generations.prepareGeneration(label);
 
   if (!checked.ok) {
-    return refused(`${submitted}\ngeneration ${label} was not prepared: ${checked.problem.code}`);
+    return refused(
+      `${submitted}\ngeneration ${label} was not prepared: ${problemText(checked.problem)}`,
+    );
   }
 
   const { stage, reason } = checked.report;

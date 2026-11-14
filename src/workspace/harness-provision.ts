@@ -2,32 +2,22 @@ import type { Workspace } from "@cloudflare/computer";
 import * as Effect from "effect/Effect";
 import type { HarnessBuildConfiguration } from "../harness-build.js";
 import type { HarnessCommit } from "../harness-commit.js";
+import { durableGitHubConfigurationSource } from "../github/index.js";
+import { shellQuote } from "../shell-quote.js";
 import { hasErrnoCode } from "./errno-code.js";
 import { cloneIntoPlace, githubToken } from "./isolate-clone.js";
 import { attemptWorkspace, type CommandOutput, type WorkspaceFault } from "./operations.js";
 
 const HARNESS_CLONE_DEPTH = 50;
 
-const HARNESS_DEEPEN_DEPTHS = [500, 5_000, 100_000] as const;
-
-type Git = Pick<
-  Workspace["git"],
-  | "clone"
-  | "configSet"
-  | "configGet"
-  | "show"
-  | "fetch"
-  | "revParse"
-  | "status"
-  | "currentBranch"
-  | "merge"
-  | "checkout"
->;
+type Git = Pick<Workspace["git"], "clone" | "configSet" | "configGet" | "show">;
 
 type HarnessWorkspace = Readonly<{
   fs: Pick<Workspace["fs"], "readFile" | "readdir" | "stat" | "rm" | "mkdir" | "rename">;
   git: Git;
 }>;
+
+type Container = (source: string) => Effect.Effect<CommandOutput, WorkspaceFault>;
 
 function failed(message: string): CommandOutput {
   return { stdout: "", stderr: `${message}\n`, exitCode: 1 };
@@ -61,58 +51,50 @@ async function hasCommit(git: Git, dir: string, commit: HarnessCommit): Promise<
   }
 }
 
-async function obtainCommit(git: Git, dir: string, commit: HarnessCommit): Promise<boolean> {
-  for (const depth of HARNESS_DEEPEN_DEPTHS) {
-    if (await hasCommit(git, dir, commit)) return true;
-
-    await git.fetch({ dir, remote: "origin", depth, singleBranch: true, tags: false });
-  }
-
-  if (await hasCommit(git, dir, commit)) return true;
-
-  await git.fetch({
-    dir,
-    remote: "origin",
-    depth: HARNESS_CLONE_DEPTH,
-    singleBranch: false,
-    tags: false,
-  });
-
-  return hasCommit(git, dir, commit);
+function fetchCommitSource(dir: string, commit: HarnessCommit): string {
+  return [
+    "set -eu",
+    ...durableGitHubConfigurationSource(),
+    `git -C ${shellQuote(dir)} fetch --quiet --depth=${HARNESS_CLONE_DEPTH} origin ${commit}`,
+    `git -C ${shellQuote(dir)} cat-file -e ${commit}^{commit}`,
+  ].join("\n");
 }
 
-async function advanceCheckout(git: Git, dir: string): Promise<string> {
-  const head = (await git.revParse({ dir, ref: "HEAD" })).slice(0, 7);
-  const changes = await git.status({ dir });
-
-  if (changes.some((entry) => entry.worktree !== "?")) {
-    return `harness checkout has local changes; left at ${head}\n`;
-  }
-
-  const branch = await git.currentBranch({ dir });
-
-  try {
-    await git.fetch({ dir, remote: "origin", singleBranch: true, tags: false });
-  } catch {
-    return "harness checkout not updated: fetch failed\n";
-  }
-
-  const stuck = `harness checkout not updated: cannot fast-forward from ${head}\n`;
-
-  if (branch === undefined) return stuck;
-
-  try {
-    await git.merge({ dir, theirs: `origin/${branch}`, fastForwardOnly: true });
-    await git.checkout({ dir, ref: branch });
-  } catch {
-    return stuck;
-  }
-
-  return "";
+function advanceSource(dir: string): string {
+  return [
+    "set -eu",
+    ...durableGitHubConfigurationSource(),
+    `cd ${shellQuote(dir)}`,
+    'head="$(git rev-parse --short=7 HEAD)"',
+    "stuck() {",
+    `  printf 'harness checkout not updated: cannot fast-forward from %s\\n' "$head" >&2`,
+    "  exit 0",
+    "}",
+    'branch="$(git symbolic-ref --quiet --short HEAD)" || stuck',
+    'upstream="refs/remotes/origin/$branch"',
+    'if ! git fetch --quiet origin "+refs/heads/$branch:$upstream" 2>/dev/null; then',
+    "  printf 'harness checkout not updated: fetch failed\\n' >&2",
+    "  exit 0",
+    "fi",
+    "if ! git diff --quiet HEAD --; then",
+    `  printf 'harness checkout has local changes; left at %s\\n' "$head" >&2`,
+    "  exit 0",
+    "fi",
+    "while :; do",
+    '  git merge-base --is-ancestor "$upstream" HEAD 2>/dev/null && exit 0',
+    '  if git merge-base --is-ancestor HEAD "$upstream" 2>/dev/null; then',
+    '    git merge --ff-only --quiet "$upstream" >/dev/null 2>&1 || stuck',
+    "    exit 0",
+    "  fi",
+    '  [ "$(git rev-parse --is-shallow-repository)" = true ] || stuck',
+    '  git fetch --quiet --unshallow origin "+refs/heads/$branch:$upstream" 2>/dev/null || stuck',
+    "done",
+  ].join("\n");
 }
 
 export function provisionHarness(
   workspace: HarnessWorkspace,
+  container: Container,
   configuration: HarnessBuildConfiguration,
   commit: HarnessCommit,
 ): Effect.Effect<CommandOutput, WorkspaceFault> {
@@ -141,14 +123,18 @@ export function provisionHarness(
 
     if (String(origin) !== remote) return failed(`${dir} has a different origin than ${remote}`);
 
-    if (!(yield* attemptWorkspace(() => obtainCommit(git, dir, commit)))) {
-      return failed(`harness commit ${commit} is not in ${remote}`);
+    if (!(yield* attemptWorkspace(() => hasCommit(git, dir, commit)))) {
+      const fetched = yield* container(fetchCommitSource(dir, commit));
+
+      if (fetched.exitCode !== 0) {
+        const reason = fetched.stderr.trim();
+
+        return failed(`harness commit ${commit} is not in ${remote}${reason && `: ${reason}`}`);
+      }
     }
 
-    return {
-      stdout: "",
-      stderr: yield* attemptWorkspace(() => advanceCheckout(git, dir)),
-      exitCode: 0,
-    };
+    const advanced = yield* container(advanceSource(dir));
+
+    return { stdout: "", stderr: advanced.stderr, exitCode: 0 };
   });
 }

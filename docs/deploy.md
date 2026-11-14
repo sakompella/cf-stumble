@@ -188,6 +188,22 @@ For a risky change, stage it first on a separate stage with its own Worker and c
 
 Workers Logs keeps events for 7 days. After a deploy that changes lifecycle behavior, copy out the events you need as evidence before they expire.
 
+## Roll back a generation
+
+A generation rollback changes the harness code that serves conversations, nothing else. `POST /api/generations/rollback` with `{"label":<n>,"observedEpoch":<epoch from /api/status>}`, or `stumble gen rollback <n> --epoch <epoch>` from a conversation, loads the module map stored for that generation's commit; nothing is rebuilt. Project files, the harness checkout in `/workspace/harness`, and every conversation and its history stay as they are: the next message continues the same thread on the older code. An activation behaves the same way. Undo a bad change to files with Git (commit and push work you want to keep), not with a rollback.
+
+- Only a generation that served before can be a rollback target (`not-previously-active` otherwise). The owner API refuses a target whose commit does not contain the serving generation's commit with `drops-active-commit`; send `"force":true` to switch anyway. While a run is active the owner API answers 409 `run-active`; cancel the run or wait for it.
+- Probation rolls back by itself only when the first run on a newly activated generation fails because of the generation (`failed`) or stalls before its first model turn (`stalled`, at the 8-minute deadline). A generation whose tools return errors completes its run and is proven; one whose model call fails ends the run as a model error without a verdict. Both keep serving; roll them back by hand. A run that ignores the deadline's abort stays active, but once its deadline passed the owner may roll back, which ends it.
+- A failed preparation never changes the serving generation. `stumble gen prepare` names the failed build step and Git's reason; after `build-workspace-unavailable` (the workspace did not finish the build, for example because the platform restarted it) prepare the same commit again.
+
+### When the host protocol changes
+
+`FACET_COMPATIBILITY` (`pi-durable@<version>/host-<N>`, `src/facet/runtime-contract.ts`) is compiled into both the Worker and every generation. Activation and rollback refuse a generation whose recorded key differs from the deployed Worker's with `facet-compatibility-mismatch`, and the startup check refuses a candidate that reports another key. The Supervisor does not check the key of the generation that is already serving: after a deploy that changes the key, the old generation keeps serving until another is activated, and it may fail against the new host.
+
+- Deploy a key change together with a generation that reports the new key. The Deploy workflow does this for `main`: it releases main's commit as a generation right after the deploy ("Release of main as a generation"). Check `/api/status` afterwards; if the release did not activate, submit and activate main's commit by hand.
+- To return to an older host, deploy the older Worker commit. Generations recorded under that commit's key can be activated or rolled back to again. A generation recorded under the newer key cannot: submit the commit you want to serve (normally the same commit as the Worker) and activate it. Submitting a commit again re-runs its startup check under its existing label, and only a commit whose facet reports the deployed key passes.
+- Generations built for another key cannot be converted; prepare a new commit instead (`docs/agents/status.md`, "Old generation tables are not converted").
+
 ## Container image
 
 CI builds the image once. `.github/workflows/workspace-image.yml` builds `infra/workspace-image/computerd.Dockerfile` for linux/amd64, with `infra/workspace-image` as the build context, and pushes it to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`. `infra/workspace-image/image-ref.sh` prints that reference; `<hash>` is a hash of the Dockerfile and the patch. It skips the build when that tag exists, and on `main` it moves `latest` to it. The Deploy workflow runs it first, so a deploy always finds its image. Nothing else builds the image, and no machine builds it locally: a change to those files is the only reason to rebuild, and CI does it. The package is public (the first publish from this public repository was pullable without a login), so machines pull without credentials.
@@ -378,8 +394,8 @@ a machine you trust with that.
 tip of `main`. It sets `OWNER_PASSWORD` last and then deploys the stage again with
 `--force`: the first deploy starts the Durable Objects without the secrets, and the Supervisor did
 not see `GH_TOKEN` until a new version replaced it, so every push answered 401. Harness provisioning
-deepens the default branch first and then fetches every branch head, so a pushed branch's commit
-can be prepared as a generation. Then it runs three workflows and the ChatGPT turn, each with a time
+fetches a commit the checkout lacks by its ID, so a pushed branch's commit can be prepared as a
+generation. Then it runs three workflows and the ChatGPT turn, each with a time
 limit:
 
 1. Page: a Playwright spec opens the owner page, sends a message, waits for the streamed answer,
