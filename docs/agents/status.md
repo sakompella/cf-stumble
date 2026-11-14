@@ -55,6 +55,7 @@ Each item that this file used to list as open is now classified: **resolved** (w
 **Resolved**
 
 - **ChatGPT was unproved end to end.** Resolved. ChatGPT is connected and streams real answers. `a6ff28b9` made each ChatGPT call log `chatgpt.model-call` with its outcome and token counts, and made `ops:check` print call counts and the cache hit rate per provider. `4542ce55` (merged in `afa53612`) fixed the cache misses. `tools/e2e/chatgpt.mts` runs a real ChatGPT turn in `pnpm ci:local` and skips when ChatGPT is disconnected, so a green run that skipped it proves nothing about ChatGPT.
+- **The e2e and preview workflows could not run.** Resolved on 2026-11-14 (`55f04763`, `f604b477`, `5f868932`). `.github/workflows/preview.yml` gives its e2e step the job's `GITHUB_TOKEN` with contents write: on the `preview` stage the step only lists and deletes the run's branches, and the agent pushes with the preview Worker's own `GH_TOKEN`. `.github/workflows/e2e.yml` was deleted: a fresh stage needs a user token as its `GH_TOKEN`, because the Workspace's credential check calls `GET /user`, and the repository holds none; a throwaway stage runs from a machine with `pnpm ci:local --stage <stage>`. Preview run 43583952242 passed every step, with a real ChatGPT turn (4 answers, 94.5% of prompt tokens cached). A run cancelled during the e2e step now deletes its branches, disconnects its project, stops the harness run and rolls the preview back to the generation it found (run 43587493739).
 
 **Accepted limitations**
 
@@ -66,4 +67,4 @@ Each item that this file used to list as open is now classified: **resolved** (w
 
 **Reproduced**
 
-- **The e2e and preview workflows cannot run.** Reproduced on 2026-11-14. `.github/workflows/e2e.yml` and `.github/workflows/preview.yml` read the repository secret `E2E_GH_TOKEN`, a user token, and `gh secret list` shows only `CLOUDFLARE_API_TOKEN`, `OWNER_PASSWORD` and `PREVIEW_OWNER_PASSWORD`. `gh run list` returns no run of either workflow. `e2e.yml` runs by hand only (the Monday schedule was removed on 2026-11-11). Setting the secret is a GitHub write that the owner approves and a person creates; until then, `pnpm ci:local` from a machine is the end-to-end evidence and counts as local evidence, not as a green GitHub run.
+None.
