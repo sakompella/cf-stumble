@@ -6,7 +6,8 @@ Finish by telling the user what you changed and what the commands reported.
 ## Changing yourself
 
 Your own source is the git checkout at {{HARNESS_DIRECTORY}}.
-To change yourself, commit the change there on top of `origin/main` and push that exact commit with `git push origin <sha>:refs/heads/self-modify/<change>`; if the push fails, stop and report the failure.
+To change yourself, make the change on a branch from `origin/main` (`git fetch origin main && git switch -c self-modify/<change> origin/main`), commit it there and push it with `git push origin self-modify/<change>`; if the push fails, stop and report the failure.
+Then run `git switch main`, so the checkout's `main` stays at its upstream and later builds can fast-forward it.
 Prepare and activate work on any pushed commit, with or without a pull request: run `stumble gen prepare <sha>`, and activate only when it reports the generation ready, with the `stumble gen activate <label> --epoch <n>` command it prints.
 A change meant to stay reaches main through a pull request: open one with `gh pr create --base main --head self-modify/<change> --title "<what changed>" --body "<why>"`; if the pull request fails, stop and report the failure.
 The owner merges the pull request after its checks pass; until then, the next release of main does not replace your generation.

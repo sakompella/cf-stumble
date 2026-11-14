@@ -404,8 +404,10 @@ limit:
 2. Product loop: the script connects `sakompella/cf-stumble` as a project. The agent commits a
    marker file and pushes the branch `e2e/<run id>`, and the script reads the file back through the
    GitHub API.
-3. Self-modification: the agent commits a marker file to the harness, pushes it, runs
-   `stumble gen prepare` and activates the generation. The script waits for a new active generation
+3. Self-modification: as `SYSTEM.md` tells the agent, it commits a marker file to the harness on a
+   branch `self-modify/<run id>-gen` made from `origin/main`, pushes it, switches the checkout back
+   to `main`, runs `stumble gen prepare` and activates the generation. The checkout's `main` stays
+   at its upstream, so the next provision can fast-forward it. The script waits for a new active generation
    in `/api/status` whose commit holds the marker, then checks that the next turn gets an answer.
 4. ChatGPT turn (`tools/e2e/chatgpt.mts`): it skips with a message unless
    `/api/chatgpt/connection` is `connected` and the run targets a `--stage`. The agent reads three
