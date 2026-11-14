@@ -11,7 +11,7 @@ import { GitHub } from "./github.mts";
 import { Owner } from "./owner-api.mts";
 import { execute } from "./process.mts";
 import { forgetRestoreState, loadRestoreState, saveRestoreState } from "./restore-state.mts";
-import { markerPath } from "./workflows.mts";
+import { HARNESS_PROJECT, markerPath } from "./workflows.mts";
 
 const MINUTE_MS = 60_000;
 
@@ -142,7 +142,11 @@ export class Target {
 
     if (this.#connectedProject !== undefined) await owner.disconnect(this.#connectedProject);
 
-    if (this.#restoreLabel !== undefined) await owner.control("rollback", this.#restoreLabel);
+    if (this.#restoreLabel !== undefined) {
+      await owner.abort(HARNESS_PROJECT);
+      await owner.waitSettled(HARNESS_PROJECT, AbortSignal.timeout(MINUTE_MS));
+      await owner.control("rollback", this.#restoreLabel);
+    }
 
     forgetRestoreState(this.runId);
   }

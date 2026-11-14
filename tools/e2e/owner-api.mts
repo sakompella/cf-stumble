@@ -173,6 +173,12 @@ export class Owner {
     await this.post(`/api/projects/${projectId}/disconnect`);
   }
 
+  async abort(projectId: string): Promise<void> {
+    const response = await this.post(`/api/projects/${projectId}/abort`);
+
+    if (!response.ok) throw new Error(`abort ${projectId} answered ${await response.text()}`);
+  }
+
   async send(projectId: string, content: string): Promise<void> {
     const response = await this.post(`/api/projects/${projectId}/messages`, {
       content,
