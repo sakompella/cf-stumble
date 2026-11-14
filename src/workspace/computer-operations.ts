@@ -19,6 +19,7 @@ import { provisionHarness } from "./harness-provision.js";
 import { cloneProjectInIsolate } from "./isolate-clone.js";
 import { CONTAINER_BACKEND_ID } from "./project/index.js";
 import type { Project } from "../project-catalog.js";
+import { WORKSPACE_ROOT } from "../workspace-layout.js";
 
 function isNotFound(cause: unknown): boolean {
   return hasErrnoCode(cause) && cause.code === "ENOENT";
@@ -55,7 +56,14 @@ export class ComputerWorkspaceOperations implements WorkspaceEffects {
   }
 
   provisionHarness: WorkspaceEffects["provisionHarness"] = (configuration, commit) =>
-    this.harnessPermit.withPermits(1)(provisionHarness(this.workspace, configuration, commit));
+    this.harnessPermit.withPermits(1)(
+      provisionHarness(
+        this.workspace,
+        (source) => this.runCommand(source, WORKSPACE_ROOT, configuration.stepTimeoutMs),
+        configuration,
+        commit,
+      ),
+    );
 
   cloneProject(project: Project): Effect.Effect<void, WorkspaceFault> {
     return cloneProjectInIsolate(this.workspace, project);

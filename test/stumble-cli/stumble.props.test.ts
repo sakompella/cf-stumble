@@ -8,7 +8,7 @@ import { label as generationLabel, testHarnessCommit } from "../supervisor/gener
 
 type Selection = { label: number | undefined; epoch: number };
 
-type Stage = "ready" | "mount-failed";
+type Stage = "ready" | "mount-failed" | "provision-failed";
 
 function generation(label: number): Generation {
   return {
@@ -17,6 +17,21 @@ function generation(label: number): Generation {
     status: "ready",
   };
 }
+
+const PROVISION_FAILED = {
+  ok: false as const,
+  problem: {
+    code: "build-step-failed" as const,
+    harnessCommit: "b".repeat(40),
+    step: "provision" as const,
+    exitCode: 1,
+    diagnostics: {
+      stdoutTail: "",
+      stderrTail: `harness commit ${"b".repeat(40)} is not in https://github.com/o/r.git: fatal: not our ref\n`,
+      truncated: false,
+    },
+  },
+};
 
 function generationControl(selection: Selection, stage: Stage = "ready") {
   const reached: object[] = [];
@@ -38,6 +53,8 @@ function generationControl(selection: Selection, stage: Stage = "ready") {
     },
     prepareGeneration: (label) => {
       reached.push({ prepared: label });
+
+      if (stage === "provision-failed") return Promise.resolve(PROVISION_FAILED);
 
       return Promise.resolve({
         ok: true as const,
@@ -127,6 +144,17 @@ test("a preparation that fails its startup check exits non-zero", async () => {
   const { ports } = generationControl({ label: undefined, epoch: 0 }, "mount-failed");
 
   expect((await runStumble(["gen", "prepare", "b".repeat(40)], ports)).exitCode).toBe(1);
+});
+
+test("a preparation whose build step fails names the step and Git's reason", async () => {
+  const { ports } = generationControl({ label: undefined, epoch: 0 }, "provision-failed");
+
+  const ran = await runStumble(["gen", "prepare", "b".repeat(40)], ports);
+
+  expect(ran.exitCode).toBe(1);
+  expect(ran.stderr).toBe(
+    `submitted generation 7 for ${"b".repeat(40)}\ngeneration 7 was not prepared: build-step-failed at provision (exit 1): harness commit ${"b".repeat(40)} is not in https://github.com/o/r.git: fatal: not our ref\n`,
+  );
 });
 
 function failing(method: "generationStatus" | "prepareGeneration", message: string) {

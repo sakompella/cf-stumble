@@ -374,8 +374,8 @@ a machine you trust with that.
 tip of `main`. It sets `OWNER_PASSWORD` last and then deploys the stage again with
 `--force`: the first deploy starts the Durable Objects without the secrets, and the Supervisor did
 not see `GH_TOKEN` until a new version replaced it, so every push answered 401. Harness provisioning
-deepens the default branch first and then fetches every branch head, so a pushed branch's commit
-can be prepared as a generation. Then it runs three workflows and the ChatGPT turn, each with a time
+fetches a commit the checkout lacks by its ID, so a pushed branch's commit can be prepared as a
+generation. Then it runs three workflows and the ChatGPT turn, each with a time
 limit:
 
 1. Page: a Playwright spec opens the owner page, sends a message, waits for the streamed answer,
