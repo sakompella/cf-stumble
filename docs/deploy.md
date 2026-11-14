@@ -269,6 +269,8 @@ The page shows one of three states:
 - **reconnect required** (with the reason): OpenAI refused the refresh token or the access token. Every model call fails with `chatgpt-reconnect-required` until you connect again or disconnect. The route does not fall back to Workers AI here, so a broken subscription is visible.
 - **not connected (Workers AI fallback)**: model calls use Workers AI.
 
+When the page shows **reconnect required**, reconnect the same way: select **Log in with ChatGPT**, sign in, paste the callback address and select **Finish**. The panel then says **connected** and the next turn uses ChatGPT. Until you do, every turn fails with `chatgpt-reconnect-required`. To use Workers AI in the meantime, send `POST /api/chatgpt/disconnect`; the page shows no **Disconnect** button in this state. Unit tests cover a refused refresh and a repeated 401; no deployed check has produced this state, because only a real sign-in stores a credential that OpenAI can refuse.
+
 **Disconnect** deletes the stored tokens and returns the route to Workers AI. It does not revoke the grant at OpenAI. To revoke it, remove cf-stumble from your ChatGPT account's settings.
 
 ## First run
