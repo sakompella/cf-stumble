@@ -51,7 +51,7 @@ const EVENT: Spec = union(
         content: union(str, nul),
         tool_calls: arr(obj({ id: str, function: obj({ name: str, arguments: str }) })),
       }),
-      usage: obj({ inputTokens: num, outputTokens: num, estimated: bool }),
+      usage: obj({ inputTokens: num, outputTokens: num, estimated: bool }, { cachedTokens: num }),
     },
     {
       truncated: lit(true),

@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { PacedStream } from "../../../src/facet/generation-1/paced-stream.js";
+import { tick } from "../../eventually.js";
 
 const bytes = new TextEncoder().encode("line\n");
 
@@ -9,9 +10,7 @@ async function settled(promise: Promise<void>): Promise<boolean> {
   void promise.then(() => {
     done = true;
   });
-  await new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
+  await tick();
 
   return done;
 }

@@ -1,7 +1,6 @@
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as pause } from "node:timers/promises";
 import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
@@ -13,26 +12,23 @@ import {
 } from "../../../src/orb-protocol.js";
 import { orbCommands, type OrbPorts } from "../../../src/stumble-cli/orb/commands.js";
 import { runCommandTree, type CommandNode } from "../../../src/stumble-cli/tree.js";
+import { eventually } from "../../eventually.js";
 import { startFakeContainer, startFakeHost, type FakeHost } from "./fake-host.js";
 
 const root: CommandNode<OrbPorts> = { name: "stumble", summary: "", subcommands: [orbCommands] };
 
 const startC1 = hostFrame.job({ id: 1, job: orbJob.start({ container: "c1", env: {} }) });
 
-type Provider = Readonly<{ stop(): void; exitCode: Promise<number> }>;
+type Provider = Readonly<{ stop(): void; exitCode: Promise<number>; logged: readonly string[] }>;
 
 let directory: string;
 
 let host: FakeHost;
 
 async function until(done: () => boolean | Promise<boolean>): Promise<void> {
-  for (let tries = 0; tries < 200; tries += 1) {
-    if (await done()) return;
-
-    await pause(25);
-  }
-
-  throw new Error("timed out waiting");
+  await eventually(async () => {
+    expect(await done()).toBe(true);
+  });
 }
 
 async function dispatchScript(start: string): Promise<string> {
@@ -56,18 +52,22 @@ esac
 
 function provider(script: string): Provider {
   const stopping = new AbortController();
+  const logged: string[] = [];
 
   const ports: OrbPorts = {
     env: { STUMBLE_ORB_URL: host.origin, STUMBLE_ORB_TOKEN: "token" },
     signal: stopping.signal,
     platform: "linux",
     arch: "x64",
-    log: () => {},
+    log: (line) => {
+      logged.push(line);
+    },
   };
 
   const finished = runCommandTree(root, ["orb", "provider", script], ports);
 
   return {
+    logged,
     exitCode: finished.then((output) => output.exitCode),
     stop: () => {
       stopping.abort();
@@ -92,15 +92,15 @@ afterEach(async () => {
 });
 
 test("a stop during the backoff ends the provider and it does not connect again", async () => {
-  host = await startFakeHost();
+  host = await startFakeHost({});
   const running = provider(await dispatchScript("true"));
 
-  await until(() => host.attempts() === 1);
-  await pause(200);
+  await until(greeted);
+  host.closeLink();
+  await until(() => running.logged.some((line) => line.endsWith("connecting again in 1s")));
   running.stop();
 
   expect(await running.exitCode).toBe(0);
-  await pause(1_300);
   expect(host.attempts()).toBe(1);
 });
 
@@ -262,12 +262,15 @@ function greeted(): boolean {
   return host.received().some((frame) => frame !== ORB_PING && frame._tag === "hello");
 }
 
-async function pingTick(): Promise<void> {
+async function pingTick(id: number): Promise<void> {
   const before = pings();
 
   vi.advanceTimersByTime(30_000);
   await until(() => pings() > before);
-  await pause(100);
+  host.send(containerFetch(id, "/"));
+  await until(() =>
+    host.received().some((frame) => frame !== ORB_PING && "id" in frame && frame.id === id),
+  );
 }
 
 test("a Host that answers each ping keeps the link", async () => {
@@ -277,11 +280,11 @@ test("a Host that answers each ping keeps the link", async () => {
   const running = provider(await dispatchScript("true"));
 
   await until(greeted);
-  await pingTick();
-  await pingTick();
-  await pingTick();
-  await pause(1_300);
+  await pingTick(1);
+  await pingTick(2);
+  await pingTick(3);
 
+  expect(pings()).toBe(3);
   expect(host.attempts()).toBe(1);
   expect(host.closedLinks()).toBe(0);
 
@@ -290,18 +293,22 @@ test("a Host that answers each ping keeps the link", async () => {
 });
 
 test("a Host that stops answering pings is dropped at the second ping and connected again", async () => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+  vi.useFakeTimers({
+    toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"],
+  });
   host = await startFakeHost({ answersPings: false });
 
   const running = provider(await dispatchScript("true"));
 
   await until(greeted);
-  await pingTick();
+  await pingTick(1);
   expect(host.attempts()).toBe(1);
 
   vi.advanceTimersByTime(30_000);
-  await until(() => host.attempts() === 2);
-  expect(host.closedLinks()).toBe(1);
+  await eventually(async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(host.attempts()).toBe(2);
+  });
 
   running.stop();
   await running.exitCode;

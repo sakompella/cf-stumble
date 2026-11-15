@@ -1,6 +1,9 @@
 import { createModels } from "@earendil-works/pi-ai";
 import type { Context } from "@earendil-works/pi-ai";
 import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
+import { workersAiTurn } from "../../../src/model-route-stream.js";
+import { modelEventStream } from "../../../src/model-route-turn.js";
+import { providerStreamOfLines, sseLine, DONE_LINE } from "../../model-route-provider-stream.js";
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
 import type {
   ModelRouteRequest,
@@ -65,4 +68,21 @@ export function streamThroughProvider(
   models.setProvider(routeProvider(capability));
 
   return models.stream(ROUTE_MODEL, context, signal === undefined ? {} : { signal });
+}
+
+export function capacityOnceModel(calls: number[]): ModelCapability {
+  return {
+    runStream: (request) => {
+      calls.push(Date.now());
+
+      const ai = {
+        run: () =>
+          calls.length === 1
+            ? Promise.reject(new Error("3040: Capacity temporarily exceeded, please try again."))
+            : Promise.resolve(providerStreamOfLines([sseLine({ response: "hi" }), DONE_LINE])),
+      };
+
+      return Promise.resolve(modelEventStream(workersAiTurn(ai, request)));
+    },
+  };
 }
