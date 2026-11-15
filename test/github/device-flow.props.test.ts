@@ -50,6 +50,12 @@ test("a token shorter than 8 or longer than 255 characters is refused", () => {
   });
 });
 
+test("an unset configured token is no token, not the word undefined", () => {
+  const configured = new Map<string, string>();
+
+  expect(parseGitHubToken(configured.get("GH_TOKEN"))).toBeUndefined();
+});
+
 type Sent = string | number | boolean | readonly string[] | null | undefined;
 
 type Field<T> = Readonly<{ sent: Sent; usable: T | undefined }>;

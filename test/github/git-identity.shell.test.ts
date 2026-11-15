@@ -68,7 +68,11 @@ function runInstall(): string {
   return join(directory, "workspace/.gitconfig");
 }
 
-function commitAuthor(configuration: Readonly<{ global: string; system: string }>): string {
+type Identity = Readonly<{ name: string; email: string }>;
+
+function commitAuthor(
+  configuration: Readonly<{ global: string; system: string; repository?: Identity }>,
+): string {
   const repository = join(scratch, "repository");
 
   rmSync(repository, { recursive: true, force: true });
@@ -84,6 +88,11 @@ function commitAuthor(configuration: Readonly<{ global: string; system: string }
     spawnSync(git, arguments_, { encoding: "utf8", cwd: repository, env: configured });
 
   expect(run(["init", "--quiet"]).status).toBe(0);
+
+  if (configuration.repository !== undefined) {
+    expect(run(["config", "user.name", configuration.repository.name]).status).toBe(0);
+    expect(run(["config", "user.email", configuration.repository.email]).status).toBe(0);
+  }
 
   const committed = run(["commit", "--allow-empty", "--quiet", "--message", "probe"]);
 
@@ -127,28 +136,11 @@ test("the image's fallback identity commits when no credential is installed", ()
 });
 
 test("a repository's own identity wins over the installed and fallback identities", () => {
-  const repository = join(scratch, "repository");
+  const author = commitAuthor({
+    global: runInstall(),
+    system: systemConfiguration(),
+    repository: { name: "repo-owner", email: "repo-owner@example.com" },
+  });
 
-  rmSync(repository, { recursive: true, force: true });
-  mkdirSync(repository, { recursive: true });
-
-  const configured = {
-    ...environment,
-    GIT_CONFIG_GLOBAL: runInstall(),
-    GIT_CONFIG_SYSTEM: systemConfiguration(),
-  };
-
-  const run = (arguments_: readonly string[]) =>
-    spawnSync(git, arguments_, { encoding: "utf8", cwd: repository, env: configured });
-
-  expect(run(["init", "--quiet"]).status).toBe(0);
-  expect(run(["config", "user.name", "repo-owner"]).status).toBe(0);
-  expect(run(["config", "user.email", "repo-owner@example.com"]).status).toBe(0);
-
-  const committed = run(["commit", "--allow-empty", "--quiet", "--message", "probe"]);
-
-  expect(committed.status, committed.stderr).toBe(0);
-  expect(run(["log", "-1", "--format=%an <%ae>"]).stdout.trim()).toBe(
-    "repo-owner <repo-owner@example.com>",
-  );
+  expect(author).toBe("repo-owner <repo-owner@example.com>");
 });

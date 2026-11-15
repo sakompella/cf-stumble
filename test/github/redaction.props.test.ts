@@ -2,7 +2,9 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import { containsCredential, redactCredentials, REDACTED } from "../../src/github/redaction.js";
+import { containsCredential, redactCredentials } from "../../src/github/redaction.js";
+
+const MARKER = "[redacted]";
 
 const prefix = gs.sampledFrom(["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]);
 
@@ -59,6 +61,9 @@ const nearMiss = gs.oneOf(
     .map(([tokenPrefix, body]) => `${tokenPrefix}${body}`),
   gs.text({ alphabet: `${alphanumeric}_`, maxSize: 15 }).map((body) => `github_pat_${body}`),
   gs.text({ alphabet: alphanumeric, minSize: 16, maxSize: 30 }).map((body) => `ghx_${body}`),
+  gs
+    .tuples(gs.sampledFrom(["http", "https"]), urlPart, gs.sampledFrom([" ", "/", "\t"]), urlPart)
+    .map(([scheme, host, gap, rest]) => `${scheme}://${host}:${gap}@${rest}`),
 );
 
 const separator = gs.sampledFrom([" ", "\n", ":", "/", "(", ")", ","]);
@@ -73,9 +78,9 @@ test("redacts documented tokens next to non-word delimiters and reaches a fixpoi
 
     expect(containsCredential(message)).toBe(true);
     expect(containsCredential(redacted)).toBe(false);
-    expect(redacted).toContain(REDACTED);
+    expect(redacted).toContain(MARKER);
     expect(redacted).not.toContain(token);
-    expect(redacted.replaceAll(REDACTED, "")).not.toContain(body.slice(-6));
+    expect(redacted.replaceAll(MARKER, "")).not.toContain(body.slice(-6));
     expect(redactCredentials(redacted)).toBe(redacted);
   });
 });
@@ -91,16 +96,16 @@ test("redacts arbitrary opaque known tokens", () => {
   });
 });
 
-test("redacts generated HTTPS URL userinfo credentials", () => {
+test("redacts the userinfo of an HTTP or HTTPS URL, with or without a password", () => {
   hegel.test((tc) => {
+    const scheme = tc.draw(gs.sampledFrom(["http", "https"]));
     const user = tc.draw(gs.oneOf(urlPart, gs.just("x-access-token")));
-    const secret = `secret-${tc.draw(urlPart)}`;
-    const message = `remote: https://${user}:${secret}@github.com/owner/repo.git failed`;
+    const secret = tc.draw(gs.optional(urlPart.map((part) => `secret-${part}`)));
+    const userinfo = secret === null ? user : `${user}:${secret}`;
+    const message = `remote: ${scheme}://${userinfo}@github.com/owner/repo.git failed`;
     const redacted = redactCredentials(message);
 
-    expect(redacted).toBe(`remote: https://${REDACTED}@github.com/owner/repo.git failed`);
-    expect(redacted).not.toContain(user);
-    expect(redacted).not.toContain(secret);
+    expect(redacted).toBe(`remote: ${scheme}://[redacted]@github.com/owner/repo.git failed`);
     expect(redactCredentials(redacted)).toBe(redacted);
   });
 });
