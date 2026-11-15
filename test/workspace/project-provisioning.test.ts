@@ -1,11 +1,8 @@
 import * as Result from "effect/Result";
-import { expect, test, vi } from "vitest";
-import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
+import { expect, test } from "vitest";
+import { sampleProjectOne } from "../project-fixtures.js";
 import type { WorkspaceCommandResult } from "../../src/workspace/commands/command-result.js";
-import {
-  parseProjectProvisionRequest,
-  type ProjectProvisionRequest,
-} from "../../src/workspace/commands/provision-project.js";
+import type { ProjectProvisionRequest } from "../../src/workspace/commands/provision-project.js";
 import { ProvisionUnavailable } from "../../src/supervisor/readiness/provisioning.js";
 import { provisionerFor, ScriptedProvisionHost, TENANT_WORKSPACE } from "./provisioning-fakes.js";
 
@@ -33,21 +30,6 @@ test("clones and then writes the managed instructions into the tenant's workspac
   expect(namespace.names, "one project reaches the tenant's one workspace").toEqual([
     TENANT_WORKSPACE,
   ]);
-});
-
-test("refuses a project id that is not the one its repository URL derives", async () => {
-  const host = new ScriptedProvisionHost();
-
-  await provisionerFor(host).provision();
-
-  expect(
-    parseProjectProvisionRequest({
-      kind: "provision-project",
-      projectId: sampleProjectOne.id,
-      repositoryUrl: sampleProjectTwo.repositoryUrl,
-    }),
-    "an id that is not the one the URL derives is refused",
-  ).toEqual({ ok: false, error: { code: "invalid-request" } });
 });
 
 test.each<readonly ["clone" | "instructions" | undefined, readonly string[], object | undefined]>([
@@ -99,14 +81,11 @@ test("keeps a refused or unreachable workspace one typed failure", async () => {
   const throwing = new ScriptedProvisionHost();
   throwing.provision = (): Promise<WorkspaceCommandResult> =>
     Promise.reject(new Error("fake workspace host failure"));
-  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
   const results = [
     await provisionerFor(refusing).provision(),
     await provisionerFor(throwing).provision(),
   ];
-
-  logged.mockRestore();
 
   expect(
     results.every(

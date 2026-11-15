@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { eventually } from "../../eventually.js";
 import {
   computerExecBackend,
   type ExecWorkspace,
@@ -18,18 +19,6 @@ function alive(pid: number | undefined): boolean {
     return true;
   } catch {
     return false;
-  }
-}
-
-async function until(deadlineMs: number, reached: () => boolean): Promise<void> {
-  const deadline = Date.now() + deadlineMs;
-
-  while (!reached()) {
-    if (Date.now() > deadline) throw new Error("timed out waiting for the host process tree");
-
-    await new Promise((resolve) => {
-      setTimeout(resolve, 20);
-    });
   }
 }
 
@@ -102,10 +91,8 @@ test("cancelling a running command kills the wrapper, its command and the comman
   try {
     const handle = await backend.exec({ command, cwd: "/", timeoutMs: 30_000 });
 
-    await until(5_000, () => {
-      if (!existsSync(pidFile)) return false;
-
-      return readFileSync(pidFile, "utf8").trim().split("\n").length === 2;
+    await eventually(() => {
+      expect(readFileSync(pidFile, "utf8").trim().split("\n")).toHaveLength(2);
     });
 
     const [commandPid, childPid] = readFileSync(pidFile, "utf8").trim().split("\n").map(Number);
@@ -117,7 +104,9 @@ test("cancelling a running command kills the wrapper, its command and the comman
 
     await handle.kill();
 
-    await until(5_000, () => ![rootPid, commandPid, childPid].some(alive));
+    await eventually(() => {
+      expect([rootPid, commandPid, childPid].some(alive)).toBe(false);
+    });
 
     expect(alive(rootPid), "the session leader is gone").toBe(false);
     expect(alive(commandPid), "the command is gone").toBe(false);

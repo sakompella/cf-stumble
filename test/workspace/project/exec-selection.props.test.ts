@@ -1,7 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { commandMayWrite, routedBackend } from "../../../src/workspace/project/exec-routing.js";
+import { routedBackend } from "../../../src/workspace/project/exec-routing.js";
 import { ISOLATE_PROGRAMS } from "../../../src/workspace/project/isolate-programs.js";
 
 const SYSTEM_DIRECTORIES = [
@@ -190,7 +190,7 @@ test("a command goes to the isolate exactly when every segment can run there and
 
       expect(routedBackend(command, requested)).toBe(isolate ? "isolate" : "container");
     },
-    { testCases: 400 },
+    { testCases: 1_200 },
   );
 });
 
@@ -222,73 +222,60 @@ test("a construct the router cannot read sends a command that would run in the i
   );
 });
 
-const ROUTES: ReadonlyArray<readonly [string, "isolate" | "container" | undefined, string]> = [
-  ["", undefined, "container"],
-  ["FOO=1", undefined, "container"],
-  ["for f in *; do cat $f; done", undefined, "container"],
-  ["git status --short", undefined, "container"],
-  ["git push origin main", undefined, "container"],
-  ["curl https://github.com/owner/repo", undefined, "isolate"],
-  ["printf 'h\u00C9llo \u2713\\n' > /tmp/u.txt && cat /tmp/u.txt", undefined, "container"],
-  ["echo >/bin", undefined, "container"],
-  ["echo hi>/tmp/x", undefined, "container"],
-  [">ls node", undefined, "container"],
-  ["cat </etc/hosts", undefined, "container"],
-  ["echo hi > /dev/null", undefined, "isolate"],
-  ["curl -s -o /dev/null -w '%{http_code}' https://github.com/owner/repo", undefined, "isolate"],
-  ["echo hi > /dev/stdout", undefined, "container"],
-  ["grep 'a|b; c' file > out.txt 2>&1", undefined, "isolate"],
-  ["awk 'BEGIN{for(i=0;i<100000;i++)printf \"%d\\n\",i}' | wc -l", undefined, "container"],
-  ["awk '{print $1}' a.txt", undefined, "isolate"],
-  ["awk '{while(i<3)i++}' a.txt", undefined, "container"],
-  ["ls", "container", "container"],
-  ["node -e 1 | cat", "isolate", "container"],
-  ["git status", "isolate", "refused"],
-  ["cd repo && git commit -m x", "isolate", "refused"],
-  ["/usr/bin/git log", "isolate", "refused"],
-  ["git status", "container", "container"],
-];
+const GIT_WORDS = ["git", "/usr/bin/git", "./git"];
 
-test.each(ROUTES)("%j (%s) goes to %s", (command, requested, expected) => {
-  expect(routedBackend(command, requested)).toBe(expected);
+const GIT_CALLS = ["status", "-C repo commit -m x", "-c user.name=x push origin main", "log"];
+
+test("git asked to run in the isolate is refused wherever its segment sits, and a quoted mention of git is not", () => {
+  hegel.test(
+    (tc) => {
+      const before = drawSegments(tc, true).map((segment) => segment.words);
+      const call = tc.draw(gs.sampledFrom(GIT_CALLS));
+      const mentioned = tc.draw(gs.booleans());
+      const requested = tc.draw(gs.sampledFrom([undefined, "isolate", "container"] as const));
+
+      const git = mentioned
+        ? ["echo", `'git ${call}'`]
+        : [
+            `${tc.draw(gs.sampledFrom(["", "GIT_DIR=x "]))}${tc.draw(gs.sampledFrom(GIT_WORDS))}`,
+            call,
+          ];
+
+      const words = tc.draw(gs.booleans()) ? [...before, git] : [git, ...before];
+      const route = routedBackend(commandOf(tc, words), requested);
+
+      if (requested === "container") expect(route).toBe("container");
+      else if (mentioned) expect(route).toBe("isolate");
+      else expect(route).toBe(requested === "isolate" ? "refused" : "container");
+    },
+    { testCases: 200 },
+  );
 });
 
-const MAY_WRITE: ReadonlyArray<readonly [string, boolean]> = [
-  ["cat a b", false],
-  ["grep foo file", false],
-  ["seq 1 300000", false],
-  ["FOO=1 seq 5", false],
-  ["sed s/a/b/ file", false],
-  ["sed -n s/a/b/ file", false],
-  ["sed s/a/b/ a-b.txt", false],
-  ["sed --expression s/a/b/ file", false],
-  ["sed -i s/a/b/ file", true],
-  ["sed -nri s/a/b/ file", true],
-  ["sed --in-place s/a/b/ file", true],
-  ["sed --in-place=bak s/a/b/ file", true],
-  ["echo hi > log", true],
-  ["echo hi >> log", true],
-  ["echo hi >& log", true],
-  ["cat a; echo hi > log", true],
-  ["grep foo file 2>err", true],
-  ["PATH=x seq 5", true],
-  ["grep $(id) file", true],
-  ["chmod +x run.sh", true],
-  ["cp a b", true],
-  ["gunzip a.gz", true],
-  ["gzip a", true],
-  ["ln -s a b", true],
-  ["mkdir d", true],
-  ["mv a b", true],
-  ["rm -rf build", true],
-  ["rmdir d", true],
-  ["split -b 1M a", true],
-  ["tar xf a.tgz", true],
-  ["tee out", true],
-  ["touch f", true],
-  ["grep foo file; rm bar", true],
-];
+test.each(["echo >/bin", "echo hi>/tmp/x", "cat </etc/hosts", ">ls node"])(
+  "a redirect glued to a system path, or placed before the program, sends %j to the container (820cbf7e)",
+  (command) => {
+    expect(routedBackend(command)).toBe("container");
+  },
+);
 
-test.each(MAY_WRITE)("%s may write: %s", (command, mayWrite) => {
-  expect(commandMayWrite(command)).toBe(mayWrite);
+test.each([
+  "awk 'BEGIN{for(i=0;i<100000;i++)printf \"%d\\n\",i}' | wc -l",
+  "awk '{while(i<3)i++}' a.txt",
+])("an awk loop goes to the container because it froze the isolate (40a150b2): %j", (command) => {
+  expect(routedBackend(command)).toBe("container");
+});
+
+test("an awk program without a loop runs in the isolate", () => {
+  expect(routedBackend("awk '{print $1}' a.txt")).toBe("isolate");
+});
+
+test.each(["", "FOO=1"])("%j runs no program, so it goes to the container", (command) => {
+  expect(routedBackend(command)).toBe("container");
+});
+
+test("find with an executing flag runs its arguments, so it goes to the container", () => {
+  for (const flag of FIND_FLAGS) {
+    expect(routedBackend(`find . ${flag} echo {}`), flag).toBe("container");
+  }
 });

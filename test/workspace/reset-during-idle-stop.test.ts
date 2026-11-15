@@ -1,24 +1,12 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.js";
-import { REFUSED_BUILD, restoreWorkspaceMembers } from "./host-fixtures.js";
+import { eventually, tick } from "../eventually.js";
+import { REFUSED_BUILD } from "./host-fixtures.js";
 import { withHost } from "./idle-host.js";
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  restoreWorkspaceMembers();
-});
-
-const tick = () =>
-  new Promise<void>((resolve) => {
-    setTimeout(resolve, 20);
-  });
 
 test.each(["stops", "fails"] as const)(
   "a reset during an idle stop that %s waits for it, then wipes the store and stops the container for the reset",
   async (outcome) => {
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
     const seen = await withHost(`host-reset-during-idle-${outcome}`, async (host, state, box) => {
       const gate = {
         settle: (): void => {},
@@ -37,7 +25,9 @@ test.each(["stops", "fails"] as const)(
       vi.spyOn(Date, "now").mockReturnValue(Date.now() + WORKSPACE_IDLE_STOP_MS + 1_000);
 
       const alarm = host.alarm();
-      await tick();
+      await eventually(() => {
+        expect(box.destroyed).toEqual(["idle"]);
+      });
       let answer: unknown;
 
       const resetting = host.reset().then((result) => {

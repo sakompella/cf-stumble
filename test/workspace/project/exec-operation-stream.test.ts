@@ -4,6 +4,7 @@ import {
   startExecOperation,
   type TerminalEvent,
 } from "../../../src/workspace/project/exec-operation.js";
+import { eventually, eventuallyTruthy, tick } from "../../eventually.js";
 import { FakeExecBackend } from "./fakes.js";
 
 const encoder = new TextEncoder();
@@ -21,10 +22,6 @@ function start() {
   );
 
   return { backend, operation, settled };
-}
-
-async function ticks(count: number): Promise<void> {
-  for (let index = 0; index < count; index += 1) await Promise.resolve();
 }
 
 const decodeFrame = Schema.decodeSync(
@@ -46,8 +43,7 @@ function decode(frame: Uint8Array): Frame {
 
 test("every output chunk reaches the reader in order, numbered from zero, before the terminal", async () => {
   const { backend, operation } = start();
-  await ticks(2);
-  const handle = backend.handles[0]!;
+  const handle = await eventuallyTruthy(() => backend.handles[0]);
   const sent: [string, string][] = [];
 
   for (let index = 0; index < 200; index += 1) {
@@ -68,27 +64,31 @@ test("every output chunk reaches the reader in order, numbered from zero, before
 
 test("the backend is read only as fast as the reader reads, and a cancel mid-stream stops and kills it", async () => {
   const { backend, operation, settled } = start();
-  await ticks(2);
-  const handle = backend.handles[0]!;
+  const handle = await eventuallyTruthy(() => backend.handles[0]);
 
   for (let index = 0; index < 50; index += 1) {
     handle.push({ name: "stdout", data: encoder.encode(`${index}\n`) });
   }
 
-  await ticks(20);
+  await tick();
   expect(handle.readCalls).toBe(1);
 
   const reader = operation.events.getReader();
 
   for (let index = 0; index < 5; index += 1) await reader.read();
-  await ticks(20);
+  await eventually(() => {
+    expect(handle.readCalls).toBe(6);
+  });
+  await tick();
   expect(handle.readCalls).toBe(6);
 
   await reader.cancel();
-  await ticks(20);
+  await eventually(() => {
+    expect(handle.killCalls).toBe(1);
+  });
   const readsAtCancel = handle.readCalls;
   handle.push({ name: "stdout", data: encoder.encode("late\n") });
-  await ticks(20);
+  await tick();
 
   expect(handle.readCalls).toBe(readsAtCancel);
   expect(handle.killCalls).toBe(1);

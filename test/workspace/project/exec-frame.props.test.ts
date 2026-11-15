@@ -5,6 +5,8 @@ import { startExecOperation } from "../../../src/workspace/project/exec-operatio
 import { MAX_EXEC_FRAME_BYTES } from "../../../src/workspace/project/protocol.js";
 import { FakeExecBackend } from "./fakes.js";
 
+const LONE_SURROGATE = /\p{Cs}/u;
+
 const text = gs.text({ alphabet: "ab'\"\\\n\u0001é日🙂", maxSize: 48 });
 
 type DecodedEvent = {
@@ -196,5 +198,25 @@ test("output equals a one-shot decode of the bytes, however they are cut and how
       });
     },
     { testCases: 200 },
+  );
+});
+
+test("a frame boundary never splits a character, wherever the limit falls", async () => {
+  await hegel.testAsync(
+    async (tc) => {
+      const filler = tc.draw(gs.integers({ minValue: 65_440, maxValue: 65_530 }));
+      const tail = tc.draw(gs.text({ alphabet: "x\u0001é🙂", minSize: 1, maxSize: 40 }));
+      const bytes = new TextEncoder().encode(`${"x".repeat(filler)}${tail}`);
+
+      const events = eventsOf(
+        await runOperation({ bytes, offsets: [] }, { bytes: new Uint8Array(), offsets: [] }),
+      );
+
+      expect(events.filter((event) => LONE_SURROGATE.test(event.data ?? ""))).toEqual([]);
+      expect(events.map((event) => event.data ?? "").join("")).toBe(
+        new TextDecoder().decode(bytes),
+      );
+    },
+    { testCases: 100 },
   );
 });

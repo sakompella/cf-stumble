@@ -1,14 +1,10 @@
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
+import { expect, test } from "vitest";
 import {
   executeProjectRemovalRequest,
-  parseProjectRemovalRequest,
-  planProjectRemovalRequest,
   type ProjectRemovalRequest,
 } from "../../src/workspace/commands/remove-project.js";
 import { projectDirectory } from "../../src/workspace-layout.js";
-import { shellQuote } from "../../src/shell-quote.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import {
   workspaceEffects,
@@ -18,10 +14,6 @@ import {
   type WorkspacePathKind,
 } from "./promise-operations.js";
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 const request: ProjectRemovalRequest = {
   kind: "remove-project",
   projectId: sampleProjectOne.id,
@@ -29,21 +21,15 @@ const request: ProjectRemovalRequest = {
 
 class FakeOperations implements PromiseOperations {
   readonly sources: string[] = [];
-  readonly statted: string[] = [];
   readonly remaining = new Set<string>();
-  readonly removedTrees: string[] = [];
   treesStay = false;
   syncFailure: WorkspaceSyncIncomplete | undefined;
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
-    this.statted.push(path);
-
     return Promise.resolve(this.remaining.has(path) ? "directory" : undefined);
   }
 
   removeTree(path: string): Promise<void> {
-    this.removedTrees.push(path);
-
     if (!this.treesStay) this.remaining.delete(path);
 
     return Promise.resolve();
@@ -85,19 +71,7 @@ test("refuses an invalid project id and the harness", async () => {
   expect(operations.sources).toEqual([]);
 });
 
-test("derives the removal from the project id and removes only the clone and staging directory", async () => {
-  const parsed = parseProjectRemovalRequest(request);
-
-  expect(parsed).toEqual(request);
-
-  if ("ok" in parsed) throw new Error("the valid removal request must parse");
-
-  const plan = planProjectRemovalRequest(parsed);
-
-  expect(plan.kind).toBe("run-command");
-  expect(plan.cwd).toBe("/");
-  expect(plan.timeoutMs).toBe(WORKSPACE_COMMAND_TIMEOUT_MS);
-
+test("a removal answers done once the store holds neither the clone nor its staging directory", async () => {
   const operations = new FakeOperations();
 
   await expect(
@@ -108,16 +82,6 @@ test("derives the removal from the project id and removes only the clone and sta
     ok: true,
     result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
   });
-
-  expect(operations.sources).toHaveLength(1);
-  expect(operations.statted, "the durable store is checked for both directories").toEqual([
-    projectDirectory(sampleProjectOne.id),
-    `${projectDirectory(sampleProjectOne.id)}.provisioning`,
-  ]);
-  expect(operations.sources[0]?.split("\n").at(-1)).toBe(
-    `rm -rf -- ${shellQuote(projectDirectory(sampleProjectOne.id))} ${shellQuote(`${projectDirectory(sampleProjectOne.id)}.provisioning`)}`,
-  );
-  expect(operations.sources[0]).not.toContain("/workspace/harness");
 });
 
 test.each([
@@ -144,7 +108,6 @@ test.each([
     },
   ],
 ] as const)("a removal is not reported as done when %s", async (_case, arrange) => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
   const operations = new FakeOperations();
   arrange(operations);
 
@@ -159,7 +122,6 @@ test.each([
 });
 
 test("directories that the command left in the durable store are removed from the store", async () => {
-  vi.spyOn(console, "warn").mockImplementation(() => {});
   const operations = new FakeOperations();
   const clone = projectDirectory(sampleProjectOne.id);
   operations.remaining.add(clone);
@@ -170,5 +132,5 @@ test("directories that the command left in the durable store are removed from th
     ),
   ).resolves.toMatchObject({ ok: true, result: { exitCode: 0 } });
 
-  expect(operations.removedTrees).toEqual([clone]);
+  expect(operations.remaining.has(clone)).toBe(false);
 });

@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { executeProjectProvisionRequest } from "../../src/workspace/commands/provision-project.js";
+import { capturedEvents, named } from "../log-capture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { workspaceEffects, type PromiseOperations } from "./promise-operations.js";
 
@@ -16,11 +17,14 @@ type Clone = (state: { cloned: boolean }) => Promise<void>;
 
 function workspaceWith(cloned: boolean, clone: Clone) {
   const commands: string[] = [];
-  const state = { cloned };
-  const cloneProject = vi.fn(() => clone(state));
+  const state = { cloned, isolateClones: 0 };
 
   const operations: PromiseOperations = {
-    cloneProject,
+    cloneProject: () => {
+      state.isolateClones += 1;
+
+      return clone(state);
+    },
     lstat: (path) =>
       Promise.resolve(
         state.cloned ? (path.endsWith("/.git/config") ? "file" : "directory") : undefined,
@@ -36,9 +40,8 @@ function workspaceWith(cloned: boolean, clone: Clone) {
   };
 
   return {
-    operations,
+    state,
     commands,
-    cloneProject,
     run: () =>
       Effect.runPromise(
         executeProjectProvisionRequest({ operations: workspaceEffects(operations), request }),
@@ -46,44 +49,40 @@ function workspaceWith(cloned: boolean, clone: Clone) {
   };
 }
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-test("an isolate clone provisions the project without running a command", async () => {
-  const { run, commands, cloneProject } = workspaceWith(false, (state) => {
+test("an isolate clone provisions the project without a container command", async () => {
+  const { run, commands } = workspaceWith(false, (state) => {
     state.cloned = true;
 
     return Promise.resolve();
   });
 
   await expect(run()).resolves.toMatchObject({ ok: true, result: { exitCode: 0 } });
-  expect(cloneProject).toHaveBeenCalledTimes(1);
   expect(commands).toEqual([]);
 });
 
 test("a project that is already cloned is neither cloned nor run again", async () => {
-  const { run, commands, cloneProject } = workspaceWith(true, () => Promise.resolve());
+  const { run, commands, state } = workspaceWith(true, () => Promise.resolve());
 
-  await run();
-
-  expect(cloneProject).not.toHaveBeenCalled();
+  await expect(run()).resolves.toMatchObject({ ok: true, result: { exitCode: 0 } });
+  expect(state.isolateClones).toBe(0);
   expect(commands).toEqual([]);
 });
 
 test.each([
   ["fails", () => Promise.reject(new Error("401 Unauthorized")), "401 Unauthorized"],
   ["leaves no clone behind", () => Promise.resolve(), ""],
-])("the container clone runs when the isolate clone %s", async (_case, clone, cause) => {
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  const { run, commands } = workspaceWith(false, clone);
+])(
+  "the container clone runs when the isolate clone %s, and the fallback is logged",
+  async (_case, clone, reason) => {
+    const events = capturedEvents();
+    const { run, commands } = workspaceWith(false, clone);
 
-  await expect(run()).resolves.toMatchObject({ ok: true });
-  expect(commands).toHaveLength(1);
-  expect(error).not.toHaveBeenCalled();
-  expect(warn).toHaveBeenCalledWith(
-    expect.objectContaining({ event: "workspace.isolate-clone.fell-back", level: "warn" }),
-  );
-  expect(JSON.stringify(warn.mock.calls)).toContain(cause);
-});
+    await expect(run()).resolves.toMatchObject({ ok: true, result: { exitCode: 0 } });
+    expect(commands).toHaveLength(1);
+
+    const fellBack = named(events(), "workspace.isolate-clone.fell-back");
+
+    expect(fellBack.map((event) => event.level)).toEqual(["warn"]);
+    expect(String(fellBack[0]?.reason)).toContain(reason);
+  },
+);

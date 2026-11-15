@@ -9,6 +9,7 @@ import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import {
   commitFile,
   git,
+  GIT_ENVIRONMENT,
   makeRoot,
   originRepository,
   rooted,
@@ -53,6 +54,7 @@ function commits(repository: string, label: string, count: number): void {
   const ran = spawnSync("git", ["-C", repository, "fast-import", "--quiet"], {
     input: stream.join(""),
     encoding: "utf8",
+    env: GIT_ENVIRONMENT,
   });
 
   if (ran.status !== 0) throw new Error(`git fast-import: ${ran.stderr}`);

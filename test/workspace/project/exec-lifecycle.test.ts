@@ -46,17 +46,30 @@ test("forwards stdout as it arrives, before the terminal exit event", async () =
 });
 
 test.each([
-  { name: "omitted timeout defaults to the host maximum", input: {}, expected: 600_000 },
-  { name: "short timeout is used exactly as given", input: { timeoutMs: 50 }, expected: 50 },
-  {
-    name: "oversized timeout clamps to the host maximum",
-    input: { timeoutMs: 600_000 * 10 },
-    expected: 600_000,
-  },
-])("$name", async ({ input, expected }) => {
-  const { execBackend, target } = makeTarget();
-  await target.startExec({ command: "sleep 1", ...input });
-  expect(execBackend.requests[0]?.timeoutMs).toBe(expected);
+  ["no timeout times out at the host maximum", {}, 600_000],
+  ["a short timeout times out exactly when asked", { timeoutMs: 50 }, 50],
+  ["an oversized timeout times out at the host maximum", { timeoutMs: 6_000_000 }, 600_000],
+])("an exec with %s", async (_name, input, expectedMs) => {
+  vi.useFakeTimers();
+  const { target } = makeTarget();
+  const started = await target.startExec({ command: "sleep 1", ...input });
+
+  if (!started.ok) throw new Error("expected startExec to succeed");
+  const reading = started.value.events.getReader().read();
+  const seen = { terminal: false };
+
+  void reading.then(() => {
+    seen.terminal = true;
+  });
+
+  await vi.advanceTimersByTimeAsync(expectedMs - 1);
+  expect(seen.terminal).toBe(false);
+
+  await vi.advanceTimersByTimeAsync(1);
+  await expect(reading).resolves.toEqual({
+    done: false,
+    value: { kind: "terminal", seq: 0, outcome: "timed-out" },
+  });
 });
 
 test("two staggered operations time out independently", async () => {

@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import type {
   BackendExecEvent,
   ExecBackend,
@@ -7,6 +7,7 @@ import type {
 } from "../../../src/workspace/project/exec-backend.js";
 import { isolateWithContainerFallback } from "../../../src/workspace/project/exec-fallback.js";
 import { startExecOperation } from "../../../src/workspace/project/exec-operation.js";
+import { eventually } from "../../eventually.js";
 
 const encoder = new TextEncoder();
 
@@ -87,249 +88,130 @@ async function drain(events: ReadableStream<Uint8Array>): Promise<string> {
   return text;
 }
 
-async function run(
-  isolateEvents: BackendExecEvent[],
-  containerEvents: BackendExecEvent[],
-  command = "grep foo file",
-) {
-  const container = new ScriptedBackend("container", containerEvents);
+interface BreakingIsolate {
+  readonly backend: ExecBackend;
+  readonly killed: () => number;
+}
 
-  const backend = isolateWithContainerFallback(
-    new ScriptedBackend("isolate", isolateEvents),
-    container,
-  );
+function breaking(): BreakingIsolate {
+  const scripted = new ScriptedBackend("isolate", []);
 
+  return {
+    backend: {
+      exec: async (input) => {
+        const handle = await scripted.exec(input);
+
+        return {
+          ...handle,
+          reader: { ...handle.reader, read: () => Promise.reject(new Error("CPU time limit")) },
+        };
+      },
+    },
+    killed: () => scripted.killed,
+  };
+}
+
+async function run(isolate: ExecBackend, command = "grep foo file") {
+  const container = new ScriptedBackend("container", [out("from container\n"), exit(0)]);
   const input = { command, cwd: "/", timeoutMs: 1_000 };
-  const handle = await backend.exec(input);
+  const handle = await isolateWithContainerFallback(isolate, container).exec(input);
 
   const text = await drain(
     startExecOperation({ exec: () => Promise.resolve(handle) }, input, () => {}).events,
   );
 
-  return { text, containerRuns: container.seen, handle };
+  return { text, containerRuns: container.seen.length, handle };
 }
 
-test.each([127, 129])("an isolate exit %i reruns the command in the container", async (code) => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
+const isolateRun = (...events: BackendExecEvent[]) => new ScriptedBackend("isolate", events);
 
-  const { text, containerRuns, handle } = await run(
-    [err("git branch: unknown option '-vv'\n"), exit(code)],
-    [out("* main\n"), exit(0)],
-  );
-
-  expect(containerRuns).toEqual([
-    expect.objectContaining({
-      backend: "container",
-      command: "grep foo file",
-    }),
-  ]);
-  expect(text).toContain("* main");
-  expect(text).not.toContain("unknown option");
-  expect(handle.backend).toBe("container");
-  expect(handle.fellBackFrom).toBe("isolate");
-});
-
-test("an isolate that hits a just-bash limit reruns the command in the container", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
-  const { text, containerRuns, handle } = await run(
-    [err("bash: seq: iteration limit exceeded (100000)\n"), exit(126)],
-    [out("1\n2\n3\n"), exit(0)],
-  );
-
-  expect(containerRuns).toEqual([
-    expect.objectContaining({
-      backend: "container",
-      command: "grep foo file",
-    }),
-  ]);
-  expect(text).toContain("1\\n2\\n3");
-  expect(text).not.toContain("iteration limit exceeded");
-  expect(handle.backend).toBe("container");
-  expect(handle.fellBackFrom).toBe("isolate");
-});
-
-test("an isolate that exceeds its execution deadline reruns the command in the container", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
-  const { text, containerRuns, handle } = await run(
+const NOTHING_RAN: ReadonlyArray<readonly [string, readonly BackendExecEvent[]]> = [
+  ["an unknown option (exit 127)", [err("git branch: unknown option '-vv'\n"), exit(127)]],
+  ["a form it does not run (exit 129)", [err("git branch: unknown option '-vv'\n"), exit(129)]],
+  ["a just-bash limit", [err("bash: seq: iteration limit exceeded (100000)\n"), exit(126)]],
+  [
+    "its execution deadline",
     [err("bash: grep exceeded execution deadline (30000ms)\n"), exit(124)],
-    [out("found\n"), exit(0)],
-  );
+  ],
+  ["a stream end without an exit", [err("partial failure\n")]],
+];
 
-  expect(containerRuns).toHaveLength(1);
-  expect(text).toContain("found\\n");
-  expect(text).not.toContain("execution deadline");
-  expect(handle.fellBackFrom).toBe("isolate");
-});
+test.each(NOTHING_RAN)(
+  "an isolate run that hit %s before any output reruns in the container and shows only the container's output",
+  async (_case, events) => {
+    const { text, containerRuns, handle } = await run(isolateRun(...events));
 
-test("an isolate permission failure does not rerun in the container", async () => {
-  const { text, containerRuns } = await run(
+    expect(containerRuns).toBe(1);
+    expect(text).toContain("from container");
+    expect(text).not.toContain('"stderr"');
+    expect(handle.backend).toBe("container");
+    expect(handle.fellBackFrom).toBe("isolate");
+  },
+);
+
+const RAN: ReadonlyArray<readonly [string, readonly BackendExecEvent[], readonly string[]]> = [
+  [
+    "a permission failure",
     [err("bash: ./script.sh: Permission denied\n"), exit(126)],
-    [out("never\n"), exit(0)],
-  );
+    ["Permission denied"],
+  ],
+  ["a failing command", [exit(1)], ['"exitCode":1']],
+  ["exit 129 after output", [out("a\n"), err("usage\n"), exit(129)], ["usage"]],
+  ["a stream end after output", [out("a\n")], ["a\\n", "backend-unavailable"]],
+];
 
-  expect(containerRuns).toEqual([]);
-  expect(text).toContain("Permission denied");
-});
+test.each(RAN)("an isolate run with %s is returned as it is", async (_case, events, shown) => {
+  const { text, containerRuns, handle } = await run(isolateRun(...events));
 
-test("an isolate failure that ran something is returned as it is", async () => {
-  const { text, containerRuns } = await run([exit(1)], [out("never\n"), exit(0)]);
+  expect(containerRuns).toBe(0);
 
-  expect(containerRuns).toEqual([]);
-  expect(text).toContain('"exitCode":1');
-});
-
-test("exit 129 after output is not rerun", async () => {
-  const { text, containerRuns } = await run([out("a\n"), err("usage\n"), exit(129)], []);
-
-  expect(containerRuns).toEqual([]);
-  expect(text).toContain("usage");
-});
-
-test("an isolate stream that ends without an exit before any output reruns the command in the container", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
-  const { text, containerRuns, handle } = await run(
-    [err("partial failure\n")],
-    [out("done\n"), exit(0)],
-  );
-
-  expect(containerRuns).toHaveLength(1);
-  expect(text).toContain("done");
-  expect(text).not.toContain("partial failure");
-  expect(handle.fellBackFrom).toBe("isolate");
-});
-
-test("an isolate stream that breaks before any output reruns the command in the container", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
-  const container = new ScriptedBackend("container", [out("100000\n"), exit(0)]);
-  const broken = new ScriptedBackend("isolate", []);
-
-  const isolate: ExecBackend = {
-    exec: async (input) => {
-      const handle = await broken.exec(input);
-
-      return {
-        ...handle,
-        reader: { ...handle.reader, read: () => Promise.reject(new Error("CPU time limit")) },
-      };
-    },
-  };
-
-  const handle = await isolateWithContainerFallback(isolate, container).exec({
-    command: "awk 'BEGIN{for(;;)}'",
-    cwd: "/",
-    timeoutMs: 1_000,
-  });
-
-  const text = await drain(
-    startExecOperation(
-      { exec: () => Promise.resolve(handle) },
-      { command: "awk", cwd: "/", timeoutMs: 1_000 },
-      () => {},
-    ).events,
-  );
-
-  expect(container.seen).toHaveLength(1);
-  expect(text).toContain("100000");
-  expect(handle.fellBackFrom).toBe("isolate");
-  expect(broken.killed).toBe(1);
-});
-
-test("an isolate stream that breaks after output is not rerun", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
-  const { text, containerRuns } = await run([out("a\n")], [out("never\n"), exit(0)]);
-
-  expect(containerRuns).toEqual([]);
-  expect(text).toContain('"data":"a');
-  expect(text).toContain("backend-unavailable");
-});
-
-test("an isolate limit on a command with a write form is returned with a rerun note", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
-  const { text, containerRuns, handle } = await run(
-    [err("bash: sed: iteration limit exceeded (100000)\n"), exit(126)],
-    [out("never\n"), exit(0)],
-    "sed -i s/a/b/ file",
-  );
-
-  expect(containerRuns).toEqual([]);
-  expect(text).toContain("iteration limit exceeded");
-  expect(text).toContain("rerun with backend: container");
-  expect(handle.backend).toBe("isolate");
+  for (const fragment of shown) expect(text).toContain(fragment);
+  expect(text).not.toContain("from container");
   expect(handle.fellBackFrom).toBeUndefined();
 });
 
-test("an isolate deadline on an append is not rerun", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
-  const { text, containerRuns } = await run(
-    [err("bash: grep exceeded execution deadline (30000ms)\n"), exit(124)],
-    [out("never\n"), exit(0)],
+const WRITES: ReadonlyArray<readonly [string, readonly BackendExecEvent[], string]> = [
+  [
+    "sed -i s/a/b/ file",
+    [err("bash: sed: iteration limit exceeded (100000)\n"), exit(126)],
+    "iteration limit exceeded",
+  ],
+  [
     "grep foo file >> log",
-  );
+    [err("bash: grep exceeded execution deadline (30000ms)\n"), exit(124)],
+    "exceeded execution deadline",
+  ],
+  ["rm -rf build", [err("partial failure\n")], "partial failure"],
+];
 
-  expect(containerRuns).toEqual([]);
-  expect(text).toContain("execution deadline");
-  expect(text).toContain("rerun with backend: container");
-});
+test.each(WRITES)(
+  "%j may write, so an isolate limit is returned with a rerun note instead of a second run",
+  async (command, events, diagnostic) => {
+    const { text, containerRuns, handle } = await run(isolateRun(...events), command);
 
-test("an isolate stream that ends without an exit on a write command is not rerun", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(containerRuns).toBe(0);
+    expect(text).toContain(diagnostic);
+    expect(text).toContain("rerun with backend: container");
+    expect(text).toContain('"stderr"');
+    expect(handle.backend).toBe("isolate");
+    expect(handle.fellBackFrom).toBeUndefined();
+  },
+);
 
-  const { text, containerRuns } = await run(
-    [err("partial failure\n")],
-    [out("never\n"), exit(0)],
-    "rm -rf build",
-  );
+test.each([
+  ["awk 'BEGIN{for(;;)}'", 1, "from container"],
+  ["cp a b", 0, "rerun with backend: container"],
+] as const)(
+  "an isolate stream that breaks before any output stops the isolate; %j runs in the container %i times",
+  async (command, runs, shown) => {
+    const isolate = breaking();
+    const { text, containerRuns } = await run(isolate.backend, command);
 
-  expect(containerRuns).toEqual([]);
-  expect(text).toContain("partial failure");
-  expect(text).toContain("rerun with backend: container");
-  expect(text).toContain("backend-unavailable");
-});
-
-test("an isolate stream that breaks on a write command is not rerun", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
-
-  const container = new ScriptedBackend("container", [out("never\n"), exit(0)]);
-  const broken = new ScriptedBackend("isolate", []);
-
-  const isolate: ExecBackend = {
-    exec: async (input) => {
-      const handle = await broken.exec(input);
-
-      return {
-        ...handle,
-        reader: { ...handle.reader, read: () => Promise.reject(new Error("CPU time limit")) },
-      };
-    },
-  };
-
-  const handle = await isolateWithContainerFallback(isolate, container).exec({
-    command: "cp a b",
-    cwd: "/",
-    timeoutMs: 1_000,
-  });
-
-  const text = await drain(
-    startExecOperation(
-      { exec: () => Promise.resolve(handle) },
-      { command: "cp a b", cwd: "/", timeoutMs: 1_000 },
-      () => {},
-    ).events,
-  );
-
-  expect(container.seen).toEqual([]);
-  expect(text).toContain("rerun with backend: container");
-  expect(broken.killed).toBe(1);
-});
+    expect(containerRuns).toBe(runs);
+    expect(text).toContain(shown);
+    expect(isolate.killed()).toBe(1);
+  },
+);
 
 test("a kill while the container fallback starts kills that container once it exists", async () => {
   const started = gate();
@@ -338,13 +220,14 @@ test("a kill while the container fallback starts kills that container once it ex
     exec: started.opened,
   });
 
-  const handle = await isolateWithContainerFallback(
-    new ScriptedBackend("isolate", [exit(127)]),
-    container,
-  ).exec({ command: "git branch -vv", cwd: "/", timeoutMs: 1_000 });
+  const handle = await isolateWithContainerFallback(isolateRun(exit(127)), container).exec({
+    command: "git branch -vv",
+    cwd: "/",
+    timeoutMs: 1_000,
+  });
 
   const reading = handle.reader.read().catch(() => {});
-  await vi.waitFor(() => {
+  await eventually(() => {
     expect(container.seen).toHaveLength(1);
   });
   await handle.reader.cancel();
@@ -352,7 +235,7 @@ test("a kill while the container fallback starts kills that container once it ex
   started.open();
   await reading;
 
-  await vi.waitFor(() => {
+  await eventually(() => {
     expect(container.killed).toBe(1);
   });
 });

@@ -27,7 +27,7 @@ test("a Worker without ORB_PROVIDER_TOKEN refuses every provider connection", as
   expect((await worker.fetch(request, env)).status).toBe(401);
 });
 
-test("the Worker does not mint provider tokens over HTTP", async () => {
+test("the Worker does not mint provider tokens over HTTP, since c6f502e6 removed the open mint route", async () => {
   const request = ownerRequest("https://cf-stumble.test/api/orb/provider-token", {
     method: "POST",
   });

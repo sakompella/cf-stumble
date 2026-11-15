@@ -1,11 +1,9 @@
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
-import type { GitHubCredentialState } from "../../src/github/index.js";
+import { expect, test } from "vitest";
 import { REDACTED } from "../../src/github/redaction.js";
 import {
   executeGitHubCredentialRequest,
   type GitHubCredentialRequest,
-  type GitHubCredentialResult,
 } from "../../src/workspace/github-credential.js";
 import {
   workspaceEffects,
@@ -16,40 +14,7 @@ import {
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
-class FakeCredentialOperations implements PromiseOperations {
-  readonly writes: (readonly [string, string])[] = [];
-  readonly sources: string[] = [];
-  readonly stdins: (string | undefined)[] = [];
-  stdout = "";
-  stderr = "";
-  exitCode = 0;
-
-  lstat(): Promise<WorkspacePathKind | undefined> {
-    return Promise.resolve("file");
-  }
-
-  readFile(): Promise<string> {
-    return Promise.reject(new Error("the credential surface never reads a file"));
-  }
-
-  writeFile(path: string, content: string): Promise<void> {
-    this.writes.push([path, content]);
-
-    return Promise.resolve();
-  }
-
-  runCommand(
-    source: string,
-    _cwd: string,
-    _timeoutMs: number,
-    stdin?: string,
-  ): Promise<CommandOutput> {
-    this.sources.push(source);
-    this.stdins.push(stdin);
-
-    return Promise.resolve({ stdout: this.stdout, stderr: this.stderr, exitCode: this.exitCode });
-  }
-}
+const SAMPLE_JWT = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJvd25lciJ9.c2lnbmF0dXJl";
 
 class FilesystemlessOperations implements PromiseOperations {
   readonly sources: string[] = [];
@@ -57,8 +22,7 @@ class FilesystemlessOperations implements PromiseOperations {
   stdout = "";
   stderr = "";
   exitCode = 0;
-  commandFails = false;
-  commandFailure = new Error("workspace is unavailable");
+  commandFailure: Error | undefined;
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     return Promise.reject(new Error(`parent directory missing: ${path}`));
@@ -78,7 +42,7 @@ class FilesystemlessOperations implements PromiseOperations {
     _timeoutMs: number,
     stdin?: string,
   ): Promise<CommandOutput> {
-    if (this.commandFails) return Promise.reject(this.commandFailure);
+    if (this.commandFailure !== undefined) return Promise.reject(this.commandFailure);
     this.sources.push(source);
     this.stdins.push(stdin);
 
@@ -86,9 +50,7 @@ class FilesystemlessOperations implements PromiseOperations {
   }
 }
 
-type CredentialOperations = FakeCredentialOperations | FilesystemlessOperations;
-
-function credential(operations: CredentialOperations, request: GitHubCredentialRequest) {
+function credential(operations: FilesystemlessOperations, request: GitHubCredentialRequest) {
   return Effect.runPromise(
     executeGitHubCredentialRequest({
       operations: workspaceEffects(operations),
@@ -98,43 +60,24 @@ function credential(operations: CredentialOperations, request: GitHubCredentialR
   );
 }
 
-function statusOf(result: GitHubCredentialResult): GitHubCredentialState | undefined {
-  return result.ok && result.result.kind === "credential-status" ? result.result.state : void 0;
+function install(operations: FilesystemlessOperations, token = FAKE_TOKEN) {
+  return credential(operations, { kind: "github-credential", step: "install", token });
 }
 
-test("hands the token to gh on standard input and keeps it out of the command line", async () => {
-  const operations = new FakeCredentialOperations();
-  operations.stdout = "installed";
-
-  const installed = await credential(operations, {
-    kind: "github-credential",
-    step: "install",
-    token: FAKE_TOKEN,
-  });
-
-  expect(installed).toEqual({ ok: true, result: { kind: "credential-installed" } });
-  expect(operations.stdins[0], "standard input is how --with-token reads a token").toBe(
-    `${FAKE_TOKEN}\n`,
-  );
-  expect(operations.sources.join("\n")).not.toContain(FAKE_TOKEN);
-  expect(operations.sources[0]).toContain("gh auth login --hostname github.com --with-token");
-  expect(operations.sources[0], "the credential is also usable from git").toContain(
-    "gh auth setup-git",
-  );
-});
-
-test("installs a credential without touching a filesystem at all", async () => {
+test("installs a credential in a workspace whose filesystem refuses everything, which staged the token in a /tmp the workspace filesystem does not have before d7f1481c", async () => {
   const operations = new FilesystemlessOperations();
   operations.stdout = "installed";
 
-  const installed = await credential(operations, {
-    kind: "github-credential",
-    step: "install",
-    token: FAKE_TOKEN,
+  await expect(install(operations)).resolves.toEqual({
+    ok: true,
+    result: { kind: "credential-installed" },
   });
-
-  expect(installed).toEqual({ ok: true, result: { kind: "credential-installed" } });
-  expect(operations.stdins[0]).toBe(`${FAKE_TOKEN}\n`);
+  expect(operations.stdins, "standard input is how gh reads the token").toEqual([
+    `${FAKE_TOKEN}\n`,
+  ]);
+  expect(operations.sources.join("\n"), "the token is never part of a command line").not.toContain(
+    FAKE_TOKEN,
+  );
 });
 
 test("reports a failed install with gh's stderr as the detail", async () => {
@@ -142,106 +85,45 @@ test("reports a failed install with gh's stderr as the detail", async () => {
   operations.exitCode = 1;
   operations.stderr = "gh: something went wrong";
 
-  const failed = await credential(operations, {
-    kind: "github-credential",
-    step: "install",
-    token: FAKE_TOKEN,
-  });
-
-  expect(failed).toEqual({
+  await expect(install(operations)).resolves.toEqual({
     ok: false,
     error: { code: "credential-command-failed", detail: "gh: something went wrong" },
   });
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 test("a command that cannot run is one workspace-unavailable failure", async () => {
   const operations = new FilesystemlessOperations();
-  operations.commandFails = true;
   operations.commandFailure = new Error("workspace transport dropped");
-  vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const failed = await credential(operations, {
-    kind: "github-credential",
-    step: "install",
-    token: FAKE_TOKEN,
+  await expect(install(operations)).resolves.toEqual({
+    ok: false,
+    error: { code: "workspace-unavailable", detail: "" },
   });
-
-  expect(failed).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
 });
 
-test("redacts a token a tool printed back before it leaves the workspace", async () => {
-  const operations = new FakeCredentialOperations();
-  operations.exitCode = 1;
-  operations.stderr = `fatal: bad credentials for https://x-access-token:${FAKE_TOKEN}@github.com`;
-
-  const failed = await credential(operations, {
-    kind: "github-credential",
-    step: "install",
-    token: FAKE_TOKEN,
-  });
-
-  if (failed.ok) {
-    throw new Error("a failing install must report a failure");
-  }
-
-  expect(failed.error.detail).not.toContain(FAKE_TOKEN);
-  expect(failed.error.detail).toContain(REDACTED);
-});
-
-test("redacts an opaque token a tool echoed back, even though it matches no known prefix", async () => {
+test("redacts the installed token from a failure detail, even an opaque token with no known prefix", async () => {
   const opaqueToken = "s3cr3t-opaque-installer-token-0123456789";
-  const operations = new FakeCredentialOperations();
+  const operations = new FilesystemlessOperations();
   operations.exitCode = 1;
   operations.stderr = `gh: unexpected response, saw token ${opaqueToken} in the request`;
 
-  const failed = await credential(operations, {
-    kind: "github-credential",
-    step: "install",
-    token: opaqueToken,
-  });
-
-  if (failed.ok) {
-    throw new Error("a failing install must report a failure");
-  }
-
-  expect(failed.error.detail).not.toContain(opaqueToken);
-  expect(failed.error.detail).toContain(REDACTED);
-});
-
-const SAMPLE_JWT = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJvd25lciJ9.c2lnbmF0dXJl";
-
-test("redacts a JWT a tool printed, as the log does", async () => {
-  const operations = new FakeCredentialOperations();
-  operations.exitCode = 1;
-  operations.stderr = `gh: request carried ${SAMPLE_JWT}`;
-
-  const failed = await credential(operations, {
-    kind: "github-credential",
-    step: "install",
-    token: FAKE_TOKEN,
-  });
-
-  expect(failed).toEqual({
+  await expect(install(operations, opaqueToken)).resolves.toEqual({
     ok: false,
-    error: { code: "credential-command-failed", detail: `gh: request carried ${REDACTED}` },
+    error: {
+      code: "credential-command-failed",
+      detail: `gh: unexpected response, saw token ${REDACTED} in the request`,
+    },
   });
 });
 
 test("reports a workspace image without gh instead of pretending to install", async () => {
-  const operations = new FakeCredentialOperations();
+  const operations = new FilesystemlessOperations();
   operations.stdout = "tooling-missing";
 
-  const installed = await credential(operations, {
-    kind: "github-credential",
-    step: "install",
-    token: FAKE_TOKEN,
+  await expect(install(operations)).resolves.toEqual({
+    ok: true,
+    result: { kind: "credential-status", state: "tooling-missing", login: undefined },
   });
-
-  expect(statusOf(installed)).toBe("tooling-missing");
 });
 
 test.each([
@@ -251,55 +133,58 @@ test.each([
   ["tooling-missing", "tooling-missing", undefined],
   ["something unexpected", "unusable", undefined],
 ])("reads %j as the %s credential state", async (stdout, state, login) => {
-  const operations = new FakeCredentialOperations();
+  const operations = new FilesystemlessOperations();
   operations.stdout = stdout;
 
-  const status = await credential(operations, { kind: "github-credential", step: "status" });
-
-  expect(status).toEqual({ ok: true, result: { kind: "credential-status", state, login } });
-  expect(operations.sources[0]).toContain("gh auth status");
+  await expect(
+    credential(operations, { kind: "github-credential", step: "status" }),
+  ).resolves.toEqual({ ok: true, result: { kind: "credential-status", state, login } });
 });
 
-test("asks git whether a repository is readable, and redacts what git says when it is not", async () => {
-  const granted = new FakeCredentialOperations();
-  granted.stdout = "granted";
-  const denied = new FakeCredentialOperations();
-  denied.stdout = `denied fatal: could not read from https://user:${FAKE_TOKEN}@github.com/o/r ${SAMPLE_JWT}`;
-
-  const allowed = await credential(granted, {
+function verify(operations: FilesystemlessOperations, repositoryUrl: string) {
+  return credential(operations, {
     kind: "github-credential",
     step: "verify-repository",
-    repositoryUrl: "https://github.com/owner/repo.git",
+    repositoryUrl,
   });
+}
 
-  const refused = await credential(denied, {
-    kind: "github-credential",
-    step: "verify-repository",
-    repositoryUrl: "https://github.com/owner/repo",
-  });
+test("checks one repository for both spellings of its URL", async () => {
+  const operations = new FilesystemlessOperations();
+  operations.stdout = "granted";
 
-  expect(allowed).toEqual({
-    ok: true,
-    result: { kind: "repository-access", granted: true, detail: "" },
-  });
-  expect(granted.sources[0]).toContain("git ls-remote --heads");
-  expect(
-    granted.sources[0],
-    "the URL is canonical, so both spellings check one repository",
-  ).toContain("'https://github.com/owner/repo'");
+  const answers = [
+    await verify(operations, "https://github.com/owner/repo.git"),
+    await verify(operations, "https://github.com/owner/repo"),
+  ];
+
+  expect(answers).toEqual(
+    Array.from({ length: 2 }, () => ({
+      ok: true,
+      result: { kind: "repository-access", granted: true, detail: "" },
+    })),
+  );
+  expect(operations.sources[0]).toBe(operations.sources[1]);
+});
+
+test("a repository git cannot read is denied with git's reason, secrets redacted", async () => {
+  const operations = new FilesystemlessOperations();
+  operations.stdout = `denied fatal: could not read from https://user:${FAKE_TOKEN}@github.com/o/r ${SAMPLE_JWT}`;
+
+  const refused = await verify(operations, "https://github.com/owner/repo");
 
   if (!refused.ok || refused.result.kind !== "repository-access") {
     throw new Error("a denied repository must still be a result");
   }
 
   expect(refused.result.granted).toBe(false);
+  expect(refused.result.detail).toContain("could not read from");
   expect(refused.result.detail).not.toContain(FAKE_TOKEN);
   expect(refused.result.detail).not.toContain(SAMPLE_JWT);
-  expect(refused.result.detail).toContain(REDACTED);
 });
 
-test("refuses an install token or repository URL that does not parse", async () => {
-  const operations = new FakeCredentialOperations();
+test("refuses an install token or repository URL that does not parse, and runs nothing", async () => {
+  const operations = new FilesystemlessOperations();
 
   for (const request of [
     { kind: "github-credential", step: "install", token: "has space" },
@@ -311,6 +196,5 @@ test("refuses an install token or repository URL that does not parse", async () 
     });
   }
 
-  expect(operations.writes, "a refused request stages nothing").toEqual([]);
-  expect(operations.sources, "a refused request runs nothing").toEqual([]);
+  expect(operations.sources).toEqual([]);
 });

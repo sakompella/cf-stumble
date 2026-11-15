@@ -16,6 +16,11 @@ const GIT_IDENTITY = {
   GIT_CONFIG_GLOBAL: "/dev/null",
 };
 
+export const GIT_ENVIRONMENT = {
+  ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_"))),
+  ...GIT_IDENTITY,
+};
+
 export function makeRoot(prefix: string): Root {
   const root = mkdtempSync(join(tmpdir(), prefix));
 
@@ -58,7 +63,7 @@ export function runRooted(
 export function git(directory: string, ...args: readonly string[]): string {
   const ran = spawnSync("git", ["-C", directory, ...args], {
     encoding: "utf8",
-    env: { ...process.env, ...GIT_IDENTITY },
+    env: GIT_ENVIRONMENT,
   });
 
   if (ran.status !== 0) throw new Error(`git ${args.join(" ")}: ${ran.stderr}`);

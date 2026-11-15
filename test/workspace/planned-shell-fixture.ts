@@ -1,5 +1,7 @@
 import { devShellTool } from "../dev-shell-tool.js";
-import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { eventually } from "../eventually.js";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { expect } from "vitest";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -52,4 +54,10 @@ export function systemToolsDirectory(parent: string): string {
   }
 
   return directory;
+}
+
+export function untilExists(path: string): Promise<void> {
+  return eventually(() => {
+    expect(existsSync(path), `${path} appeared`).toBe(true);
+  });
 }
