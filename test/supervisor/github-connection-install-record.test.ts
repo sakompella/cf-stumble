@@ -1,21 +1,19 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { GitHubConnection, GitHubConnectionStore } from "../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./projects/fake-tenant-workspace.js";
 
 const NOW = 1_700_000_000_000;
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
 test.each(["unavailable", "tooling-missing"] as const)(
   "a device authorization whose install ends %s replaces the connected record",
   async (failure) => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
     await runInDurableObject(
       env.SUPERVISOR.getByName(`install-record-${failure}`),
       async (_instance, state) => {
@@ -66,8 +64,6 @@ test.each(["unavailable", "tooling-missing"] as const)(
 );
 
 test("a credential install held across a reset leaves the cleared record alone", async () => {
-  vi.spyOn(console, "info").mockImplementation(() => {});
-
   await runInDurableObject(
     env.SUPERVISOR.getByName("install-across-reset"),
     async (_instance, state) => {

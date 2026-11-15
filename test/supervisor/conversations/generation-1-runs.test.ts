@@ -3,9 +3,16 @@ import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:tes
 import { afterEach, expect, test, vi } from "vitest";
 import { PROJECT_RUN_DEADLINE_MS } from "../../../src/turn-budget.js";
 import { sampleProjectOne, sampleProjectTwo } from "../../project-fixtures.js";
-import { hasRun, servingGeneration1, submitted, untilAnswered } from "./generation-1-session.js";
+import {
+  hasRun,
+  servingGeneration1,
+  submitted,
+  untilAnswered,
+  untilIdle,
+} from "./generation-1-session.js";
 import { ProjectWorkspace } from "./project-workspace.js";
 import { calls, held, says, scriptModel } from "./scripted-model.js";
+import { eventuallyTruthy } from "../../eventually.js";
 
 const project = sampleProjectOne.id;
 
@@ -19,7 +26,6 @@ function advanceSupervisorClock(ms: number): void {
 
 afterEach(async () => {
   vi.useRealTimers();
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -84,7 +90,7 @@ test("a project's capability ends when its run settles while another project's r
   await untilAnswered(control, project, 1);
 
   const ended = () => workspace.leases.map((lease) => lease.ended);
-  await vi.waitUntil(() => ended().slice(othersLeases).every(Boolean), { timeout: 5_000 });
+  await eventuallyTruthy(() => ended().slice(othersLeases).every(Boolean));
   expect(ended().slice(0, othersLeases)).not.toContain(true);
   expect(await hasRun(control, otherProject)).toBe(true);
   other.release(says("done"));
@@ -116,7 +122,7 @@ test("an alarm after a Supervisor reset aborts only the run past its own deadlin
   advanceSupervisorClock(PROJECT_RUN_DEADLINE_MS - 5 * MINUTE_MS + 1_000);
 
   expect(await runDurableObjectAlarm(control)).toBe(true);
-  await vi.waitUntil(async () => !(await hasRun(control, project)), { timeout: 10_000 });
+  await untilIdle(control, project);
   expect(await hasRun(control, otherProject)).toBe(true);
 
   for (const answer of answers) answer.release(says("late"));
@@ -133,7 +139,7 @@ test("a run aborted at its deadline leaves a notice that the next turn's model r
   advanceSupervisorClock(PROJECT_RUN_DEADLINE_MS + 1_000);
 
   expect(await runDurableObjectAlarm(control)).toBe(true);
-  await vi.waitUntil(async () => !(await hasRun(control, project)), { timeout: 10_000 });
+  await untilIdle(control, project);
   await submitted(control, project, "continue", "r2");
   await model.asked(2);
 

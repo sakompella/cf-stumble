@@ -11,6 +11,7 @@ import {
   servingGeneration1,
   submitted,
   untilAnswered,
+  untilIdle,
 } from "./generation-1-session.js";
 import { ProjectWorkspace } from "./project-workspace.js";
 import { calls, held, says, scriptModel } from "./scripted-model.js";
@@ -18,7 +19,6 @@ import { calls, held, says, scriptModel } from "./scripted-model.js";
 const project = sampleProjectOne.id;
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -92,7 +92,7 @@ test("a message queued behind a cancelled run is withdrawn", async () => {
   await model.asked(1);
   await submitted(control, project, "second", "r2");
   expect(await control.abortProjectRun(project)).toEqual({ ok: true });
-  await vi.waitUntil(async () => !(await hasRun(control, project)), { timeout: 10_000 });
+  await untilIdle(control, project);
   first.release(says("an answer nobody reads"));
   await submitted(control, project, "third", "r3");
 
@@ -144,10 +144,10 @@ test("an abort kills the command a tool is running and answers", async () => {
   const control = await servingGeneration1("generation-1-abort-tool", workspace);
 
   await submitted(control, project, "run sleep 120", "r1");
-  await vi.waitUntil(() => workspace.execs.handles.length === 1, { timeout: 10_000 });
+  await workspace.untilExecs((handles) => handles.length === 1);
   const aborted = control.abortProjectRun(project);
 
-  await vi.waitUntil(() => workspace.execs.handles[0]?.killCalls === 1, { timeout: 5_000 });
+  await workspace.untilExecs((handles) => handles[0]?.killCalls === 1);
   expect(await aborted).toEqual({ ok: true });
 });
 
@@ -159,7 +159,7 @@ test("an abort answers while a command that ignores its kill still runs", async 
   const control = await servingGeneration1("generation-1-abort-unkillable", workspace);
 
   await submitted(control, project, "run sleep 120", "r1");
-  await vi.waitUntil(() => workspace.execs.handles.length === 1, { timeout: 10_000 });
+  await workspace.untilExecs((handles) => handles.length === 1);
 
   expect(await control.abortProjectRun(project)).toEqual({ ok: true });
 });

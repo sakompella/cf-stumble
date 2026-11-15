@@ -12,7 +12,6 @@ import {
   submitCandidate,
   generationLabel,
 } from "./helpers.js";
-import { readGenerations } from "./generation-reads.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
@@ -51,7 +50,7 @@ test("reports a typed failure and serves nothing when no generation is active", 
   const control = supervisor("no-active-generation-serves-nothing");
 
   expect(await servedText(control)).toBe("refused: no-active-generation");
-  expect(await readGenerations(control), "no submission means no labeled generation").toEqual([]);
+  expect(await control.getActiveGeneration()).toMatchObject({ generation: undefined, epoch: 0 });
 });
 
 test("serves the active retained artifact after Durable Object eviction", async () => {

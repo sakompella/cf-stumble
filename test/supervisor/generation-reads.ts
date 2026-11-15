@@ -18,14 +18,20 @@ export function readGeneration(
 export function readGenerations(
   control: DurableObjectStub<Supervisor>,
 ): Promise<{ label: number; harnessCommit: string; status: string }[]> {
-  return runInDurableObject(control, (_instance, state) =>
-    state.storage.sql
-      .exec<{ label: number; harness_commit: string; status: string }>(
-        "SELECT label, harness_commit, status FROM generations ORDER BY label",
-      )
-      .toArray()
-      .map((row) => ({ label: row.label, harnessCommit: row.harness_commit, status: row.status })),
-  );
+  return runInDurableObject(control, (_instance, state) => {
+    const generations = new Generations(state.storage, FACET_COMPATIBILITY);
+    const read: { label: number; harnessCommit: string; status: string }[] = [];
+
+    for (
+      let generation = generations.byLabel(generationLabel(0));
+      generation !== undefined;
+      generation = generations.byLabel(generationLabel(read.length))
+    ) {
+      read.push({ ...generation });
+    }
+
+    return read;
+  });
 }
 
 export async function expectFailedCandidate(

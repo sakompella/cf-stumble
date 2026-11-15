@@ -4,28 +4,15 @@ import { activateGeneration, connectedSupervisor, generationLabel } from "../hel
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { PROJECT_RUN_DEADLINE_MS } from "../../../src/turn-budget.js";
 import { readyScripted, SCRIPTED_COMMITS, servingScripted } from "./serving-fixture.js";
+import { eventually, eventuallyTruthy } from "../../eventually.js";
 
 afterEach(async () => {
   vi.useRealTimers();
-  vi.restoreAllMocks();
   await reset();
 });
 
 function alarm(control: DurableObjectStub<Supervisor>): Promise<number | null> {
   return runInDurableObject(control, (_instance, state) => state.storage.getAlarm());
-}
-
-async function rearmed(control: DurableObjectStub<Supervisor>): Promise<number> {
-  let at = await alarm(control);
-
-  while (at === null) {
-    await new Promise<void>((resume) => {
-      setTimeout(resume, 10);
-    });
-    at = await alarm(control);
-  }
-
-  return at;
 }
 
 async function admitted(
@@ -108,7 +95,7 @@ test("a Supervisor with nothing serving refuses a message", async () => {
 test("an active run keeps the recovery alarm armed and refuses a workspace reset until it settles", async () => {
   const control = await servingScripted("conversations-alarm");
   const before = Date.now();
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const log = vi.spyOn(console, "log");
 
   await control.submitProjectMessage("sample-project-one", "hello", "r1", 30);
 
@@ -128,8 +115,8 @@ test("an active run keeps the recovery alarm armed and refuses a workspace reset
 test("a run the facet continues at its deadline gets its own deadline and workspace at once, so the next alarm does not abort it", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   const control = await servingScripted("conversations-continued-at-deadline");
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const log = vi.spyOn(console, "log");
+  const warn = vi.spyOn(console, "warn");
 
   const events = (spy: typeof log, event: string) =>
     spy.mock.calls.filter(([line]) => JSON.stringify(line).includes(`"event":"${event}"`));
@@ -138,7 +125,7 @@ test("a run the facet continues at its deadline gets its own deadline and worksp
   vi.setSystemTime(Date.now() + PROJECT_RUN_DEADLINE_MS + 1_000);
 
   expect(await runDurableObjectAlarm(control)).toBe(true);
-  await rearmed(control);
+  await eventuallyTruthy(() => alarm(control));
   expect(await runDurableObjectAlarm(control)).toBe(true);
 
   expect(events(warn, "run.deadline-aborted")).toHaveLength(1);
@@ -153,7 +140,7 @@ test("a run the facet continues at its deadline gets its own deadline and worksp
 
 test("a run the facet reports unanswered with a model error settles as unanswered with the error code", async () => {
   const control = await servingScripted("conversations-failed-run");
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const log = vi.spyOn(console, "log");
 
   await control.submitProjectMessage("sample-project-one", "fail the run", "r1", 30);
 
@@ -168,7 +155,7 @@ test("a run the facet reports unanswered with a model error settles as unanswere
 
 test("an abort while nothing runs does not mark the next run cancelled", async () => {
   const control = await servingScripted("conversations-idle-abort");
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const log = vi.spyOn(console, "log");
 
   await control.submitProjectMessage("sample-project-one", "fail the run", "r1", 30);
   await control.abortProjectRun("sample-project-one");
@@ -212,7 +199,6 @@ test("activation and rollback replace the serving facet, and its storage carries
 });
 
 test("an alarm whose attach fails throws, so the platform retries it, and the retry resumes the run", async () => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
   const control = await servingScripted("conversations-alarm-retry");
 
   await control.submitProjectMessage("harness", "refuse the next attach", "r1", 30);
@@ -237,7 +223,7 @@ test("a message that was checked before its project was disconnected does not gi
 
 test("an events stream the facet closes ends once its chunks are read, without cancelling the facet's stream", async () => {
   const control = await servingScripted("conversations-events-end");
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const log = vi.spyOn(console, "log");
 
   expect(await servingCommit(control, "sample-project-one")).toBe(SCRIPTED_COMMITS[0]);
   expect(log).not.toHaveBeenCalledWith(
@@ -247,7 +233,7 @@ test("an events stream the facet closes ends once its chunks are read, without c
 
 test("a reader that cancels its events stream cancels the facet's stream", async () => {
   const control = await servingScripted("conversations-events-cancel");
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const log = vi.spyOn(console, "log");
 
   await admitted(control, "sample-project-one", "hold the events open", "r1");
   const result = await control.projectEvents("sample-project-one");
@@ -257,7 +243,7 @@ test("a reader that cancels its events stream cancels the facet's stream", async
   await reader.read();
   await reader.cancel();
 
-  await vi.waitFor(() => {
+  await eventually(() => {
     expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: "facet.events-cancelled" }));
   });
 });

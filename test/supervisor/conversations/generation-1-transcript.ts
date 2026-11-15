@@ -18,6 +18,7 @@ export function openReader() {
     feed: (line: string) => {
       latest = read(line);
     },
+    viewed: () => Option.isSome(latest),
     isRunning: () => Option.exists(latest, (value) => value.isRunning),
     entries: (): readonly Entry[] =>
       Option.match(latest, {

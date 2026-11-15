@@ -1,17 +1,15 @@
 import { reset } from "cloudflare:test";
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { projectIdOf } from "../../project-fixtures.js";
 import { FAKE_TOKEN, NOW, REPOSITORY, tenant } from "./connection-tenant.js";
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
 test("refuses provisioning on use when the clone's sync does not complete", async () => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
   const subject = tenant("use-sync-incomplete", { fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
   subject.workspace.commandSync = "incomplete";

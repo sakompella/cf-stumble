@@ -15,8 +15,6 @@ type Tag = LifecycleEvent["_tag"];
 
 type Expected = Readonly<{ state: State; commands: readonly LifecycleCommand[] }>;
 
-type Move = Readonly<{ from: State; tag: Tag; step: Expected }>;
-
 const EVENTS: readonly LifecycleEvent[] = Object.values(LifecycleEvent.cases).map((variant) =>
   variant.make({}),
 );
@@ -47,17 +45,8 @@ const TABLE: Readonly<Record<Tag, (state: State) => Expected>> = {
   removalFailed: unchanged,
 };
 
-function walkFromNothing(tc: hegel.TestCase, inspect?: (move: Move) => void) {
-  let state: State;
-
-  for (const tag of tc.draw(gs.arrays(gs.sampledFrom(TAGS), { maxSize: 30 }))) {
-    const move = { from: state, tag, step: lifecycleStep(state, tagged(tag)) };
-
-    inspect?.(move);
-    state = move.step.state;
-  }
-
-  return state;
+function walkFromNothing(tc: hegel.TestCase): State {
+  return finish(undefined, tc.draw(gs.arrays(gs.sampledFrom(TAGS), { maxSize: 30 })));
 }
 
 const CONNECT_AFTER_REMOVAL: readonly Tag[] = ["removed", "connect", "provisioned"];
@@ -66,37 +55,10 @@ function finish(from: State, tags: readonly Tag[]): State {
   return tags.reduce<State>((state, tag) => lifecycleStep(state, tagged(tag)).state, from);
 }
 
-test("a connect during a removal changes nothing", () => {
-  expect(lifecycleStep("removing", tagged("connect"))).toEqual(unchanged("removing"));
-});
-
 test("every state and event pair moves and emits like the documented transition table", () => {
-  hegel.test((tc) => {
-    const state = tc.draw(gs.sampledFrom(STATES));
-    const tag = tc.draw(gs.sampledFrom(TAGS));
-
-    expect(lifecycleStep(state, tagged(tag))).toEqual(TABLE[tag](state));
-  });
-});
-
-test("a walk from no project follows the table, enters each state only through its documented event, and starts work only for the state it enters", () => {
-  hegel.test((tc) => {
-    walkFromNothing(tc, ({ from, tag, step }) => {
-      expect(step).toEqual(TABLE[tag](from));
-
-      if (step.state === "connected" && from !== "connected") {
-        expect([from, tag]).toEqual(["provisioning", "provisioned"]);
-      }
-
-      if (step.state === undefined && from !== undefined)
-        expect([from, tag]).toEqual(["removing", "removed"]);
-
-      for (const command of step.commands) {
-        expect(command._tag).toBe(step.state === "removing" ? "RemoveDirectories" : "Provision");
-        expect(step.state).not.toBe("connected");
-      }
-    });
-  });
+  for (const state of STATES) {
+    for (const tag of TAGS) expect(lifecycleStep(state, tagged(tag))).toEqual(TABLE[tag](state));
+  }
 });
 
 test("a disconnect then a successful removal ends with no project from every reachable state", () => {

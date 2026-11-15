@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { runAtEntryPoint, runResponseBody } from "../src/run-entry-point.js";
+import { tick } from "./eventually.js";
 
 const RUNNERS = [
   ["runAtEntryPoint", (program: Effect.Effect<void>) => runAtEntryPoint(program)],
@@ -55,7 +56,7 @@ test("a body's program runs until the body is cancelled, then runs its finalizer
     cancelled.signal,
   );
 
-  await scheduler.wait(5);
+  await tick();
   expect(finalized).toEqual([]);
 
   cancelled.abort();

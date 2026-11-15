@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import * as Result from "effect/Result";
 import type { CommandOutput } from "../../../src/workspace/index.js";
 import { everythingLogged } from "../../log-capture.js";
@@ -16,10 +16,6 @@ async function failedDiagnostics(output: Partial<CommandOutput>) {
 
   return result.failure.diagnostics;
 }
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 test("a failed step gives the owner its output tail with every credential redacted, and logs none of it", async () => {
   for (const level of ["log", "warn", "error"] as const) {

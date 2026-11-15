@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { expect, vi } from "vitest";
+import { expect } from "vitest";
+import { eventuallyTruthy } from "../eventually.js";
 import { seedSampleProjects } from "./projects/seed-connected.js";
 import {
   fixtureMainHarnessArtifact,
@@ -106,7 +107,7 @@ export async function storeModuleMap(input: MainHarnessArtifactInput): Promise<v
 }
 
 export async function historyEventText(key: string): Promise<string> {
-  const object = await vi.waitUntil(() => env.MODULE_MAPS.get(`history/events/${key}.json`));
+  const object = await eventuallyTruthy(() => env.MODULE_MAPS.get(`history/events/${key}.json`));
 
   return object.text();
 }

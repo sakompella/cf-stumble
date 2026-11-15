@@ -10,7 +10,6 @@ import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.restoreAllMocks();
 });
 
 function trackedWorkspaces() {

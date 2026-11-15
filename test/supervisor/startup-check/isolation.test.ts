@@ -1,5 +1,5 @@
 import { reset } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { builtGeneration } from "../../facet/generation-1/built-module-map.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
 import { prepareWithModuleMap, submitCandidate } from "../helpers.js";
@@ -15,7 +15,6 @@ import { says, scriptModel } from "../conversations/scripted-model.js";
 const project = sampleProjectOne.id;
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 

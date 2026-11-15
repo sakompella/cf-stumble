@@ -2,9 +2,9 @@ import { reset } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { activateGeneration } from "../helpers.js";
 import { readyScripted, SCRIPTED_COMMITS, servingScripted } from "./serving-fixture.js";
+import { eventually } from "../../eventually.js";
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -15,17 +15,14 @@ test.each([
   "a generation that activates while the message is %s gets the message once",
   async (_stage, content, gate, attachDelayMs) => {
     const control = await servingScripted(`conversations-switch-${gate}`, attachDelayMs);
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log");
     const second = await readyScripted(control, SCRIPTED_COMMITS[1]);
 
     const submitting = control.submitProjectMessage("harness", content, "r1", 30);
 
-    await vi.waitFor(
-      () => {
-        expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: `facet.${gate}` }));
-      },
-      { timeout: 10_000 },
-    );
+    await eventually(() => {
+      expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: `facet.${gate}` }));
+    });
     await activateGeneration(control, second);
 
     expect(await submitting).toEqual({ ok: true, submissionId: 1 });
@@ -37,7 +34,6 @@ test.each([
 );
 
 test("a message is refused when the generation still fails after the retry", async () => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
   const control = await servingScripted("conversations-switch-refused");
 
   await control.submitProjectMessage("harness", "refuse the next attach", "r0", 30);

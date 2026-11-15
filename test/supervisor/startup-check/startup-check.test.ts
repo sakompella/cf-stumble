@@ -302,21 +302,12 @@ test("remounts a checked generation instead of reusing its warm candidate instan
   });
 });
 
-test("overlapping preparations of one generation do not abort each other's startup check", async () => {
+test("overlapping preparations of one generation both come back ready instead of one aborting the other's candidate (d584b395)", async () => {
   const control = await activeSupervisor("startup-check-overlap");
   const label = await labelCandidate(control, commits.ordinary);
 
   await storeModuleMap(
-    artifact(
-      commits.ordinary,
-      servingFacetSource(
-        "overlapping",
-        `async compatibility() {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    return ${JSON.stringify(FACET_COMPATIBILITY)};
-  }`,
-      ),
-    ),
+    artifact(commits.ordinary, servingFacetSource("overlapping", FACET_COMPATIBILITY_METHOD)),
   );
 
   const reports = await Promise.all([

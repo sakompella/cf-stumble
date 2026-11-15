@@ -5,14 +5,9 @@ import { afterEach, expect, test } from "vitest";
 import type { ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { tenantConnections } from "./tenant-connections.js";
-import { noRunActive } from "./connection-tenant.js";
+import { FAKE_TOKEN, NOW, noRunActive, REPOSITORY } from "./connection-tenant.js";
 import { projectIdOf } from "../../project-fixtures.js";
-
-const NOW = 1_700_000_000_000;
-
-const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
-
-const REPOSITORY = "https://github.com/sample/repo-1";
+import { tick } from "../../eventually.js";
 
 const PROJECT_ID = projectIdOf("sample-repo-1");
 
@@ -37,11 +32,7 @@ function withConnections<T>(
 }
 
 async function letOtherWorkRun(): Promise<void> {
-  for (let turn = 0; turn < 20; turn += 1) {
-    await new Promise((resolve) => {
-      setTimeout(resolve, 0);
-    });
-  }
+  for (let turn = 0; turn < 20; turn += 1) await tick();
 }
 
 function isConnected(connections: ProjectConnections): boolean {
