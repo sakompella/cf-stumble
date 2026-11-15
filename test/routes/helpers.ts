@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
-import type { ConversationApiSupervisor } from "../../src/routes/conversations.js";
 import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
 
 export function ownerApiResponse(
@@ -75,18 +74,6 @@ export function ownerApiSupervisor(
     ...chatgptSupervisor,
     ...overrides,
   };
-}
-
-export function messageRefusingSupervisor(
-  onMessage: () => void = () => {},
-): ConversationApiSupervisor {
-  return ownerApiSupervisor({
-    submitProjectMessage: () => {
-      onMessage();
-
-      return Promise.resolve({ ok: false, problem: { code: "workspace-busy" } });
-    },
-  });
 }
 
 export function controlRequest(path: string, body: string): Request {

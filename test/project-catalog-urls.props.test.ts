@@ -102,6 +102,23 @@ test("an owner or repository name with a character GitHub does not allow gets no
   });
 });
 
+const notInOwners = gs.sampledFrom([".", "_"]);
+
+test("an owner that starts with a hyphen or holds a dot or an underscore gets no id", () => {
+  hegel.test((tc) => {
+    const ownerName = tc.draw(owner);
+    const position = tc.draw(gs.integers({ minValue: 0, maxValue: ownerName.length }));
+
+    const spoiled = tc.draw(gs.booleans())
+      ? `-${ownerName}`
+      : insertAt(ownerName, position, tc.draw(notInOwners));
+
+    expect(projectIdForRepository(`https://github.com/${spoiled}/${tc.draw(repository)}`)).toBe(
+      undefined,
+    );
+  });
+});
+
 test("an owner of 40 characters or a name of 101 gets no id, one character less does", () => {
   hegel.test((tc) => {
     const ownerLength = tc.draw(gs.integers({ minValue: 1, maxValue: 45 }));

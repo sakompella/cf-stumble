@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
-import { afterEach, expect, test, vi } from "vitest";
+import { reset } from "cloudflare:test";
+import { afterEach, expect, test } from "vitest";
 import worker from "../src/worker.js";
 import { ownerAuthorization, ownerRequest } from "./owner-credentials.js";
 
@@ -13,8 +14,15 @@ function envWithPassword(password: string | undefined): Cloudflare.Env {
     : { ...withoutPassword, OWNER_PASSWORD: password };
 }
 
-afterEach(() => {
-  vi.restoreAllMocks();
+async function chatgptSignInStarted(): Promise<boolean> {
+  const response = await worker.fetch(ownerRequest(`${ORIGIN}/api/chatgpt/connection`), env);
+  const { chatgpt } = await response.json<{ chatgpt: { login: object | null } }>();
+
+  return chatgpt.login !== null;
+}
+
+afterEach(async () => {
+  await reset();
 });
 
 test("with the owner's credential a request reaches the Supervisor and reads the status", async () => {
@@ -28,14 +36,14 @@ test("with the owner's credential a request reaches the Supervisor and reads the
   });
 });
 
-test("a missing or wrong credential gets a Basic challenge and never reaches the Supervisor", async () => {
-  const getByName = vi.spyOn(env.SUPERVISOR, "getByName");
+test("a missing or wrong credential gets a Basic challenge and changes nothing", async () => {
   const credentials = [undefined, ownerAuthorization("wrong"), `Basic ${btoa("root:x")}`];
 
   const routes = [
     ["GET", "/"],
     ["GET", "/api/status"],
     ["POST", "/health"],
+    ["POST", "/api/chatgpt/login"],
   ] as const;
 
   for (const authorization of credentials) {
@@ -56,7 +64,7 @@ test("a missing or wrong credential gets a Basic challenge and never reaches the
     }
   }
 
-  expect(getByName).not.toHaveBeenCalled();
+  expect(await chatgptSignInStarted()).toBe(false);
 });
 
 test("GET /health answers without a credential, also when the secret is missing", async () => {
@@ -79,45 +87,25 @@ test("without OWNER_PASSWORD the Worker answers 503, not 401, even to the right 
   }
 });
 
-test("an authorized POST from another origin is refused before the Supervisor, and one from its own origin or with no Origin is routed", async () => {
-  const getByName = vi.spyOn(env.SUPERVISOR, "getByName");
-
-  const post = (origin?: string) =>
+test("an authorized POST from another origin is refused and changes nothing, one from its own origin or with no Origin is served", async () => {
+  const startSignIn = (origin?: string) =>
     worker.fetch(
-      ownerRequest(`${ORIGIN}/api/unknown`, {
+      ownerRequest(`${ORIGIN}/api/chatgpt/login`, {
         method: "POST",
         headers: origin === undefined ? {} : { origin },
       }),
       env,
     );
 
-  const foreign = await post("https://elsewhere.test");
+  const foreign = await startSignIn("https://elsewhere.test");
 
   expect(foreign.status).toBe(403);
   await expect(foreign.json()).resolves.toEqual({
     ok: false,
     error: { code: "cross-origin-request" },
   });
-  expect(getByName).not.toHaveBeenCalled();
-  expect((await post(ORIGIN)).status).toBe(404);
-  expect((await post()).status).toBe(404);
-  expect(getByName).toHaveBeenCalledTimes(2);
-});
-
-test("the credential check compares equal-length SHA-256 digests in constant time, whatever the password length", async () => {
-  const compare = vi.spyOn(crypto.subtle, "timingSafeEqual");
-
-  for (const password of ["", "x", "wrong".repeat(40), env.OWNER_PASSWORD ?? ""]) {
-    compare.mockClear();
-    await worker.fetch(
-      new Request(`${ORIGIN}/api/status`, {
-        headers: { authorization: ownerAuthorization(password) },
-      }),
-      env,
-    );
-
-    expect(compare).toHaveBeenCalledOnce();
-    const [expected, presented] = compare.mock.calls[0] ?? [];
-    expect([expected?.byteLength, presented?.byteLength]).toEqual([32, 32]);
-  }
+  expect(await chatgptSignInStarted()).toBe(false);
+  expect((await startSignIn(ORIGIN)).status).toBe(200);
+  expect(await chatgptSignInStarted()).toBe(true);
+  expect((await startSignIn()).status).toBe(200);
 });

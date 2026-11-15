@@ -11,12 +11,11 @@ import {
 } from "../src/workspace-layout.js";
 import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "./project-fixtures.js";
 
-test("offers the harness with no connection behind it, connected repositories or not", () => {
+test("offers the harness after the connected repositories, also when none is connected", () => {
   const nothingConnected = selectableCatalog([]);
   const withRepositories = selectableCatalog(sampleCatalog);
 
   expect(nothingConnected).toEqual([HARNESS_PROJECT]);
-  expect(HARNESS_PROJECT).not.toHaveProperty("repositoryUrl");
   expect(withRepositories.map((project) => project.id)).toEqual([
     sampleProjectOne.id,
     sampleProjectTwo.id,

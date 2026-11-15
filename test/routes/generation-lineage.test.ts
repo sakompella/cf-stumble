@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import type { HarnessLineage, WorkspaceHostRpc } from "../../src/workspace/index.js";
 import {
@@ -60,7 +60,6 @@ async function withSecondGeneration(name: string) {
 }
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 

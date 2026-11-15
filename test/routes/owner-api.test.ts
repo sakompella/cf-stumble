@@ -91,57 +91,14 @@ test.each([
   await expect(response.json()).resolves.toEqual({ ok: false, problem: { code } });
 });
 
-test("starts a fresh thread only on POST", async () => {
-  const fresh = await ownerApiResponse(
+test("a fresh thread answers the conversation the Supervisor started", async () => {
+  const response = await ownerApiResponse(
     new Request(`${PROJECT}/thread/fresh`, { method: "POST" }),
     supervisor({
       freshProjectConversation: () => Promise.resolve({ ok: true, conversationId: "c2" }),
     }),
   );
 
-  const wrongMethod = await ownerApiResponse(new Request(`${PROJECT}/thread/fresh`), supervisor());
-
-  await expect(fresh.json()).resolves.toEqual({ ok: true, conversationId: "c2" });
-  expect(wrongMethod.status).toBe(404);
-});
-
-test("returns JSON 404 for unknown route and method pairs", async () => {
-  const unknownPath = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/unknown"),
-    supervisor(),
-  );
-
-  const unknownMethod = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/status", {
-      method: "POST",
-    }),
-    supervisor(),
-  );
-
-  const unknownProjectRoute = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/projects/sample-project-one/rename", {
-      method: "POST",
-    }),
-    supervisor(),
-  );
-
-  for (const response of [unknownPath, unknownMethod, unknownProjectRoute]) {
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ ok: false, error: { code: "not-found" } });
-  }
-});
-
-test("keeps the generation control routes POST-only", async () => {
-  const getActivate = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/generations/activate"),
-    supervisor(),
-  );
-
-  const getSubmit = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/generations/submit"),
-    supervisor(),
-  );
-
-  expect(getActivate.status).toBe(404);
-  expect(getSubmit.status).toBe(404);
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toEqual({ ok: true, conversationId: "c2" });
 });

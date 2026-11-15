@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { afterEach, expect, test, vi } from "vitest";
 import { subscriptions } from "../../../src/page/client/events-stream.js";
 import { Message } from "../../../src/page/client/message.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { eventually } from "../../eventually.js";
 import { openedTranscript } from "./transcript-resource.js";
 import { received, running, viewing } from "./views.js";
 
@@ -21,8 +21,6 @@ const events = subscriptions["events"];
 if (events === undefined) {
   throw new Error("the page has no events subscription");
 }
-
-const sameDependencies = Schema.toEquivalence(events.dependenciesSchema);
 
 const FIRST_VIEW = JSON.stringify([["r", { conversation: { id: 1 }, entries: [], docs: {} }]]);
 
@@ -43,7 +41,6 @@ function ndjson(body: string): Promise<Response> {
 }
 
 afterEach(() => {
-  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -68,7 +65,7 @@ test("the stream's dependencies stay equal while the conversation runs, the read
   for (const message of messages) {
     model = update(model, message).model;
 
-    expect(sameDependencies(events.modelToDependencies(model), opened), message._tag).toBe(true);
+    expect(events.modelToDependencies(model), message._tag).toEqual(opened);
   }
 });
 
@@ -84,7 +81,7 @@ test("leaving the project or starting a fresh thread opens another stream", () =
   for (const change of changes) {
     const changed = events.modelToDependencies(update(start, change).model);
 
-    expect(sameDependencies(changed, opened), change._tag).toBe(false);
+    expect(changed, change._tag).not.toEqual(opened);
   }
 
   expect(Option.isNone(events.modelToDependencies(init().model).maybeStream)).toBe(true);
@@ -151,7 +148,7 @@ test("the page reads past blank lines, and reconnects when the stream ends", asy
 });
 
 function oneTimerArmed(): Promise<void> {
-  return vi.waitFor(() => {
+  return eventually(() => {
     expect(vi.getTimerCount()).toBe(1);
   });
 }
@@ -221,7 +218,7 @@ test("a stream that ends opens again after one second", async () => {
     ),
   );
 
-  await vi.waitFor(() => {
+  await eventually(() => {
     expect(tags).toContain("DisconnectedEvents");
   });
   await vi.advanceTimersByTimeAsync(800);

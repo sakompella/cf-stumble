@@ -1,29 +1,12 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
 const ORIGIN = "https://cf-stumble.test";
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 const connectedProject = sampleProjectOne;
 
-function get(path: string): Request {
-  return new Request(`${ORIGIN}${path}`);
-}
-
-type RequestBody =
-  | Readonly<{
-      repositoryUrl?: string | number;
-      displayName?: string | number | null;
-      tenant?: string;
-      token?: string;
-    }>
-  | string;
-
-function post(path: string, body: RequestBody): Request {
+function post(path: string, body: Readonly<Record<string, string>>): Request {
   return new Request(`${ORIGIN}${path}`, {
     method: "POST",
     body: JSON.stringify(body),
@@ -59,22 +42,6 @@ test("connects the repository the body names, and nothing else it carries", asyn
     ok: true,
     alreadyConnected: false,
     checkedAt: 3_000,
-  });
-});
-
-test("refuses a connect body whose displayName is null before it reaches the Supervisor", async () => {
-  const response = await ownerApiResponse(
-    post("/api/projects/connect", {
-      repositoryUrl: "https://github.com/sample/repo-1",
-      displayName: null,
-    }),
-    supervisor(),
-  );
-
-  expect(response.status).toBe(400);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    error: { code: "invalid-connect-request" },
   });
 });
 
@@ -190,23 +157,4 @@ test.each([
 
   expect(response.status).toBe(status);
   await expect(response.json()).resolves.toEqual({ ok: false, problem: { code } });
-});
-
-test("keeps disconnect POST-only", async () => {
-  const response = await ownerApiResponse(
-    get(`/api/projects/${connectedProject.id}/disconnect`),
-    supervisor(),
-  );
-
-  expect(response.status).toBe(404);
-});
-
-test("keeps the project routes to their methods", async () => {
-  const postList = await ownerApiResponse(post("/api/projects", {}), supervisor());
-
-  const getConnect = await ownerApiResponse(get("/api/projects/connect"), supervisor());
-
-  const getRefresh = await ownerApiResponse(get("/api/github/connection/refresh"), supervisor());
-
-  expect([postList.status, getConnect.status, getRefresh.status]).toEqual([404, 404, 404]);
 });

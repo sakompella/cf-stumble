@@ -2,6 +2,7 @@ import * as Option from "effect/Option";
 import { afterEach, expect, test } from "vitest";
 import { type Conversation } from "../../../src/page/client/conversation.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
+import { eventuallyTruthy } from "../../eventually.js";
 import { folded, lastFolded } from "./folded.js";
 import { context, openPiRun, type PiRun } from "./pi-run.js";
 
@@ -106,7 +107,7 @@ test("an aborted run reads as cancelled, live and after a reconnect", async () =
 
   const piRun = run;
 
-  await expect.poll(() => folded(piRun.lines).some(isAnswering)).toBe(true);
+  await eventuallyTruthy(() => folded(piRun.lines).some(isAnswering));
   await run.conversation.abort(context);
   await submission.wait(context);
 

@@ -1,15 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { subscriptions } from "../../../src/page/client/events-stream.js";
 import { Message } from "../../../src/page/client/message.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { openedTranscript } from "./transcript-resource.js";
 import { routeClass, routePattern } from "../../../src/routes/route-pattern.js";
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 test("loading the page asks only for routes the Supervisor answers without the workspace container", async () => {
   const asked: string[] = [];
