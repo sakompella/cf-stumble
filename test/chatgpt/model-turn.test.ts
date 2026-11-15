@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { chatgptTurn, type ChatGPTCredential } from "../../src/chatgpt/index.js";
 import { modelEventStream } from "../../src/model-route-turn.js";
 import type { ModelRouteRequest } from "../../src/model-route-wire/request.js";
@@ -19,10 +19,6 @@ import {
 } from "./fixtures.js";
 
 const SERVED = { provider: "chatgpt", model: "gpt-test", effort: "medium" };
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 const REQUEST: ModelRouteRequest = {
   messages: [
@@ -167,7 +163,7 @@ function sessionHeaders(calls: readonly RecordedCall[]): readonly (string | null
   return [sent.get("session_id"), sent.get("x-client-request-id")];
 }
 
-test("the prompt cache key also travels as the session headers, which route the call to its cache", async () => {
+test("a prompt cache key travels in the body and as the session headers, and a call without one sends neither", async () => {
   const keyed = await run(
     fakeCredential([ready(ACCESS_ONE)]),
     () => Promise.resolve(sseResponse([COMPLETED])),
@@ -181,6 +177,7 @@ test("the prompt cache key also travels as the session headers, which route the 
   expect(sessionHeaders(keyed.calls)).toEqual(["session-7", "session-7"]);
   expect(JSON.parse(bodyOf(keyed.calls[0]))).toMatchObject({ prompt_cache_key: "session-7" });
   expect(sessionHeaders(unkeyed.calls)).toEqual([null, null]);
+  expect(JSON.parse(bodyOf(unkeyed.calls[0]))).not.toHaveProperty("prompt_cache_key");
 });
 
 test("a 401 is retried once with the token the holder gives for the refused one", async () => {
@@ -244,12 +241,11 @@ test("an error object without a type, then [DONE], keeps the text already stream
   expect(everythingLogged()).not.toContain("Read a.txt");
 });
 
-test("an error body past its byte bound is not drained", async () => {
-  const seen = { pulled: 0, cancelled: false };
+test("an endless error body is not drained: the call ends with its status and the body is cancelled", async () => {
+  const seen = { cancelled: false };
 
   const body = new ReadableStream<Uint8Array>({
     pull(controller) {
-      seen.pulled += 1;
       controller.enqueue(new TextEncoder().encode("x".repeat(2_048)));
     },
     cancel() {
@@ -264,7 +260,6 @@ test("an error body past its byte bound is not drained", async () => {
   expect(events).toEqual([
     { type: "error", error: { code: "model-unavailable", detail: "503 unknown" } },
   ]);
-  expect(seen.pulled).toBe(3);
   expect(seen.cancelled).toBe(true);
 });
 

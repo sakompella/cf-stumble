@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
+import { eventually } from "../eventually.js";
 import type { ChatGPTConnection } from "../../src/chatgpt/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
@@ -18,7 +19,6 @@ import {
 import { type Harness, HOUR, storeGrant, withConnection } from "./connection-harness.js";
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -155,7 +155,7 @@ function heldExchanges(count: number) {
 }
 
 async function requestsMade(harness: Harness, count: number): Promise<void> {
-  await vi.waitFor(() => {
+  await eventually(() => {
     expect(harness.calls).toHaveLength(count);
   });
 }

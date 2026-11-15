@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
+import { eventually } from "../eventually.js";
 import { ChatGPTCredentialStore } from "../../src/chatgpt/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
@@ -13,13 +14,18 @@ import {
   REFRESH_ONE,
   REFRESH_TWO,
 } from "./fixtures.js";
-import { access, connected, HOUR, withConnection } from "./connection-harness.js";
+import { access, connected, type Harness, HOUR, withConnection } from "./connection-harness.js";
 import { AccountEvent } from "../../src/chatgpt/account.js";
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
+
+function refreshSent(harness: Harness): Promise<void> {
+  return eventually(() => {
+    expect(harness.calls).toHaveLength(1);
+  });
+}
 
 test("concurrent callers near expiry share one refresh, and the rotated pair is stored", async () => {
   const held = heldReply();
@@ -32,7 +38,7 @@ test("concurrent callers near expiry share one refresh, and the rotated pair is 
 
       const first = access(harness.connection);
       const second = access(harness.connection);
-      await Promise.resolve();
+      await refreshSent(harness);
       held.release(grant(ACCESS_TWO, REFRESH_TWO));
 
       await expect(Promise.all([first, second])).resolves.toEqual([
@@ -212,7 +218,7 @@ test("a caller that joins a refresh with the token it rejected does not get that
 
       const starter = access(harness.connection);
       const joiner = access(harness.connection, ACCESS_ONE);
-      await Promise.resolve();
+      await refreshSent(harness);
       held.release(new Response("busy", { status: 503 }));
 
       await expect(starter).resolves.toEqual({ kind: "ready", accessToken: ACCESS_ONE });
@@ -231,7 +237,7 @@ test("a sign-in that lands during a refresh wins over the refreshed pair", async
     async (harness) => {
       connected(harness, 60_000);
       const refreshing = access(harness.connection);
-      await Promise.resolve();
+      await refreshSent(harness);
 
       harness.store.update(
         AccountEvent.LoggedIn({
@@ -266,9 +272,7 @@ test("a Disconnect while the token server is busy leaves the caller not connecte
     async (harness) => {
       connected(harness, 60_000);
       const refreshing = access(harness.connection);
-      await vi.waitFor(() => {
-        expect(harness.calls).toHaveLength(1);
-      });
+      await refreshSent(harness);
 
       harness.connection.disconnect();
       held.release(new Response("busy", { status: 503 }));
@@ -287,9 +291,7 @@ test("a token the provider refused while the token server was busy is not handed
     async (harness) => {
       connected(harness, 60_000);
       const refreshing = access(harness.connection);
-      await vi.waitFor(() => {
-        expect(harness.calls).toHaveLength(1);
-      });
+      await refreshSent(harness);
 
       harness.connection.markRefused(ACCESS_ONE);
       held.release(new Response("busy", { status: 503 }));
@@ -308,9 +310,7 @@ test("an account that replaced the pair while the token server was busy is the o
     async (harness) => {
       connected(harness, 60_000);
       const refreshing = access(harness.connection);
-      await vi.waitFor(() => {
-        expect(harness.calls).toHaveLength(1);
-      });
+      await refreshSent(harness);
 
       harness.store.update(
         AccountEvent.LoggedIn({

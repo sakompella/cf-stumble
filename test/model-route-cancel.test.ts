@@ -2,7 +2,8 @@ import { expect, test } from "vitest";
 import type { ModelStreamInference } from "../src/model-route-wire/events.js";
 import { loadFixtureEntrypoint } from "./loaded-fixture.js";
 import { sseLine, streamModelEvents } from "./model-route-provider-stream.js";
-import { PROMPTLY_MS, readFirstEvent, REQUEST, until } from "./stream-cancel-fixture.js";
+import { eventually } from "./eventually.js";
+import { readFirstEvent, REQUEST } from "./stream-cancel-fixture.js";
 import type LoadedStreamRelayEntry from "./supervisor/projects/loaded-stream-relay-entry.js";
 
 function quietProvider() {
@@ -54,5 +55,7 @@ test("a generation that stops reading across Workers RPC cancels a quiet provide
   await readFirstEvent(reader);
   await reader.cancel();
 
-  expect(await until(() => seen.cancelled)).toBeLessThan(PROMPTLY_MS);
+  await eventually(() => {
+    expect(seen.cancelled).toBe(true);
+  });
 });

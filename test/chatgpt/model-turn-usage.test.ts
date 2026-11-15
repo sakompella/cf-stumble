@@ -3,11 +3,10 @@ import { expect, test } from "vitest";
 import { chatgptTurn } from "../../src/chatgpt/index.js";
 import { modelEventStream } from "../../src/model-route-turn.js";
 import type { ModelRouteRequest } from "../../src/model-route-wire/request.js";
-import { capturedEvents, named } from "../log-capture.js";
+import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import { collectEvents } from "../model-route-provider-stream.js";
 import {
   ACCESS_ONE,
-  bodyOf,
   fakeCredential,
   ready,
   recordingFetch,
@@ -27,7 +26,7 @@ const CACHED = responsesEvent({
 });
 
 async function turnOf(request: ModelRouteRequest) {
-  const { fetcher, calls } = recordingFetch(() =>
+  const { fetcher } = recordingFetch(() =>
     Promise.resolve(
       sseResponse([responsesEvent({ type: "response.output_text.delta", delta: "ok" }), CACHED]),
     ),
@@ -48,40 +47,79 @@ async function turnOf(request: ModelRouteRequest) {
     ),
   );
 
-  return { events, body: bodyOf(calls[0]) };
+  return { events };
 }
 
-async function hash12(text: string): Promise<string> {
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-  );
+const HI: ModelRouteRequest = { messages: [{ role: "user", content: "Read notes.txt" }] };
 
-  return Array.from(digest.slice(0, 6), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
+const WITH_SYSTEM: ModelRouteRequest = {
+  messages: [{ role: "system", content: "You review code." }, ...HI.messages],
+};
 
-const HI: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
+const WITH_OTHER_INPUT: ModelRouteRequest = {
+  messages: [{ role: "user", content: "Summarize the diff" }],
+};
 
-test("the first answered call in an isolate logs the prompt fingerprints and the usage fields", async () => {
+const WITH_TOOLS: ModelRouteRequest = {
+  messages: [...HI.messages],
+  tools: [
+    {
+      type: "function",
+      function: { name: "read_file", description: "Read a file", parameters: { type: "object" } },
+    },
+  ],
+};
+
+test("an answered call logs prompt fingerprints that describe its instructions, tools and first input, never the prompt itself", async () => {
   const logged = capturedEvents();
   await turnOf(HI);
-  await turnOf({ ...HI, messages: [{ role: "system", content: "s" }, ...HI.messages] });
+  await turnOf(HI);
+  await turnOf(WITH_SYSTEM);
+  await turnOf(WITH_OTHER_INPUT);
+  await turnOf(WITH_TOOLS);
 
-  const rows = named(logged(), "chatgpt.model-call");
+  const [first, again, otherInstructions, otherInput, otherTools] = named(
+    logged(),
+    "chatgpt.model-call",
+  );
 
-  expect(rows[0]).toEqual(
-    expect.objectContaining({
-      instructionsHash: await hash12(""),
-      toolsHash: await hash12("[]"),
-      firstInputHash: await hash12('{"role":"user","content":"hi"}'),
-      inputItems: 1,
-      usageFields:
-        "input_tokens,input_tokens_details,input_tokens_details.cached_tokens,input_tokens_details.cache_write_tokens,output_tokens",
-    }),
+  for (const row of [first, again, otherInstructions, otherInput, otherTools]) {
+    expect(row?.instructionsHash ?? "").not.toBe("");
+    expect(row?.toolsHash ?? "").not.toBe("");
+    expect(row?.firstInputHash ?? "").not.toBe("");
+  }
+
+  expect(again).toMatchObject({
+    instructionsHash: first?.instructionsHash,
+    toolsHash: first?.toolsHash,
+    firstInputHash: first?.firstInputHash,
+    inputItems: 1,
+  });
+  expect(otherInstructions).toMatchObject({
+    toolsHash: first?.toolsHash,
+    firstInputHash: first?.firstInputHash,
+    inputItems: 1,
+  });
+  expect(otherInstructions?.instructionsHash).not.toBe(first?.instructionsHash);
+  expect(otherInput).toMatchObject({
+    instructionsHash: first?.instructionsHash,
+    toolsHash: first?.toolsHash,
+    inputItems: 1,
+  });
+  expect(otherInput?.firstInputHash).not.toBe(first?.firstInputHash);
+  expect(otherTools).toMatchObject({
+    instructionsHash: first?.instructionsHash,
+    firstInputHash: first?.firstInputHash,
+    inputItems: 1,
+  });
+  expect(otherTools?.toolsHash).not.toBe(first?.toolsHash);
+  expect(everythingLogged()).not.toContain("notes.txt");
+  expect(everythingLogged()).not.toContain("You review code");
+  expect(everythingLogged()).not.toContain("Summarize the diff");
+  expect(first?.usageFields).toBe(
+    "input_tokens,input_tokens_details,input_tokens_details.cached_tokens,input_tokens_details.cache_write_tokens,output_tokens",
   );
-  expect(rows[1]).toEqual(
-    expect.objectContaining({ instructionsHash: await hash12("s"), inputItems: 1 }),
-  );
-  expect(rows[1]).not.toHaveProperty("usageFields");
+  expect(again).not.toHaveProperty("usageFields");
 });
 
 test("an answered call reports its cached tokens, names who served it, and is logged as ok", async () => {
@@ -105,12 +143,4 @@ test("an answered call reports its cached tokens, names who served it, and is lo
       estimated: false,
     }),
   ]);
-});
-
-test("the request carries the conversation's prompt cache key only when it has one", async () => {
-  const keyed = await turnOf({ ...HI, promptCacheKey: "conversation-key" });
-  const plain = await turnOf(HI);
-
-  expect(JSON.parse(keyed.body)).toMatchObject({ prompt_cache_key: "conversation-key" });
-  expect(JSON.parse(plain.body)).not.toHaveProperty("prompt_cache_key");
 });

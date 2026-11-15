@@ -1,6 +1,5 @@
 import { expect, test } from "vitest";
-import { responsesRequest, ResponsesStreamReader } from "../../src/chatgpt/responses.js";
-import { ProviderStreamAccumulator } from "../../src/model-route-stream.js";
+import { responsesRequest } from "../../src/chatgpt/responses.js";
 import type { ModelRouteRequest } from "../../src/model-route-wire/request.js";
 
 const MODEL = "gpt-test";
@@ -58,24 +57,4 @@ test("a system-only conversation carries its whole prompt as the instructions", 
   };
 
   expect(responsesRequest(MODEL, request)).toMatchObject({ instructions: "one\n\ntwo", input: [] });
-});
-
-test("the reader records the names of the usage fields the backend sent", () => {
-  const reader = new ResponsesStreamReader(new ProviderStreamAccumulator(() => {}));
-
-  reader.handleEvent(
-    JSON.stringify({
-      type: "response.completed",
-      response: {
-        usage: { input_tokens: 1, input_tokens_details: { cached_tokens: 1 }, output_tokens: 2 },
-      },
-    }),
-  );
-
-  expect(reader.usageFields).toEqual([
-    "input_tokens",
-    "input_tokens_details",
-    "input_tokens_details.cached_tokens",
-    "output_tokens",
-  ]);
 });

@@ -134,3 +134,34 @@ test("the events of a provider stream do not depend on where its bytes are cut, 
     { testCases: 200 },
   );
 });
+
+const THROTTLE_CODES = ["3021", "3036", "3040"];
+
+test("a binding error carries status 429, so Pi retries it, exactly when it starts with a Workers AI rate limit or capacity code", async () => {
+  await hegel.testAsync(async (tc) => {
+    const code = tc.draw(
+      gs.oneOf(
+        gs.sampledFrom(THROTTLE_CODES),
+        gs.integers({ minValue: 1000, maxValue: 9999 }).map(String),
+      ),
+    );
+
+    const rest = tc.draw(gs.text({ alphabet: "abc ,.", maxSize: 20 }));
+    const leading = tc.draw(gs.booleans());
+    const message = leading ? `${code}: ${rest}` : `${rest} ${code}: busy`;
+    const failure = Object.assign(new Error(message), { name: "AiError" });
+
+    const events = await collectEvents(
+      streamModelEvents({ run: () => Promise.reject(failure) }, REQUEST),
+    );
+
+    const throttled = leading && THROTTLE_CODES.includes(code);
+
+    expect(events).toEqual([
+      {
+        type: "error",
+        error: { code: "model-unavailable", detail: throttled ? `429 ${message}` : message },
+      },
+    ]);
+  });
+});
