@@ -1,3 +1,5 @@
+import * as hegel from "@hegeldev/hegel";
+import * as gs from "@hegeldev/hegel/generators";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { JsonValue } from "../json.mts";
@@ -19,20 +21,43 @@ const OLD_EVENT = {
 
 const event = (kind: string, actor: string) => parseEvent({ ...OLD_EVENT, kind, actor });
 
-describe("parseEventKeys and latestSwitch", () => {
-  it("picks the activation or rollback with the highest epoch, not the last key in R2 order", () => {
-    const { keys, cursor } = parseEventKeys(
-      listing([
-        "history/events/100-rolled-back.json",
-        "history/events/101-proven.json",
-        "history/events/99-activated.json",
-        "history/generations/27.json",
-      ]),
-    );
+const kinds = gs.sampledFrom(["activated", "rolled-back", "proven", "probation-failed"]);
 
-    assert.equal(cursor, "next");
-    assert.equal(keys.length, 3);
-    assert.equal(latestSwitch(keys)?.key, "history/events/100-rolled-back.json");
+describe("parseEventKeys and latestSwitch", () => {
+  it("picks the activation or rollback with the highest epoch, whatever order R2 lists the keys in", () => {
+    hegel.test((tc) => {
+      const epochs = tc.draw(
+        gs.arrays(gs.integers({ minValue: 0, maxValue: 10_000 }), { unique: true, maxSize: 8 }),
+      );
+
+      const events = epochs.map((epoch) => ({ epoch, kind: tc.draw(kinds) }));
+      const keys = events.map(({ epoch, kind }) => `history/events/${epoch}-${kind}.json`);
+      const switches = events.filter(({ kind }) => kind === "activated" || kind === "rolled-back");
+      const newest = Math.max(...switches.map(({ epoch }) => epoch));
+
+      const expected = switches.find(({ epoch }) => epoch === newest);
+
+      const picked = latestSwitch(
+        parseEventKeys(listing([...keys, "history/generations/27.json"])).keys,
+      );
+
+      assert.deepEqual(
+        picked === undefined
+          ? undefined
+          : { key: picked.key, epoch: picked.epoch, kind: picked.kind },
+        expected === undefined
+          ? undefined
+          : {
+              key: `history/events/${expected.epoch}-${expected.kind}.json`,
+              epoch: expected.epoch,
+              kind: expected.kind,
+            },
+      );
+    });
+  });
+
+  it("passes R2's cursor on while the listing is truncated", () => {
+    assert.equal(parseEventKeys(listing([])).cursor, "next");
   });
 });
 

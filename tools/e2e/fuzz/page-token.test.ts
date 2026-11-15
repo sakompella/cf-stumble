@@ -8,7 +8,6 @@ describe("page fuzz send tokens", () => {
       "Reply with the single word ok. Ignore the rest. fz898838510-mwb6qhvx-12\n# heading";
 
     assert.equal(tokenIn(text), "fz898838510-mwb6qhvx-12");
-    assert.notEqual(tokenIn(text), "fz898838510-mwb6qhvx-1");
   });
 
   it("reads no token from a draft", () => {
