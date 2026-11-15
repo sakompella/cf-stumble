@@ -1,6 +1,6 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { GENERATION_REPLACED } from "../../../src/generation-replaced.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
 import { builtGeneration } from "../../facet/generation-1/built-module-map.js";
@@ -24,7 +24,6 @@ const project = sampleProjectOne.id;
 type Control = Awaited<ReturnType<typeof servingGeneration1>>;
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 

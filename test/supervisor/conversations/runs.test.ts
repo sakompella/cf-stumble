@@ -5,7 +5,6 @@ import { runAtEntryPoint } from "../../../src/run-entry-point.js";
 import { AlarmWriteFailed, ConversationRuns } from "../../../src/supervisor/conversations/runs.js";
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -22,7 +21,7 @@ test("a failing alarm write reaches the entry point as a typed failure", async (
   );
 });
 
-test("a runs table from before automatic continues gains the column, and its runs read none", async () => {
+test("a run stored before automatic continues existed still reads and settles after the upgrade", async () => {
   await runInDurableObject(
     env.SUPERVISOR.getByName("runs-continues-column"),
     (_instance, state) => {
@@ -43,8 +42,8 @@ test("a runs table from before automatic continues gains the column, and its run
       const runs = new ConversationRuns(state.storage);
 
       expect(runs.expired(1)).toEqual(["7"]);
-      expect(sql.exec("SELECT continues FROM conversation_runs").toArray()).toEqual([
-        { continues: 0 },
+      expect(runs.reconcile({ running: [], failed: {} }, 1, 1, null)).toMatchObject([
+        { conversationId: "7", outcome: "completed" },
       ]);
     },
   );

@@ -1,8 +1,7 @@
 import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { ProjectRpcTarget } from "../../src/workspace/project/index.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
-import type { ProjectCapabilityStub } from "../../src/workspace/host-rpc.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import {
@@ -20,6 +19,7 @@ import {
   servingScriptedGeneration,
   stubExternalBoundaries,
 } from "./owner-session.js";
+import { eventually } from "../eventually.js";
 
 const generationSource = `
 import { DurableObject } from "cloudflare:workers";
@@ -65,7 +65,7 @@ class LiveWorkWorkspace extends FakeTenantWorkspace {
   readonly execBackend = new FakeExecBackend();
   resets = 0;
 
-  project(budget: Readonly<{ remainingMs: number }>): Promise<ProjectCapabilityStub> {
+  project(budget: Readonly<{ remainingMs: number }>) {
     const target = new ProjectRpcTarget(
       new FakeProjectFilesystemProvider(),
       new FakeProjectTransactions(),
@@ -86,7 +86,6 @@ class LiveWorkWorkspace extends FakeTenantWorkspace {
 }
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -95,8 +94,6 @@ function removals(workspace: FakeTenantWorkspace): readonly string[] {
 }
 
 test("a second client cannot reset the workspace or disconnect the project under a running command", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
   const workspace = stubExternalBoundaries(new LiveWorkWorkspace());
   const owner = ownerSession();
   await servingScriptedGeneration(owner, generationSource);
@@ -114,7 +111,7 @@ test("a second client cannot reset the workspace or disconnect the project under
   });
 
   expect(submitted.status).toBe(202);
-  await vi.waitFor(() => {
+  await eventually(() => {
     expect(workspace.execBackend.handles).toHaveLength(1);
   });
 
@@ -133,7 +130,7 @@ test("a second client cannot reset the workspace or disconnect the project under
     workspace.execBackend.handles[0]?.push({ name: "exit", exitCode: 0 });
   });
 
-  await vi.waitFor(async () => {
+  await eventually(async () => {
     expect((await owner.post(`${projectPath}/disconnect`)).status).toBe(200);
   });
   expect(removals(workspace)).toHaveLength(1);

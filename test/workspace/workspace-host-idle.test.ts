@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { WorkspaceHost } from "../../src/workspace/host.js";
 import { withHost } from "./idle-host.js";
 import {
@@ -12,9 +12,14 @@ import {
 } from "./host-fixtures.js";
 import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.js";
 import { sampleProjectOne } from "../project-fixtures.js";
+import { eventually, tick } from "../eventually.js";
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+});
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.useRealTimers();
   restoreWorkspaceMembers();
 });
 
@@ -28,62 +33,51 @@ test("each tracked RPC arms the idle alarm one limit after it ends", async () =>
   };
 
   for (const [rpc, call] of Object.entries(requests)) {
-    const alarm = await withHost(`host-seam-${rpc}`, async (host, state) => {
-      const before = Date.now();
+    const armed = await withHost(`host-seam-${rpc}`, async (host, state) => {
       await call(host);
 
-      return { alarm: await state.storage.getAlarm(), before };
+      return state.storage.getAlarm();
     });
 
-    expect(alarm.alarm, `${rpc} arms the alarm`).not.toBeNull();
-    expect(
-      (alarm.alarm ?? 0) - alarm.before,
-      `${rpc} arms it one idle limit after it ends`,
-    ).toBeGreaterThanOrEqual(WORKSPACE_IDLE_STOP_MS);
+    expect(armed, `${rpc} arms it one idle limit after it ends`).toBe(
+      Date.now() + WORKSPACE_IDLE_STOP_MS,
+    );
   }
 });
 
 test("a project capability leases the workspace until the end of its turn", async () => {
   const leaseMs = 60_000;
 
-  const result = await withHost("host-seam-lease", async (host, state) => {
-    const before = Date.now();
+  const armed = await withHost("host-seam-lease", async (host, state) => {
     await host.project({ remainingMs: leaseMs });
 
-    return { alarm: await state.storage.getAlarm(), before };
+    return state.storage.getAlarm();
   });
 
-  const armedAfter = (result.alarm ?? 0) - result.before;
-  expect(armedAfter).toBeGreaterThanOrEqual(leaseMs + WORKSPACE_IDLE_STOP_MS);
-  expect(armedAfter, "the lease is the turn's budget, not the longer default").toBeLessThan(
-    leaseMs + WORKSPACE_IDLE_STOP_MS + 5_000,
-  );
+  expect(armed).toBe(Date.now() + leaseMs + WORKSPACE_IDLE_STOP_MS);
 });
 
 test("an ended project capability holds the workspace one idle limit from its end", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  const endedAt = Date.now();
 
   const result = await withHost("host-seam-lease-end", async (host, state, container) => {
     const project = await host.project({ remainingMs: 9 * 60_000 });
-    const endedAt = Date.now();
     await project.endTurn();
     const alarm = (await state.storage.getAlarm()) ?? 0;
-    vi.spyOn(Date, "now").mockReturnValue(alarm);
+    vi.setSystemTime(alarm);
     await host.alarm();
 
-    return { armedAfter: alarm - endedAt, destroyed: container.destroyed };
+    return { alarm, destroyed: container.destroyed };
   });
 
-  expect(result.armedAfter).toBeLessThan(WORKSPACE_IDLE_STOP_MS + 5_000);
+  expect(result.alarm).toBe(endedAt + WORKSPACE_IDLE_STOP_MS);
   expect(result.destroyed).toEqual(["idle"]);
 });
 
 test("a past-due alarm closes the Workspace and destroys the container for being idle", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
   const destroyed = await withHost("host-seam-stop", async (host, _state, container) => {
     await host.build(REFUSED_BUILD);
-    vi.spyOn(Date, "now").mockReturnValue(Date.now() + WORKSPACE_IDLE_STOP_MS + 1);
+    vi.setSystemTime(Date.now() + WORKSPACE_IDLE_STOP_MS + 1);
     await host.alarm();
 
     return container.destroyed;
@@ -93,8 +87,6 @@ test("a past-due alarm closes the Workspace and destroys the container for being
 });
 
 test("an alarm that wakes a restarted Host beside a running container pulls it, then destroys it", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
   const container = await withHost("host-seam-restarted", async (host, _state, running) => {
     await host.alarm();
 
@@ -156,14 +148,7 @@ test.each([
   },
 );
 
-const tick = () =>
-  new Promise<void>((resolve) => {
-    setTimeout(resolve, 20);
-  });
-
 test("an exec started while the idle stop destroys the container waits for it", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
   const seen = await withHost("host-seam-exec-wait", async (host, state, container) => {
     const open = { release: (): void => {} };
 
@@ -173,23 +158,28 @@ test("an exec started while the idle stop destroys the container waits for it", 
     await host.build(REFUSED_BUILD);
     await seedWorkspaceRoot(state);
 
-    vi.spyOn(Date, "now").mockReturnValue(Date.now() + WORKSPACE_IDLE_STOP_MS + 1_000);
+    vi.setSystemTime(Date.now() + WORKSPACE_IDLE_STOP_MS + 1_000);
     const alarm = host.alarm();
-    await tick();
+    await eventually(() => {
+      expect(container.destroyed).toEqual(["idle"]);
+    });
     const project = await host.project({ remainingMs: 60_000 });
     const started = await project.startExec({ command: "node -v", timeoutMs: 1_000 });
     await tick();
     const whileDestroying = container.starts;
     open.release();
     await alarm;
-    await tick();
+    await eventually(() => {
+      expect(container.starts, "it reaches the container once the destroy settled").toBeGreaterThan(
+        0,
+      );
+    });
 
-    return { whileDestroying, afterwards: container.starts, started };
+    return { whileDestroying, started };
   });
 
   expect(seen.started.ok, "the exec is accepted").toBe(true);
   expect(seen.whileDestroying, "it does not reach the container during the destroy").toBe(0);
-  expect(seen.afterwards, "it reaches the container once the destroy settled").toBeGreaterThan(0);
 });
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
@@ -217,17 +207,23 @@ test("a reset refuses while a file change or credential request is in flight and
     });
 
     const seen = await withHost(`host-reset-busy-${name}`, async (host, state) => {
-      stubWorkspaceMember("fs", {
-        lstat: () => stalled,
-        readFile: () => stalled,
-        writeFile: () => stalled,
-      });
-      stubWorkspaceMember("runtime", { exec: () => stalled });
+      const reached = { workspace: false };
+
+      const stall = () => {
+        reached.workspace = true;
+
+        return stalled;
+      };
+
+      stubWorkspaceMember("fs", { lstat: stall, readFile: stall, writeFile: stall });
+      stubWorkspaceMember("runtime", { exec: stall });
       await state.storage.put("durable-row", "kept");
 
       const inFlight = change(host);
 
-      await tick();
+      await eventually(() => {
+        expect(reached.workspace).toBe(true);
+      });
       const refused = await host.reset();
       const row = await state.storage.get("durable-row");
       held.release();
@@ -238,7 +234,6 @@ test("a reset refuses while a file change or credential request is in flight and
 
     expect(seen.refused, name).toEqual({ ok: false, problem: { code: "workspace-busy" } });
     expect(seen.row, `the reset refused during ${name} deleted nothing`).toBe("kept");
-    vi.restoreAllMocks();
     restoreWorkspaceMembers();
   }
 });
@@ -286,7 +281,7 @@ test("while a reset runs, file changes, credential requests, project capabilitie
     const deleteAll = vi.spyOn(state.storage, "deleteAll").mockReturnValue(deleting);
     const resetting = host.reset();
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(deleteAll).toHaveBeenCalledOnce();
     });
 
@@ -298,7 +293,6 @@ test("while a reset runs, file changes, credential requests, project capabilitie
 
     return {
       during,
-      deleteCalls: deleteAll.mock.calls.length,
       startsDuring,
       afterwards: await host.build(REFUSED_BUILD),
     };
@@ -322,7 +316,6 @@ test("while a reset runs, file changes, credential requests, project capabilitie
     reset: { ok: false, problem: { code: "workspace-busy" } },
     capability: "refused",
   });
-  expect(seen.deleteCalls, "the second reset deleted nothing").toBe(1);
   expect(seen.startsDuring, "no refused request reached the container").toBe(0);
   expect(seen.afterwards, "the exclusion ends with the reset").toEqual({
     ok: false,

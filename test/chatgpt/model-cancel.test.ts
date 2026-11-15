@@ -3,7 +3,8 @@ import { expect, test } from "vitest";
 import { chatgptTurn, type ChatGPTCredential } from "../../src/chatgpt/index.js";
 import type { ProviderFetch } from "../../src/chatgpt/oauth.js";
 import { modelEventStream, type ModelTurn } from "../../src/model-route-turn.js";
-import { PROMPTLY_MS, readFirstEvent, REQUEST, until } from "../stream-cancel-fixture.js";
+import { eventually } from "../eventually.js";
+import { readFirstEvent, REQUEST } from "../stream-cancel-fixture.js";
 import { ACCESS_ONE, responsesEvent } from "./fixtures.js";
 
 const CONNECTED: ChatGPTCredential = {
@@ -39,7 +40,9 @@ test("cancelling the model stream before ChatGPT answers aborts the provider fet
     ),
   );
 
-  expect(await until(() => seen.asked)).toBeLessThan(PROMPTLY_MS);
+  await eventually(() => {
+    expect(seen.asked).toBe(true);
+  });
   await stream.cancel();
 
   expect(seen.aborted).toBe(true);
@@ -61,10 +64,14 @@ test("cancelling the model stream cancels a quiet ChatGPT error body", async () 
     chatgptOnly(() => Promise.resolve(new Response(body, { status: 503 }))),
   ).getReader();
 
-  expect(await until(() => body.locked)).toBeLessThan(PROMPTLY_MS);
+  await eventually(() => {
+    expect(body.locked).toBe(true);
+  });
   await reader.cancel();
 
-  expect(await until(() => seen.cancelled)).toBeLessThan(PROMPTLY_MS);
+  await eventually(() => {
+    expect(seen.cancelled).toBe(true);
+  });
 });
 
 test("cancelling the model stream cancels a quiet ChatGPT response body", async () => {
@@ -92,5 +99,7 @@ test("cancelling the model stream cancels a quiet ChatGPT response body", async 
   await readFirstEvent(reader);
   await reader.cancel();
 
-  expect(await until(() => seen.cancelled)).toBeLessThan(PROMPTLY_MS);
+  await eventually(() => {
+    expect(seen.cancelled).toBe(true);
+  });
 });

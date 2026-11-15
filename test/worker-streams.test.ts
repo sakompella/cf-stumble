@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import worker from "../src/worker.js";
 import { ownerRequest } from "./owner-credentials.js";
 import { sampleProjectOne } from "./project-fixtures.js";
@@ -7,10 +7,6 @@ import { sampleProjectOne } from "./project-fixtures.js";
 const ORIGIN = "https://cf-stumble.test";
 
 const encoder = new TextEncoder();
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 type HeldStream = Readonly<{ stream: ReadableStream<Uint8Array>; cancelled: Promise<void> }>;
 

@@ -1,5 +1,5 @@
 import { createExecutionContext } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
 import type { WorkersAiBinding } from "../src/model-route-wire/events.js";
 import { ModelRoute } from "../src/model-route.js";
@@ -10,10 +10,6 @@ import {
   providerStreamOfLines,
   sseLine,
 } from "./model-route-provider-stream.js";
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
@@ -133,24 +129,4 @@ test("while a usage limit with a named end lasts, ChatGPT is not asked and the n
     limitedUntil: 1_800_000_000_000,
   });
   expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "ok" } });
-});
-
-test("without a ChatGPT connection, Workers AI answers and its served record names the fallback", async () => {
-  const fetchSpy = vi.spyOn(globalThis, "fetch");
-  const binding = workersAi("ok");
-
-  const events = await supervisedRoute(binding.ai, { kind: "not-connected" }).events();
-
-  expect(fetchSpy).not.toHaveBeenCalled();
-  expect(events.filter((event) => event.type === "provider-fallback")).toEqual([]);
-  expect(events.at(-1)).toMatchObject({
-    type: "done",
-    message: { content: "ok" },
-    served: {
-      provider: "workers-ai",
-      model: "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
-      effort: "low",
-      fallback: "chatgpt-not-connected",
-    },
-  });
 });

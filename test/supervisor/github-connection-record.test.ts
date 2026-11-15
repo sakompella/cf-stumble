@@ -12,7 +12,6 @@ const NOW = 1_700_000_000_000;
 const HOUR_MS = 3_600_000;
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -69,7 +68,6 @@ test("a check that could not reach the workspace is the last known state, with i
   const host = workspaceAnswering(CONNECTED);
   await control.refreshGitHubConnection(NOW);
   host.credential.mockRejectedValue(new Error("the Workspace Host went away"));
-  vi.spyOn(console, "error").mockImplementation(() => {});
 
   await control.refreshGitHubConnection(NOW + HOUR_MS);
 
@@ -122,7 +120,6 @@ test.each([
   const control = env.SUPERVISOR.getByName(`record-refresh-across-reset-${resetAnswer.ok}`);
   const fake = heldCheckWorkspace(resetAnswer);
   replaceWorkspaceHost(env.WORKSPACE_HOST, fake.workspace);
-  vi.spyOn(console, "warn").mockImplementation(() => {});
 
   await runInDurableObject(control, async (supervisor) => {
     const refreshing = supervisor.refreshGitHubConnection(NOW);

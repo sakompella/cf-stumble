@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import type { ChatGPTConnectionView, ChatGPTLoginOutcome } from "../../src/chatgpt/index.js";
 import {
   controlRequest,
@@ -6,10 +6,6 @@ import {
   ownerApiResponse,
   ownerApiSupervisor,
 } from "./helpers.js";
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 const signingIn: ChatGPTConnectionView = {
   ...disconnectedChatGPT,

@@ -37,43 +37,29 @@ test("canonicalizes one module map to the same bytes whatever order it arrived i
   });
 });
 
-test("distinguishes module maps when a source or entry module changes", () => {
+test("distinguishes module maps when a source or the entry module changes", () => {
   hegel.test((tc) => {
     const modules = tc.draw(moduleMaps);
     const entryModule = modules[0]?.name ?? "";
-    const edit = tc.draw(gs.sampledFrom(["rotation", "source", "entry"] as const));
-    let otherModules = modules;
-    let otherEntryModule = entryModule;
-    let encodingsShouldMatch = true;
+    const changeEntry = modules.length > 1 && tc.draw(gs.booleans());
+    const index = tc.draw(gs.integers({ minValue: 0, maxValue: modules.length - 1 }));
+    const suffix = tc.draw(gs.characters());
 
-    if (edit === "rotation") {
-      const by = tc.draw(gs.integers({ minValue: 0, maxValue: modules.length }));
-      otherModules = [...rotated(modules, by)];
-    } else if (edit === "source") {
-      const index = tc.draw(gs.integers({ minValue: 0, maxValue: modules.length - 1 }));
-      const suffix = tc.draw(gs.characters());
-      otherModules = modules.map((module, moduleIndex) =>
-        moduleIndex === index ? { ...module, source: module.source + suffix } : module,
-      );
-      encodingsShouldMatch = false;
-    } else if (modules.length > 1) {
-      otherEntryModule = modules[1]?.name ?? entryModule;
-      encodingsShouldMatch = false;
-    } else {
-      const suffix = tc.draw(gs.characters());
-      otherModules = [{ ...modules[0]!, source: modules[0]!.source + suffix }];
-      encodingsShouldMatch = false;
-    }
+    const otherModules = changeEntry
+      ? modules
+      : modules.map((module, moduleIndex) =>
+          moduleIndex === index ? { ...module, source: module.source + suffix } : module,
+        );
 
     const first = parsedArtifact({ harnessCommit, entryModule, modules });
 
     const second = parsedArtifact({
       harnessCommit,
-      entryModule: otherEntryModule,
+      entryModule: changeEntry ? (modules[1]?.name ?? entryModule) : entryModule,
       modules: otherModules,
     });
 
-    expect(encodeModuleMap(second) === encodeModuleMap(first)).toBe(encodingsShouldMatch);
+    expect(encodeModuleMap(second)).not.toBe(encodeModuleMap(first));
   });
 });
 

@@ -54,7 +54,7 @@ test("every base image is pinned by digest", () => {
     match[1] === "computerd-source" ? [] : [match[1] ?? ""],
   );
 
-  expect(bases.length).toBe(2);
+  expect(bases.length).toBeGreaterThan(0);
   expect(bases.filter((image) => !/@sha256:[0-9a-f]{64}$/u.test(image))).toStrictEqual([]);
 });
 

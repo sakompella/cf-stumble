@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import type {
   BackendExecEvent,
   ExecBackend,
@@ -7,6 +7,7 @@ import type {
 import type { LogFields } from "../../../src/diagnostics.js";
 import { isolateWithContainerFallback } from "../../../src/workspace/project/exec-fallback.js";
 import { startExecOperation } from "../../../src/workspace/project/exec-operation.js";
+import { capturedEvents, named } from "../../log-capture.js";
 
 const encoder = new TextEncoder();
 
@@ -36,18 +37,13 @@ function scripted(backend: "isolate" | "container", events: readonly BackendExec
 }
 
 async function finished(backend: ExecBackend, command: string): Promise<LogFields | undefined> {
-  const entries: LogFields[] = [];
-
-  vi.spyOn(console, "log").mockImplementation((entry: LogFields) => {
-    entries.push(entry);
-  });
-
+  const logged = capturedEvents();
   const input = { command, cwd: "/", timeoutMs: 1_000 };
   const reader = startExecOperation(backend, input, () => {}).events.getReader();
 
   while (!(await reader.read()).done);
 
-  return entries.find((entry) => entry.event === "exec.finished");
+  return named(logged(), "exec.finished").at(0);
 }
 
 const COMMIT = "git commit -m 'deploy key ghp_0123456789abcdefghijklmnopqrstuvwxyzAB'";

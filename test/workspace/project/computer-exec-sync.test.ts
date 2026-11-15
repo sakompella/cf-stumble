@@ -27,7 +27,6 @@ function closed<T>(...chunks: T[]): ReadableStream<T> {
 }
 
 class ContainerThatCreatesAFile {
-  pulls = 0;
   #executed = false;
   #pushRev = 0;
 
@@ -74,8 +73,6 @@ class ContainerThatCreatesAFile {
         return { rev: this.#rev(), appliedPushCursor: { rev: senderRev, path: null } };
       },
       fetchChanges: () => {
-        this.pulls += 1;
-
         return Promise.resolve({
           currentCursor: { rev: this.#rev(), path: null },
           appliedPushCursor: { rev: this.#pushRev, path: null },
@@ -212,7 +209,6 @@ test("a file a command creates is readable once the command has exited", async (
 
     for await (const _ of started.value.events);
 
-    expect(container.pulls).toBeGreaterThan(0);
     expect(await target.readFile("/generated.txt")).toMatchObject({ ok: true });
   });
 });

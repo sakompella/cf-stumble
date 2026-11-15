@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { ownerSession } from "../integration/owner-session.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
@@ -13,7 +13,6 @@ function spyOnWorkspaceLookups() {
 }
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 

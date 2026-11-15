@@ -2,7 +2,11 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import { canonicalRepositoryUrl, projectIdForRepository } from "../src/project-catalog.js";
+import {
+  canonicalRepositoryUrl,
+  PROJECT_ID_LIMIT,
+  projectIdForRepository,
+} from "../src/project-catalog.js";
 import { projectIdFromPath, routePattern } from "../src/routes/route-pattern.js";
 import { HARNESS_PROJECT_ID } from "../src/selectable-projects.js";
 
@@ -125,8 +129,18 @@ test("an id derived for a repository of any GitHub size is the id its API routes
 
     expect(routePattern(path)).toBe("/api/projects/:projectId/messages");
     expect(projectIdFromPath(path, "/messages")).toBe(id);
+    expect(id?.length).toBeLessThanOrEqual(PROJECT_ID_LIMIT);
     expect(id).not.toBe(HARNESS_PROJECT_ID);
   });
+});
+
+test("the longest names GitHub allows derive an id unless punctuation makes it too long for a directory name", () => {
+  const hyphenated = `${"o-".repeat(19)}o`;
+  const name = "r".repeat(100);
+
+  expect(projectIdForRepository(`https://github.com/${"o".repeat(39)}/${name}`)).toHaveLength(140);
+  expect(projectIdForRepository(`https://github.com/${hyphenated}/${name}`)).toBeDefined();
+  expect(projectIdForRepository(`https://github.com/owner/${"a.".repeat(50)}`)).toBeUndefined();
 });
 
 const plainOwner = gs.text({ alphabet: "aZ0", minSize: 1, maxSize: 6 });

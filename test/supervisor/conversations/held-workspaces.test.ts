@@ -1,10 +1,11 @@
 import { reset } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { selectableCatalog } from "../../../src/selectable-projects.js";
 import type { WorkspaceCommandResult } from "../../../src/workspace/commands/command-result.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
 import { CLONED, HeldHost } from "./held-host.js";
 import { withHeldWorkspaces } from "./held-workspaces-fixture.js";
+import { eventually } from "../../eventually.js";
 
 function pending<A>() {
   const settle = { resolve: (_value: A): void => {} };
@@ -19,7 +20,6 @@ function pending<A>() {
 const [project] = selectableCatalog([sampleProjectOne]);
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -31,7 +31,7 @@ test("a release during provisioning starts no capability RPC, so the workspace t
   await withHeldWorkspaces("held-release-during-provision", host, async (held) => {
     const capability = held.capability("conversation", project!, 1_000);
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(host.steps).toEqual(["clone"]);
     });
     held.end("conversation");
@@ -51,7 +51,7 @@ test("a capability that answers after its release is ended once and never handed
   await withHeldWorkspaces("held-late-capability", host, async (held) => {
     const capability = held.capability("conversation", project!, 1_000);
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(host.steps).toContain("project");
     });
     held.end("conversation");
@@ -59,7 +59,7 @@ test("a capability that answers after its release is ended once and never handed
     answer.settle.resolve(null);
 
     await expect(capability).rejects.toThrow("the workspace is unavailable");
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(host.turns).toEqual({ ended: 1, disposed: 1 });
     });
   });
@@ -74,7 +74,7 @@ test("a capability released after it was handed out is ended once", async () => 
     held.end("conversation");
     held.endAll();
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(host.turns).toEqual({ ended: 1, disposed: 1 });
     });
     expect(host.steps).toEqual(["clone", "project"]);

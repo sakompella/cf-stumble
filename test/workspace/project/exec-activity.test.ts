@@ -1,5 +1,6 @@
-import { expect, test, vi, afterEach } from "vitest";
-import type { ProjectActivity } from "../../../src/workspace/idle-controller.js";
+import * as Effect from "effect/Effect";
+import { afterEach, expect, test, vi } from "vitest";
+import { WorkspaceIdleController } from "../../../src/workspace/idle-controller.js";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import { deferredExec } from "./deferred-exec.js";
 import {
@@ -12,69 +13,62 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-class CountingActivity implements ProjectActivity {
-  open = 0;
-  begun = 0;
-  touched = 0;
-
-  begin(): () => void {
-    this.open += 1;
-    this.begun += 1;
-
-    return () => {
-      this.open -= 1;
-    };
-  }
-
-  touch(): void {
-    this.touched += 1;
-  }
-}
-
 function makeTarget() {
-  const activity = new CountingActivity();
+  const clock = { nowMs: 0 };
+
+  const idle = new WorkspaceIdleController({
+    nowMs: () => clock.nowMs,
+    idleLimitMs: 1_000,
+    setAlarm: () => Promise.resolve(),
+    containerRunning: () => false,
+    pullContainer: () => Promise.resolve(),
+    closeWorkspace: () => Promise.resolve(),
+    stopContainer: () => Effect.void,
+  });
+
   const execBackend = new FakeExecBackend();
 
   const target = new ProjectRpcTarget(
     new FakeProjectFilesystemProvider(),
     new FakeProjectTransactions(),
     execBackend,
-    { activity },
+    { activity: idle },
   );
 
-  return { activity, execBackend, target };
+  return { clock, idle, execBackend, target };
 }
 
-test("an exec holds the workspace until it settles, then releases it exactly once", async () => {
+test("an exec keeps the workspace busy until it settles, and its late handle changes nothing", async () => {
   vi.useFakeTimers();
-  const { activity, execBackend, target } = makeTarget();
+  const { clock, idle, execBackend, target } = makeTarget();
   const deferred = deferredExec();
   execBackend.deferNextExec(deferred);
+  clock.nowMs = 5_000;
 
   const started = await target.startExec({ command: "sleep 9", timeoutMs: 50 });
 
   expect(started.ok).toBe(true);
-  expect(activity.open, "an exec that has not settled holds the workspace").toBe(1);
+  expect(idle.snapshot()).toMatchObject({ inFlight: 1, lastActiveAtMs: 5_000 });
 
   await vi.advanceTimersByTimeAsync(49);
-  expect(activity.open).toBe(1);
+  expect(idle.snapshot().inFlight).toBe(1);
 
+  clock.nowMs = 5_050;
   await vi.advanceTimersByTimeAsync(1);
-  expect(activity.open, "the timeout settles the exec").toBe(0);
+  expect(idle.snapshot()).toMatchObject({ inFlight: 0, lastActiveAtMs: 5_050 });
 
   deferred.resolve();
   await vi.advanceTimersByTimeAsync(0);
-  expect(activity.open, "a late handle does not release a second time").toBe(0);
-  expect(activity.begun).toBe(1);
+  expect(idle.snapshot().inFlight).toBe(0);
 });
 
-test("a refused exec never holds the workspace", async () => {
-  const { activity, target } = makeTarget();
+test("a refused exec never keeps the workspace busy", async () => {
+  const { idle, target } = makeTarget();
 
   const refused = await target.startExec({ command: "" });
 
   expect(refused.ok).toBe(false);
-  expect(activity.begun).toBe(0);
+  expect(idle.snapshot().inFlight).toBe(0);
 });
 
 test.each([
@@ -84,20 +78,11 @@ test.each([
     "writeFile",
     (target: ProjectRpcTarget) => target.writeFile("/a", new Uint8Array(), "overwrite"),
   ],
-])("a %s call marks activity and does not hold the workspace", async (_name, call) => {
-  const { activity, target } = makeTarget();
+])("a %s call counts as activity without keeping the workspace busy", async (_name, call) => {
+  const { clock, idle, target } = makeTarget();
+  clock.nowMs = 7_000;
 
   await call(target);
 
-  expect(activity.touched).toBeGreaterThan(0);
-  expect(activity.open).toBe(0);
-});
-
-test("starting an exec marks activity", async () => {
-  const { activity, execBackend, target } = makeTarget();
-  execBackend.deferNextExec(deferredExec());
-
-  await target.startExec({ command: "sleep 9" });
-
-  expect(activity.touched).toBeGreaterThan(0);
+  expect(idle.snapshot()).toMatchObject({ inFlight: 0, lastActiveAtMs: 7_000 });
 });

@@ -6,13 +6,11 @@ import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import { sampleProjectTwo } from "../project-fixtures.js";
 import { connectSampleProjects, submitCandidate } from "./helpers.js";
 import { seedGitHubConnection } from "./github-seed.js";
-import { readGenerations } from "./generation-reads.js";
 import { fakeWorkspace, heldWorkspace } from "./workspace-reset-fakes.js";
 
 const NOW = 1_700_000_000_000;
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -22,7 +20,7 @@ test("resets the named workspace while preserving the projects and generations",
   await submitCandidate(control, "0123456789abcdef0123456789abcdef01234567");
 
   const projectsBeforeReset = await control.listProjects();
-  const generationsBeforeReset = await readGenerations(control);
+  const activeBeforeReset = await control.getActiveGeneration();
   await seedGitHubConnection(control);
 
   const resetResult = { ok: true, reset: "workspace" } as const satisfies WorkspaceResetResult;
@@ -40,7 +38,11 @@ test("resets the named workspace while preserving the projects and generations",
   expect(fake.resetWorkspace).toHaveBeenCalledOnce();
   await expect(control.getGitHubConnection()).resolves.toEqual({ github: null, checkedAt: null });
   expect(await control.listProjects()).toEqual(projectsBeforeReset);
-  expect(await readGenerations(control)).toEqual(generationsBeforeReset);
+  expect(await control.getActiveGeneration()).toEqual(activeBeforeReset);
+  expect(
+    await submitCandidate(control, "1123456789abcdef0123456789abcdef01234567"),
+    "the submitted generation keeps its label, so the next one takes the label after it",
+  ).toBe(1);
 });
 
 test("a reset the Workspace Host refuses keeps the GitHub connection record", async () => {

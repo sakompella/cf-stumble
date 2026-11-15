@@ -1,6 +1,6 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
-import { textLines } from "../log-capture.js";
+import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { controlRequest, ownerApiResponse, ownerApiSupervisor } from "./helpers.js";
 
@@ -9,10 +9,6 @@ const ORIGIN = "https://cf-stumble.test";
 const SECRET = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 const PROJECT_PATH = `/api/projects/${sampleProjectOne.id}`;
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 function thrown(): Promise<never> {
   return Promise.reject(new Error(`storage failed with ${SECRET} in /root/.git-credentials`));
@@ -100,8 +96,10 @@ const throwingRoutes: readonly (readonly [string, Request, Partial<OwnerApiSuper
 ];
 
 test.each(throwingRoutes)(
-  "%s answers a bare fault without echoing the token",
+  "%s answers a bare fault and logs its cause without the token",
   async (_route, request, overrides) => {
+    capturedEvents();
+
     const response = await ownerApiResponse(request, ownerApiSupervisor(overrides));
 
     expect(response.status).toBe(500);
@@ -109,19 +107,8 @@ test.each(throwingRoutes)(
     expect(JSON.parse(body)).toEqual({ ok: false, error: { code: "internal-error" } });
     expect(body).not.toContain(SECRET);
     expect(body).not.toContain("git-credentials");
+    const logged = everythingLogged();
+    expect(logged).toContain("storage failed");
+    expect(logged).not.toContain(SECRET);
   },
 );
-
-test("a thrown Supervisor error is logged under its code, redacted", async () => {
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  const response = await ownerApiResponse(
-    new Request(`${ORIGIN}/api/status`),
-    ownerApiSupervisor({ getStatus: thrown }),
-  );
-
-  expect(response.status).toBe(500);
-  const logged = textLines(loggedErrors).join("\n");
-  expect(logged).toContain("internal-error");
-  expect(logged).not.toContain(SECRET);
-});

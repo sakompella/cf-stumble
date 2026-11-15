@@ -1,15 +1,17 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
-import type { Conversation } from "../../../src/page/client/conversation.js";
 import { chatGPTConnection } from "../../../src/page/client/chatgpt.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
-import { entryItem, running, viewing } from "./views.js";
+import { entryItem, running, viewing, type Conversation } from "./views.js";
 
 const PROJECT_IDS = ["repo", "harness"] as const;
+
+const REQUEST_IDS = ["r1", "r2"] as const;
 
 const PROJECTS = [
   { id: "repo", displayName: "hello-world", isHarness: false, location: "https://github.com/o/r" },
@@ -38,6 +40,17 @@ const STEPS: readonly Step[] = [
       conversation: tc.draw(gs.sampledFrom(VIEWS)),
     }),
   (model) => Message.SucceededFreshThread({ streamId: model.eventsStreamId }),
+  (model, tc) =>
+    Message.MintedRequestId({
+      projectId: Option.getOrElse(model.maybeProjectId, () => "repo"),
+      requestId: tc.draw(gs.sampledFrom(REQUEST_IDS)),
+      content: "sent",
+    }),
+  (_model, tc) =>
+    Message.SucceededSend({
+      requestId: tc.draw(gs.sampledFrom(REQUEST_IDS)),
+      submissionId: tc.draw(gs.sampledFrom([2, 9])),
+    }),
 ];
 
 const STALE: readonly Step[] = [
@@ -80,6 +93,38 @@ const CONNECTED_CHATGPT = chatGPTConnection({
 function listedPage(): Model {
   return update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS })).model;
 }
+
+function stepped(tc: hegel.TestCase, steps: readonly Step[]): Model {
+  let model = listedPage();
+
+  for (let count = tc.draw(gs.integers({ minValue: 0, maxValue: 12 })); count > 0; count -= 1) {
+    const message = tc.draw(gs.sampledFrom(steps))(model, tc);
+    tc.note(message._tag);
+    model = update(model, message).model;
+  }
+
+  return model;
+}
+
+test("showing the view the page already shows again changes nothing and asks nothing", () => {
+  hegel.test(
+    (tc) => {
+      const model = stepped(tc, STEPS);
+
+      const view = Message.ReceivedConversation({
+        streamId: model.eventsStreamId,
+        conversation: tc.draw(gs.sampledFrom(VIEWS)),
+      });
+
+      const shown = update(model, view).model;
+      const again = update(shown, view);
+
+      expect(again.model).toEqual(shown);
+      expect(again.commands ?? []).toEqual([]);
+    },
+    { testCases: 300 },
+  );
+});
 
 test("a queued answer or event for a stream the page replaced changes nothing", () => {
   hegel.test(
@@ -134,6 +179,54 @@ test("only the owner's own request checks the GitHub connection again after the 
         const names = (next.commands ?? []).map((command) => command.name);
 
         expect(names, message._tag).not.toContain("RefreshGitHub");
+        model = next.model;
+      }
+    },
+    { testCases: 300 },
+  );
+});
+
+const FRESH_THREAD_ANSWERS = [
+  (streamId: number) => Message.SucceededFreshThread({ streamId }),
+  (streamId: number) => Message.RejectedFreshThread({ streamId, wording: "rejected: x" }),
+  (streamId: number) => Message.FailedFreshThread({ streamId, detail: "x" }),
+] as const;
+
+const replacedStream = Schema.decodeUnknownSync(Schema.Struct({ streamId: Schema.Number }));
+
+function answered(tc: hegel.TestCase, asked: Set<number>): Message {
+  const streamId = tc.draw(gs.sampledFrom([...asked]));
+  asked.delete(streamId);
+
+  return tc.draw(gs.sampledFrom(FRESH_THREAD_ANSWERS))(streamId);
+}
+
+test("the page asks to replace a stream's thread at most once until that request is answered", () => {
+  hegel.test(
+    (tc) => {
+      const asked = new Set<number>();
+      const steps = [...STEPS, () => Message.ClickedFreshThread()];
+      let model = listedPage();
+
+      for (let count = tc.draw(gs.integers({ minValue: 1, maxValue: 30 })); count > 0; count -= 1) {
+        const message =
+          asked.size > 0 && tc.draw(gs.booleans())
+            ? answered(tc, asked)
+            : tc.draw(gs.sampledFrom(steps))(model, tc);
+
+        tc.note(message._tag);
+
+        const next = update(model, message);
+
+        for (const command of next.commands ?? []) {
+          if (command.name !== "ReplaceThread") continue;
+
+          const { streamId } = replacedStream(command.args);
+
+          expect(asked.has(streamId), message._tag).toBe(false);
+          asked.add(streamId);
+        }
+
         model = next.model;
       }
     },

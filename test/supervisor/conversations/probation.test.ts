@@ -17,7 +17,6 @@ import { PROJECT_RUN_DEADLINE_MS } from "../../../src/turn-budget.js";
 
 afterEach(async () => {
   vi.useRealTimers();
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -120,8 +119,8 @@ async function provenThenActivated(name: string, harnessCommit: string, failure:
 test("a generation whose first real turn fails is rolled back to the last generation that completed one", async () => {
   const { control, working } = await provenThenActivated("probation-rollback", BROKEN, "faulted");
 
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const log = vi.spyOn(console, "log");
+  const warn = vi.spyOn(console, "warn");
 
   const { epoch: activated, generation } = await control.getActiveGeneration();
   await send(control, "r2");
@@ -179,7 +178,6 @@ test("a completed turn ends probation, so a later failed turn keeps the generati
 test("a model error on a generation's first turn keeps it on probation, and a later fault still rolls it back", async () => {
   const { control, working } = await provenThenActivated("probation-model-error", SOUND, null);
   const activated = (await control.getActiveGeneration()).generation?.label;
-  vi.spyOn(console, "warn").mockImplementation(() => {});
 
   await send(control, "r2", "fail");
   expect((await control.getActiveGeneration()).generation?.label).toBe(activated);
@@ -213,7 +211,6 @@ test("an owner cancel survives a Supervisor restart, so the run's end does not r
 
 test("a run reported first without its number and then with it stays one run, so it proves nothing early", async () => {
   const { control, working } = await provenThenActivated("probation-run-number", SOUND, null);
-  vi.spyOn(console, "warn").mockImplementation(() => {});
 
   await send(control, "r2", "numbered");
   await send(control, "r3", "end");
@@ -246,7 +243,6 @@ test("a run stopped at its deadline fails probation only when its generation nev
   const { control, working } = await provenThenActivated("probation-deadline", SOUND, null);
   const activated = await activeLabel(control);
   const { epoch } = await control.getActiveGeneration();
-  vi.spyOn(console, "warn").mockImplementation(() => {});
 
   await send(control, "r2", "ask");
   await pastDeadline(control);

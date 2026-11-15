@@ -3,8 +3,8 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 import { Generations, type GenerationLabel } from "../../../src/supervisor/generations.js";
-import type { HistoryCommit } from "../../../src/supervisor/history/commits.js";
 import { GenerationHistory } from "../../../src/supervisor/history/log.js";
+import { r2History } from "../../../src/supervisor/history/r2-history.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 
 const firstCommit = "1".repeat(40);
@@ -15,22 +15,20 @@ afterEach(async () => {
   await reset();
 });
 
-function recorder(failures: number) {
-  const commits: HistoryCommit[] = [];
+function recorder(refusals: number) {
   const pending: Promise<void>[] = [];
-  let remaining = failures;
+  const append = r2History(env.MODULE_MAPS);
+  let remaining = refusals;
 
   const history = new GenerationHistory(
     (commit) => {
       if (remaining > 0) {
         remaining -= 1;
 
-        return Promise.reject(new Error("the repository refused the push"));
+        return Promise.reject(new Error("the bucket refused the put"));
       }
 
-      commits.push(commit);
-
-      return Promise.resolve();
+      return append(commit);
     },
     (promise) => {
       pending.push(promise);
@@ -38,7 +36,25 @@ function recorder(failures: number) {
     () => 1_700_000_000_000,
   );
 
-  return { commits, history, settled: () => Promise.all(pending) };
+  return { history, settled: () => Promise.all(pending) };
+}
+
+async function storedText(path: string): Promise<string> {
+  const object = await env.MODULE_MAPS.get(`history/${path}`);
+
+  return object === null ? "" : object.text();
+}
+
+function epochOf(eventName: string): number {
+  return Number(eventName.slice(0, eventName.indexOf("-")));
+}
+
+async function eventNames(): Promise<string[]> {
+  const listed = await env.MODULE_MAPS.list({ prefix: "history/events/" });
+
+  return listed.objects
+    .map((object) => object.key.slice("history/events/".length, -".json".length))
+    .toSorted((left, right) => epochOf(left) - epochOf(right));
 }
 
 const READY = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;
@@ -52,57 +68,58 @@ function served(generations: Generations, commit: string): GenerationLabel {
   return label;
 }
 
-test("each outcome appends one commit, in order, after the transaction", async () => {
-  const { commits, history, settled } = recorder(0);
+function recordedSupervisor(name: string, refusals: number, change: (g: Generations) => void) {
+  const { history, settled } = recorder(refusals);
 
-  await runInDurableObject(env.SUPERVISOR.getByName("history-order"), (_instance, state) => {
-    const generations = new Generations(state.storage, FACET_COMPATIBILITY, (change) => {
-      history.record(change);
-    });
+  return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) => {
+    change(
+      new Generations(state.storage, FACET_COMPATIBILITY, (recorded) => {
+        history.record(recorded);
+      }),
+    );
+  }).then(settled);
+}
 
+test("every outcome leaves one event named by its epoch, and each generation record ends in its latest state", async () => {
+  await recordedSupervisor("history-order", 0, (generations) => {
     const first = served(generations, firstCommit);
     served(generations, secondCommit);
     const observedEpoch = generations.active().epoch;
     generations.activate({ kind: "rollback", label: first, observedEpoch }, "owner");
   });
 
-  await settled();
-
-  expect(commits.map((commit) => commit.message)).toEqual([
-    "submitted generation 0",
-    "prepared generation 0",
-    "activated generation 0",
-    "submitted generation 1",
-    "prepared generation 1",
-    "activated generation 1",
-    "rolled-back generation 0",
+  expect(await eventNames()).toEqual([
+    "1-submitted",
+    "2-prepared",
+    "3-activated",
+    "4-submitted",
+    "5-prepared",
+    "6-activated",
+    "7-rolled-back",
   ]);
+  expect(JSON.parse(await storedText("generations/0.json"))).toMatchObject({
+    label: 0,
+    wasActive: true,
+  });
+  expect(JSON.parse(await storedText("generations/1.json"))).toMatchObject({
+    label: 1,
+    wasActive: true,
+  });
 });
 
-test("a commit holds the generation record and the event", async () => {
-  const { commits, history, settled } = recorder(0);
-
-  await runInDurableObject(env.SUPERVISOR.getByName("history-files"), (_instance, state) => {
-    const generations = new Generations(state.storage, FACET_COMPATIBILITY, (change) => {
-      history.record(change);
-    });
-
+test("an activation stores the generation record and the event as JSON objects", async () => {
+  await recordedSupervisor("history-files", 0, (generations) => {
     served(generations, firstCommit);
   });
 
-  await settled();
-
-  const last = commits.at(-1);
-
-  expect(Object.keys(last?.files ?? {})).toEqual(["generations/0.json", "events/3-activated.json"]);
-  expect(JSON.parse(last?.files["generations/0.json"] ?? "")).toEqual({
+  expect(JSON.parse(await storedText("generations/0.json"))).toEqual({
     label: 0,
     harnessCommit: firstCommit,
     status: "ready",
     wasActive: true,
     facetCompatibility: FACET_COMPATIBILITY,
   });
-  expect(JSON.parse(last?.files["events/3-activated.json"] ?? "")).toEqual({
+  expect(JSON.parse(await storedText("events/3-activated.json"))).toEqual({
     kind: "activated",
     actor: "owner",
     label: 0,
@@ -111,29 +128,18 @@ test("a commit holds the generation record and the event", async () => {
     outcome: null,
     errorCode: null,
   });
+  const event = await env.MODULE_MAPS.head("history/events/3-activated.json");
+  expect(event?.httpMetadata?.contentType).toBe("application/json");
 });
 
-test("a failed history write does not block activation or later commits", async () => {
-  const { commits, history, settled } = recorder(1);
+test("a failed history write does not block activation or later events", async () => {
+  let active: number | undefined;
 
-  const active = await runInDurableObject(
-    env.SUPERVISOR.getByName("history-failure"),
-    (_instance, state) => {
-      const generations = new Generations(state.storage, FACET_COMPATIBILITY, (change) => {
-        history.record(change);
-      });
-
-      served(generations, firstCommit);
-
-      return generations.active().generation?.label;
-    },
-  );
-
-  await settled();
+  await recordedSupervisor("history-failure", 1, (generations) => {
+    served(generations, firstCommit);
+    active = generations.active().generation?.label;
+  });
 
   expect(active).toBe(0);
-  expect(commits.map((commit) => commit.message)).toEqual([
-    "prepared generation 0",
-    "activated generation 0",
-  ]);
+  expect(await eventNames()).toEqual(["2-prepared", "3-activated"]);
 });

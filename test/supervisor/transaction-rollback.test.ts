@@ -1,24 +1,14 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { FACET_COMPATIBILITY } from "../../src/facet/runtime-contract.js";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { Generations } from "../../src/supervisor/generations.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
+import { label } from "./generations/fixtures.js";
+import { refuseGenerationStateWrites } from "./refused-storage.js";
 
 const commit = "7200000000000000000000000000000000000001";
-
-function refuseStatements(storage: DurableObjectStorage, refused: string): void {
-  const exec = storage.sql.exec.bind(storage.sql);
-
-  vi.spyOn(storage.sql, "exec").mockImplementation(
-    (query: string, ...bindings: SqlStorageValue[]) => {
-      if (query.includes(refused)) throw new Error(`the storage refused: ${refused}`);
-
-      return exec(query, ...bindings);
-    },
-  );
-}
 
 function raises(operation: () => void): boolean {
   try {
@@ -35,53 +25,45 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 }
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
 test("a submission whose epoch write fails raises and labels nothing", async () => {
   const outcome = await runInDurableObject(supervisor("submit-rolls-back"), (_instance, state) => {
     const generations = new Generations(state.storage, FACET_COMPATIBILITY);
-
-    refuseStatements(state.storage, "UPDATE generation_state SET");
+    const allowWrites = refuseGenerationStateWrites(state.storage);
 
     const raised = raises(() => {
       generations.submit(testHarnessCommit(commit), "owner");
     });
 
-    vi.restoreAllMocks();
+    allowWrites();
 
-    const labeled = state.storage.sql
-      .exec<{ count: number }>("SELECT COUNT(*) AS count FROM generations")
-      .one().count;
-
-    return { raised, labeled, epoch: generations.active().epoch };
+    return { raised, labeled: generations.byLabel(label(0)), epoch: generations.active().epoch };
   });
 
-  expect(outcome).toEqual({ raised: true, labeled: 0, epoch: 0 });
+  expect(outcome).toEqual({ raised: true, labeled: undefined, epoch: 0 });
 });
 
 test("a preparation check whose selection write fails raises and changes nothing", async () => {
   const outcome = await runInDurableObject(supervisor("check-rolls-back"), (_instance, state) => {
     const generations = new Generations(state.storage, FACET_COMPATIBILITY);
-
-    const { label } = generations.submit(testHarnessCommit(commit), "owner").generation;
-
-    refuseStatements(state.storage, "UPDATE generation_state SET");
+    const { label: submitted } = generations.submit(testHarnessCommit(commit), "owner").generation;
+    const allowWrites = refuseGenerationStateWrites(state.storage);
 
     const raised = raises(() => {
       generations.recordPreparation(
-        label,
+        submitted,
         { status: "ready", compatibility: FACET_COMPATIBILITY },
         "owner",
       );
     });
 
-    vi.restoreAllMocks();
+    allowWrites();
 
     return {
       raised,
-      status: generations.byLabel(label)?.status,
+      status: generations.byLabel(submitted)?.status,
       epoch: generations.active().epoch,
     };
   });

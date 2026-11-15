@@ -1,12 +1,8 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import * as Schema from "effect/Schema";
 import { logEvent, logRedactedCause, type LogFields } from "../src/diagnostics.js";
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 const githubToken = gs
   .text({
@@ -71,7 +67,9 @@ test("no credential or JWT inside a string field reaches the log", () => {
   });
 });
 
-test("every logged event is one JSON-stable object that keeps its own event, level and time, and bounds its text", () => {
+const CONSOLE_OF_LEVEL = { info: "log", warn: "warn", error: "error" } as const;
+
+test("every logged event is one JSON-stable object on the console of its level that keeps its own event, level and time, and bounds its text", () => {
   hegel.test((tc) => {
     const event = tc.draw(gs.text({ alphabet: "abc.-", minSize: 1, maxSize: 12 }));
     const level = tc.draw(gs.sampledFrom(["info", "warn", "error"] as const));
@@ -80,17 +78,19 @@ test("every logged event is one JSON-stable object that keeps its own event, lev
       tc.draw(gs.arrays(gs.tuples(fieldKey, fieldValue), { maxSize: 5 })),
     );
 
-    const consoles = [
-      vi.spyOn(console, "log").mockImplementation(() => {}),
-      vi.spyOn(console, "warn").mockImplementation(() => {}),
-      vi.spyOn(console, "error").mockImplementation(() => {}),
-    ];
+    const consoles = {
+      log: vi.spyOn(console, "log").mockImplementation(() => {}),
+      warn: vi.spyOn(console, "warn").mockImplementation(() => {}),
+      error: vi.spyOn(console, "error").mockImplementation(() => {}),
+    };
 
     logEvent(level, event, fields);
 
-    const calls = consoles.flatMap((spy) => spy.mock.calls);
+    const calls = Object.values(consoles).flatMap((spy) => spy.mock.calls);
+    const own = consoles[CONSOLE_OF_LEVEL[level]].mock.calls;
     vi.restoreAllMocks();
     expect(calls).toHaveLength(1);
+    expect(own, "Workers Logs takes the level from the console method").toHaveLength(1);
     expect(calls[0]).toHaveLength(1);
 
     const entry = decodeEntry(calls[0]?.[0]);

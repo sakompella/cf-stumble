@@ -42,7 +42,7 @@ afterEach(async () => {
   await reset();
 });
 
-test("a generation holding the model route cannot reach its credential helper or instance state", async () => {
+test("a generation holding the model route cannot call a credential helper or read its instance state, as it could before 5d446f4d moved the helper off the RPC prototype", async () => {
   const supervisor = "rpc-surface-credential-holder";
 
   await runInDurableObject(env.SUPERVISOR.getByName(supervisor), (_instance, state) => {

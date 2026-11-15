@@ -7,12 +7,10 @@ function base64url(text: string): string {
   return btoa(text).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
 }
 
-export function syntheticJwt(claimPadding = 0): SyntheticJwt {
+export function syntheticJwt(): SyntheticJwt {
   const header = base64url(JSON.stringify({ alg: "RS256", kid: "synthetic-test-key" }));
 
-  const payload = base64url(
-    JSON.stringify({ sub: "synthetic-owner", padding: "p".repeat(claimPadding) }),
-  );
+  const payload = base64url(JSON.stringify({ sub: "synthetic-owner" }));
 
   const signature = base64url("synthetic signature, not a real one");
 

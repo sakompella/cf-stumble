@@ -19,6 +19,7 @@ import {
   ManualExecHandle,
 } from "../../workspace/project/fakes.js";
 import { FakeTenantWorkspace } from "../projects/fake-tenant-workspace.js";
+import { eventuallyTruthy } from "../../eventually.js";
 
 const answered = (stdout: string): readonly BackendExecEvent[] => [
   ...(stdout === "" ? [] : [{ name: "stdout", data: new TextEncoder().encode(stdout) } as const]),
@@ -82,6 +83,10 @@ export class ProjectWorkspace extends FakeTenantWorkspace {
         }),
       ),
     );
+  }
+
+  untilExecs(condition: (handles: readonly ManualExecHandle[]) => boolean): Promise<boolean> {
+    return eventuallyTruthy(() => condition(this.execs.handles));
   }
 
   seedFile(path: string, text: string): void {

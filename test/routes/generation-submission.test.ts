@@ -1,12 +1,8 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generations.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label as generationLabel } from "../supervisor/generations/fixtures.js";
 import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -63,8 +59,6 @@ test("returns a failed build step's output tail to the owner", async () => {
 });
 
 test("reports the recorded label with a preparation failure, without echoing the internal error", async () => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
-
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({

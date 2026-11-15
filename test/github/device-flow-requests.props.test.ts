@@ -150,24 +150,98 @@ const spoiledAuthorization = gs.sampledFrom([
 
 const unusableStart = gs.oneOf(
   spoiledAuthorization.map((reply) => ({
-    response: Response.json(reply),
+    answer: () => Promise.resolve(Response.json(reply)),
     problem: "provider-refused",
   })),
   gs.sampledFrom([[], "text", 7, null, true]).map((body) => ({
-    response: Response.json(body),
+    answer: () => Promise.resolve(Response.json(body)),
     problem: "provider-refused",
   })),
-  gs.just({ response: new Response("{not json"), problem: "provider-unavailable" }),
+  gs.just({
+    answer: () => Promise.resolve(new Response("{not json")),
+    problem: "provider-unavailable",
+  }),
+  gs.just({
+    answer: () => Promise.reject(new TypeError("network connection lost")),
+    problem: "provider-unavailable",
+  }),
   gs.sampledFrom([400, 404, 500, 502]).map((status) => ({
-    response: new Response("{}", { status }),
+    answer: () => Promise.resolve(new Response("{}", { status })),
     problem: "provider-unavailable",
   })),
 );
 
 test("a start reply that cannot begin an authorization says whether the provider failed or refused", () =>
   hegel.testAsync(async (tc) => {
-    const { response, problem } = tc.draw(unusableStart);
-    const fetcher: GitHubFetch = () => Promise.resolve(response);
+    const { answer, problem } = tc.draw(unusableStart);
 
-    await expect(startAuthorization("client", fetcher)).resolves.toEqual({ ok: false, problem });
+    await expect(startAuthorization("client", answer)).resolves.toEqual({ ok: false, problem });
   }));
+
+const verificationPage = gs.record({
+  scheme: gs.sampledFrom(["https", "http", ""]),
+  userinfo: gs.sampledFrom(["", "owner@", "owner:secret@", ":secret@"]),
+  host: gs.sampledFrom([
+    "github.com",
+    "GitHub.com",
+    "api.github.com",
+    "github.com.example.com",
+    "example.com",
+  ]),
+  port: gs.sampledFrom(["", ":443", ":8443"]),
+  path: gs.fromRegex("(/[a-z]{1,8}){0,3}"),
+});
+
+test("only a page on https://github.com with no credentials in its address can start an authorization", () =>
+  hegel.testAsync(async (tc) => {
+    const { scheme, userinfo, host, port, path } = tc.draw(verificationPage);
+    const verificationUri = `${scheme}://${userinfo}${host}${port}${path}`;
+
+    const safe =
+      scheme === "https" &&
+      userinfo === "" &&
+      host.toLowerCase() === "github.com" &&
+      (port === "" || port === ":443");
+
+    const { fetcher } = recorder(() =>
+      Response.json({
+        device_code: "device-code",
+        user_code: "WDJB-MJHT",
+        verification_uri: verificationUri,
+      }),
+    );
+
+    const started = await startAuthorization("client", fetcher);
+
+    if (safe) {
+      expect(started.ok, verificationUri).toBe(true);
+
+      return;
+    }
+
+    expect(started, verificationUri).toEqual({ ok: false, problem: "provider-refused" });
+  }));
+
+test("regression: the unsafe verification pages GitHub documents are all refused", async () => {
+  for (const verificationUri of [
+    "http://github.com/login/device",
+    "https://example.com/login/device",
+    "https://github.com.example.com/login/device",
+    "https://github.com@evil.example/login/device",
+    "https://owner:secret@github.com/login/device",
+    "https://github.com:8443/login/device",
+  ]) {
+    const { fetcher } = recorder(() =>
+      Response.json({
+        device_code: "device-code",
+        user_code: "WDJB-MJHT",
+        verification_uri: verificationUri,
+      }),
+    );
+
+    await expect(startAuthorization("client", fetcher)).resolves.toEqual({
+      ok: false,
+      problem: "provider-refused",
+    });
+  }
+});

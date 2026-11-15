@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { vi } from "vitest";
+import { eventuallyTruthy } from "../../eventually.js";
 
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
 
@@ -73,8 +74,7 @@ export function scriptModel(...answers: readonly Answer[]) {
     return answer();
   });
 
-  const asked = (count: number) =>
-    vi.waitUntil(() => inputs.length === count, { timeout: 10_000, interval: 10 });
+  const asked = (count: number) => eventuallyTruthy(() => inputs.length === count);
 
   return { inputs, asked };
 }

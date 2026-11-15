@@ -1,8 +1,14 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
+import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
-import { parseCallback, parseRefreshGrant, parseTokenGrant } from "../../src/chatgpt/oauth.js";
+import {
+  parseCallback,
+  parseRefreshGrant,
+  parseTokenGrant,
+  requestTokens,
+} from "../../src/chatgpt/oauth.js";
 
 const REDIRECT_URI = "http://127.0.0.1:1455/auth/callback";
 
@@ -90,6 +96,75 @@ test("a pasted address yields its code and client, whatever they contain and how
     const pasted = `${tc.draw(whitespace)}${REDIRECT_URI}?${query}${tc.draw(whitespace)}`;
 
     expect(parseCallback(pasted, signIn)).toEqual(Result.succeed({ code, clientId: client }));
+  });
+});
+
+const FAULTS = [
+  ["repeated parameter", "bad-address"],
+  ["other address", "bad-address"],
+  ["oversized", "bad-address"],
+  ["provider error", "provider-refused"],
+  ["other sign-in", "wrong-sign-in"],
+  ["no code", "missing-code"],
+  ["no client", "missing-client"],
+  ["dynamic client", "missing-client"],
+] as const;
+
+type Fault = (typeof FAULTS)[number][0];
+
+function droppedParameter(fault: Fault): string | undefined {
+  if (fault === "no code") return "code";
+
+  return fault === "no client" ? "client_id" : undefined;
+}
+
+const OTHER_ADDRESSES = [
+  "https://evil.example/auth/callback",
+  "http://127.0.0.1:1456/auth/callback",
+  "http://127.0.0.1:1455/callback",
+];
+
+function faulted(tc: hegel.TestCase, fault: Fault, signIn: string): string {
+  const pairs: [string, string][] = [
+    ["code", tc.draw(callbackValue)],
+    [
+      "state",
+      fault === "other sign-in" ? tc.draw(state.filter((other) => other !== signIn)) : signIn,
+    ],
+    ["client_id", fault === "dynamic client" ? DYNAMIC_CLIENT_ID : tc.draw(clientId)],
+  ];
+
+  const kept = pairs.filter(([name]) => name !== droppedParameter(fault));
+
+  if (fault === "repeated parameter") {
+    kept.push([tc.draw(gs.sampledFrom(["code", "state", "client_id"])), tc.draw(callbackValue)]);
+  }
+
+  if (fault === "provider error") kept.push(["error", tc.draw(callbackValue)]);
+
+  if (fault === "oversized") kept.push(["pad", "x".repeat(4_100)]);
+
+  const address =
+    fault === "other address" ? tc.draw(gs.sampledFrom(OTHER_ADDRESSES)) : REDIRECT_URI;
+
+  return `${address}?${new URLSearchParams(kept).toString()}`;
+}
+
+const NOT_AN_ADDRESS = gs.text({ alphabet: "this is not an address, just words", maxSize: 40 });
+
+test("a pasted address with one fault, or no address at all, is refused with that fault's reason", () => {
+  hegel.test((tc) => {
+    const signIn = tc.draw(state);
+
+    if (tc.draw(gs.booleans())) {
+      expect(parseCallback(tc.draw(NOT_AN_ADDRESS), signIn)).toEqual(Result.fail("bad-address"));
+
+      return;
+    }
+
+    const [fault, problem] = tc.draw(gs.sampledFrom([...FAULTS]));
+
+    expect(parseCallback(faulted(tc, fault, signIn), signIn)).toEqual(Result.fail(problem));
   });
 });
 
@@ -188,5 +263,31 @@ test("text that is not a token reply never connects", () => {
     expect(parseRefreshGrant(text, { refreshToken: "previous" }, 0)).toEqual(
       Result.fail("ambiguous"),
     );
+  });
+});
+
+const refusedStatus = gs
+  .integers({ minValue: 400, maxValue: 498 })
+  .map((status) => (status >= 429 ? status + 1 : status));
+
+const failureContract = gs.oneOf(
+  refusedStatus.map((status) => ({ status, failure: "rejected" })),
+  gs.just({ status: 429, failure: "rate-limited" }),
+  gs.integers({ minValue: 500, maxValue: 599 }).map((status) => ({
+    status,
+    failure: "temporary",
+  })),
+);
+
+test("a token request refused by the provider fails as rejected for a 4xx other than 429, rate-limited for 429, and retryably for a 5xx", async () => {
+  await hegel.testAsync(async (tc) => {
+    const { status, failure } = tc.draw(failureContract);
+    const reply = new Response(tc.draw(gs.text({ maxSize: 40 })), { status });
+
+    const outcome = await Effect.runPromise(
+      Effect.result(requestTokens(() => Promise.resolve(reply), {}, parseTokenGrant)),
+    );
+
+    expect(Result.isFailure(outcome) ? outcome.failure.failure : "granted").toBe(failure);
   });
 });

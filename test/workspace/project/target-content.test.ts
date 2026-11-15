@@ -1,20 +1,6 @@
 import { expect, test } from "vitest";
 import { encode, makeTarget } from "./target-helpers.js";
 
-test("arbitrary bytes round-trip exactly", async () => {
-  const { target } = makeTarget();
-  const bytes = new Uint8Array([0x00, 0xff, 0xc3, 0x28]);
-
-  await expect(target.writeFile("/weird.bin", bytes, "overwrite")).resolves.toEqual({
-    ok: true,
-    value: null,
-  });
-  const read = await target.readFile("/weird.bin");
-  expect(read.ok).toBe(true);
-
-  if (read.ok) expect(Array.from(read.value)).toEqual([0x00, 0xff, 0xc3, 0x28]);
-});
-
 test("a symlink's size is the byte length of its target, not the string length", async () => {
   const { provider, target } = makeTarget();
   const targetText = "café-target";

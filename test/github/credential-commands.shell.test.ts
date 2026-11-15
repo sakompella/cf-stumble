@@ -9,7 +9,11 @@ import {
   repositoryAccessSource,
 } from "../../src/github/index.js";
 import { GITHUB_CLI_CONFIG_DIRECTORY, GIT_GLOBAL_CONFIG_PATH } from "../../src/workspace-layout.js";
-import { scratchDirectory, writeExecutable } from "../workspace/planned-shell-fixture.js";
+import {
+  scratchDirectory,
+  underScratch,
+  writeExecutable,
+} from "../workspace/planned-shell-fixture.js";
 
 const scratch = scratchDirectory("cf-stumble-credential-commands-");
 
@@ -58,4 +62,52 @@ test.each([
   for (const environment of seen) {
     expect(environment).toBe(`${GITHUB_CLI_CONFIG_DIRECTORY} ${GIT_GLOBAL_CONFIG_PATH}`);
   }
+});
+
+test("an install sets up Git's credential helper for github.com, so Git can use the credential", () => {
+  const area = scratchDirectory("cf-stumble-credential-helper-");
+  const areaStubs = join(area, "bin");
+
+  mkdirSync(areaStubs);
+  writeExecutable(
+    join(areaStubs, "gh"),
+    `#!/bin/sh
+case "$1 $2" in
+  "auth setup-git")
+    printf '[credential "https://github.com"]\n\thelper = !gh auth git-credential\n' >> "$GIT_CONFIG_GLOBAL"
+    ;;
+esac
+exit 0
+`,
+  );
+
+  const root = join(area, "root");
+
+  mkdirSync(join(root, "workspace"), { recursive: true });
+
+  const ran = spawnSync(devShellTool("sh"), ["-c", underScratch(installCredentialSource(), root)], {
+    encoding: "utf8",
+    input: "token\n",
+    env: { PATH: `${areaStubs}:${process.env["PATH"] ?? ""}` },
+  });
+
+  expect(ran.status, ran.stderr).toBe(0);
+  expect(ran.stdout).toBe("installed\n");
+
+  const helper = spawnSync(
+    devShellTool("git"),
+    [
+      "config",
+      "--file",
+      join(root, "workspace/.gitconfig"),
+      "--get",
+      "credential.https://github.com.helper",
+    ],
+    { encoding: "utf8" },
+  );
+
+  expect(helper.status, helper.stderr).toBe(0);
+  expect(helper.stdout.trim()).toBe("!gh auth git-credential");
+
+  rmSync(area, { recursive: true, force: true });
 });

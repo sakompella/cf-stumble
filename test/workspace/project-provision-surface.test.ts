@@ -1,13 +1,12 @@
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import {
-  projectCloneSource,
   executeProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
 import type { Project } from "../../src/project-catalog.js";
 import { projectDirectory } from "../../src/workspace-layout.js";
-import { sampleProjectOne } from "../project-fixtures.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   workspaceEffects,
   type PromiseOperations,
@@ -24,7 +23,6 @@ function provisionRequest(project: Project): ProjectProvisionRequest {
 
 class FakeProjectOperations implements PromiseOperations {
   readonly calls: string[] = [];
-  readonly sources: string[] = [];
   exitCode = 0;
   commandFailure: Error | undefined;
   cloneFailure: Error | undefined = new Error("the isolate clone is unavailable");
@@ -69,9 +67,8 @@ class FakeProjectOperations implements PromiseOperations {
     return Promise.resolve();
   }
 
-  runCommand(source: string, cwd: string): Promise<CommandOutput> {
+  runCommand(_source: string, cwd: string): Promise<CommandOutput> {
     this.calls.push(`command:${cwd}`);
-    this.sources.push(source);
 
     if (this.commandFailure !== undefined) return Promise.reject(this.commandFailure);
 
@@ -87,7 +84,7 @@ function provision(operations: FakeProjectOperations, request: ProjectProvisionR
   );
 }
 
-test("runs the clone command above the project root", async () => {
+test("without an isolate clone, the container clone runs from above the not yet existing project root", async () => {
   const operations = new FakeProjectOperations();
 
   await expect(provision(operations, provisionRequest(projectOne))).resolves.toEqual({
@@ -96,7 +93,6 @@ test("runs the clone command above the project root", async () => {
   });
 
   expect(operations.calls.filter((call) => call.startsWith("command:"))).toEqual(["command:/"]);
-  expect(operations.sources).toEqual([projectCloneSource(projectOne)]);
 });
 
 test("reports a failing clone with its exit code instead of continuing", async () => {
@@ -131,7 +127,6 @@ test.each([
     },
   ],
 ] as const)("a clone is not provisioned when %s", async (_case, arrange) => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
   const operations = new FakeProjectOperations();
   arrange(operations);
 
@@ -141,14 +136,9 @@ test.each([
   });
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 test("a clone command that cannot run is one workspace-unavailable failure", async () => {
   const operations = new FakeProjectOperations();
   operations.commandFailure = new Error("econnrefused while dialing the container");
-  vi.spyOn(console, "error").mockImplementation(() => {});
 
   await expect(provision(operations, provisionRequest(projectOne))).resolves.toEqual({
     ok: false,
@@ -156,7 +146,7 @@ test("a clone command that cannot run is one workspace-unavailable failure", asy
   });
 });
 
-test("refuses a repository URL that is not the project's, and a project id that is not an id", async () => {
+test("refuses a repository URL that is not the project's, an id its URL does not derive, and a project id that is not an id", async () => {
   const operations = new FakeProjectOperations();
 
   for (const request of [
@@ -165,6 +155,7 @@ test("refuses a repository URL that is not the project's, and a project id that 
       repositoryUrl: "https://example.invalid/attacker/repo.git",
     },
     { ...provisionRequest(projectOne), repositoryUrl: "git@github.com:a/b.git" },
+    { ...provisionRequest(projectOne), repositoryUrl: sampleProjectTwo.repositoryUrl },
     { ...provisionRequest(projectOne), projectId: "../../etc" },
   ]) {
     await expect(provision(operations, request)).resolves.toEqual({

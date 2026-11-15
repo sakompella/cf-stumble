@@ -1,3 +1,5 @@
+import * as hegel from "@hegeldev/hegel";
+import * as gs from "@hegeldev/hegel/generators";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { JsonRecord } from "../json.mts";
@@ -42,18 +44,25 @@ const input = (staleCalls: readonly StaleCall[]): VersionInput => ({
 
 describe("parseLatestDeployment", () => {
   it("takes the newest deployment whatever order the list comes in", () => {
-    const response = {
-      result: {
-        deployments: [
-          deployment("2026-10-01T10:00:00Z", OLD_VERSION),
-          deployment("2026-10-01T12:00:00Z", NEW_VERSION),
-        ],
-      },
-    };
+    hegel.test((tc) => {
+      const minutes = tc.draw(
+        gs.arrays(gs.integers({ minValue: 0, maxValue: 100_000 }), {
+          unique: true,
+          minSize: 1,
+          maxSize: 8,
+        }),
+      );
 
-    assert.deepEqual(parseLatestDeployment(response), {
-      deployedAtMs: DEPLOYED,
-      versionIds: [NEW_VERSION],
+      const deployments = minutes.map((minute) =>
+        deployment(new Date(DEPLOYED + minute * 60_000).toISOString(), `version-${minute}`),
+      );
+
+      const newest = Math.max(...minutes);
+
+      assert.deepEqual(parseLatestDeployment({ result: { deployments } }), {
+        deployedAtMs: DEPLOYED + newest * 60_000,
+        versionIds: [`version-${newest}`],
+      });
     });
   });
 

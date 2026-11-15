@@ -1,9 +1,8 @@
 import * as Result from "effect/Result";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { parseGitHubToken } from "../../src/github/index.js";
-import { REDACTED } from "../../src/github/redaction.js";
 import { installWorkspaceCredential } from "../../src/workspace/index.js";
-import { textLines } from "../log-capture.js";
+import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { runToResult } from "./workspace-results.js";
 import type { WorkspaceHostNamespace, WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
@@ -11,16 +10,12 @@ function namespaceOf(host: WorkspaceHostRpc<"credential">): WorkspaceHostNamespa
   return { getByName: () => host };
 }
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-test("a thrown install RPC fails as workspace-unavailable and logs its cause with the token redacted", async () => {
+test("a thrown install RPC fails as workspace-unavailable and never logs the token", async () => {
   const token = parseGitHubToken("ghp_cfstumbleFAKEtokenFAKEtoken0123456789");
 
   if (token === undefined) throw new Error("the test token must parse");
 
-  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  capturedEvents();
 
   const installed = await runToResult(
     installWorkspaceCredential({
@@ -35,9 +30,5 @@ test("a thrown install RPC fails as workspace-unavailable and logs its cause wit
   expect(Result.isFailure(installed) && installed.failure.code).toBe(
     "credential-workspace-unavailable",
   );
-
-  const logged = textLines(errors).join("\n");
-
-  expect(logged).toContain(REDACTED);
-  expect(logged).not.toContain(token);
+  expect(everythingLogged()).not.toContain(token);
 });

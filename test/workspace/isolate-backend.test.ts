@@ -81,7 +81,7 @@ test("appending to a file that does not exist creates it", async () => {
   ]);
 });
 
-test("isolate commands open no new request back into their host", async () => {
+test("isolate commands open no request back into their host, which hit the subrequest depth limit from the 14th exec of a turn (d7a6f5fd)", async () => {
   const opened = await runInDurableObject(
     env.WORKSPACE_HOST.getByName("isolate-no-loopback"),
     async (host, state) => {

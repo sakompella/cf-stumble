@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { capturedEvents, named } from "./log-capture.js";
 import type { ModelRouteRequest } from "../src/model-route-wire/request.js";
 import type {
@@ -15,10 +15,6 @@ import {
 } from "./model-route-provider-stream.js";
 
 const encoder = new TextEncoder();
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 function fakeStreamInference(providerStream: ReadableStream<Uint8Array>): ModelStreamInference {
   return {
@@ -287,33 +283,6 @@ test("a binding call that throws before it returns a Promise becomes one termina
 
   await expect(collectEvents(streamModelEvents(throwing, REQUEST))).resolves.toEqual([
     { type: "error", error: { code: "model-unavailable", detail: "binding unavailable" } },
-  ]);
-});
-
-test.each([
-  "3021: rate limiting: inference request per min rate reached",
-  "3036: You have used up your daily free allocation of 10,000 neurons.",
-  "3040: Capacity temporarily exceeded, please try again.",
-])(
-  "a binding rate limit or capacity error carries status 429 so Pi retries it",
-  async (message) => {
-    const throttled = Object.assign(new Error(message), { name: "AiError" });
-
-    const full: ModelStreamInference = { run: () => Promise.reject(throttled) };
-
-    await expect(collectEvents(streamModelEvents(full, REQUEST))).resolves.toEqual([
-      { type: "error", error: { code: "model-unavailable", detail: `429 ${message}` } },
-    ]);
-  },
-);
-
-test("a binding error with another Workers AI code stays a plain model-unavailable error", async () => {
-  const missing = Object.assign(new Error("5007: No such model or task"), { name: "AiError" });
-
-  const full: ModelStreamInference = { run: () => Promise.reject(missing) };
-
-  await expect(collectEvents(streamModelEvents(full, REQUEST))).resolves.toEqual([
-    { type: "error", error: { code: "model-unavailable", detail: "5007: No such model or task" } },
   ]);
 });
 

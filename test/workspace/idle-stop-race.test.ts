@@ -1,18 +1,10 @@
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { afterIdleStop, WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 import type { ExecBackend } from "../../src/workspace/project/exec-backend.js";
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+import { eventually, tick } from "../eventually.js";
 
 const LIMIT = 10_000;
-
-const tick = () =>
-  new Promise<void>((resolve) => {
-    setTimeout(resolve, 0);
-  });
 
 function gated(phase: "close" | "destroy") {
   const clock = { now: 1_000 };
@@ -50,16 +42,19 @@ function gated(phase: "close" | "destroy") {
 test.each(["close", "destroy"] as const)(
   "work that starts during the %s waits for the stop, then runs",
   async (phase) => {
-    vi.spyOn(console, "log").mockImplementation(() => {});
     const { idle, clock, calls, release } = gated(phase);
     idle.begin()();
     clock.now = 11_000;
     const alarm = idle.onAlarm();
     let stopFinished = false;
-    void idle.settled().then(() => {
+
+    const stopped = idle.settled().then(() => {
       stopFinished = true;
     });
-    await tick();
+
+    await eventually(() => {
+      expect(calls.at(-1)).toBe(phase);
+    });
     const started: string[] = [];
 
     const backend: ExecBackend = {
@@ -88,9 +83,7 @@ test.each(["close", "destroy"] as const)(
     await alarm;
     await exec;
     end();
-    await tick();
-
-    expect(stopFinished).toBe(true);
+    await stopped;
 
     expect(started).toEqual(["exec"]);
     expect(calls).toEqual(phase === "close" ? ["pull", "close"] : ["pull", "close", "destroy"]);
@@ -98,12 +91,13 @@ test.each(["close", "destroy"] as const)(
 );
 
 test("a backend change during an idle stop that work keeps alive still stops the container", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
   const { idle, clock, calls, release } = gated("close");
   idle.begin()();
   clock.now = 11_000;
   const alarm = idle.onAlarm();
-  await tick();
+  await eventually(() => {
+    expect(calls).toEqual(["pull", "close"]);
+  });
   const end = idle.begin();
   const backendChange = idle.stopForBackendChange();
   release.open();
@@ -116,8 +110,6 @@ test("a backend change during an idle stop that work keeps alive still stops the
 });
 
 test("a failed stop for a backend change rejects, and work waiting on the stop still runs", async () => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
-
   const idle = new WorkspaceIdleController({
     nowMs: () => 1_000,
     idleLimitMs: LIMIT,

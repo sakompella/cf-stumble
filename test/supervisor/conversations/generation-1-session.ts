@@ -77,11 +77,13 @@ export async function submitted(
   return result.submissionId;
 }
 
-export async function untilAnswered(
+type EventsView = ReturnType<typeof openReader>;
+
+async function readEventsUntil(
   control: Control,
   projectId: string,
-  count: number,
-): Promise<readonly Entry[]> {
+  done: (view: EventsView) => boolean,
+): Promise<EventsView> {
   const opened = await control.projectEvents(projectId);
 
   if (!opened.ok) throw new Error(`the events must open: ${opened.problem.code}`);
@@ -90,10 +92,10 @@ export async function untilAnswered(
   let buffer = "";
 
   try {
-    while (answerCount(view.entries()) < count) {
+    while (!done(view)) {
       const next = await reader.read();
 
-      if (next.done) throw new Error("the event stream ended before the answers arrived");
+      if (next.done) throw new Error("the event stream ended before the awaited view arrived");
       const split = (buffer + next.value).split("\n");
       buffer = split.pop() ?? "";
 
@@ -102,6 +104,20 @@ export async function untilAnswered(
   } finally {
     await reader.cancel();
   }
+
+  return view;
+}
+
+export async function untilAnswered(
+  control: Control,
+  projectId: string,
+  count: number,
+): Promise<readonly Entry[]> {
+  const view = await readEventsUntil(
+    control,
+    projectId,
+    (read) => answerCount(read.entries()) >= count,
+  );
 
   return view.entries();
 }
@@ -115,25 +131,11 @@ export async function answeredLines(
 }
 
 export async function hasRun(control: Control, projectId: string): Promise<boolean> {
-  const opened = await control.projectEvents(projectId);
-
-  if (!opened.ok) throw new Error(`the events must open: ${opened.problem.code}`);
-  const reader = opened.events.pipeThrough(new TextDecoderStream()).getReader();
-  let read = "";
-
-  try {
-    while (!read.includes("\n")) {
-      const next = await reader.read();
-
-      if (next.done) throw new Error("the event stream ended before its first view");
-      read += next.value;
-    }
-  } finally {
-    await reader.cancel();
-  }
-
-  const view = openReader();
-  view.feed(read.split("\n")[0] ?? "");
+  const view = await readEventsUntil(control, projectId, (read) => read.viewed());
 
   return view.isRunning();
+}
+
+export async function untilIdle(control: Control, projectId: string): Promise<void> {
+  await readEventsUntil(control, projectId, (read) => read.viewed() && !read.isRunning());
 }

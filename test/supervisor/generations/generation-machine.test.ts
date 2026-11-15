@@ -1,12 +1,12 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 import { Generations } from "../../../src/supervisor/generations.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
+import { refuseGenerationStateWrites } from "../refused-storage.js";
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -38,14 +38,7 @@ test("a probation failure whose rollback cannot be written keeps the generation 
     generations.settled(run("completed"));
     served(generations, "b");
 
-    const exec = storage.sql.exec.bind(storage.sql);
-    const refused = vi.spyOn(storage.sql, "exec");
-    refused.mockImplementation((query: string, ...bindings: SqlStorageValue[]) => {
-      if (query.includes("UPDATE generation_state SET")) throw new Error("refused");
-
-      return exec(query, ...bindings);
-    });
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const refused = refuseGenerationStateWrites(storage);
 
     const raised = (() => {
       try {
@@ -57,7 +50,7 @@ test("a probation failure whose rollback cannot be written keeps the generation 
       return false;
     })();
 
-    refused.mockRestore();
+    refused();
 
     return { raised, proven, retried: generations.settled(run("failed"))?.command.label };
   });

@@ -2,20 +2,6 @@ import type { ModelRouteRequest } from "../src/model-route-wire/request.js";
 
 export const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
-export const PROMPTLY_MS = 5_000;
-
-export async function until(condition: () => boolean): Promise<number> {
-  const started = Date.now();
-
-  while (!condition()) {
-    if (Date.now() - started > PROMPTLY_MS) return Number.POSITIVE_INFINITY;
-
-    await scheduler.wait(20);
-  }
-
-  return Date.now() - started;
-}
-
 export async function readFirstEvent(
   reader: ReadableStreamDefaultReader<Uint8Array>,
 ): Promise<void> {

@@ -1,5 +1,5 @@
 import { reset, runDurableObjectAlarm } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { builtGeneration } from "../../facet/generation-1/built-module-map.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
 import {
@@ -16,11 +16,11 @@ import {
 } from "./generation-1-session.js";
 import { ProjectWorkspace } from "./project-workspace.js";
 import { calls, says, scriptModel } from "./scripted-model.js";
+import { eventuallyTruthy } from "../../eventually.js";
 
 const project = sampleProjectOne.id;
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -41,11 +41,8 @@ test("a conversation activates a prepared generation with stumble, and the new g
   );
 
   await submitted(control, project, "activate it", "r1");
-  await vi.waitUntil(
+  await eventuallyTruthy(
     async () => (await control.getActiveGeneration()).generation?.label === label,
-    {
-      timeout: 10_000,
-    },
   );
 
   expect(model.inputs, "the replaced facet stops before its next model turn").toHaveLength(1);

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { chatgptTurn, type ChatGPTCredential } from "../../src/chatgpt/index.js";
 import type { ModelRouteRequest } from "../../src/model-route-wire/request.js";
 import type { ModelStreamEvent } from "../../src/model-route-wire/events.js";
@@ -14,10 +14,6 @@ import {
   sseResponse,
   type RecordedCall,
 } from "./fixtures.js";
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "Read a.txt" }] };
 

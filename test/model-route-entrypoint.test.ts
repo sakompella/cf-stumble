@@ -1,6 +1,6 @@
 import { exports as workerExports } from "cloudflare:workers";
 import { createExecutionContext } from "cloudflare:test";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { GENERATION_REPLACED } from "../src/generation-replaced.js";
 import { ModelRoute } from "../src/model-route.js";
 import {
@@ -163,30 +163,31 @@ test("the deployed entrypoint refuses a bad runStream request across its own ser
   } satisfies ValidationFailure);
 });
 
-test("with no ChatGPT credential connected, the Supervisor's route answers from Workers AI", async () => {
+test("with no ChatGPT connection, the route asks Workers AI with the normalized messages under the Supervisor's session affinity, and served names the fallback", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
   const binding = bindingStreaming([sseLine({ response: "fallback" }), DONE_LINE]);
 
-  const events = await collectEvents(await streamOf(routeOver(binding).runStream(REQUEST)));
-
-  expect(binding.calls).toHaveLength(1);
-  expect(binding.calls[0]?.headers).toEqual({ "x-session-affinity": "owner" });
-  expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "fallback" } });
-});
-
-test("a Supervisor's route sends the binding the normalized messages", async () => {
-  const binding = bindingStreaming([sseLine({ response: "ok" }), DONE_LINE]);
-
-  await collectEvents(
+  const events = await collectEvents(
     await streamOf(
-      supervisedRoute(binding, { kind: "not-connected" }).runStream({
-        messages: [{ role: "user", content: "hi", name: "owner" }],
-      }),
+      routeOver(binding).runStream({ messages: [{ role: "user", content: "hi", name: "owner" }] }),
     ),
   );
 
-  expect(binding.calls.map((call) => call.input.messages)).toEqual([
-    [{ role: "user", content: "hi" }],
+  expect(fetchSpy).not.toHaveBeenCalled();
+  expect(binding.calls.map(({ input, headers }) => [input.messages, headers])).toEqual([
+    [[{ role: "user", content: "hi" }], { "x-session-affinity": "owner" }],
   ]);
+  expect(events.filter((event) => event.type === "provider-fallback")).toEqual([]);
+  expect(events.at(-1)).toMatchObject({
+    type: "done",
+    message: { content: "fallback" },
+    served: {
+      provider: "workers-ai",
+      model: "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+      effort: "low",
+      fallback: "chatgpt-not-connected",
+    },
+  });
 });
 
 test("a ChatGPT grant that needs a reconnect fails the call and never falls back to Workers AI", async () => {

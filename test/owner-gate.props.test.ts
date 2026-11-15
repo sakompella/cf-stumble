@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import { ownerGateRefusal } from "../src/owner-gate.js";
 import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH } from "../src/orb-protocol.js";
 
@@ -14,12 +14,10 @@ beforeAll(() => {
     value: (a: ArrayBuffer, b: ArrayBuffer) =>
       timingSafeEqual(new Uint8Array(a), new Uint8Array(b)),
   });
-  vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 afterAll(() => {
   Reflect.deleteProperty(crypto.subtle, "timingSafeEqual");
-  vi.restoreAllMocks();
 });
 
 function basic(username: string, password: string): string {
@@ -126,7 +124,7 @@ test("without the secret every route but the exempt GETs answers 503, and an exe
   });
 });
 
-test("a mutation through the Worker's workers.dev URL passes only with its own origin and a credential", async () => {
+test("the CI release that goes through the workers.dev URL since Bot Fight Mode blocked the custom domain (ebdc1709) passes only with its own origin and a credential", async () => {
   const own = "https://cf-stumble.example-subdomain.workers.dev";
   const headers = { authorization: basic("aditya", "pw"), origin: own };
 

@@ -1,6 +1,6 @@
 import { reset } from "cloudflare:test";
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
@@ -8,7 +8,6 @@ import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
 import { FAKE_TOKEN, noRunActive, NOW, REPOSITORY, tenant } from "./connection-tenant.js";
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -149,8 +148,6 @@ test.each([
     },
   },
 ])("unlists the project and reports the clone as failed when $outcome", async (row) => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
-
   const subject = tenant(`disconnect-${row.outcome.replaceAll(" ", "-")}`, {
     fallbackToken: FAKE_TOKEN,
   });

@@ -54,21 +54,30 @@ test.describe("a run that is still going", () => {
     await expect(owner.locator(`#${ID.cancelTurnButton}`)).toBeDisabled();
   });
 
-  test("cancel aborts the run, and nothing answers it afterwards", async ({ owner, server }) => {
+  test("cancel aborts the run, which never answers, and the next message is answered after it", async ({
+    owner,
+    server,
+  }) => {
     await sendMessage(owner, PROMPT);
     await server.waitForBarrier();
     await owner.locator(`#${ID.cancelTurnButton}`).click();
 
     await expect(turnState(owner)).toHaveText("stopped: aborted");
-    expect(requestsTo(server, "POST", ABORT_PATH)).toHaveLength(1);
-
-    server.release();
-    await owner.waitForTimeout(300);
-
-    await expect(turnState(owner)).toHaveText("stopped: aborted");
     await expect(transcriptTexts(owner, "assistant").last()).toHaveText(OPENING_TEXT);
     await expect(owner.locator(`#${ID.cancelTurnButton}`)).toBeDisabled();
     await expect(owner.locator(`#${ID.sendTurnButton}`)).toBeEnabled();
+    expect(requestsTo(server, "POST", ABORT_PATH)).toHaveLength(1);
+
+    server.release();
+    await sendMessage(owner, FOLLOW_UP);
+
+    await expect(turnState(owner)).toHaveText("answered");
+    await expect(transcriptTexts(owner, "assistant")).toHaveText([
+      /is checked out at/u,
+      OPENING_TEXT,
+      OPENING_TEXT,
+      ANSWER_TEXT,
+    ]);
     expect(server.openEventStreams(HARNESS_PROJECT_ID)).toBe(1);
   });
 });
@@ -108,7 +117,6 @@ test.describe("a follow-up", () => {
     const posts = messagePosts(server).map((request) => request.body);
 
     expect(posts).toMatchObject([{ content: PROMPT }, { content: FOLLOW_UP }]);
-    expect(new Set(posts.map((body) => JSON.stringify(body))).size).toBe(2);
   });
 });
 

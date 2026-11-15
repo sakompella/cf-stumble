@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  releaseGeneration,
-  RUN_ACTIVE_POLL_MS,
-  type ActivationAnswer,
-  type ReleaseDeps,
-} from "./release.mts";
+import { releaseGeneration, type ActivationAnswer, type ReleaseDeps } from "./release.mts";
 
 const ACTIVE = "a".repeat(40);
 
@@ -15,12 +10,14 @@ type Fake = Readonly<{
   deps: ReleaseDeps;
   submitted: string[];
   activations: number[];
+  activatedAtMs: number[];
   forced: boolean[];
 }>;
 
 function fake(answers: readonly ActivationAnswer[], changed = true, ready = true): Fake {
   const submitted: string[] = [];
   const activations: number[] = [];
+  const activatedAtMs: number[] = [];
   const forced: boolean[] = [];
   let clock = 0;
   let epoch = 4;
@@ -28,6 +25,7 @@ function fake(answers: readonly ActivationAnswer[], changed = true, ready = true
   return {
     submitted,
     activations,
+    activatedAtMs,
     forced,
     deps: {
       owner: {
@@ -39,6 +37,7 @@ function fake(answers: readonly ActivationAnswer[], changed = true, ready = true
         },
         activate: (_label, observedEpoch, force) => {
           activations.push(observedEpoch);
+          activatedAtMs.push(clock);
           forced.push(force);
           epoch += 1;
 
@@ -66,6 +65,13 @@ describe("release of main's commit as a generation", () => {
     assert.deepEqual(activations, [4]);
   });
 
+  it("submits nothing when main's commit is already the active generation", async () => {
+    const { deps, submitted } = fake([]);
+
+    assert.match(await releaseGeneration(ACTIVE, deps), /already the active generation/u);
+    assert.deepEqual(submitted, []);
+  });
+
   it("skips when nothing the facet bundles changed", async () => {
     const { deps, submitted } = fake([], false);
 
@@ -81,14 +87,31 @@ describe("release of main's commit as a generation", () => {
     assert.deepEqual(activations, [4, 5, 6]);
   });
 
-  it("reports, without failing, when a run stays active past the retry window", async () => {
+  it("keeps retrying a busy run for fifteen minutes, then reports without failing", async () => {
     const answers = Array.from({ length: 100 }, () => ({ ok: false, code: "run-active" }));
-    const { deps, activations } = fake(answers);
+    const { deps, activatedAtMs } = fake(answers);
 
-    assert.match(await releaseGeneration(MAIN, deps), /a run stayed active/u);
-    assert.equal(activations.length, (15 * 60_000) / RUN_ACTIVE_POLL_MS + 1);
+    assert.match(await releaseGeneration(MAIN, deps), /a run stayed active for 15 minutes/u);
+    assert.equal(activatedAtMs.at(-1), 15 * 60_000);
+    assert.ok((activatedAtMs.at(-2) ?? Infinity) < 15 * 60_000);
   });
 
+  it("activates again at once with the new epoch when the observed one went stale", async () => {
+    const { deps, activations, activatedAtMs } = fake([{ ok: false, code: "stale-epoch" }]);
+
+    assert.match(await releaseGeneration(MAIN, deps), /Activated/u);
+    assert.deepEqual(activations, [4, 5]);
+    assert.deepEqual(activatedAtMs, [0, 0]);
+  });
+
+  it("fails on an activation answer it does not know", async () => {
+    const { deps } = fake([{ ok: false, code: "unknown-generation" }]);
+
+    await assert.rejects(releaseGeneration(MAIN, deps), /answered unknown-generation/u);
+  });
+});
+
+describe("activation answers other than success", () => {
   it("reports when main does not contain the active generation's commit", async () => {
     const { deps } = fake([{ ok: false, code: "drops-active-commit" }]);
 

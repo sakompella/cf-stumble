@@ -1,17 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { loadIntoTranscript } from "../../../src/page/client/transcript-store.js";
 import { viewReader } from "../../../src/page/client/view-reader.js";
 import type { Conversation } from "../../../src/page/client/conversation.js";
-import { Message } from "../../../src/page/client/message.js";
-import { init, update } from "../../../src/page/client/update.js";
+import { eventually } from "../../eventually.js";
 import { openedTranscript } from "./transcript-resource.js";
-import { received, viewing } from "./views.js";
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 function entry(id: number, conversationId = 1) {
   return {
@@ -71,7 +65,7 @@ test("a tab whose conversation was replaced starts its transcript over, and a la
 
   const loading = Effect.runPromise(provide(loadIntoTranscript()));
 
-  await vi.waitFor(() => {
+  await eventually(() => {
     expect(answer).toBeDefined();
   });
 
@@ -82,29 +76,4 @@ test("a tab whose conversation was replaced starts its transcript over, and a la
   answer?.(Response.json({ items: [entry(8), entry(9)] }));
   await expect(loading).resolves.toEqual(Option.none());
   expect(ids(viewReader(held)(viewLine(2, [entry(20, 2)])))).toEqual([20]);
-});
-
-test("a page showing a replaced conversation drops the old one's queued messages and note", () => {
-  const listed = update(
-    init().model,
-    Message.SucceededFetchProjects({
-      projects: [
-        { id: "repo", displayName: "repo", isHarness: false, location: "/workspace/repo" },
-      ],
-    }),
-  ).model;
-
-  const old = update(listed, received(listed, viewing({ maybeId: Option.some(1) }))).model;
-
-  const queued = [
-    Message.MintedRequestId({ projectId: "repo", requestId: "r", content: "hi" }),
-    Message.SucceededSend({ requestId: "r", submissionId: 4 }),
-  ].reduce((model, message) => update(model, message).model, old);
-
-  const unsent = { ...queued, runNote: "stopped: aborted" };
-
-  const replaced = update(unsent, received(unsent, viewing({ maybeId: Option.some(2) }))).model;
-
-  expect(replaced.outgoing).toEqual([]);
-  expect(replaced.runNote).toBe("");
 });

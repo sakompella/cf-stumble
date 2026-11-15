@@ -9,13 +9,14 @@ import {
 } from "../../src/workspace/commands/provision-project.js";
 import { planProjectRemovalRequest } from "../../src/workspace/commands/remove-project.js";
 import { projectDirectory } from "../../src/workspace-layout.js";
-import { sampleProjectOne } from "../project-fixtures.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   FLOCK_STAND_IN,
   STUB_GIT,
   scratchDirectory,
   systemToolsDirectory,
   underScratch,
+  untilExists,
   writeExecutable,
 } from "./planned-shell-fixture.js";
 
@@ -92,22 +93,30 @@ function exited(child: ChildProcess): Promise<number | null> {
   });
 }
 
-function pause(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-async function untilExists(path: string): Promise<void> {
-  for (let attempt = 0; attempt < 250 && !existsSync(path); attempt += 1) await pause(20);
-
-  expect(existsSync(path), `${path} appeared`).toBe(true);
-}
-
 function removalSource(): string {
   return planProjectRemovalRequest({ kind: "remove-project", projectId: sampleProjectOne.id })
     .source;
 }
+
+test("a removal deletes the project's clone and staging directory and nothing else", async () => {
+  const run = prepare();
+  const staging = `${run.project}.provisioning`;
+  mkdirSync(staging);
+
+  const survivors = [
+    join(run.root, projectDirectory(sampleProjectTwo.id).slice(1), "work.txt"),
+    join(run.root, "workspace", "harness", "work.txt"),
+  ];
+
+  for (const path of survivors) {
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, "work");
+  }
+
+  await expect(exited(start(run, removalSource()))).resolves.toBe(0);
+  expect([run.project, staging].filter((path) => existsSync(path))).toEqual([]);
+  expect(survivors.filter((path) => !existsSync(path))).toEqual([]);
+});
 
 test("a removal waits while another process holds the project's lock", async () => {
   const run = prepare();

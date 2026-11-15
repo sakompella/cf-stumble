@@ -1,12 +1,11 @@
 import { reset } from "cloudflare:test";
 import * as Effect from "effect/Effect";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
 import { FAKE_TOKEN, NOW, REPOSITORY, tenant } from "./connection-tenant.js";
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await reset();
 });
 
@@ -33,7 +32,6 @@ test.each([
     code: "provisioning-failed",
   },
 ])("refuses a repository whose clone $clone, and keeps it out of the catalog", async (row) => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
   const workspace = new FakeTenantWorkspace();
   row.arrange(workspace);
 

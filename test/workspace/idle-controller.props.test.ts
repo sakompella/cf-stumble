@@ -1,7 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Effect from "effect/Effect";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 
 const LIMIT = 10_000;
@@ -148,15 +148,6 @@ async function perform(
 
   await settleTasks();
 }
-
-beforeEach(() => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-  vi.spyOn(console, "error").mockImplementation(() => {});
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 async function runScenario(tc: hegel.TestCase) {
   const failures: FailureSwitch = {

@@ -2,19 +2,17 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { Harness } from "@earendil-works/pi-durable";
 import { afterEach, expect, test, vi } from "vitest";
-import type { ConversationHost } from "../../../src/facet/index.js";
 import { MainFacet } from "../../../src/facet/generation-1/main-facet.js";
 import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
-import { workersAiTurn } from "../../../src/model-route-stream.js";
-import { modelEventStream } from "../../../src/model-route-turn.js";
-import { providerStreamOfLines, sseLine, DONE_LINE } from "../../model-route-provider-stream.js";
+import { capacityOnceModel } from "./scripted-route.js";
+import { eventually } from "../../eventually.js";
+import { entriesText, hostWith } from "./conversation-host.js";
 
 const noModelRun: ModelCapability = {
   runStream: () => Promise.reject(new Error("no run asks the model")),
 };
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   vi.useRealTimers();
   await reset();
 });
@@ -22,17 +20,13 @@ afterEach(async () => {
 test("an attach after a failed open opens the session and arms the host", async () => {
   let armed = 0;
 
-  const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
-    log: () => Promise.resolve(),
+  const host = hostWith({
     arm: () => {
       armed += 1;
 
       return Promise.resolve();
     },
-    running: () => Promise.resolve(),
-    workspace: () => Promise.reject(new Error("no workspace")),
-    dup: () => host,
-  };
+  });
 
   await runInDurableObject(
     env.SUPERVISOR.getByName("main-facet-open"),
@@ -65,13 +59,7 @@ test("an attach after a failed open opens the session and arms the host", async 
 test("an idle events stream beats every two seconds, and cancelling it leaves no timer running", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
 
-  const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
-    arm: () => Promise.resolve(),
-    log: () => Promise.resolve(),
-    running: () => Promise.resolve(),
-    workspace: () => Promise.reject(new Error("no workspace")),
-    dup: () => host,
-  };
+  const host = hostWith();
 
   await runInDurableObject(
     env.SUPERVISOR.getByName("main-facet-events"),
@@ -101,8 +89,7 @@ test("a session that failed on a storage error is reopened by the next attach an
   const faults: string[] = [];
   let opened = 0;
 
-  const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
-    arm: () => Promise.resolve(),
+  const host = hostWith({
     log: (level, event, fields) => {
       if (level === "error" && event === "session-failed")
         faults.push(`${event}: ${String(fields["cause"])}`);
@@ -114,9 +101,7 @@ test("a session that failed on a storage error is reopened by the next attach an
 
       return Promise.resolve();
     },
-    workspace: () => Promise.reject(new Error("no workspace")),
-    dup: () => host,
-  };
+  });
 
   await runInDurableObject(
     env.SUPERVISOR.getByName("main-facet-failed"),
@@ -136,7 +121,7 @@ test("a session that failed on a storage error is reopened by the next attach an
 
       broken = true;
       await expect(facet.createConversation("/workspace")).rejects.toThrow();
-      await vi.waitFor(() => {
+      await eventually(() => {
         expect(faults.length).toBe(1);
       });
       expect(faults[0]).toContain("storage reset");
@@ -152,17 +137,13 @@ test("a session that failed on a storage error is reopened by the next attach an
 test("a turn whose model fails is reported to the host as failed with the reason", async () => {
   const reports: Array<Readonly<Record<string, string>> | undefined> = [];
 
-  const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
-    arm: () => Promise.resolve(),
-    log: () => Promise.resolve(),
+  const host = hostWith({
     running: (_conversations, failed) => {
       reports.push(failed);
 
       return Promise.resolve();
     },
-    workspace: () => Promise.reject(new Error("no workspace")),
-    dup: () => host,
-  };
+  });
 
   await runInDurableObject(
     env.SUPERVISOR.getByName("main-facet-turn-failed"),
@@ -174,25 +155,12 @@ test("a turn whose model fails is reported to the host as failed with the reason
       const id = await facet.createConversation("/workspace");
 
       await facet.submit(id, "hello", "r1");
-      await vi.waitFor(() => {
+      await eventually(() => {
         expect(reports).toContainEqual({ [id]: "model_error" });
       });
     },
   );
 });
-
-function hostWith(overrides: Partial<ConversationHost>) {
-  const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
-    arm: () => Promise.resolve(),
-    log: () => Promise.resolve(),
-    running: () => Promise.resolve(),
-    workspace: () => Promise.reject(new Error("no workspace")),
-    ...overrides,
-    dup: () => host,
-  };
-
-  return host;
-}
 
 test("a host that refuses the first running report aborts the facet", async () => {
   const host = hostWith({ running: () => Promise.reject(new Error("supervisor gone")) });
@@ -209,7 +177,7 @@ test("a host that refuses the first running report aborts the facet", async () =
   );
 });
 
-test("a submit that fails re-arms the plain wake", async () => {
+test("a submit that fails leaves the host armed with the plain wake, not the active one (issue #10, 11bdd393)", async () => {
   const arms: unknown[] = [];
 
   const host = hostWith({
@@ -246,7 +214,7 @@ test("a submit that fails re-arms the plain wake", async () => {
       const id = await facet.createConversation("/workspace");
 
       await expect(facet.submit(id, "hello", "r1")).rejects.toThrow("busy");
-      await vi.waitFor(() => {
+      await eventually(() => {
         expect(arms.at(-1)).not.toMatchObject({ active: true });
       });
       expect(arms).toContainEqual(expect.objectContaining({ active: true }));
@@ -254,24 +222,7 @@ test("a submit that fails re-arms the plain wake", async () => {
   );
 });
 
-function capacityOnceModel(calls: number[]): ModelCapability {
-  return {
-    runStream: (request) => {
-      calls.push(Date.now());
-
-      const ai = {
-        run: () =>
-          calls.length === 1
-            ? Promise.reject(new Error("3040: Capacity temporarily exceeded, please try again."))
-            : Promise.resolve(providerStreamOfLines([sseLine({ response: "hi" }), DONE_LINE])),
-      };
-
-      return Promise.resolve(modelEventStream(workersAiTurn(ai, request)));
-    },
-  };
-}
-
-test("a Workers AI capacity error (3040) is retried by Pi and the turn answers", async () => {
+test("a Workers AI capacity error (3040) is retried by Pi and the turn answers (e2e c6cead13, 24324e53)", async () => {
   const calls: number[] = [];
   const reports: Array<Readonly<Record<string, string>> | undefined> = [];
   let alarm: (() => void) | undefined;
@@ -300,21 +251,10 @@ test("a Workers AI capacity error (3040) is retried by Pi and the turn answers",
       const id = await facet.createConversation("/workspace");
 
       await facet.submit(id, "hello", "r1");
-      await vi.waitFor(
-        async () => {
-          expect(calls).toHaveLength(2);
-
-          const entries = await facet.entries(id, {
-            minEntryId: undefined,
-            maxEntryId: undefined,
-            order: "ascending",
-            limit: 50,
-          });
-
-          expect(entries).toContain('"hi"');
-        },
-        { timeout: 10_000, interval: 100 },
-      );
+      await eventually(async () => {
+        expect(calls).toHaveLength(2);
+        expect(await entriesText(facet, id)).toContain('"hi"');
+      });
       expect(reports.flatMap((failed) => Object.values(failed ?? {}))).not.toContain("model_error");
     },
   );

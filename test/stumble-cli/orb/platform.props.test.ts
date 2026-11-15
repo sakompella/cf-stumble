@@ -1,42 +1,38 @@
+import * as hegel from "@hegeldev/hegel";
+import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { orbCommands, type OrbPorts } from "../../../src/stumble-cli/orb/commands.js";
+import { orbCommands } from "../../../src/stumble-cli/orb/commands.js";
 import { runCommandTree } from "../../../src/stumble-cli/tree.js";
 
-function ports(platform: string, arch: string, lines: string[]): OrbPorts {
-  return {
-    env: {},
-    signal: new AbortController().signal,
-    log: (line) => {
-      lines.push(line);
-    },
-    platform,
-    arch,
-  };
-}
+const other = gs.oneOf(
+  gs.sampledFrom(["darwin", "win32", "freebsd", "arm64", "ia32"]),
+  gs.fromRegex("[a-z0-9]{1,8}", { fullmatch: true }),
+);
 
-test.each([
-  ["darwin", "arm64"],
-  ["linux", "arm64"],
-  ["win32", "x64"],
-])("the provider warns on %s %s and carries on", async (platform, arch) => {
-  const lines: string[] = [];
+const platform = gs.oneOf(gs.just("linux"), other);
 
-  const output = await runCommandTree(
-    orbCommands,
-    ["provider", "dispatch.sh"],
-    ports(platform, arch, lines),
-  );
+const arch = gs.oneOf(gs.just("x64"), other);
 
-  expect(lines).toContain(
-    `warning: the orb provider is tested on x86_64 Linux only, not ${platform} ${arch}`,
-  );
-  expect(output.stderr).toBe("set STUMBLE_ORB_URL to the Worker's http(s) URL\n");
-});
+test("the provider warns about any platform other than x86_64 Linux, naming it, and still runs", async () => {
+  await hegel.testAsync(async (tc) => {
+    const drawnPlatform = tc.draw(platform);
+    const drawnArch = tc.draw(arch);
+    const lines: string[] = [];
 
-test("the provider does not warn on x86_64 Linux", async () => {
-  const lines: string[] = [];
+    const output = await runCommandTree(orbCommands, ["provider", "dispatch.sh"], {
+      env: {},
+      signal: new AbortController().signal,
+      log: (line) => {
+        lines.push(line);
+      },
+      platform: drawnPlatform,
+      arch: drawnArch,
+    });
 
-  await runCommandTree(orbCommands, ["provider", "dispatch.sh"], ports("linux", "x64", lines));
+    const supported = drawnPlatform === "linux" && drawnArch === "x64";
 
-  expect(lines).toEqual([]);
+    expect(lines.length).toBe(supported ? 0 : 1);
+    expect(lines.every((line) => line.includes(`${drawnPlatform} ${drawnArch}`))).toBe(true);
+    expect(output.stderr).toBe("set STUMBLE_ORB_URL to the Worker's http(s) URL\n");
+  });
 });
