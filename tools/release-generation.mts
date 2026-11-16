@@ -75,7 +75,7 @@ async function decoded<S extends Schema.ConstraintDecoder<unknown>>(
 
   if (status !== 200) throw new Error(`the owner API answered ${status}: ${text}`);
 
-  return Schema.decodeUnknownSync(Schema.fromJsonString(schema))(text);
+  return Schema.decodeSync(Schema.fromJsonString(schema))(text);
 }
 
 const owner: ReleaseOwner = {
@@ -108,7 +108,7 @@ const owner: ReleaseOwner = {
       force,
     });
 
-    const refusal = Schema.decodeUnknownOption(Schema.fromJsonString(Refusal))(text);
+    const refusal = Schema.decodeOption(Schema.fromJsonString(Refusal))(text);
 
     return {
       ok: status === 200,

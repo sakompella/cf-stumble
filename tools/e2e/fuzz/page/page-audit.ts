@@ -153,7 +153,7 @@ async function auditOnce(document: Document, window: Window, projectId: string):
 
 async function auditLoop(document: Document, window: Window, projectId: string): Promise<void> {
   const deadline = Date.now() + AUDIT_WINDOW_MS;
-  let problems: string[] = [];
+  let problems: string[];
 
   do {
     problems = await auditOnce(document, window, projectId);

@@ -42,13 +42,14 @@ function assertSmallRepository(
       response.json(),
     );
 
-    if (!response.ok || repository.size === undefined || repository.size > ISOLATE_CLONE_MAX_KB) {
-      yield* Effect.fail(
-        new RepositoryNotEligible({
+    const eligible =
+      response.ok && repository.size !== undefined && repository.size <= ISOLATE_CLONE_MAX_KB;
+
+    return yield* eligible
+      ? Effect.void
+      : new RepositoryNotEligible({
           message: `repository is not eligible for an isolate clone (${String(response.status)})`,
-        }),
-      );
-    }
+        });
   });
 }
 

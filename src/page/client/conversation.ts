@@ -62,21 +62,18 @@ export const EMPTY_CONVERSATION: Conversation = {
 };
 
 export function conversationOf(view: TranscriptView): Option.Option<Conversation> {
-  return Option.map(
-    Schema.decodeUnknownOption(TranscriptDoc)(view),
-    ({ conversation, items, docs }) => ({
-      maybeId: Option.some(conversation.id),
-      items,
-      maybePartial: Option.fromUndefinedOr(docs["pi.live"]?.generation?.message),
-      tools: docs["pi.live"]?.tools ?? [],
-      isRunning: docs["pi.live"]?.run !== undefined,
-      maybeRunFailure: Option.fromUndefinedOr(docs["pi.live"]?.runFailure?.reason),
-      inbox: (docs["pi.inbox"]?.items ?? []).map(({ id, content }) => ({
-        id,
-        text: Predicate.isString(content) ? content : blocksText(content),
-      })),
-    }),
-  );
+  return Option.map(Schema.decodeOption(TranscriptDoc)(view), ({ conversation, items, docs }) => ({
+    maybeId: Option.some(conversation.id),
+    items,
+    maybePartial: Option.fromUndefinedOr(docs["pi.live"]?.generation?.message),
+    tools: docs["pi.live"]?.tools ?? [],
+    isRunning: docs["pi.live"]?.run !== undefined,
+    maybeRunFailure: Option.fromUndefinedOr(docs["pi.live"]?.runFailure?.reason),
+    inbox: (docs["pi.inbox"]?.items ?? []).map(({ id, content }) => ({
+      id,
+      text: Predicate.isString(content) ? content : blocksText(content),
+    })),
+  }));
 }
 
 export function newestEntryId(conversation: Conversation): number {
