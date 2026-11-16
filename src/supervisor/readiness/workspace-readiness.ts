@@ -7,7 +7,13 @@ import type { SelectableProject } from "../../selectable-projects.js";
 import type { ProjectCapabilityStub, WorkspaceHostNamespace } from "../../workspace/index.js";
 import type { ProvisionFence } from "./provision-fence.js";
 import type { ProjectUseResult } from "./provision-on-use.js";
-import { provisionHarnessWorkspace } from "./provisioning.js";
+import {
+  harnessProblem,
+  hostRejected,
+  logWorkspaceUnavailable,
+  provisionHarnessWorkspace,
+  WorkspaceUnavailable,
+} from "./provisioning.js";
 
 type ReadinessNamespace = WorkspaceHostNamespace<"project" | "build" | "ensureManagedInstructions">;
 
@@ -42,17 +48,22 @@ export class WorkspaceReadiness {
   obtain(
     project: SelectableProject | null,
     remainingMs: number,
-  ): Effect.Effect<ProjectCapabilityStub | null, never, Scope.Scope> {
+  ): Effect.Effect<ProjectCapabilityStub, WorkspaceUnavailable, Scope.Scope> {
     if (project === null) return this.capability(remainingMs);
 
     return Effect.gen({ self: this }, function* () {
       yield* this.fence.wait(project.id);
       yield* this.github.installConfiguredCredential(Date.now());
-
-      if (!(yield* this.provision(project))) return null;
+      yield* this.provision(project);
 
       return yield* this.capability(remainingMs);
-    });
+    }).pipe(
+      Effect.tapError((reason) =>
+        Effect.sync(() => {
+          logWorkspaceUnavailable(reason);
+        }),
+      ),
+    );
   }
 
   forget(): void {
@@ -60,14 +71,18 @@ export class WorkspaceReadiness {
     this.github.resetWorkspace();
   }
 
-  private provision(project: SelectableProject): Effect.Effect<boolean> {
+  private provision(project: SelectableProject): Effect.Effect<void, WorkspaceUnavailable> {
     if (project.kind === "repository") {
-      return this.ensureProvisioned(project.id).pipe(Effect.map((used) => used.ok));
+      return this.ensureProvisioned(project.id).pipe(
+        Effect.flatMap((used) =>
+          used.ok ? Effect.void : Effect.fail(new WorkspaceUnavailable(used.problem)),
+        ),
+      );
     }
 
     const { generation } = this.generations.active();
 
-    if (generation === undefined) return Effect.succeed(true);
+    if (generation === undefined) return Effect.void;
 
     return provisionHarnessWorkspace({
       workspaceName: this.workspaceName,
@@ -75,23 +90,18 @@ export class WorkspaceReadiness {
       projectId: project.id,
       harnessCommit: generation.harnessCommit,
       namespace: this.namespace,
-    }).pipe(Effect.isSuccess);
+    }).pipe(Effect.mapError(harnessProblem));
   }
 
   private capability(
     remainingMs: number,
-  ): Effect.Effect<ProjectCapabilityStub | null, never, Scope.Scope> {
+  ): Effect.Effect<ProjectCapabilityStub, WorkspaceUnavailable, Scope.Scope> {
     return Effect.acquireRelease(
-      Effect.promise(() =>
-        this.namespace
-          .getByName(this.workspaceName)
-          .project({ remainingMs })
-          .then(
-            (capability) => capability,
-            () => null,
-          ),
-      ),
-      (capability) => (capability === null ? Effect.void : endWorkspaceTurn(capability)),
+      Effect.tryPromise({
+        try: () => this.namespace.getByName(this.workspaceName).project({ remainingMs }),
+        catch: hostRejected,
+      }),
+      endWorkspaceTurn,
     );
   }
 }

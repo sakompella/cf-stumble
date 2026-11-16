@@ -52,13 +52,7 @@ export function checkConversation(
     arm: () => Promise.resolve(),
     log: () => {},
     running: () => Promise.resolve(),
-    workspace: async () => {
-      const workspace = await held.capability();
-
-      if (workspace === null) throw new Error("the workspace is unavailable");
-
-      return workspace.dup();
-    },
+    workspace: async () => (await held.capability()).dup(),
   });
 
   return Effect.gen(function* () {

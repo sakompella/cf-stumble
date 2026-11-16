@@ -27,6 +27,13 @@ beforeEach(() => {
   origin = originRepository(layout);
   commits(origin.path, "base", 60);
   git(layout.workspace, "clone", "-q", "--depth=50", origin.url, "harness");
+  git(
+    harness(),
+    "config",
+    `url.${origin.url}.insteadOf`,
+    HARNESS_BUILD_CONFIGURATION.harnessGitRemote,
+  );
+  git(harness(), "remote", "set-url", "origin", HARNESS_BUILD_CONFIGURATION.harnessGitRemote);
 });
 
 afterEach(() => {
@@ -64,8 +71,6 @@ function unsupported(): Promise<never> {
   return Promise.reject(new Error("not used once the checkout exists"));
 }
 
-const person = { name: "t", email: "t@example.invalid", timestamp: 0, timezoneOffset: 0 };
-
 const workspace: Parameters<typeof provisionHarness>[0] = {
   fs: {
     readFile: unsupported,
@@ -86,20 +91,7 @@ const workspace: Parameters<typeof provisionHarness>[0] = {
     mkdir: unsupported,
     rename: unsupported,
   },
-  git: {
-    clone: unsupported,
-    configSet: unsupported,
-    configGet: () => Promise.resolve(HARNESS_BUILD_CONFIGURATION.harnessGitRemote),
-    show: ({ ref }) =>
-      Promise.resolve({
-        oid: ref,
-        message: "",
-        tree: "",
-        parent: [],
-        author: person,
-        committer: person,
-      }),
-  },
+  git: { clone: unsupported, configSet: unsupported },
 };
 
 function container(source: string) {
@@ -110,11 +102,9 @@ function container(source: string) {
   });
 }
 
-function provision() {
-  const head = testHarnessCommit(git(harness(), "rev-parse", "HEAD"));
-
+function provision(commit = testHarnessCommit(git(harness(), "rev-parse", "HEAD"))) {
   return Effect.runPromise(
-    provisionHarness(workspace, container, HARNESS_BUILD_CONFIGURATION, head),
+    provisionHarness(workspace, container, HARNESS_BUILD_CONFIGURATION, commit),
   );
 }
 
@@ -171,5 +161,40 @@ test("leaves a detached checkout with cannot fast-forward", async () => {
   commits(origin.path, "ahead", 1);
 
   await expect(provision()).resolves.toEqual(stuck(head));
+  expect(git(harness(), "rev-parse", "HEAD")).toBe(head);
+});
+
+test("fetches a commit the shallow checkout lacks and fast-forwards to the branch", async () => {
+  const wanted = commitFile(origin.path, "wanted.txt", "wanted");
+  commits(origin.path, "after", 70);
+
+  await expect(provision(testHarnessCommit(wanted))).resolves.toEqual(ok);
+  expect(git(harness(), "cat-file", "-t", wanted)).toBe("commit");
+  expect(git(harness(), "rev-parse", "HEAD")).toBe(git(origin.path, "rev-parse", "HEAD"));
+});
+
+test("fails naming the commit and the remote when the remote does not have it", async () => {
+  const absent = testHarnessCommit("f".repeat(40));
+
+  const result = await provision(absent);
+
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain(
+    `harness commit ${absent} is not in ${HARNESS_BUILD_CONFIGURATION.harnessGitRemote}`,
+  );
+});
+
+test("fails and leaves the checkout alone when its origin is another repository", async () => {
+  const head = git(harness(), "rev-parse", "HEAD");
+  git(harness(), "remote", "set-url", "origin", "https://github.com/someone/else.git");
+
+  await expect(provision()).resolves.toEqual({
+    stdout: "",
+    stderr: rooted(
+      `${HARNESS_BUILD_CONFIGURATION.harnessRepositoryRoot} has a different origin than ${HARNESS_BUILD_CONFIGURATION.harnessGitRemote}\n`,
+      layout,
+    ),
+    exitCode: 1,
+  });
   expect(git(harness(), "rev-parse", "HEAD")).toBe(head);
 });

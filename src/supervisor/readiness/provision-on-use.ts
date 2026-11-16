@@ -6,7 +6,7 @@ import {
   type ProjectCatalog,
   type ProjectId,
 } from "../../project-catalog.js";
-import type { CloneSizeVerdict, WorkspaceHostNamespace } from "../../workspace/index.js";
+import type { WorkspaceHostNamespace } from "../../workspace/index.js";
 import type { GitHubConnection } from "../projects/index.js";
 import type { ProvisionFence } from "./provision-fence.js";
 import {
@@ -14,15 +14,12 @@ import {
   ProvisionFailed,
   ProvisionTooLarge,
   type ProvisionProblem,
+  type WorkspaceUnavailableReason,
 } from "./provisioning.js";
-
-type ProjectUseProblem =
-  | Readonly<{ code: "invalid-project-id" | "unknown-project-id" | "provisioning-failed" }>
-  | Readonly<{ code: "repository-too-large"; verdict: CloneSizeVerdict }>;
 
 export type ProjectUseResult =
   | Readonly<{ ok: true; project: Project }>
-  | Readonly<{ ok: false; problem: ProjectUseProblem }>;
+  | Readonly<{ ok: false; problem: WorkspaceUnavailableReason }>;
 
 export type ProvisionSources = Readonly<{
   workspaceName: string;
@@ -32,10 +29,14 @@ export type ProvisionSources = Readonly<{
   catalog: () => ProjectCatalog;
 }>;
 
-function useProblem(failure: ProvisionProblem): ProjectUseProblem {
-  return failure instanceof ProvisionTooLarge
-    ? { code: "repository-too-large", verdict: failure.verdict }
-    : { code: "provisioning-failed" };
+function useProblem(failure: ProvisionProblem): WorkspaceUnavailableReason {
+  if (failure instanceof ProvisionTooLarge) {
+    return { code: "repository-too-large", detail: failure.verdict };
+  }
+
+  return failure instanceof ProvisionFailed
+    ? { code: "clone-failed", detail: `exit ${String(failure.exitCode)}` }
+    : { code: "host-unavailable", detail: failure.detail };
 }
 
 export function provisionOnUse(
@@ -48,7 +49,7 @@ export function provisionOnUse(
     const resolved = resolveProject(projectId, sources.catalog());
 
     if (!resolved.ok) {
-      return { ok: false, problem: { code: resolved.reason } } as const;
+      return { ok: false, problem: { code: resolved.reason, detail: "" } } as const;
     }
 
     const provision = provisionProjectWorkspace({

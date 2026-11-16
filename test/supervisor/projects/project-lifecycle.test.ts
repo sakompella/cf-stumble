@@ -179,7 +179,10 @@ test("provisioning on use waits for a failing connection and then finds no proje
     clone.release(128);
 
     await expect(connecting).resolves.toMatchObject({ ok: false });
-    await expect(used).resolves.toEqual({ ok: false, problem: { code: "unknown-project-id" } });
+    await expect(used).resolves.toEqual({
+      ok: false,
+      problem: { code: "unknown-project-id", detail: "" },
+    });
     expect(workspace.commands.filter((command) => command.includes(CLONE))).toHaveLength(
       clonesDuringConnection,
     );

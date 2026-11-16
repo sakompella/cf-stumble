@@ -32,7 +32,7 @@ test.each([
       workspace.cloneExitCode = 128;
     },
     code: "provisioning-failed",
-    detail: "",
+    detail: "exit 128",
   },
   {
     clone: "does not reach the durable store",
@@ -40,7 +40,7 @@ test.each([
       workspace.commandSync = "incomplete";
     },
     code: "provisioning-failed",
-    detail: "",
+    detail: "workspace-sync-incomplete",
   },
 ])("refuses a repository whose clone $clone, and keeps it out of the catalog", async (row) => {
   const workspace = new FakeTenantWorkspace();

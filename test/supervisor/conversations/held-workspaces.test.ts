@@ -37,7 +37,7 @@ test("a release during provisioning starts no capability RPC, so the workspace t
     held.end("conversation");
     clone.settle.resolve(CLONED);
 
-    await expect(capability).rejects.toThrow("the workspace is unavailable");
+    await expect(capability).rejects.toMatchObject({ code: "released" });
     expect(host.steps).toEqual(["clone"]);
     expect(host.turns).toEqual({ ended: 0, disposed: 0 });
   });
@@ -58,7 +58,7 @@ test("a capability that answers after its release is ended once and never handed
     held.endAll();
     answer.settle.resolve(null);
 
-    await expect(capability).rejects.toThrow("the workspace is unavailable");
+    await expect(capability).rejects.toMatchObject({ code: "released" });
     await eventually(() => {
       expect(host.turns).toEqual({ ended: 1, disposed: 1 });
     });

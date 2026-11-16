@@ -1,6 +1,7 @@
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { logRedactedCause } from "../../diagnostics.js";
 
 export class EventsEndings {
   readonly #pending = new Map<string, Deferred.Deferred<void>>();
@@ -13,6 +14,11 @@ export class EventsEndings {
     return Stream.toReadableStream(
       Stream.fromReadableStream({ evaluate: () => events, onError: (cause) => cause }).pipe(
         Stream.interruptWhen(Deferred.await(ending)),
+        Stream.tapError((cause) =>
+          Effect.sync(() => {
+            logRedactedCause("supervisor.events: the facet's event stream failed", cause);
+          }),
+        ),
         Stream.catch(() => Stream.empty),
       ),
     );
