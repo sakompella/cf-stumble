@@ -134,7 +134,7 @@ function resultsOf(model: readonly unknown[]): readonly string[] {
   if (!text.startsWith(RESULTS_PREFIX))
     throw new Error(`the scripted turn answered: ${text.slice(0, 300)}`);
 
-  return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(
+  return Schema.decodeSync(Schema.fromJsonString(Schema.Array(Schema.String)))(
     text.slice(RESULTS_PREFIX.length),
   );
 }

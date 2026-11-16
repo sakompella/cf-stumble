@@ -65,6 +65,6 @@ export function loadIntoTranscript(
 ): Effect.Effect<Option.Option<LoadedView>, string, TranscriptService> {
   return TranscriptResource.get.pipe(
     Effect.flatMap((current) => loadInto(current, itemIndex)),
-    Effect.catchTag("ResourceNotAvailable", () => Effect.succeed(Option.none())),
+    Effect.catchTag("ResourceNotAvailable", () => Effect.succeedNone),
   );
 }

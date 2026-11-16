@@ -22,7 +22,7 @@ export function decoded<S extends Schema.ConstraintDecoder<unknown>>(
   value: JsonValue,
   message: string,
 ): S["Type"] {
-  const parsed = Schema.decodeUnknownOption(schema)(value);
+  const parsed = Schema.decodeOption(schema)(value);
 
   if (Option.isNone(parsed)) throw new ApiFailure(message);
 
@@ -82,9 +82,7 @@ export function readToken(env: NodeJS.ProcessEnv): string {
   try {
     token = Option.getOrUndefined(
       Option.map(
-        Schema.decodeUnknownOption(Schema.fromJsonString(LoginFile))(
-          readFileSync(CF_LOGIN_FILE, "utf8"),
-        ),
+        Schema.decodeOption(Schema.fromJsonString(LoginFile))(readFileSync(CF_LOGIN_FILE, "utf8")),
         (login) => login.oauth_token,
       ),
     );

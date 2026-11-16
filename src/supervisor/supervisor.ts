@@ -177,11 +177,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         const result = yield* Effect.tryPromise(() =>
           namespace.getByName(this.#parts.workspaceName).reset(),
         ).pipe(
-          Effect.catch(() =>
-            Effect.succeed({
-              ok: false,
-              problem: { code: "workspace-unavailable" },
-            } as const),
+          Effect.orElseSucceed(
+            () =>
+              ({
+                ok: false,
+                problem: { code: "workspace-unavailable" },
+              }) as const,
           ),
         );
 

@@ -108,7 +108,7 @@ export class Owner {
 
     if (!answer.ok) throw new Error(`${answer.url} answered ${answer.status}: ${text}`);
 
-    return Schema.decodeUnknownSync(Schema.fromJsonString(schema))(text);
+    return Schema.decodeSync(Schema.fromJsonString(schema))(text);
   }
 
   async waitHealthy(limitMs: number): Promise<void> {
@@ -208,7 +208,7 @@ export class Owner {
 
     await reader.cancel();
 
-    return Schema.decodeUnknownSync(View)(text.slice(0, text.indexOf("\n")))[0][1];
+    return Schema.decodeSync(View)(text.slice(0, text.indexOf("\n")))[0][1];
   }
 
   async waitSettled(projectId: string, signal: AbortSignal): Promise<Settled> {

@@ -16,7 +16,7 @@ function file(runId: string): string {
 export function loadRestoreState(runId: string): RestoreState {
   if (!existsSync(file(runId))) return { label: undefined, project: undefined };
 
-  const saved = Schema.decodeUnknownSync(RestoreState)(readFileSync(file(runId), "utf8"));
+  const saved = Schema.decodeSync(RestoreState)(readFileSync(file(runId), "utf8"));
 
   return { label: saved.label, project: saved.project };
 }

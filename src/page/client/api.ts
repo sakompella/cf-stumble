@@ -89,7 +89,7 @@ export function requestJson<S extends Schema.ConstraintDecoder<unknown>>(
   return fetchEffect(path, { method, accept: "application/json", maybeBody }).pipe(
     Effect.flatMap(answerOf),
     Effect.map(({ status, payload }) => {
-      const maybeAnswer = Schema.decodeUnknownOption(schema)(payload);
+      const maybeAnswer = Schema.decodeOption(schema)(payload);
 
       return {
         status,

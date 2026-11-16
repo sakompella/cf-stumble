@@ -99,7 +99,7 @@ class ExecRun implements ExecOperation {
         if (this.#settled) stopHandle(handle);
         else this.#handle = handle;
       },
-      (cause) => {
+      (cause: unknown) => {
         this.#fail(cause);
       },
     );
