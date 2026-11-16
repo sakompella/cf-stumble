@@ -44,88 +44,47 @@ export function answerOf(response: Response): Effect.Effect<Answer> {
   );
 }
 
-const RefusalPayload = Schema.Struct({
-  ok: Schema.Literal(false),
-  problem: Schema.optional(Schema.Struct({ code: Schema.String })),
-  error: Schema.optional(Schema.Struct({ code: Schema.String })),
-});
+export type Refusal = Readonly<{ kind: "problem" | "error"; code: string }>;
 
-type Refusal = typeof RefusalPayload.Type;
+const Code = Schema.Struct({ code: Schema.String });
 
-const decodeRefusal = Schema.decodeUnknownOption(RefusalPayload);
+const decodeProblem = Schema.decodeUnknownOption(
+  Schema.Struct({ ok: Schema.Literal(false), problem: Code }),
+);
 
-export function refusalText(refusal: Refusal, status: number): string {
-  const problem = refusal.problem;
+const decodeError = Schema.decodeUnknownOption(
+  Schema.Struct({ ok: Schema.Literal(false), error: Code }),
+);
 
-  if (problem !== undefined) {
-    return `rejected: ${problem.code}`;
-  }
-
-  const error = refusal.error;
-
-  return error === undefined ? `error: HTTP ${status}` : `error: ${error.code}`;
-}
-
-export function problemText(answer: Answer): string {
-  const refusal = Option.getOrUndefined(decodeRefusal(answer.payload));
-
-  return refusal === undefined
-    ? `error: HTTP ${answer.status}`
-    : refusalText(refusal, answer.status);
-}
-
-export type Answered<A> = Readonly<{
-  status: number;
-  maybeAnswer: Option.Option<A>;
-  maybeRefusal: Option.Option<Refusal>;
-}>;
-
-export function requestJson<S extends Schema.ConstraintDecoder<unknown>>(
-  method: "GET" | "POST",
-  path: string,
-  maybeBody: Option.Option<JsonBody>,
-  schema: S,
-): Effect.Effect<Answered<S["Type"]>, string> {
-  return fetchEffect(path, { method, accept: "application/json", maybeBody }).pipe(
-    Effect.flatMap(answerOf),
-    Effect.map(({ status, payload }) => {
-      const maybeAnswer = Schema.decodeOption(schema)(payload);
-
-      return {
-        status,
-        maybeAnswer,
-        maybeRefusal: Option.isNone(maybeAnswer) ? decodeRefusal(payload) : Option.none(),
-      };
-    }),
+export function decodeRefusal(payload: Schema.Json): Option.Option<Refusal> {
+  return Option.orElse(
+    Option.map(decodeProblem(payload), ({ problem }) => ({
+      kind: "problem" as const,
+      code: problem.code,
+    })),
+    () =>
+      Option.map(decodeError(payload), ({ error }) => ({
+        kind: "error" as const,
+        code: error.code,
+      })),
   );
 }
 
-export function refusalWording(
-  answered: Readonly<Pick<Answered<unknown>, "status" | "maybeRefusal">>,
-): string {
-  return Option.match(answered.maybeRefusal, {
-    onNone: () => `error: HTTP ${answered.status}`,
-    onSome: (refusal) => refusalText(refusal, answered.status),
-  });
+export function refusalText(refusal: Refusal): string {
+  return refusal.kind === "problem" ? `rejected: ${refusal.code}` : `error: ${refusal.code}`;
 }
 
-export function sendRefusalText(
-  answered: Readonly<Pick<Answered<unknown>, "status" | "maybeRefusal">>,
-): string {
-  const refusal = Option.getOrUndefined(answered.maybeRefusal);
-  const code = refusal?.problem?.code;
+export function unreadableText(status: number): string {
+  return status >= 200 && status < 300
+    ? `error: unreadable answer (HTTP ${status})`
+    : `error: HTTP ${status}`;
+}
 
-  if (code === "no-active-generation") {
-    return "no active generation: activate one in the generation controls";
-  }
-
-  if (code === "workspace-busy") {
-    return "busy: the workspace is resetting; send again once it finishes";
-  }
-
-  return refusal === undefined
-    ? `error: HTTP ${answered.status}`
-    : refusalText(refusal, answered.status);
+export function problemText(answer: Readonly<{ status: number; payload: Schema.Json }>): string {
+  return Option.match(decodeRefusal(answer.payload), {
+    onNone: () => unreadableText(answer.status),
+    onSome: refusalText,
+  });
 }
 
 const GenerationView = Schema.Struct({

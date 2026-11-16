@@ -2,13 +2,17 @@ import { stopChildren } from "./process.mts";
 
 export const MINUTE_MS = 60_000;
 
-type Outcome = Readonly<{
-  name: string;
-  ok: boolean;
-  skipped: boolean;
-  seconds: number;
-  detail: string;
-}>;
+type Outcome = Readonly<{ name: string; seconds: number }> &
+  (
+    | Readonly<{ status: "passed" }>
+    | Readonly<{ status: "skipped"; reason: string }>
+    | Readonly<{ status: "failed"; detail: string }>
+  );
+
+type Result =
+  | Readonly<{ status: "passed" }>
+  | Readonly<{ status: "skipped"; reason: string }>
+  | Readonly<{ status: "failed"; detail: string }>;
 
 export class Skip extends Error {}
 
@@ -18,6 +22,21 @@ function describe(cause: unknown): string {
   const inner = cause.cause === undefined ? "" : describe(cause.cause);
 
   return cause.message.includes(inner) ? cause.message : `${cause.message} (${inner})`;
+}
+
+const MARK = { passed: "✓", skipped: "-", failed: "✗" } as const satisfies Record<
+  Outcome["status"],
+  string
+>;
+
+function note(result: Result): string {
+  if (result.status === "passed") return "";
+
+  return result.status === "skipped" ? result.reason : result.detail;
+}
+
+function wording(result: Result): string {
+  return result.status === "passed" ? "passed" : `${result.status}: ${note(result)}`;
 }
 
 export class Steps {
@@ -69,39 +88,37 @@ export class Steps {
       });
     });
 
-    let detail = "";
-    let skipped = false;
+    let result: Result = { status: "passed" };
 
     console.error(`e2e: ${name} (limit ${limitMs / MINUTE_MS} min)`);
 
     try {
       await Promise.race([work(signal), aborted]);
     } catch (cause) {
-      detail = describe(cause);
-      skipped = cause instanceof Skip;
+      result =
+        cause instanceof Skip
+          ? { status: "skipped", reason: describe(cause) }
+          : { status: "failed", detail: describe(cause) };
     }
 
     const seconds = Math.round((Date.now() - began) / 1000);
-    const ok = skipped || detail === "";
 
-    this.#outcomes.push({ name, ok, skipped, seconds, detail });
-    console.error(
-      `e2e: ${name} ${skipped ? `skipped: ${detail}` : ok ? "passed" : `failed: ${detail}`}`,
-    );
+    this.#outcomes.push({ name, seconds, ...result });
+    console.error(`e2e: ${name} ${wording(result)}`);
 
-    return ok;
+    return result.status !== "failed";
   }
 
   report(label: string): boolean {
-    const passed = this.#outcomes.every((outcome) => outcome.ok);
+    const passed = this.#outcomes.every((outcome) => outcome.status !== "failed");
     const minutes = Math.round((Date.now() - this.#startedMs) / MINUTE_MS);
 
     console.error(`\n${label}: ${passed ? "PASS" : "FAIL"} in ${minutes} min`);
 
-    for (const { ok, skipped, name, seconds, detail } of this.#outcomes) {
-      const mark = skipped ? "-" : ok ? "✓" : "✗";
-
-      console.error(`${mark} ${name} (${seconds} s)${detail === "" ? "" : `: ${detail}`}`);
+    for (const outcome of this.#outcomes) {
+      console.error(
+        `${MARK[outcome.status]} ${outcome.name} (${outcome.seconds} s)${note(outcome) === "" ? "" : `: ${note(outcome)}`}`,
+      );
     }
 
     return passed;

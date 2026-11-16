@@ -1,5 +1,5 @@
-import type { Finding, Fuzzer } from "./context.mts";
-import { fuzzGit } from "./git-fuzz.mts";
+import type { Finding, FuzzContext, Fuzzer } from "./context.mts";
+import { fuzzGit, type Report } from "./git-fuzz.mts";
 import {
   installScriptedGeneration,
   pushBranch,
@@ -15,6 +15,28 @@ function installed(owner: Owner, signal: AbortSignal): Promise<boolean> {
     () => true,
     () => false,
   );
+}
+
+export function findingsOf(
+  report: Report,
+  context: Pick<FuzzContext, "area" | "seed">,
+): readonly Finding[] {
+  const reproduction = `pnpm e2e:fuzz --area git --seed ${context.seed}`;
+
+  return [
+    ...report.divergences.map((divergence): Finding => ({
+      area: context.area,
+      oracle: "git matches the reference",
+      detail: JSON.stringify(divergence),
+      reproduction,
+    })),
+    ...report.remoteMismatches.map((detail): Finding => ({
+      area: context.area,
+      oracle: "pushed branches have the reference tree on GitHub",
+      detail,
+      reproduction,
+    })),
+  ];
 }
 
 export const fuzz: Fuzzer = async (context) => {
@@ -45,10 +67,5 @@ export const fuzz: Fuzzer = async (context) => {
 
   for (const [name, count] of report.classes) context.log(`${count} x ${name}`);
 
-  return report.divergences.map((divergence): Finding => ({
-    area: context.area,
-    oracle: "git matches the reference",
-    detail: JSON.stringify(divergence),
-    reproduction: `pnpm e2e:fuzz --area git --seed ${context.seed}`,
-  }));
+  return findingsOf(report, context);
 };

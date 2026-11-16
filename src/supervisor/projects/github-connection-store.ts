@@ -25,7 +25,7 @@ type ConnectionRow = {
   readonly connected_at: number;
 };
 
-type CheckRow = {
+type StoredCheck = {
   readonly state: string;
   readonly reconnect_reason: string | null;
   readonly login: string | null;
@@ -33,11 +33,29 @@ type CheckRow = {
   readonly checked_at: number;
 };
 
+type CheckRow = Readonly<{
+  state: "connected" | "disconnected" | "tooling-missing" | "reconnect-required";
+  reconnect_reason: ReconnectReason | null;
+  login: string | null;
+  credential_source: CredentialSource | null;
+  checked_at: number;
+}>;
+
 type AuthorizationChange = Readonly<{ before: GitHubAuthorization; after: GitHubAuthorization }>;
 
-const decodeSource = Schema.decodeUnknownSync(CredentialSource);
+const isSource = Schema.is(CredentialSource);
 
-const decodeReason = Schema.decodeUnknownSync(ReconnectReason);
+const isReason = Schema.is(ReconnectReason);
+
+const UNKNOWN_SOURCE: CredentialSource = "device-authorization";
+
+const UNKNOWN_REASON: ReconnectReason = "credential-rejected";
+
+const sourceOf = (stored: string | null): CredentialSource =>
+  isSource(stored) ? stored : UNKNOWN_SOURCE;
+
+const reasonOf = (stored: string | null): ReconnectReason =>
+  isReason(stored) ? stored : UNKNOWN_REASON;
 
 const sameAuthorization = Schema.toEquivalence(GitHubAuthorization);
 
@@ -46,13 +64,13 @@ function recordedFromRow(connection: ConnectionRow | undefined) {
     ? null
     : {
         login: connection.login,
-        source: decodeSource(connection.credential_source),
+        source: sourceOf(connection.credential_source),
         connectedAt: connection.connected_at,
       };
 }
 
 function decodeRows(
-  check: CheckRow | undefined,
+  check: StoredCheck | undefined,
   connection: ConnectionRow | undefined,
 ): GitHubCredential {
   if (check === undefined) return GitHubCredential.cases.unchecked.make({});
@@ -65,7 +83,7 @@ function decodeRows(
       return GitHubCredential.cases.connected.make({
         checkedAt,
         login: check.login ?? "",
-        source: decodeSource(check.credential_source),
+        source: sourceOf(check.credential_source),
         connectedAt: connection?.connected_at ?? checkedAt,
       });
     case "tooling-missing":
@@ -73,12 +91,39 @@ function decodeRows(
     case "reconnect-required":
       return GitHubCredential.cases.reconnectRequired.make({
         checkedAt,
-        reason: decodeReason(check.reconnect_reason),
+        reason: reasonOf(check.reconnect_reason),
         recorded,
       });
     default:
       return GitHubCredential.cases.disconnected.make({ checkedAt });
   }
+}
+
+function checkRow(
+  state: CheckRow["state"],
+  checkedAt: number,
+  fields: Partial<Omit<CheckRow, "state" | "checked_at">> = {},
+): CheckRow {
+  return {
+    state,
+    reconnect_reason: null,
+    login: null,
+    credential_source: null,
+    ...fields,
+    checked_at: checkedAt,
+  };
+}
+
+function checkRowOf(credential: GitHubCredential): CheckRow | null {
+  return GitHubCredential.match(credential, {
+    unchecked: () => null,
+    disconnected: ({ checkedAt }) => checkRow("disconnected", checkedAt),
+    toolingMissing: ({ checkedAt }) => checkRow("tooling-missing", checkedAt),
+    connected: ({ checkedAt, login, source }) =>
+      checkRow("connected", checkedAt, { login, credential_source: source }),
+    reconnectRequired: ({ checkedAt, reason }) =>
+      checkRow("reconnect-required", checkedAt, { reconnect_reason: reason }),
+  });
 }
 
 export class GitHubConnectionStore {
@@ -127,7 +172,7 @@ export class GitHubConnectionStore {
 
   credential(): GitHubCredential {
     const check = this.sql
-      .exec<CheckRow>(
+      .exec<StoredCheck>(
         `SELECT state, reconnect_reason, login, credential_source, checked_at
          FROM github_connection_check WHERE id = 1`,
       )
@@ -251,41 +296,22 @@ export class GitHubConnectionStore {
       );
     }
 
-    GitHubCredential.match(credential, {
-      unchecked: () => {
-        this.sql.exec(`DELETE FROM github_connection_check WHERE id = 1`);
-      },
-      disconnected: ({ checkedAt }) => {
-        this.writeCheck("disconnected", checkedAt, null, null, null);
-      },
-      toolingMissing: ({ checkedAt }) => {
-        this.writeCheck("tooling-missing", checkedAt, null, null, null);
-      },
-      connected: ({ checkedAt, login, source }) => {
-        this.writeCheck("connected", checkedAt, null, login, source);
-      },
-      reconnectRequired: ({ checkedAt, reason }) => {
-        this.writeCheck("reconnect-required", checkedAt, reason, null, null);
-      },
-    });
+    const check = checkRowOf(credential);
+
+    if (check === null) this.sql.exec(`DELETE FROM github_connection_check WHERE id = 1`);
+    else this.writeCheck(check);
   }
 
-  private writeCheck(
-    state: string,
-    checkedAt: number,
-    reason: string | null,
-    login: string | null,
-    source: string | null,
-  ): void {
+  private writeCheck(check: CheckRow): void {
     this.sql.exec(
       `INSERT OR REPLACE INTO github_connection_check
          (id, state, reconnect_reason, login, credential_source, checked_at)
        VALUES (1, ?, ?, ?, ?, ?)`,
-      state,
-      reason,
-      login,
-      source,
-      checkedAt,
+      check.state,
+      check.reconnect_reason,
+      check.login,
+      check.credential_source,
+      check.checked_at,
     );
   }
 }
