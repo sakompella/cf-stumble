@@ -10,7 +10,7 @@ export { type CommandOutput } from "./operations.js";
 
 export {
   checkRepositoryAccess,
-  CredentialInstallFailed,
+  type CredentialWorkspaceUnavailable,
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
 } from "./credential-access.js";

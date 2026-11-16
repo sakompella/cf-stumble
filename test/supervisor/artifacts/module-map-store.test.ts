@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import { resultOf } from "../../effect-result.js";
 import * as Result from "effect/Result";
 import { ModuleMapStore } from "../../../src/supervisor/artifacts/index.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
@@ -41,13 +42,13 @@ afterEach(async () => {
 
 test("stores a large module map under its commit key and reads back the same bytes", async () => {
   const store = new ModuleMapStore(env.MODULE_MAPS);
-  const written = await store.write(parsedArtifact(largeModuleMap(commits.large)));
+  const written = await resultOf(store.write(parsedArtifact(largeModuleMap(commits.large))));
 
   if (Result.isFailure(written)) {
     throw new Error(`a large module map must be written: ${written.failure.code}`);
   }
 
-  const read = await store.read(testHarnessCommit(commits.large));
+  const read = await resultOf(store.read(testHarnessCommit(commits.large)));
   const object = await env.MODULE_MAPS.get(`module-maps/${commits.large}.json`);
 
   if (Result.isFailure(read) || read.success.kind === "absent") {
@@ -60,10 +61,14 @@ test("stores a large module map under its commit key and reads back the same byt
 
 test("never overwrites a stored module map", async () => {
   const store = new ModuleMapStore(env.MODULE_MAPS);
-  await store.write(parsedArtifact(artifact(commits.immutable, "export const first = 1;\n")));
-  await store.write(parsedArtifact(artifact(commits.immutable, "export const second = 2;\n")));
+  await resultOf(
+    store.write(parsedArtifact(artifact(commits.immutable, "export const first = 1;\n"))),
+  );
+  await resultOf(
+    store.write(parsedArtifact(artifact(commits.immutable, "export const second = 2;\n"))),
+  );
 
-  const read = await store.read(testHarnessCommit(commits.immutable));
+  const read = await resultOf(store.read(testHarnessCommit(commits.immutable)));
 
   expect(
     Result.isSuccess(read) && read.success.kind === "stored"
@@ -76,9 +81,9 @@ test("a write that loses to a stored module map returns the stored artifact, not
   const store = new ModuleMapStore(env.MODULE_MAPS);
   const first = parsedArtifact(artifact(commits.raced, "export const first = 1;\n"));
   const second = parsedArtifact(artifact(commits.raced, "export const second = 2;\n"));
-  await store.write(first);
+  await resultOf(store.write(first));
 
-  const written = await store.write(second);
+  const written = await resultOf(store.write(second));
 
   if (Result.isFailure(written)) {
     throw new Error(`a losing write must return the stored artifact: ${written.failure.code}`);
@@ -88,11 +93,15 @@ test("a write that loses to a stored module map returns the stored artifact, not
 });
 
 test("a refused write reports a problem and stores nothing", async () => {
-  const written = await new ModuleMapStore(refusingPut(env.MODULE_MAPS)).write(
-    parsedArtifact(largeModuleMap(commits.atomic)),
+  const written = await resultOf(
+    new ModuleMapStore(refusingPut(env.MODULE_MAPS)).write(
+      parsedArtifact(largeModuleMap(commits.atomic)),
+    ),
   );
 
-  const read = await new ModuleMapStore(env.MODULE_MAPS).read(testHarnessCommit(commits.atomic));
+  const read = await resultOf(
+    new ModuleMapStore(env.MODULE_MAPS).read(testHarnessCommit(commits.atomic)),
+  );
 
   expect(Result.isFailure(written) ? written.failure.code : "written").toBe(
     "artifact-write-failed",

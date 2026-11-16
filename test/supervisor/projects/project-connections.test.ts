@@ -26,7 +26,6 @@ test("connects a repository once the workspace credential works, and provisions 
     ok: true,
     alreadyConnected: false,
     project: { id: "sample-repo-1", displayName: "Repo one", repositoryUrl: REPOSITORY },
-    github: { state: "connected", login: "octocat", source: "configured-token" },
   });
   expect(listed.map((project) => project.id)).toEqual(["sample-repo-1", "harness"]);
   expect(
@@ -102,6 +101,34 @@ test("refuses a repository URL that once reduced to the harness entry's id", asy
     subject.workspace.commands.filter((command) => command.includes("https://github.com/-/")),
     "a URL that derives no project id is never handed to the workspace",
   ).toEqual([]);
+});
+
+test("a mistyped repository URL is refused without any GitHub status to show", async () => {
+  const subject = tenant("connect-typo", { fallbackToken: FAKE_TOKEN });
+
+  const refused = await subject.connections((connections) =>
+    connections.connect("https:/github.com/sample", undefined, NOW),
+  );
+
+  expect(refused).toEqual({ ok: false, problem: { code: "invalid-repository-url", detail: "" } });
+  await expect(
+    subject.github((github) => Effect.sync(() => github.lastKnown(NOW))),
+  ).resolves.toEqual({ github: null, checkedAt: null });
+});
+
+test("a connect that cannot reach the workspace is refused as unavailable and records no GitHub status", async () => {
+  const workspace = new FakeTenantWorkspace();
+  const subject = tenant("connect-host-down", { workspace, fallbackToken: FAKE_TOKEN });
+  workspace.unavailable = true;
+
+  const refused = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  expect(refused).toEqual({ ok: false, problem: { code: "workspace-unavailable", detail: "" } });
+  await expect(
+    subject.github((github) => Effect.sync(() => github.lastKnown(NOW))),
+  ).resolves.toEqual({ github: null, checkedAt: null });
 });
 
 test("disconnecting a project removes its clone and leaves the harness checkout", async () => {

@@ -5,7 +5,6 @@ import {
   type OwnerStatus,
 } from "../../generation-requests.js";
 import type { HarnessCommit } from "../../harness-commit.js";
-import { runAtEntryPoint } from "../../run-entry-point.js";
 import { boundedRpc, WORKSPACE_SHORT_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import {
   UNKNOWN_LINEAGE,
@@ -26,13 +25,11 @@ export class MainLineage {
     this.#workspace = workspace;
   }
 
-  read(activeCommit: HarnessCommit, harnessCommit: HarnessCommit): Promise<HarnessLineage> {
-    return runAtEntryPoint(
-      boundedRpc(
-        () => this.#workspace().lineage({ activeCommit, harnessCommit }),
-        WORKSPACE_SHORT_RPC_TIMEOUT_MS,
-      ).pipe(Effect.orElseSucceed(() => UNKNOWN_LINEAGE)),
-    );
+  read(activeCommit: HarnessCommit, harnessCommit: HarnessCommit): Effect.Effect<HarnessLineage> {
+    return boundedRpc(
+      () => this.#workspace().lineage({ activeCommit, harnessCommit }),
+      WORKSPACE_SHORT_RPC_TIMEOUT_MS,
+    ).pipe(Effect.orElseSucceed(() => UNKNOWN_LINEAGE));
   }
 
   record(harnessCommit: HarnessCommit, count: number | undefined): void {

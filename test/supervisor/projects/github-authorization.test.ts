@@ -59,7 +59,7 @@ function githubHoldingRedemption(deviceCodes: readonly Reply[], redemption: Repl
 
 interface Tenant {
   readonly workspace: FakeTenantWorkspace;
-  github<T>(use: (github: GitHubConnection) => Effect.Effect<T>): Promise<T>;
+  github<T, E = never>(use: (github: GitHubConnection) => Effect.Effect<T, E>): Promise<T>;
 }
 
 function tenant(name: string, replies: readonly Reply[], configured = true): Tenant {

@@ -14,6 +14,7 @@ import type {
   DisconnectRepositoryResult,
   GitHubAuthorizationOutcome,
   GitHubConnectionRecord,
+  GitHubRefreshOutcome,
 } from "../supervisor/projects/index.js";
 
 export type ProjectApiSupervisor = Readonly<{
@@ -23,7 +24,7 @@ export type ProjectApiSupervisor = Readonly<{
     displayName: string | undefined,
   ) => Promise<ConnectRepositoryResult>;
   getGitHubConnection: () => Promise<GitHubConnectionRecord>;
-  refreshGitHubConnection: () => Promise<GitHubConnectionRecord>;
+  refreshGitHubConnection: () => Promise<GitHubRefreshOutcome>;
   startGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
   completeGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
   disconnectProject: (projectId: string) => Promise<DisconnectRepositoryResult>;
@@ -48,7 +49,11 @@ function refreshResponse(
   supervisor: ProjectApiSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.refreshGitHubConnection()).pipe(
-    Effect.map((record) => recordResponse(record)),
+    Effect.map((outcome) =>
+      outcome.ok
+        ? recordResponse(outcome)
+        : refusal({ ok: false, problem: { code: outcome.problem } }),
+    ),
   );
 }
 
@@ -68,19 +73,13 @@ const connectResponse = Effect.fnUntraced(function* (
   );
 
   if (!result.ok) {
-    return refusal({
-      ok: false,
-      problem: result.problem,
-      ...("github" in result && { github: result.github, checkedAt: result.checkedAt }),
-    });
+    return refusal({ ok: false, problem: result.problem });
   }
 
   return Response.json({
     ok: true,
     project: result.project,
     alreadyConnected: result.alreadyConnected,
-    github: result.github,
-    checkedAt: result.checkedAt,
   });
 }, invalidRequestBody("invalid-connect-request"));
 

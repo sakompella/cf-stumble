@@ -1,5 +1,6 @@
 import { reset } from "cloudflare:test";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { afterEach, expect, test } from "vitest";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { projectIdOf } from "../../project-fixtures.js";
@@ -187,14 +188,37 @@ test("reports a reconnect requirement rather than a connection it cannot use", a
   expect(status).toEqual({ state: "reconnect-required", reason: "credential-rejected" });
 });
 
-test("reports a workspace it cannot reach as a reconnect requirement, never as connected", async () => {
+const CONNECTED_AT_NOW = {
+  github: { state: "connected", login: "octocat", source: "configured-token" },
+  checkedAt: NOW,
+};
+
+test("a check that cannot reach the workspace leaves a connected credential connected", async () => {
   const workspace = new FakeTenantWorkspace();
-  workspace.unavailable = true;
   const subject = tenant("workspace-unavailable", { workspace, fallbackToken: FAKE_TOKEN });
+  await subject.github((github) => github.ensureCredential(NOW));
+  workspace.unavailable = true;
 
-  const status = await subject.github((github) => github.ensureCredential(NOW));
+  const checked = await subject.github((github) => Effect.result(github.ensureCredential(NOW + 1)));
 
-  expect(status).toEqual({ state: "reconnect-required", reason: "workspace-unavailable" });
+  expect(Result.isFailure(checked), "the check answers that it could not run").toBe(true);
+  await expect(
+    subject.github((github) => Effect.sync(() => github.lastKnown(NOW + 2))),
+  ).resolves.toEqual(CONNECTED_AT_NOW);
+});
+
+test("a check that GitHub answered no verdict to leaves a connected credential connected", async () => {
+  const workspace = new FakeTenantWorkspace();
+  const subject = tenant("github-unreachable", { workspace, fallbackToken: FAKE_TOKEN });
+  await subject.github((github) => github.ensureCredential(NOW));
+  workspace.credentialState = "unreachable";
+
+  const checked = await subject.github((github) => Effect.result(github.status(NOW + 1)));
+
+  expect(Result.isFailure(checked), "no verdict is not a rejection").toBe(true);
+  await expect(
+    subject.github((github) => Effect.sync(() => github.lastKnown(NOW + 2))),
+  ).resolves.toEqual(CONNECTED_AT_NOW);
 });
 
 test("shows a workspace image without gh instead of installing one", async () => {

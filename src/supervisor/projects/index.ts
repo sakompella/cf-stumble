@@ -3,6 +3,7 @@ export { GitHubConnection, type GitHubConnectionEnvironment } from "./github-con
 export type {
   GitHubAuthorizationOutcome,
   GitHubConnectionRecord,
+  GitHubRefreshOutcome,
 } from "./github-connection-status.js";
 
 export { GitHubConnectionStore } from "./github-connection-store.js";

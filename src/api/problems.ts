@@ -23,6 +23,7 @@ type DisconnectProblemCode =
   | "workspace-busy";
 
 type GitHubAuthorizationProblemCode =
+  | "workspace-unavailable"
   | "not-configured"
   | "provider-unavailable"
   | "no-pending-authorization"

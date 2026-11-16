@@ -17,15 +17,8 @@ export const ConnectAnswer = Schema.Union([
   Schema.Struct({
     ok: Schema.Literal(true),
     alreadyConnected: Schema.Boolean,
-    github: GitHubStatus,
-    checkedAt: Schema.NullOr(Schema.Number),
   }),
-  Schema.Struct({
-    ok: Schema.Literal(false),
-    problem: RefusalProblem,
-    github: Schema.optional(GitHubStatus),
-    checkedAt: Schema.optional(Schema.NullOr(Schema.Number)),
-  }),
+  Schema.Struct({ ok: Schema.Literal(false), problem: RefusalProblem }),
 ]);
 
 export const ChatGPTAnswer = Schema.Union([

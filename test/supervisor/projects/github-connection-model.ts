@@ -73,21 +73,13 @@ const pending = gs.record({
 const credentialEvent = gs.composite<CredentialEvent>((tc) => {
   const now = tc.draw(gs.integers());
 
-  switch (tc.draw(gs.integers({ minValue: 0, maxValue: 2 }))) {
-    case 0:
-      return CredentialEvent.Observed({
+  return tc.draw(gs.booleans())
+    ? CredentialEvent.Observed({
         answer: { state: tc.draw(answerState), login: tc.draw(login) },
         installedBy: tc.draw(gs.optional(source)) ?? undefined,
         now,
-      });
-    case 1:
-      return CredentialEvent.WorkspaceUnreachable({ now });
-    default:
-      return CredentialEvent.InstallRefused({
-        reason: tc.draw(gs.sampledFrom(["credential-rejected", "workspace-unavailable"] as const)),
-        now,
-      });
-  }
+      })
+    : CredentialEvent.InstallRefused({ now });
 });
 
 const authorizationEvent = gs.composite<AuthorizationEvent>((tc) => {
@@ -140,9 +132,7 @@ function viewAfterAnswer(model: Model, event: Observed): View {
 function viewAfter(model: Model, event: CredentialEvent): View {
   if (event._tag === "Observed") return viewAfterAnswer(model, event);
 
-  return event._tag === "InstallRefused"
-    ? reconnect(event.reason, event.now)
-    : reconnect("workspace-unavailable", event.now);
+  return reconnect("credential-rejected", event.now);
 }
 
 function pendingAfter(current: Pending | null, event: AuthorizationEvent): Pending | null {

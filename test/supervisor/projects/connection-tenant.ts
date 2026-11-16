@@ -21,7 +21,7 @@ export const REPOSITORY = "https://github.com/sample/repo-1";
 export interface Tenant {
   readonly workspace: FakeTenantWorkspace;
   connections<T>(use: (connections: ProjectConnections) => Effect.Effect<T>): Promise<T>;
-  github<T>(use: (github: GitHubConnection) => Effect.Effect<T>): Promise<T>;
+  github<T, E = never>(use: (github: GitHubConnection) => Effect.Effect<T, E>): Promise<T>;
 }
 
 export function tenant(
@@ -33,7 +33,7 @@ export function tenant(
 ): Tenant {
   const workspace = options.workspace ?? new FakeTenantWorkspace();
 
-  const inTenant = <T>(use: (built: TenantConnections) => Effect.Effect<T>): Promise<T> =>
+  const inTenant = <T, E>(use: (built: TenantConnections) => Effect.Effect<T, E>): Promise<T> =>
     runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) =>
       Effect.runPromise(
         use(

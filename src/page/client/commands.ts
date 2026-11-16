@@ -67,21 +67,11 @@ export const ConnectRepository = Command.define("ConnectRepository", {
         answer: ConnectAnswer,
       },
       {
-        answered: (answer, now) =>
+        answered: (answer) =>
           answer.ok
-            ? Message.SucceededConnect({
-                isAlreadyConnected: answer.alreadyConnected,
-                maybeGitHub: Option.some(gitHubReport(answer.github, answer.checkedAt, now)),
-              })
-            : Message.RejectedConnect({
-                wording: `rejected: ${answer.problem.code}`,
-                maybeGitHub: Option.some(
-                  gitHubReport(answer.github ?? null, answer.checkedAt ?? null, now),
-                ),
-              }),
-        ...rejectedAs((wording) =>
-          Message.RejectedConnect({ wording, maybeGitHub: Option.none() }),
-        ),
+            ? Message.SucceededConnect({ isAlreadyConnected: answer.alreadyConnected })
+            : Message.RejectedConnect({ wording: `rejected: ${answer.problem.code}` }),
+        ...rejectedAs((wording) => Message.RejectedConnect({ wording })),
         failed: (detail) => Message.FailedConnect({ detail }),
       },
     ),

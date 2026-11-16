@@ -37,8 +37,7 @@ const events: readonly Event[] = [
     installedBy: undefined,
     now: 5,
   }),
-  CredentialEvent.WorkspaceUnreachable({ now: 6 }),
-  CredentialEvent.InstallRefused({ reason: "credential-rejected", now: 7 }),
+  CredentialEvent.InstallRefused({ now: 6 }),
 ];
 
 function sequences(depth: number): readonly (readonly Event[])[] {
