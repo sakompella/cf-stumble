@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { SERVING_FACET_NAME } from "../../../src/supervisor/artifacts/index.js";
-import { sentMessage } from "../../../src/page/client/sent-message.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
 import { ownerApiResponse } from "../../routes/helpers.js";
 import {
@@ -61,7 +60,10 @@ test("the owner API answers a sent message with the number the page accepts", as
   );
 
   expect(response.status).toBe(202);
-  expect(sentMessage(await response.json())._tag).toBe("Some");
+  const answer: unknown = await response.json();
+
+  expect(answer).toMatchObject({ ok: true });
+  expect(answer).toHaveProperty("submissionId");
 });
 
 test("a message sent while a run is busy is answered after the first", async () => {

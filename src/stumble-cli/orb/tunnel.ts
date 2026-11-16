@@ -8,7 +8,7 @@ const HEALTHY = "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r
 
 const REFUSED = "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
 
-export type RequestHead = Readonly<{ method: string; path: string; headers: readonly string[] }>;
+type RequestHead = Readonly<{ method: string; path: string; headers: readonly string[] }>;
 
 export type WorkerTarget = Readonly<{ url: URL; token: string }>;
 

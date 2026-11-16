@@ -1,16 +1,15 @@
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
-import {
-  decodeStatusAnswer,
-  generationReading,
-  submitRejection,
-} from "../../../src/page/client/api.js";
+import { generationReading, StatusAnswer, submitRejection } from "../../../src/page/client/api.js";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { settled, type SentRequest } from "./requests.js";
 import { shownText } from "./shown.js";
+
+const decodeStatus = Schema.decodeUnknownOption(StatusAnswer);
 
 function after(start: Model, messages: readonly Message[]): Model {
   return messages.reduce((model, message) => update(model, message).model, start);
@@ -102,12 +101,10 @@ test("the status answer is read into a numeric label and epoch, or refused", () 
     maybeMainAhead: Option.none(),
   });
 
-  expect(
-    Option.isNone(decodeStatusAnswer({ ok: false, problem: { code: "status-unavailable" } })),
-  ).toBe(true);
-  expect(Option.isNone(decodeStatusAnswer({ activeGeneration: { generation, epoch: "4" } }))).toBe(
+  expect(Option.isNone(decodeStatus({ ok: false, problem: { code: "status-unavailable" } }))).toBe(
     true,
   );
+  expect(Option.isNone(decodeStatus({ activeGeneration: { generation, epoch: "4" } }))).toBe(true);
 });
 
 test("a submit refused after the label was recorded says so", () => {

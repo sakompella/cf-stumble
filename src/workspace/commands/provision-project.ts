@@ -99,7 +99,7 @@ export function parseProjectProvisionRequest(
   return { id: projectId, displayName: projectId, repositoryUrl };
 }
 
-export function planProjectProvisionRequest(project: Project): WorkspacePlan {
+function planProjectProvisionRequest(project: Project): WorkspacePlan {
   return {
     kind: "run-command",
     source: projectCloneSource(project),
@@ -127,7 +127,7 @@ function originUrl(config: string): string | undefined {
   return undefined;
 }
 
-export function cloneMarkersAreDurable(
+function cloneMarkersAreDurable(
   operations: WorkspaceEffects,
   project: Project,
 ): Effect.Effect<boolean, WorkspaceFault> {

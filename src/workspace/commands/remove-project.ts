@@ -27,7 +27,7 @@ type ParsedProjectRemovalRequest = Readonly<{
   projectId: ProjectId;
 }>;
 
-export function parseProjectRemovalRequest(
+function parseProjectRemovalRequest(
   request: ProjectRemovalRequest,
 ): ParsedProjectRemovalRequest | WorkspaceFailure {
   const projectId = parseProjectId(request.projectId);

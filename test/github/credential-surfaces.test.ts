@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test } from "vitest";
-import { containsCredential } from "../../src/github/redaction.js";
+import { containsCredential } from "./contains-credential.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import { tenantConnections } from "../supervisor/projects/tenant-connections.js";
 import type { GitHubFetch } from "../../src/github/index.js";

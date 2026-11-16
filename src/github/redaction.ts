@@ -14,7 +14,3 @@ export function redactCredentials(text: string, knownToken?: string): string {
     .replaceAll(TOKEN_PATTERN, REDACTED)
     .replaceAll(URL_CREDENTIAL_PATTERN, `$1${REDACTED}@`);
 }
-
-export function containsCredential(text: string): boolean {
-  return redactCredentials(text) !== text;
-}

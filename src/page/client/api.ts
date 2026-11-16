@@ -103,8 +103,6 @@ export const StatusAnswer = Schema.Struct({
 
 export type StatusAnswer = typeof StatusAnswer.Type;
 
-export const decodeStatusAnswer = Schema.decodeUnknownOption(StatusAnswer);
-
 export function generationReading(answer: StatusAnswer): GenerationReading {
   const { generation, epoch } = answer.activeGeneration;
 

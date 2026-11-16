@@ -2,7 +2,8 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import { containsCredential, redactCredentials } from "../../src/github/redaction.js";
+import { redactCredentials } from "../../src/github/redaction.js";
+import { containsCredential } from "./contains-credential.js";
 
 const MARKER = "[redacted]";
 
