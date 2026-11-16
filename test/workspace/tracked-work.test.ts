@@ -105,7 +105,7 @@ test("failed and defective work both end their count", async () => {
   const { idle } = controller();
 
   await Effect.runPromise(Effect.result(trackedWork(idle, Effect.fail("refused"))));
-  await Effect.runPromise(Effect.exit(trackedWork(idle, Effect.die(new Error("defect")))));
+  await Effect.runPromiseExit(trackedWork(idle, Effect.die(new Error("defect"))));
 
   expect(idle.snapshot().inFlight).toBe(0);
 });

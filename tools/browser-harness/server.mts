@@ -130,8 +130,8 @@ export async function startHarnessServer(scenario: HarnessScenario): Promise<Har
   const state = initialState(scenario, conversations);
 
   const server = createServer((req, res) => {
-    void handle(req, res, state).catch((error: Error) => {
-      console.error(`harness server failed to answer ${req.url ?? "?"}: ${error.message}`);
+    void handle(req, res, state).catch((cause: unknown) => {
+      console.error(`harness server failed to answer ${req.url ?? "?"}: ${String(cause)}`);
       res.destroy();
     });
   });

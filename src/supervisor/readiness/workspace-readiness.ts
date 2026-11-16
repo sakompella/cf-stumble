@@ -75,12 +75,7 @@ export class WorkspaceReadiness {
       projectId: project.id,
       harnessCommit: generation.harnessCommit,
       namespace: this.namespace,
-    }).pipe(
-      Effect.match({
-        onFailure: () => false,
-        onSuccess: () => true,
-      }),
-    );
+    }).pipe(Effect.isSuccess);
   }
 
   private capability(

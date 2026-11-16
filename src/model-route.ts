@@ -89,11 +89,12 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
             ? modelEventStream(turn)
             : { ok: false, error: { code: "invalid-request", reason: GENERATION_REPLACED } },
         ),
-        Effect.catch(() =>
-          Effect.succeed({
-            ok: false,
-            error: { code: "invalid-request", reason: SUPERVISOR_UNAVAILABLE },
-          } satisfies ValidationFailure),
+        Effect.orElseSucceed(
+          () =>
+            ({
+              ok: false,
+              error: { code: "invalid-request", reason: SUPERVISOR_UNAVAILABLE },
+            }) satisfies ValidationFailure,
         ),
       ),
     );

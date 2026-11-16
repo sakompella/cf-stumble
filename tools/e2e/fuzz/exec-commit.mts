@@ -43,7 +43,7 @@ export class FuzzCommits {
     method: string,
     path: string,
     schema: S,
-    body?: typeof Schema.Json.Type,
+    body?: Schema.Json,
   ) {
     const response = await fetch(`https://api.github.com/repos/${REPOSITORY}${path}`, {
       method,
