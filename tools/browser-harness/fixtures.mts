@@ -1,6 +1,5 @@
 import type { ANSWERS, AnsweredEndpoint } from "../../src/api/answers.js";
 import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
-import type { JsonValue } from "../json.mjs";
 
 type Encoded<E extends AnsweredEndpoint> = (typeof ANSWERS)[E]["Encoded"];
 
@@ -58,10 +57,10 @@ export const NEW_PROJECT: ProjectEntry = {
 const CONNECTED_GITHUB = {
   state: "connected",
   login: "octocat",
-  source: "owner-authorization",
+  source: "device-authorization",
 } as const;
 
-export function github(scenario: HarnessScenario): JsonValue {
+export function github(scenario: HarnessScenario): Encoded<"GET /api/github/connection">["github"] {
   if (scenario === "github-disconnected") {
     return { state: "disconnected" };
   }
@@ -98,7 +97,9 @@ export const CHECKED_AT = new Date(2026, 9, 15, 14, 32).getTime();
 
 export const CHECKED_WORDING = "2026-10-15 14:32";
 
-export function refreshPayload(scenario: HarnessScenario): JsonValue {
+export function refreshPayload(
+  scenario: HarnessScenario,
+): Encoded<"POST /api/github/connection/refresh"> {
   return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }
 
@@ -110,7 +111,7 @@ export const STATUS_PAYLOAD: Encoded<"GET /api/status"> = {
   mainAhead: 2,
 };
 
-export const CHATGPT_PAYLOAD: JsonValue = {
+export const CHATGPT_PAYLOAD: Encoded<"GET /api/chatgpt/connection"> = {
   ok: true,
   chatgpt: { connection: { state: "disconnected" }, login: null, model: "gpt-6.1-sol" },
 };

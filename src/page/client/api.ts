@@ -7,7 +7,7 @@ import type { AnswerOf, Preparation, PreparationFailed } from "../../api/answers
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
 import { GitHubReport, type GenerationReading, type Project } from "./model.js";
 
-export { targetPath } from "../../api/endpoints.js";
+export { endpointPath } from "../../api/endpoints.js";
 
 export function transportDetail(cause: unknown): string {
   return Predicate.isError(cause) ? cause.message : String(cause);
@@ -101,26 +101,7 @@ export function generationReading(answer: AnswerOf<"GET /api/status">): Generati
   };
 }
 
-export const GitHubStatus = Schema.NullOr(
-  Schema.Union([
-    Schema.Struct({ state: Schema.Literal("disconnected") }),
-    Schema.Struct({ state: Schema.Literal("tooling-missing") }),
-    Schema.Struct({
-      state: Schema.Literal("connected"),
-      login: Schema.String,
-      source: Schema.String,
-    }),
-    Schema.Struct({ state: Schema.Literal("reconnect-required"), reason: Schema.String }),
-    Schema.Struct({
-      state: Schema.Literal("awaiting-authorization"),
-      verificationUri: Schema.String,
-      userCode: Schema.String,
-      expiresAt: Schema.Number,
-    }),
-  ]),
-);
-
-export type GitHubStatusView = typeof GitHubStatus.Type;
+export type GitHubStatusView = AnswerOf<"GET /api/github/connection">["github"];
 
 function connectionDetail(status: Exclude<GitHubStatusView, null>): string {
   if (status.state === "connected") {

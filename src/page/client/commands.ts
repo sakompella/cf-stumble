@@ -1,8 +1,6 @@
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
 import * as Schema from "effect/Schema";
-import { GitHubAnswer } from "./answers.js";
-import { ANSWERS } from "../../api/answers.js";
 import {
   diagnosticsText,
   generationReading,
@@ -23,9 +21,8 @@ export const FetchStatus = Command.define("FetchStatus", {
   messages: [Message.SucceededFetchStatus, Message.RejectedFetchStatus, Message.FailedFetchStatus],
   execute: apiRequest(
     {
-      target: { endpoint: "GET /api/status" },
+      endpoint: "GET /api/status",
       maybeBody: Option.none(),
-      answer: ANSWERS["GET /api/status"],
     },
     {
       answered: (answer) => Message.SucceededFetchStatus({ reading: generationReading(answer) }),
@@ -43,9 +40,8 @@ export const FetchProjects = Command.define("FetchProjects", {
   ],
   execute: apiRequest(
     {
-      target: { endpoint: "GET /api/projects" },
+      endpoint: "GET /api/projects",
       maybeBody: Option.none(),
-      answer: ANSWERS["GET /api/projects"],
     },
     {
       answered: (answer) => Message.SucceededFetchProjects({ projects: projectsOf(answer) }),
@@ -61,9 +57,8 @@ export const ConnectRepository = Command.define("ConnectRepository", {
   execute: ({ repositoryUrl }) =>
     apiRequest(
       {
-        target: { endpoint: "POST /api/projects/connect" },
+        endpoint: "POST /api/projects/connect",
         maybeBody: Option.some({ repositoryUrl }),
-        answer: ANSWERS["POST /api/projects/connect"],
       },
       {
         answered: (answer) =>
@@ -88,17 +83,12 @@ type GitHubEndpoint =
 function gitHubRequest(endpoint: GitHubEndpoint) {
   return apiRequest(
     {
-      target: { endpoint },
+      endpoint,
       maybeBody: endpoint.startsWith("POST ") ? Option.some({}) : Option.none(),
-      answer: GitHubAnswer,
     },
     {
       answered: (answer, now) =>
-        answer.ok
-          ? Message.SucceededGitHub({
-              github: gitHubReport(answer.github, answer.checkedAt, now),
-            })
-          : Message.RejectedGitHub({ wording: `rejected: ${answer.problem.code}` }),
+        Message.SucceededGitHub({ github: gitHubReport(answer.github, answer.checkedAt, now) }),
       ...rejectedAs((wording) => Message.RejectedGitHub({ wording })),
       failed: (detail) => Message.FailedGitHub({ detail }),
     },
@@ -127,9 +117,9 @@ export const AbortRun = Command.define("AbortRun", {
   execute: ({ projectId }) =>
     apiRequest(
       {
-        target: { endpoint: "POST /api/projects/:projectId/abort", projectId },
+        endpoint: "POST /api/projects/:projectId/abort",
+        projectId,
         maybeBody: Option.none(),
-        answer: ANSWERS["POST /api/projects/:projectId/abort"],
       },
       {
         answered: () => Message.SucceededAbort(),
@@ -145,9 +135,9 @@ export const ReplaceThread = Command.define("ReplaceThread", {
   execute: ({ projectId, streamId }) =>
     apiRequest(
       {
-        target: { endpoint: "POST /api/projects/:projectId/thread/fresh", projectId },
+        endpoint: "POST /api/projects/:projectId/thread/fresh",
+        projectId,
         maybeBody: Option.none(),
-        answer: ANSWERS["POST /api/projects/:projectId/thread/fresh"],
       },
       {
         answered: () => Message.SucceededFreshThread({ streamId }),
@@ -163,9 +153,8 @@ export const SubmitCandidate = Command.define("SubmitCandidate", {
   execute: ({ harnessCommit }) =>
     apiRequest(
       {
-        target: { endpoint: "POST /api/generations/submit" },
+        endpoint: "POST /api/generations/submit",
         maybeBody: Option.some({ harnessCommit }),
-        answer: ANSWERS["POST /api/generations/submit"],
       },
       {
         answered: (answer) =>
@@ -189,14 +178,9 @@ export const RunControl = Command.define("RunControl", {
   execute: ({ kind, observedEpoch, label }) =>
     apiRequest(
       {
-        target: {
-          endpoint:
-            kind === "activate"
-              ? "POST /api/generations/activate"
-              : "POST /api/generations/rollback",
-        },
+        endpoint:
+          kind === "activate" ? "POST /api/generations/activate" : "POST /api/generations/rollback",
         maybeBody: Option.some({ observedEpoch, label }),
-        answer: ANSWERS["POST /api/generations/activate"],
       },
       {
         answered: (answer) =>

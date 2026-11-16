@@ -1,6 +1,5 @@
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
-import { BackendAnswer } from "./answers.js";
 import { type JsonBody } from "./api.js";
 import { BackendSetting } from "../../backend-setting.js";
 import { Message } from "./message.js";
@@ -17,12 +16,9 @@ function backendRequest(
   maybeBody: Option.Option<JsonBody>,
 ) {
   return apiRequest(
-    { target: { endpoint }, maybeBody, answer: BackendAnswer },
+    { endpoint, maybeBody },
     {
-      answered: (answer) =>
-        answer.ok
-          ? Message.SucceededBackend({ backend: answer.backend })
-          : Message.RejectedBackend({ wording: `rejected: ${answer.problem.code}` }),
+      answered: (answer) => Message.SucceededBackend({ backend: answer.backend }),
       ...rejectedAs((wording) => Message.RejectedBackend({ wording })),
       failed: (detail) => Message.FailedBackend({ detail }),
     },

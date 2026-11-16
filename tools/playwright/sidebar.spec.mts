@@ -46,7 +46,7 @@ test.describe("GitHub connection", () => {
   }) => {
     const github = owner.locator(`#${ID.githubState}`);
     await expect(github).toHaveText("connected");
-    await expect(owner.locator(`#${ID.githubDetail}`)).toHaveText("octocat (owner-authorization)");
+    await expect(owner.locator(`#${ID.githubDetail}`)).toHaveText("octocat (device-authorization)");
     await expect(owner.locator(`#${ID.githubChecked}`)).toHaveText(CHECKED_WORDING);
     expect(requestsTo(server, "GET", "/api/github/connection")).toHaveLength(1);
     expect(requestsTo(server, "POST", "/api/github/connection/refresh")).toEqual([]);

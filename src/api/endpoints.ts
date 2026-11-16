@@ -36,9 +36,9 @@ export type ProjectEndpoint = Extract<Endpoint, `${string}/:projectId/${string}`
 
 type FixedEndpoint = Exclude<Endpoint, ProjectEndpoint>;
 
-export type EndpointTarget =
-  | Readonly<{ endpoint: FixedEndpoint }>
-  | Readonly<{ endpoint: ProjectEndpoint; projectId: string }>;
+export type Location<E extends Endpoint> = E extends ProjectEndpoint
+  ? Readonly<{ projectId: string }>
+  : Readonly<{ projectId?: never }>;
 
 export type EndpointMatch =
   | Readonly<{ kind: "fixed"; endpoint: FixedEndpoint }>
@@ -125,10 +125,10 @@ export function methodOf(endpoint: Endpoint): Method {
   return routeOf(endpoint).method;
 }
 
-export function targetPath(target: EndpointTarget): string {
-  const { pattern } = routeOf(target.endpoint);
+export function endpointPath(endpoint: Endpoint, projectId: string | undefined): string {
+  const { pattern } = routeOf(endpoint);
 
-  return "projectId" in target
-    ? pattern.replace(PROJECT_ID, encodeURIComponent(target.projectId))
-    : pattern;
+  return projectId === undefined
+    ? pattern
+    : pattern.replace(PROJECT_ID, encodeURIComponent(projectId));
 }

@@ -44,8 +44,14 @@ function disconnectResponse(
   );
 }
 
-function recordResponse(record: GitHubConnectionRecord): Response {
-  return Response.json({ ok: true, github: record.github, checkedAt: record.checkedAt });
+type GitHubEndpoint =
+  | "GET /api/github/connection"
+  | "POST /api/github/connection/refresh"
+  | "POST /api/github/authorization"
+  | "POST /api/github/authorization/complete";
+
+function recordResponse(endpoint: GitHubEndpoint, record: GitHubConnectionRecord): Response {
+  return answer(endpoint, { ok: true, github: record.github, checkedAt: record.checkedAt });
 }
 
 function refreshResponse(
@@ -54,7 +60,7 @@ function refreshResponse(
   return callSupervisor(() => supervisor.refreshGitHubConnection()).pipe(
     Effect.map((outcome) =>
       outcome.ok
-        ? recordResponse(outcome)
+        ? recordResponse("POST /api/github/connection/refresh", outcome)
         : refusal({ ok: false, problem: { code: outcome.problem } }),
     ),
   );
@@ -78,12 +84,13 @@ const connectResponse = Effect.fnUntraced(function* (
 }, invalidRequestBody("invalid-connect-request"));
 
 function authorizationResponse(
+  endpoint: "POST /api/github/authorization" | "POST /api/github/authorization/complete",
   outcome: () => Promise<GitHubAuthorizationOutcome>,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(outcome).pipe(
     Effect.map((result) =>
       result.ok
-        ? Response.json({ ok: true, github: result.status, checkedAt: result.checkedAt })
+        ? recordResponse(endpoint, { github: result.status, checkedAt: result.checkedAt })
         : refusal({ ok: false, problem: { code: result.problem } }),
     ),
   );
@@ -108,11 +115,15 @@ export const PROJECT_HANDLERS: Handlers<
     disconnectResponse(projectId, supervisor),
   "GET /api/github/connection": (_request, supervisor) =>
     callSupervisor(() => supervisor.getGitHubConnection()).pipe(
-      Effect.map((record) => recordResponse(record)),
+      Effect.map((record) => recordResponse("GET /api/github/connection", record)),
     ),
   "POST /api/github/connection/refresh": (_request, supervisor) => refreshResponse(supervisor),
   "POST /api/github/authorization": (_request, supervisor) =>
-    authorizationResponse(() => supervisor.startGitHubAuthorization()),
+    authorizationResponse("POST /api/github/authorization", () =>
+      supervisor.startGitHubAuthorization(),
+    ),
   "POST /api/github/authorization/complete": (_request, supervisor) =>
-    authorizationResponse(() => supervisor.completeGitHubAuthorization()),
+    authorizationResponse("POST /api/github/authorization/complete", () =>
+      supervisor.completeGitHubAuthorization(),
+    ),
 };

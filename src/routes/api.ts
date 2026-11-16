@@ -9,6 +9,7 @@ import {
 } from "./generations.js";
 import { CHATGPT_HANDLERS, type ChatGPTApiSupervisor } from "./chatgpt.js";
 import {
+  answer,
   answeringInternalErrors,
   callSupervisor,
   jsonError,
@@ -41,7 +42,9 @@ const HANDLERS: Handlers<ApiSupervisor, Endpoint> = {
   ...WORKSPACE_BACKEND_HANDLERS,
   "POST /api/workspace/reset": (_request, supervisor) =>
     callSupervisor(() => supervisor.resetWorkspace()).pipe(
-      Effect.map((reset) => (reset.ok ? Response.json(reset) : refusal(reset))),
+      Effect.map((reset) =>
+        reset.ok ? answer("POST /api/workspace/reset", reset) : refusal(reset),
+      ),
     ),
 };
 

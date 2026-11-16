@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { BackendSetting } from "../backend-setting.js";
 import { RUN_BUDGET_MINUTES } from "../turn-budget.js";
 import type { Endpoint } from "./endpoints.js";
 
@@ -139,6 +140,89 @@ export const MessageRequest = Schema.Struct({
   budgetMinutes: Schema.optional(Schema.Literals(RUN_BUDGET_MINUTES)),
 });
 
+const GitHubStatus = Schema.Union([
+  Schema.Struct({ state: Schema.Literal("disconnected") }),
+  Schema.Struct({ state: Schema.Literal("tooling-missing") }),
+  Schema.Struct({
+    state: Schema.Literal("connected"),
+    login: Schema.String,
+    source: Schema.Literals(["device-authorization", "configured-token"]),
+  }),
+  Schema.Struct({
+    state: Schema.Literal("reconnect-required"),
+    reason: Schema.Literals(["credential-missing", "credential-rejected"]),
+  }),
+  Schema.Struct({
+    state: Schema.Literal("awaiting-authorization"),
+    verificationUri: Schema.String,
+    userCode: Schema.String,
+    expiresAt: Schema.Number,
+  }),
+]);
+
+const GitHubAnswer = Schema.Struct({
+  ok: Schema.Literal(true),
+  github: Schema.NullOr(GitHubStatus),
+  checkedAt: Schema.NullOr(Schema.Number),
+});
+
+const ChatGPTView = Schema.Struct({
+  connection: Schema.Union([
+    Schema.Struct({ state: Schema.Literal("disconnected") }),
+    Schema.Struct({
+      state: Schema.Literal("connected"),
+      expiresAt: Schema.Number,
+      usageLimit: Schema.optionalKey(
+        Schema.Struct({ reachedAt: Schema.Number, limitedUntil: Schema.NullOr(Schema.Number) }),
+      ),
+    }),
+    Schema.Struct({
+      state: Schema.Literal("needs-reconnect"),
+      reason: Schema.Literals(["refresh-refused", "provider-refused", "missing-scope"]),
+    }),
+  ]),
+  login: Schema.NullOr(
+    Schema.Struct({
+      attemptId: Schema.String,
+      authorizeUrl: Schema.String,
+      expiresAt: Schema.Number,
+    }),
+  ),
+  model: Schema.String,
+});
+
+export type ChatGPTView = typeof ChatGPTView.Type;
+
+const ChatGPTAnswer = Schema.Struct({ ok: Schema.Literal(true), chatgpt: ChatGPTView });
+
+const LoginRefusal = Schema.Struct({
+  ok: Schema.Literal(false),
+  problem: Schema.Struct({
+    code: Schema.Literals([
+      "no-sign-in",
+      "expired",
+      "bad-address",
+      "provider-refused",
+      "wrong-sign-in",
+      "missing-code",
+      "missing-client",
+      "exchange-refused",
+      "exchange-unavailable",
+      "missing-scope",
+    ]),
+  }),
+  chatgpt: ChatGPTView,
+});
+
+const BackendAnswer = Schema.Struct({ ok: Schema.Literal(true), backend: BackendSetting });
+
+export const LoginCompletion = Schema.Struct({
+  attemptId: Schema.String,
+  callbackUrl: Schema.String,
+});
+
+export const BackendChange = Schema.Struct({ backend: BackendSetting });
+
 export const ANSWERS = {
   "GET /api/projects": ProjectsAnswer,
   "POST /api/projects/connect": ConnectAnswer,
@@ -156,7 +240,29 @@ export const ANSWERS = {
   "POST /api/generations/submit": SubmitAnswer,
   "POST /api/generations/activate": ControlAnswer,
   "POST /api/generations/rollback": ControlAnswer,
-} as const satisfies Partial<Readonly<Record<Endpoint, Schema.Top>>>;
+  "GET /api/github/connection": GitHubAnswer,
+  "POST /api/github/connection/refresh": GitHubAnswer,
+  "POST /api/github/authorization": GitHubAnswer,
+  "POST /api/github/authorization/complete": GitHubAnswer,
+  "GET /api/chatgpt/connection": ChatGPTAnswer,
+  "POST /api/chatgpt/login": ChatGPTAnswer,
+  "POST /api/chatgpt/login/complete": Schema.Union([ChatGPTAnswer, LoginRefusal]),
+  "POST /api/chatgpt/disconnect": ChatGPTAnswer,
+  "POST /api/workspace/reset": Schema.Struct({
+    ok: Schema.Literal(true),
+    reset: Schema.Literal("workspace"),
+  }),
+  "GET /api/workspace/backend": BackendAnswer,
+  "POST /api/workspace/backend": BackendAnswer,
+} as const satisfies Readonly<
+  Record<
+    Exclude<
+      Endpoint,
+      "GET /api/projects/:projectId/events" | "GET /api/projects/:projectId/entries"
+    >,
+    Schema.Top
+  >
+>;
 
 export type AnsweredEndpoint = keyof typeof ANSWERS;
 

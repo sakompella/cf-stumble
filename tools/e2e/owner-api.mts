@@ -2,10 +2,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 import * as Schema from "effect/Schema";
 import { ANSWERS, Submitted, type AnswerOf } from "../../src/api/answers.ts";
 
-const ChatGPTConnection = Schema.Struct({
-  chatgpt: Schema.Struct({ connection: Schema.Struct({ state: Schema.String }) }),
-});
-
 const Live = Schema.Struct({
   run: Schema.optional(Schema.Unknown),
   runFailure: Schema.optional(Schema.Struct({ reason: Schema.String })),
@@ -145,8 +141,9 @@ export class Owner {
   }
 
   async chatgptConnection(): Promise<string> {
-    return (await this.#json(this.get("/api/chatgpt/connection"), ChatGPTConnection)).chatgpt
-      .connection.state;
+    return (
+      await this.#json(this.get("/api/chatgpt/connection"), ANSWERS["GET /api/chatgpt/connection"])
+    ).chatgpt.connection.state;
   }
 
   async connect(repositoryUrl: string): Promise<string> {

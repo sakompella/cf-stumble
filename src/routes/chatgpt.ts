@@ -1,11 +1,12 @@
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
+import { LoginCompletion } from "../api/answers.js";
+import { PROBLEM_STATUS } from "../api/problems.js";
 import type { ChatGPTConnectionView, ChatGPTLoginOutcome } from "../chatgpt/index.js";
 import {
+  answer,
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
-  refusal,
   type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
@@ -20,25 +21,33 @@ export type ChatGPTApiSupervisor = {
   readonly disconnectChatGPT: () => Promise<ChatGPTConnectionView>;
 };
 
-const CompleteBody = Schema.Struct({ attemptId: Schema.String, callbackUrl: Schema.String });
-
 const completeResponse = Effect.fnUntraced(function* (
   request: Request,
   supervisor: ChatGPTApiSupervisor,
 ) {
-  const body = yield* decodeRequestBody(request, CompleteBody);
+  const body = yield* decodeRequestBody(request, LoginCompletion);
 
   const outcome = yield* callSupervisor(() =>
     supervisor.completeChatGPTLogin(body.attemptId, body.callbackUrl),
   );
 
-  return outcome.ok ? Response.json(outcome) : refusal(outcome);
+  return answer(
+    "POST /api/chatgpt/login/complete",
+    outcome,
+    outcome.ok ? 200 : PROBLEM_STATUS[outcome.problem.code],
+  );
 }, invalidRequestBody("invalid-chatgpt-request"));
 
 function viewResponse(
+  endpoint:
+    | "GET /api/chatgpt/connection"
+    | "POST /api/chatgpt/login"
+    | "POST /api/chatgpt/disconnect",
   read: () => Promise<ChatGPTConnectionView>,
 ): Effect.Effect<Response, SupervisorCallFailed> {
-  return callSupervisor(read).pipe(Effect.map((chatgpt) => Response.json({ ok: true, chatgpt })));
+  return callSupervisor(read).pipe(
+    Effect.map((chatgpt) => answer(endpoint, { ok: true, chatgpt })),
+  );
 }
 
 export const CHATGPT_HANDLERS: Handlers<
@@ -49,10 +58,10 @@ export const CHATGPT_HANDLERS: Handlers<
   | "POST /api/chatgpt/disconnect"
 > = {
   "GET /api/chatgpt/connection": (_request, supervisor) =>
-    viewResponse(() => supervisor.getChatGPTConnection()),
+    viewResponse("GET /api/chatgpt/connection", () => supervisor.getChatGPTConnection()),
   "POST /api/chatgpt/login": (_request, supervisor) =>
-    viewResponse(() => supervisor.startChatGPTLogin()),
+    viewResponse("POST /api/chatgpt/login", () => supervisor.startChatGPTLogin()),
   "POST /api/chatgpt/login/complete": completeResponse,
   "POST /api/chatgpt/disconnect": (_request, supervisor) =>
-    viewResponse(() => supervisor.disconnectChatGPT()),
+    viewResponse("POST /api/chatgpt/disconnect", () => supervisor.disconnectChatGPT()),
 };

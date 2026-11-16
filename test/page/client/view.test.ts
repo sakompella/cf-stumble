@@ -46,10 +46,10 @@ test("the page renders every stable element id, and none twice", () => {
     shownWithDiagnostics(),
     withChatGPT({
       connection: { state: "disconnected" },
-      login: { attemptId: "a", authorizeUrl: "https://auth.example/authorize" },
+      login: { attemptId: "a", authorizeUrl: "https://auth.example/authorize", expiresAt: 1 },
       model: "gpt",
     }),
-    withChatGPT({ connection: { state: "connected" }, login: null, model: "gpt" }),
+    withChatGPT({ connection: { state: "connected", expiresAt: 1 }, login: null, model: "gpt" }),
     update(
       init().model,
       Message.SucceededFetchStatus({
