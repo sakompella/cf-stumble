@@ -1,7 +1,13 @@
 import * as Array from "effect/Array";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
-import { AuthorizeGitHub, ConnectRepository, FetchProjects, RefreshGitHub } from "./commands.js";
+import {
+  AuthorizeGitHub,
+  ConnectRepository,
+  FetchGitHub,
+  FetchProjects,
+  RefreshGitHub,
+} from "./commands.js";
 import { DisconnectChatGPT, FinishChatGPTLogin, StartChatGPTLogin } from "./commands-chatgpt.js";
 import type { GitHubReport, Model, Project } from "./model.js";
 import { keepingAddress, pendingLogin, withAddress } from "./chatgpt.js";
@@ -89,10 +95,6 @@ function connect(model: Model): UpdateReturn {
   };
 }
 
-function withMaybeGitHub(model: Model, maybeReport: Option.Option<GitHubReport>): Model {
-  return Option.isSome(maybeReport) ? withGitHub(model, maybeReport.value) : model;
-}
-
 export function projectHandlers(
   model: Model,
 ): Handlers<
@@ -140,13 +142,17 @@ export function connectHandlers(
       model: { ...model, connectRepositoryInput: value },
     }),
     ClickedConnect: () => connect(model),
-    SucceededConnect: ({ isAlreadyConnected, maybeGitHub }) =>
-      requestProjects({
-        ...withMaybeGitHub(model, maybeGitHub),
+    SucceededConnect: ({ isAlreadyConnected }) => {
+      const requested = requestProjects({
+        ...model,
         connectStatus: isAlreadyConnected ? "already connected" : "connected",
-      }),
-    RejectedConnect: ({ wording, maybeGitHub }) => ({
-      model: { ...withMaybeGitHub(model, maybeGitHub), connectStatus: wording },
+      });
+
+      return { ...requested, commands: [...(requested.commands ?? []), FetchGitHub()] };
+    },
+    RejectedConnect: ({ wording }) => ({
+      model: { ...model, connectStatus: wording },
+      commands: [FetchGitHub()],
     }),
     FailedConnect: ({ detail }) => ({
       model: {

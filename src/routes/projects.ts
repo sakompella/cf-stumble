@@ -14,6 +14,7 @@ import type {
   GitHubAuthorizationOutcome,
   GitHubAuthorizationProblem,
   GitHubConnectionRecord,
+  GitHubRefreshOutcome,
 } from "../supervisor/projects/index.js";
 
 export type ProjectApiSupervisor = Readonly<{
@@ -23,7 +24,7 @@ export type ProjectApiSupervisor = Readonly<{
     displayName: string | undefined,
   ) => Promise<ConnectRepositoryResult>;
   getGitHubConnection: () => Promise<GitHubConnectionRecord>;
-  refreshGitHubConnection: () => Promise<GitHubConnectionRecord>;
+  refreshGitHubConnection: () => Promise<GitHubRefreshOutcome>;
   startGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
   completeGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
   disconnectProject: (projectId: string) => Promise<DisconnectRepositoryResult>;
@@ -66,6 +67,7 @@ function disconnectResponse(
 }
 
 const AUTHORIZATION_STATUS = {
+  "workspace-unavailable": 503,
   "not-configured": 503,
   "provider-unavailable": 502,
   "no-pending-authorization": 409,
@@ -81,7 +83,14 @@ function refreshResponse(
   supervisor: ProjectApiSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.refreshGitHubConnection()).pipe(
-    Effect.map((record) => recordResponse(record)),
+    Effect.map((outcome) =>
+      outcome.ok
+        ? recordResponse(outcome)
+        : Response.json(
+            { ok: false, problem: { code: outcome.problem } },
+            { status: AUTHORIZATION_STATUS[outcome.problem] },
+          ),
+    ),
   );
 }
 
@@ -102,11 +111,7 @@ const connectResponse = Effect.fnUntraced(function* (
 
   if (!result.ok) {
     return Response.json(
-      {
-        ok: false,
-        problem: result.problem,
-        ...("github" in result && { github: result.github, checkedAt: result.checkedAt }),
-      },
+      { ok: false, problem: result.problem },
       { status: CONNECT_STATUS[result.problem.code] },
     );
   }
@@ -115,8 +120,6 @@ const connectResponse = Effect.fnUntraced(function* (
     ok: true,
     project: result.project,
     alreadyConnected: result.alreadyConnected,
-    github: result.github,
-    checkedAt: result.checkedAt,
   });
 }, invalidRequestBody("invalid-connect-request"));
 

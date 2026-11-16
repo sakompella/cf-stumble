@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { KeyedLock } from "../../keyed-lock.js";
 import { ConnectedProjects } from "./connected-projects.js";
 import { execute, markRemoving, recover } from "./project-lifecycle-commands.js";
-import type { GitHubConnection, GitHubConnectionStatus } from "./github-connection.js";
+import type { GitHubConnection } from "./github-connection.js";
 import {
   canonicalRepositoryUrl,
   parseProjectId,
@@ -51,15 +51,8 @@ export type ConnectRepositoryResult =
       ok: true;
       project: Project;
       alreadyConnected: boolean;
-      github: GitHubConnectionStatus;
-      checkedAt: number | null;
     }>
-  | Readonly<{
-      ok: false;
-      problem: ConnectRepositoryProblem;
-      github: GitHubConnectionStatus;
-      checkedAt: number | null;
-    }>
+  | Readonly<{ ok: false; problem: ConnectRepositoryProblem }>
   | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy"; detail: "" }> }>;
 
 type ConnectionsNamespace = WorkspaceHostNamespace<
@@ -104,19 +97,23 @@ export class ProjectConnections {
       const projectId = canonical === undefined ? undefined : projectIdForRepository(canonical);
 
       if (canonical === undefined || projectId === undefined) {
-        return this.refused(
-          { code: "invalid-repository-url", detail: "" },
-          { state: "disconnected" },
-        );
+        return refused({ code: "invalid-repository-url", detail: "" });
       }
 
       yield* this.sweep(projectId);
 
-      const github = yield* this.github.ensureCredential(now);
+      const credentialRefusal = yield* this.github.ensureCredential(now).pipe(
+        Effect.map(({ state }) =>
+          state === "tooling-missing"
+            ? refused({ code: "tooling-missing", detail: "" })
+            : undefined,
+        ),
+        Effect.catchTag("CredentialWorkspaceUnavailable", (failure) =>
+          Effect.succeed(refused({ code: "workspace-unavailable", detail: failure.detail })),
+        ),
+      );
 
-      if (github.state === "tooling-missing") {
-        return this.refused({ code: "tooling-missing", detail: "" }, github);
-      }
+      if (credentialRefusal !== undefined) return credentialRefusal;
 
       const accessRefusal = yield* checkRepositoryAccess({
         workspaceName: this.workspaceName,
@@ -125,20 +122,17 @@ export class ProjectConnections {
       }).pipe(
         Effect.match({
           onFailure: (failure) =>
-            this.refused({ code: "workspace-unavailable", detail: failure.detail }, github),
+            refused({ code: "workspace-unavailable", detail: failure.detail }),
           onSuccess: (access) =>
             access.granted
               ? undefined
-              : this.refused({ code: "repository-not-accessible", detail: access.detail }, github),
+              : refused({ code: "repository-not-accessible", detail: access.detail }),
         }),
       );
 
       if (accessRefusal !== undefined) return accessRefusal;
 
-      return yield* this.lifecycle.withLock(
-        projectId,
-        this.store(canonical, displayName, github, now),
-      );
+      return yield* this.lifecycle.withLock(projectId, this.store(canonical, displayName, now));
     });
   }
 
@@ -200,7 +194,6 @@ export class ProjectConnections {
   private store(
     repositoryUrl: PublicRepositoryUrl,
     displayName: string | undefined,
-    github: GitHubConnectionStatus,
     now: number,
   ): Effect.Effect<ConnectRepositoryResult> {
     return Effect.gen({ self: this }, function* () {
@@ -213,17 +206,14 @@ export class ProjectConnections {
       const connected = this.projects.connect({ repositoryUrl, displayName }, now);
 
       if (!connected.ok) {
-        return this.refused({ code: connected.problem.code, detail: "" }, github);
+        return refused({ code: connected.problem.code, detail: "" });
       }
 
       if (connected.after === "removing") {
-        return this.refused(
-          {
-            code: "workspace-unavailable",
-            detail: "the earlier clone of this repository is still being removed",
-          },
-          github,
-        );
+        return refused({
+          code: "workspace-unavailable",
+          detail: "the earlier clone of this repository is still being removed",
+        });
       }
 
       const settled = yield* execute(this.effects(), connected.project.id, connected.commands);
@@ -233,14 +223,13 @@ export class ProjectConnections {
 
         logWorkspaceUnavailable(problem);
 
-        return this.refused(
+        return refused(
           problem.code === "repository-too-large"
             ? {
                 code: "repository-too-large",
                 detail: `repository exceeds a workspace size limit: ${problem.detail}`,
               }
             : { code: "provisioning-failed", detail: problem.detail },
-          github,
         );
       }
 
@@ -248,8 +237,6 @@ export class ProjectConnections {
         ok: true,
         project: connected.project,
         alreadyConnected: connected.before === "connected",
-        github,
-        checkedAt: this.github.checkedAt(),
       } as const;
     });
   }
@@ -276,11 +263,8 @@ export class ProjectConnections {
       projectId,
     );
   }
+}
 
-  private refused(
-    problem: ConnectRepositoryProblem,
-    github: GitHubConnectionStatus,
-  ): ConnectRepositoryResult {
-    return { ok: false, problem, github, checkedAt: this.github.checkedAt() };
-  }
+function refused(problem: ConnectRepositoryProblem): ConnectRepositoryResult {
+  return { ok: false, problem };
 }

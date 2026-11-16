@@ -73,7 +73,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
   readonly provisionRequests: ProjectProvisionRequest[] = [];
   readonly names: string[] = [];
 
-  credentialState: GitHubCredentialState = "missing";
+  credentialState: GitHubCredentialState | "unreachable" = "missing";
   login = "octocat";
   repositoryAccess: "granted" | "denied" = "granted";
   cloneExitCode = 0;
@@ -186,7 +186,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
       );
     }
 
-    if (source.includes("gh auth status")) {
+    if (source.includes("gh auth token")) {
       return this.output(
         this.credentialState === "connected" ? `connected ${this.login}` : this.credentialState,
       );

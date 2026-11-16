@@ -95,7 +95,7 @@ export function projectsPayload(projects: readonly ProjectEntry[]): JsonValue {
   return { ok: true, projects: projects.map((project) => projectJson(project)) };
 }
 
-export function connectPayload(scenario: HarnessScenario, alreadyConnected: boolean): JsonValue {
+export function connectPayload(alreadyConnected: boolean): JsonValue {
   return {
     ok: true,
     project: {
@@ -105,8 +105,6 @@ export function connectPayload(scenario: HarnessScenario, alreadyConnected: bool
       connectedAt: 1_760_000_000_000,
     },
     alreadyConnected,
-    github: github(scenario),
-    checkedAt: CHECKED_AT,
   };
 }
 

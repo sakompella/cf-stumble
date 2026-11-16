@@ -5,6 +5,7 @@ import type { CredentialSource, GitHubConnectionStatus } from "./github-connecti
 export type { CredentialSource, GitHubConnectionStatus } from "./github-connection-machine.js";
 
 export type GitHubAuthorizationProblem =
+  | "workspace-unavailable"
   | "not-configured"
   | "provider-unavailable"
   | "no-pending-authorization"
@@ -15,6 +16,10 @@ export type GitHubConnectionRecord = Readonly<{
   github: GitHubConnectionStatus | null;
   checkedAt: number | null;
 }>;
+
+export type GitHubRefreshOutcome =
+  | (Readonly<{ ok: true }> & GitHubConnectionRecord)
+  | Readonly<{ ok: false; problem: "workspace-unavailable" }>;
 
 export type GitHubAuthorizationOutcome =
   | Readonly<{ ok: true; status: GitHubConnectionStatus; checkedAt: number | null }>

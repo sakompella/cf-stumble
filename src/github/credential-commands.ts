@@ -55,16 +55,18 @@ export function credentialStatusSource(): string {
     "  printf 'tooling-missing\\n'",
     "  exit 0",
     "fi",
-    `if ! gh auth status --hostname ${GITHUB_HOSTNAME} >/dev/null 2>&1; then`,
+    `if ! gh auth token --hostname ${GITHUB_HOSTNAME} >/dev/null 2>&1; then`,
     "  printf 'missing\\n'",
     "  exit 0",
     "fi",
-    'login="$(gh api user --jq .login 2>/dev/null || true)"',
-    'if [ -z "$login" ]; then',
-    "  printf 'unusable\\n'",
+    'if login="$(gh api user --jq .login 2>&1)"; then',
+    "  printf 'connected %s\\n' \"$login\"",
     "  exit 0",
     "fi",
-    "printf 'connected %s\\n' \"$login\"",
+    'case "$login" in',
+    "  *'(HTTP 401)'*) printf 'unusable\\n' ;;",
+    "  *) printf 'unreachable\\n' ;;",
+    "esac",
   ].join("\n");
 }
 
@@ -82,23 +84,18 @@ export function repositoryAccessSource(repositoryUrl: string): string {
   ].join("\n");
 }
 
-export function parseCredentialStatus(stdout: string): GitHubCredentialStatus {
-  const [state, login] = stdout.trim().split(/\s+/u);
-
-  if (state === undefined) {
-    return { state: "unusable", login: undefined };
-  }
+export function parseCredentialStatus(stdout: string): GitHubCredentialStatus | undefined {
+  const [state = "", login] = stdout.trim().split(/\s+/u);
 
   switch (state) {
     case "connected":
-      return login !== undefined && LOGIN_PATTERN.test(login)
-        ? { state: "connected", login }
-        : { state: "unusable", login: undefined };
+      return login !== undefined && LOGIN_PATTERN.test(login) ? { state, login } : undefined;
     case "missing":
+    case "unusable":
     case "tooling-missing":
       return { state, login: undefined };
     default:
-      return { state: "unusable", login: undefined };
+      return undefined;
   }
 }
 

@@ -52,6 +52,7 @@ test("a refresh asks the workspace once, and later reads report what it found an
   const connected = { state: "connected", login: "octocat", source: "device-authorization" };
 
   await expect(control.refreshGitHubConnection(NOW)).resolves.toEqual({
+    ok: true,
     github: connected,
     checkedAt: NOW,
   });
@@ -63,17 +64,21 @@ test("a refresh asks the workspace once, and later reads report what it found an
   expect(host.credential).toHaveBeenCalledOnce();
 });
 
-test("a check that could not reach the workspace is the last known state, with its time", async () => {
+test("a check that could not reach the workspace leaves the last verdict and its time standing", async () => {
   const control = env.SUPERVISOR.getByName("record-unavailable");
   const host = workspaceAnswering(CONNECTED);
+  const connected = { state: "connected", login: "octocat", source: "device-authorization" };
   await control.refreshGitHubConnection(NOW);
   host.credential.mockRejectedValue(new Error("the Workspace Host went away"));
 
-  await control.refreshGitHubConnection(NOW + HOUR_MS);
+  await expect(control.refreshGitHubConnection(NOW + HOUR_MS)).resolves.toEqual({
+    ok: false,
+    problem: "workspace-unavailable",
+  });
 
   await expect(control.getGitHubConnection(NOW + 2 * HOUR_MS)).resolves.toEqual({
-    github: { state: "reconnect-required", reason: "workspace-unavailable" },
-    checkedAt: NOW + HOUR_MS,
+    github: connected,
+    checkedAt: NOW,
   });
 });
 
@@ -127,7 +132,7 @@ test.each([
     await expect(supervisor.resetWorkspace()).resolves.toEqual(resetAnswer);
     fake.answer(CONNECTED);
 
-    await expect(refreshing).resolves.toEqual(stored);
+    await expect(refreshing).resolves.toEqual({ ok: true, ...stored });
     expect(supervisor.getGitHubConnection()).toEqual(stored);
   });
 });

@@ -54,7 +54,7 @@ function connect(state: ScenarioState, body: JsonValue): RouteAnswer {
     state.projects = [...state.projects, NEW_PROJECT];
   }
 
-  return { status: 200, payload: connectPayload(state.scenario, already) };
+  return { status: 200, payload: connectPayload(already) };
 }
 
 const JSON_ROUTES: readonly Readonly<{
