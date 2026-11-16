@@ -139,6 +139,28 @@ test("installs the token into the workspace and returns a status without it", as
   expect(JSON.stringify(completed)).not.toContain(FAKE_TOKEN);
 });
 
+test("an install checks the credential in the install command and asks nothing more", async () => {
+  const subject = tenant("authorization-one-check", [
+    deviceReply,
+    { access_token: FAKE_TOKEN, token_type: "bearer" },
+  ]);
+
+  await subject.github((github) => github.startAuthorization(NOW));
+  await subject.github((github) => github.completeAuthorization(NOW + 1_000));
+
+  expect(subject.workspace.commands).toHaveLength(1);
+  expect(subject.workspace.credentialRequests).toHaveLength(1);
+});
+
+test("repairing a missing credential from the configured token costs the check and the install", async () => {
+  const subject = tenantOf("repair-two-commands", githubReplying([]), false, FAKE_TOKEN);
+
+  const repaired = await subject.github((github) => github.ensureCredential(NOW));
+
+  expect(repaired).toEqual({ state: "connected", login: "octocat", source: "configured-token" });
+  expect(subject.workspace.commands).toHaveLength(2);
+});
+
 test("redeems one authorization once, so a replayed completion finds nothing", async () => {
   const subject = tenant("authorization-replay", [deviceReply, { access_token: FAKE_TOKEN }]);
   await subject.github((github) => github.startAuthorization(NOW));

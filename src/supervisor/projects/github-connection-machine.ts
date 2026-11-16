@@ -132,7 +132,7 @@ function observed(
     case "connected":
       return GitHubCredential.cases.connected.make({
         checkedAt: now,
-        login: answer.login ?? recorded?.login ?? "",
+        login: answer.login,
         source: installedBy ?? recorded?.source ?? "device-authorization",
         connectedAt: installedBy === undefined ? (recorded?.connectedAt ?? 0) : now,
       });
@@ -145,7 +145,7 @@ function observed(
     case "unusable":
       return reconnectRequired("credential-rejected", recorded, now);
     default: {
-      const exhaustive: never = answer.state;
+      const exhaustive: never = answer;
 
       return exhaustive;
     }

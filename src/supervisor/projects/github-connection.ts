@@ -10,8 +10,8 @@ import * as Result from "effect/Result";
 import {
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
+  type CredentialNamespace,
   type CredentialWorkspaceUnavailable,
-  type WorkspaceHostNamespace,
 } from "../../workspace/index.js";
 import {
   AuthorizationEvent,
@@ -49,7 +49,7 @@ export interface GitHubConnectionEnvironment {
 interface GitHubConnectionInput {
   readonly store: GitHubConnectionStore;
   readonly workspaceName: string;
-  readonly namespace: WorkspaceHostNamespace<"credential">;
+  readonly namespace: CredentialNamespace;
   readonly environment: GitHubConnectionEnvironment;
 }
 
@@ -58,7 +58,7 @@ const UNAVAILABLE = { ok: false, problem: "workspace-unavailable" } as const;
 export class GitHubConnection {
   private readonly store: GitHubConnectionStore;
   private readonly workspaceName: string;
-  private readonly namespace: WorkspaceHostNamespace<"credential">;
+  private readonly namespace: CredentialNamespace;
   private readonly environment: GitHubConnectionEnvironment;
 
   constructor(input: GitHubConnectionInput) {
@@ -253,50 +253,23 @@ export class GitHubConnection {
     return Effect.gen({ self: this }, function* () {
       const revision = this.store.revision();
 
-      const installed = yield* installWorkspaceCredential({
+      const event = yield* installWorkspaceCredential({
         workspaceName: this.workspaceName,
         namespace: this.namespace,
         token,
-      }).pipe(Effect.catchTag("CredentialInstallFailed", () => Effect.succeed("refused" as const)));
+      }).pipe(
+        Effect.map((answer) => CredentialEvent.Observed({ answer, installedBy: source, now })),
+        Effect.catchTag("CredentialInstallFailed", () =>
+          Effect.succeed(CredentialEvent.InstallRefused({ now })),
+        ),
+      );
 
-      const credential = yield* this.afterInstall(installed, revision, source, now);
-
-      const status = checkedStatus(credential);
+      const status = checkedStatus(this.record(revision, event));
 
       logCredentialInstall(source, status);
 
       return status;
     });
-  }
-
-  private afterInstall(
-    installed: "installed" | "tooling-missing" | "refused",
-    revision: number,
-    source: CredentialSource,
-    now: number,
-  ): Effect.Effect<GitHubCredential, CredentialWorkspaceUnavailable> {
-    switch (installed) {
-      case "refused":
-        return Effect.succeed(this.record(revision, CredentialEvent.InstallRefused({ now })));
-      case "tooling-missing":
-        return Effect.succeed(
-          this.record(
-            revision,
-            CredentialEvent.Observed({
-              answer: { state: "tooling-missing", login: undefined },
-              installedBy: undefined,
-              now,
-            }),
-          ),
-        );
-      case "installed":
-        return this.observed(revision, now, source);
-      default: {
-        const exhaustive: never = installed;
-
-        return exhaustive;
-      }
-    }
   }
 
   private observed(

@@ -48,45 +48,6 @@ function scriptOf(command: string | readonly string[], options: ShellExecOptions
   return `exec ${[...env, ...argv].map((part) => shellQuote(part)).join(" ")}`;
 }
 
-function isSavedPaths(value: unknown): value is readonly string[] | undefined {
-  if (value === undefined) return true;
-
-  if (!Array.isArray(value)) return false;
-
-  return value.every((path): path is string => typeof path === "string");
-}
-
-function isExecEvent(value: unknown): value is ExecEvent {
-  if (typeof value !== "object" || value === null) return false;
-
-  if (!("seq" in value) || typeof value.seq !== "number" || !("kind" in value)) return false;
-
-  if (value.kind === "stdout" || value.kind === "stderr") {
-    return "data" in value && typeof value.data === "string";
-  }
-
-  if (value.kind !== "terminal" || !("outcome" in value)) return false;
-
-  if (value.outcome === "exited") {
-    const saved = "fullOutputPaths" in value ? value.fullOutputPaths : undefined;
-
-    return "exitCode" in value && typeof value.exitCode === "number" && isSavedPaths(saved);
-  }
-
-  if (value.outcome === "failed") {
-    const error = "error" in value ? value.error : undefined;
-
-    return (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      typeof error.code === "string"
-    );
-  }
-
-  return value.outcome === "killed" || value.outcome === "timed-out";
-}
-
 async function nextEvent(frames: NdjsonFrameReader): Promise<ExecEvent | ExecutionError> {
   const frame = await frames.next();
 
@@ -94,11 +55,13 @@ async function nextEvent(frames: NdjsonFrameReader): Promise<ExecEvent | Executi
     return new ExecutionError("unknown", "the exec stream ended without a terminal event");
   }
 
+  if (frame.kind === "malformed") {
+    return new ExecutionError("unknown", "the capability sent a malformed exec event");
+  }
+
   if (frame.kind !== "value") return new ExecutionError("unknown", "the exec stream broke");
 
-  return isExecEvent(frame.value)
-    ? frame.value
-    : new ExecutionError("unknown", "the capability sent a malformed exec event");
+  return frame.value;
 }
 
 function fullOutputPath(terminal: Terminal): string | undefined {

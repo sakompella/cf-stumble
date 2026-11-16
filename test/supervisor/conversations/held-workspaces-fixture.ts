@@ -31,7 +31,13 @@ export function withHeldWorkspaces(
     const github = new GitHubConnection({
       store: new GitHubConnectionStore(state.storage),
       workspaceName: name,
-      namespace: { getByName: () => ({ credential: () => Promise.reject(new Error("none")) }) },
+      namespace: {
+        getByName: () => ({
+          installCredential: () => Promise.reject(new Error("none")),
+          credentialStatus: () => Promise.reject(new Error("none")),
+          checkRepositoryAccess: () => Promise.reject(new Error("none")),
+        }),
+      },
       environment: { clientId: undefined, fallbackToken: undefined, fetcher: fetch },
     });
 

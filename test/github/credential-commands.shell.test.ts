@@ -76,6 +76,9 @@ case "$1 $2" in
   "auth setup-git")
     printf '[credential "https://github.com"]\n\thelper = !gh auth git-credential\n' >> "$GIT_CONFIG_GLOBAL"
     ;;
+  "api user")
+    printf 'octocat\n'
+    ;;
 esac
 exit 0
 `,
@@ -92,7 +95,7 @@ exit 0
   });
 
   expect(ran.status, ran.stderr).toBe(0);
-  expect(ran.stdout).toBe("installed\n");
+  expect(ran.stdout).toBe("connected octocat\n");
 
   const helper = spawnSync(
     devShellTool("git"),
