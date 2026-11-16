@@ -1,19 +1,11 @@
 import * as Effect from "effect/Effect";
+import type { ConversationProblemCode } from "../../api/problems.js";
 
 const MAX_MESSAGE_BYTES = 100_000;
 
 const MAX_REQUEST_ID_LENGTH = 128;
 
-export type ConversationProblem = Readonly<{
-  code:
-    | "invalid-project-id"
-    | "unknown-project-id"
-    | "invalid-message"
-    | "no-active-generation"
-    | "mount-failed"
-    | "generation-failed"
-    | "workspace-busy";
-}>;
+export type ConversationProblem = Readonly<{ code: ConversationProblemCode }>;
 
 export type ConversationResult<T> =
   | (Readonly<{ ok: true }> & T)

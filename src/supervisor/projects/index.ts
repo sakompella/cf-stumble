@@ -2,7 +2,6 @@ export { GitHubConnection, type GitHubConnectionEnvironment } from "./github-con
 
 export type {
   GitHubAuthorizationOutcome,
-  GitHubAuthorizationProblem,
   GitHubConnectionRecord,
   GitHubRefreshOutcome,
 } from "./github-connection-status.js";

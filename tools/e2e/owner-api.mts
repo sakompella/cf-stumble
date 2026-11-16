@@ -1,27 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import * as Schema from "effect/Schema";
-
-const Generation = Schema.Struct({ label: Schema.Number, harnessCommit: Schema.String });
-
-const Status = Schema.Struct({
-  activeGeneration: Schema.Struct({ generation: Schema.NullOr(Generation), epoch: Schema.Number }),
-});
-
-const Submitted = Schema.Struct({
-  outcome: Schema.Struct({ generation: Generation }),
-  preparation: Schema.Union([
-    Schema.Struct({ ok: Schema.Literal(true) }),
-    Schema.Struct({ ok: Schema.Literal(false), problem: Schema.Struct({ code: Schema.String }) }),
-  ]),
-});
-
-const ChatGPTConnection = Schema.Struct({
-  chatgpt: Schema.Struct({ connection: Schema.Struct({ state: Schema.String }) }),
-});
-
-const Disconnected = Schema.Struct({ workspace: Schema.String });
-
-const Connected = Schema.Struct({ project: Schema.Struct({ id: Schema.String }) });
+import { ANSWERS, Submitted, type AnswerOf } from "../../src/api/answers.ts";
 
 const Live = Schema.Struct({
   run: Schema.optional(Schema.Unknown),
@@ -55,7 +34,7 @@ const ToolResult = Schema.Struct({
 
 const Entries = Schema.Struct({ items: Schema.Array(Entry) });
 
-export type ActiveGeneration = typeof Status.Type.activeGeneration;
+export type ActiveGeneration = AnswerOf<"GET /api/status">["activeGeneration"];
 
 export type Settled = Readonly<{ failure: string | undefined }>;
 
@@ -131,7 +110,7 @@ export class Owner {
   }
 
   async status(): Promise<ActiveGeneration> {
-    return (await this.#json(this.get("/api/status"), Status)).activeGeneration;
+    return (await this.#json(this.get("/api/status"), ANSWERS["GET /api/status"])).activeGeneration;
   }
 
   async submit(harnessCommit: string): Promise<number> {
@@ -162,13 +141,18 @@ export class Owner {
   }
 
   async chatgptConnection(): Promise<string> {
-    return (await this.#json(this.get("/api/chatgpt/connection"), ChatGPTConnection)).chatgpt
-      .connection.state;
+    return (
+      await this.#json(this.get("/api/chatgpt/connection"), ANSWERS["GET /api/chatgpt/connection"])
+    ).chatgpt.connection.state;
   }
 
   async connect(repositoryUrl: string): Promise<string> {
-    return (await this.#json(this.post("/api/projects/connect", { repositoryUrl }), Connected))
-      .project.id;
+    return (
+      await this.#json(
+        this.post("/api/projects/connect", { repositoryUrl }),
+        ANSWERS["POST /api/projects/connect"],
+      )
+    ).project.id;
   }
 
   async disconnect(projectId: string): Promise<void> {
@@ -177,7 +161,9 @@ export class Owner {
 
     if (!response.ok) throw new Error(`disconnect ${projectId} answered ${text}`);
 
-    const { workspace } = Schema.decodeSync(Schema.fromJsonString(Disconnected))(text);
+    const { workspace } = Schema.decodeSync(
+      Schema.fromJsonString(ANSWERS["POST /api/projects/:projectId/disconnect"]),
+    )(text);
 
     if (workspace !== "removed") {
       throw new Error(`disconnect ${projectId} left its workspace files: ${workspace}`);

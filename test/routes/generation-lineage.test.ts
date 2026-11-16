@@ -9,7 +9,7 @@ import {
   submitCandidate,
 } from "../supervisor/helpers.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
-import { ownerApiResponse } from "./helpers.js";
+import { apiResponse } from "./helpers.js";
 
 const OTHER_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
@@ -22,7 +22,7 @@ const DROPS_ACTIVE: HarnessLineage = {
 type OwnerStatus = Readonly<{ activeGeneration: { epoch: number }; mainAhead: number | null }>;
 
 async function status(stub: DurableObjectStub<Supervisor>): Promise<OwnerStatus> {
-  const response = await ownerApiResponse(new Request("https://cf-stumble.test/api/status"), stub);
+  const response = await apiResponse(new Request("https://cf-stumble.test/api/status"), stub);
 
   return response.json<OwnerStatus>();
 }
@@ -34,7 +34,7 @@ async function activate(
 ): Promise<Response> {
   const { activeGeneration } = await status(stub);
 
-  return ownerApiResponse(
+  return apiResponse(
     new Request("https://cf-stumble.test/api/generations/activate", {
       method: "POST",
       body: JSON.stringify({ label, observedEpoch: activeGeneration.epoch, force }),

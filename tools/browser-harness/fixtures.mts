@@ -1,5 +1,7 @@
+import type { ANSWERS, AnsweredEndpoint } from "../../src/api/answers.js";
 import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
-import type { JsonValue } from "../json.mjs";
+
+type Encoded<E extends AnsweredEndpoint> = (typeof ANSWERS)[E]["Encoded"];
 
 export type HarnessScenario =
   | "ready"
@@ -33,12 +35,7 @@ export function projectLocation(projectId: string): string {
   return CONNECTED_PROJECT_URL;
 }
 
-export type ProjectEntry = Readonly<{
-  kind: "repository" | "harness";
-  id: string;
-  displayName: string;
-  repositoryUrl?: string;
-}>;
+export type ProjectEntry = Encoded<"GET /api/projects">["projects"][number];
 
 export const BASELINE_PROJECTS: readonly ProjectEntry[] = [
   {
@@ -60,10 +57,10 @@ export const NEW_PROJECT: ProjectEntry = {
 const CONNECTED_GITHUB = {
   state: "connected",
   login: "octocat",
-  source: "owner-authorization",
+  source: "device-authorization",
 } as const;
 
-export function github(scenario: HarnessScenario): JsonValue {
+export function github(scenario: HarnessScenario): Encoded<"GET /api/github/connection">["github"] {
   if (scenario === "github-disconnected") {
     return { state: "disconnected" };
   }
@@ -80,29 +77,17 @@ export function github(scenario: HarnessScenario): JsonValue {
   return CONNECTED_GITHUB;
 }
 
-function projectJson(project: ProjectEntry): JsonValue {
-  return project.repositoryUrl === undefined
-    ? { kind: project.kind, id: project.id, displayName: project.displayName }
-    : {
-        kind: project.kind,
-        id: project.id,
-        displayName: project.displayName,
-        repositoryUrl: project.repositoryUrl,
-      };
+export function projectsPayload(projects: readonly ProjectEntry[]): Encoded<"GET /api/projects"> {
+  return { ok: true, projects };
 }
 
-export function projectsPayload(projects: readonly ProjectEntry[]): JsonValue {
-  return { ok: true, projects: projects.map((project) => projectJson(project)) };
-}
-
-export function connectPayload(alreadyConnected: boolean): JsonValue {
+export function connectPayload(alreadyConnected: boolean): Encoded<"POST /api/projects/connect"> {
   return {
     ok: true,
     project: {
-      id: NEW_PROJECT.id,
-      displayName: NEW_PROJECT.displayName,
+      id: CONNECTED_PROJECT_ID,
+      displayName: "new-repo",
       repositoryUrl: CONNECTED_PROJECT_URL,
-      connectedAt: 1_760_000_000_000,
     },
     alreadyConnected,
   };
@@ -112,11 +97,13 @@ export const CHECKED_AT = new Date(2026, 9, 15, 14, 32).getTime();
 
 export const CHECKED_WORDING = "2026-10-15 14:32";
 
-export function refreshPayload(scenario: HarnessScenario): JsonValue {
+export function refreshPayload(
+  scenario: HarnessScenario,
+): Encoded<"POST /api/github/connection/refresh"> {
   return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }
 
-export const STATUS_PAYLOAD: JsonValue = {
+export const STATUS_PAYLOAD: Encoded<"GET /api/status"> = {
   activeGeneration: {
     generation: { label: 1, harnessCommit: "abc123", status: "ready" },
     epoch: 3,
@@ -124,7 +111,7 @@ export const STATUS_PAYLOAD: JsonValue = {
   mainAhead: 2,
 };
 
-export const CHATGPT_PAYLOAD: JsonValue = {
+export const CHATGPT_PAYLOAD: Encoded<"GET /api/chatgpt/connection"> = {
   ok: true,
   chatgpt: { connection: { state: "disconnected" }, login: null, model: "gpt-6.1-sol" },
 };

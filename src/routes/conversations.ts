@@ -1,15 +1,17 @@
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
+import { MessageRequest, type AnswerOf } from "../api/answers.js";
 import { type EntriesRequest, eventsFrom, parseEntriesRequest } from "../entries-request.js";
 import {
+  answer,
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
   jsonError,
+  refusal,
+  type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
-import { projectIdFromPath, type ProjectRouteSuffix } from "./route-pattern.js";
-import { DEFAULT_RUN_BUDGET_MINUTES, RUN_BUDGET_MINUTES } from "../turn-budget.js";
+import { DEFAULT_RUN_BUDGET_MINUTES } from "../turn-budget.js";
 import type {
   ConversationProblem,
   ConversationResult,
@@ -36,24 +38,8 @@ export type ConversationApiSupervisor = Readonly<{
   ) => Promise<ConversationResult<{ conversationId: string }>>;
 }>;
 
-const PROBLEM_STATUS = {
-  "invalid-project-id": 400,
-  "invalid-message": 400,
-  "unknown-project-id": 404,
-  "workspace-busy": 409,
-  "no-active-generation": 503,
-  "mount-failed": 503,
-  "generation-failed": 503,
-} as const satisfies Record<ConversationProblem["code"], number>;
-
-const MessageBody = Schema.Struct({
-  content: Schema.String,
-  requestId: Schema.String,
-  budgetMinutes: Schema.optional(Schema.Literals(RUN_BUDGET_MINUTES)),
-});
-
 function problemResponse(problem: ConversationProblem): Response {
-  return Response.json({ ok: false, problem }, { status: PROBLEM_STATUS[problem.code] });
+  return refusal({ ok: false, problem });
 }
 
 function noStoreResponse(body: ReadableStream<Uint8Array> | string, contentType: string): Response {
@@ -74,13 +60,19 @@ function entriesPageResponse(page: string): Response {
   return noStoreResponse(page, "application/json; charset=utf-8");
 }
 
-function answer<T extends object>(
-  call: () => Promise<ConversationResult<T>>,
+type ConversationEndpoint =
+  | "POST /api/projects/:projectId/messages"
+  | "POST /api/projects/:projectId/abort"
+  | "POST /api/projects/:projectId/thread/fresh";
+
+function answered<E extends ConversationEndpoint>(
+  endpoint: E,
+  call: () => Promise<ConversationResult<AnswerOf<E>>>,
   status = 200,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(call).pipe(
     Effect.map((result) =>
-      result.ok ? Response.json(result, { status }) : problemResponse(result.problem),
+      result.ok ? answer(endpoint, result, status) : problemResponse(result.problem),
     ),
   );
 }
@@ -94,67 +86,63 @@ const messageResponse = Effect.fnUntraced(function* (
     content,
     requestId,
     budgetMinutes = DEFAULT_RUN_BUDGET_MINUTES,
-  } = yield* decodeRequestBody(request, MessageBody);
+  } = yield* decodeRequestBody(request, MessageRequest);
 
-  return yield* answer(
+  return yield* answered(
+    "POST /api/projects/:projectId/messages",
     () => supervisor.submitProjectMessage(projectId, content, requestId, budgetMinutes),
     202,
   );
 }, invalidRequestBody("invalid-message-request"));
 
-function routeFor(
+function eventsResponseFor(
   request: Request,
-  method: "GET" | "POST",
-  suffix: ProjectRouteSuffix,
-): string | undefined {
-  return request.method === method
-    ? projectIdFromPath(new URL(request.url).pathname, suffix)
-    : undefined;
-}
-
-export function routeConversationRequest(
-  request: Request,
+  projectId: string,
   supervisor: ConversationApiSupervisor,
-): Effect.Effect<Response, SupervisorCallFailed> | undefined {
-  const messages = routeFor(request, "POST", "/messages");
+): Effect.Effect<Response, SupervisorCallFailed> {
+  const from = eventsFrom(new URL(request.url).searchParams);
 
-  if (messages !== undefined) return messageResponse(request, supervisor, messages);
+  if (from === null) return Effect.succeed(jsonError("invalid-events-request"));
 
-  const events = routeFor(request, "GET", "/events");
-
-  if (events !== undefined) {
-    const from = eventsFrom(new URL(request.url).searchParams);
-
-    if (from === null) return Effect.succeed(jsonError(400, "invalid-events-request"));
-
-    return callSupervisor(() => supervisor.projectEvents(events, from)).pipe(
-      Effect.map((result) =>
-        result.ok ? eventsResponse(result.events) : problemResponse(result.problem),
-      ),
-    );
-  }
-
-  const entries = routeFor(request, "GET", "/entries");
-
-  if (entries !== undefined) {
-    const query = parseEntriesRequest(new URL(request.url).searchParams);
-
-    if (query === undefined) return Effect.succeed(jsonError(400, "invalid-entries-request"));
-
-    return callSupervisor(() => supervisor.projectEntries(entries, query)).pipe(
-      Effect.map((result) =>
-        result.ok ? entriesPageResponse(result.page) : problemResponse(result.problem),
-      ),
-    );
-  }
-
-  const abort = routeFor(request, "POST", "/abort");
-
-  if (abort !== undefined) return answer(() => supervisor.abortProjectRun(abort));
-
-  const fresh = routeFor(request, "POST", "/thread/fresh");
-
-  if (fresh !== undefined) return answer(() => supervisor.freshProjectConversation(fresh));
-
-  return undefined;
+  return callSupervisor(() => supervisor.projectEvents(projectId, from)).pipe(
+    Effect.map((result) =>
+      result.ok ? eventsResponse(result.events) : problemResponse(result.problem),
+    ),
+  );
 }
+
+function entriesResponseFor(
+  request: Request,
+  projectId: string,
+  supervisor: ConversationApiSupervisor,
+): Effect.Effect<Response, SupervisorCallFailed> {
+  const query = parseEntriesRequest(new URL(request.url).searchParams);
+
+  if (query === undefined) return Effect.succeed(jsonError("invalid-entries-request"));
+
+  return callSupervisor(() => supervisor.projectEntries(projectId, query)).pipe(
+    Effect.map((result) =>
+      result.ok ? entriesPageResponse(result.page) : problemResponse(result.problem),
+    ),
+  );
+}
+
+export const CONVERSATION_HANDLERS: Handlers<
+  ConversationApiSupervisor,
+  | "POST /api/projects/:projectId/messages"
+  | "GET /api/projects/:projectId/events"
+  | "GET /api/projects/:projectId/entries"
+  | "POST /api/projects/:projectId/abort"
+  | "POST /api/projects/:projectId/thread/fresh"
+> = {
+  "POST /api/projects/:projectId/messages": (request, projectId, supervisor) =>
+    messageResponse(request, supervisor, projectId),
+  "GET /api/projects/:projectId/events": eventsResponseFor,
+  "GET /api/projects/:projectId/entries": entriesResponseFor,
+  "POST /api/projects/:projectId/abort": (_request, projectId, supervisor) =>
+    answered("POST /api/projects/:projectId/abort", () => supervisor.abortProjectRun(projectId)),
+  "POST /api/projects/:projectId/thread/fresh": (_request, projectId, supervisor) =>
+    answered("POST /api/projects/:projectId/thread/fresh", () =>
+      supervisor.freshProjectConversation(projectId),
+    ),
+};

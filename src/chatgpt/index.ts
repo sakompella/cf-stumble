@@ -3,7 +3,6 @@ export { ChatGPTConnection } from "./connection.js";
 export type {
   ChatGPTAccess,
   ChatGPTConnectionView,
-  ChatGPTLoginFailure,
   ChatGPTLoginOutcome,
 } from "./connection-view.js";
 

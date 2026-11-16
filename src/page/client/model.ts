@@ -43,6 +43,13 @@ export const ControlKind = Schema.Literals(["activate", "rollback"]);
 
 export type ControlKind = typeof ControlKind.Type;
 
+export const AuthorizationEndpoint = Schema.Literals([
+  "POST /api/github/authorization",
+  "POST /api/github/authorization/complete",
+]);
+
+export type AuthorizationEndpoint = typeof AuthorizationEndpoint.Type;
+
 const ActiveGeneration = Schema.Struct({
   label: Schema.Number,
   harnessCommit: Schema.String,

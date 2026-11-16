@@ -5,7 +5,8 @@ import { subscriptions } from "../../../src/page/client/events-stream.js";
 import { Message } from "../../../src/page/client/message.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { openedTranscript } from "./transcript-resource.js";
-import { routeClass, routePattern } from "../../../src/routes/route-pattern.js";
+import { routeClass } from "../../../src/api/endpoints.js";
+import { routePattern } from "../../../src/routes/route-pattern.js";
 
 test("loading the page asks only for routes the Supervisor answers without the workspace container", async () => {
   const asked: string[] = [];

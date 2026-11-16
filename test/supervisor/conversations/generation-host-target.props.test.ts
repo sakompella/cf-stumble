@@ -3,7 +3,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 import type { GenerationOperations } from "../../../src/generation-requests.js";
 import { GenerationHostTarget } from "../../../src/supervisor/conversations/host-target.js";
-import { controlRequest, ownerApiResponse, ownerApiSupervisor } from "../../routes/helpers.js";
+import { controlRequest, apiResponse, apiSupervisor } from "../../routes/helpers.js";
 
 const notCalled = () => Promise.reject(new Error("not this operation"));
 
@@ -62,9 +62,9 @@ test("the generation host admits exactly the control commands the HTTP routes ad
     const viaHttp = recording();
     const viaRpc = recording();
 
-    await ownerApiResponse(
+    await apiResponse(
       controlRequest(`/api/generations/${commandKind}`, JSON.stringify(body)),
-      ownerApiSupervisor({
+      apiSupervisor({
         controlGeneration: (command) =>
           Promise.resolve(viaHttp.operations.controlGeneration(command)),
       }),
@@ -87,9 +87,9 @@ test("the generation host admits exactly the commits the HTTP submission admits,
     const viaHttp = recording();
     const viaRpc = recording();
 
-    await ownerApiResponse(
+    await apiResponse(
       controlRequest("/api/generations/submit", JSON.stringify({ harnessCommit })),
-      ownerApiSupervisor({
+      apiSupervisor({
         submitGeneration: (submitted) =>
           Promise.resolve(viaHttp.operations.submitGeneration(submitted)),
       }),

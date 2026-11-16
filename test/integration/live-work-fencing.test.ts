@@ -48,7 +48,7 @@ export class MainFacet extends DurableObject {
       await this.host.arm({ active: false });
     })();
 
-    return "submission";
+    return 1;
   }
 
   async events(conversationId) {

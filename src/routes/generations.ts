@@ -10,17 +10,19 @@ import {
 } from "../generation-requests.js";
 import {
   type ActivationCommand,
-  type ControlProblemCode,
   type GenerationControlResult,
   type GenerationLabel,
   type Submission,
 } from "../supervisor/generations.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
 import {
+  answer,
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
   jsonError,
+  refusal,
+  type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
 
@@ -28,11 +30,11 @@ export type GenerationStatusSupervisor = {
   readonly getStatus: () => Promise<OwnerStatus>;
 };
 
-export function statusResponse(
+function statusResponse(
   supervisor: GenerationStatusSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.getStatus()).pipe(
-    Effect.map((status) => Response.json(status)),
+    Effect.map((status) => answer("GET /api/status", status)),
   );
 }
 
@@ -53,31 +55,9 @@ export type GenerationSubmissionSupervisor = {
   readonly prepareGeneration: (label: GenerationLabel) => Promise<StartupCheckResult>;
 };
 
-export type GenerationSubmissionResult = Readonly<{
-  ok: true;
-  outcome: Submission;
-  preparation: StartupCheckResult;
-}>;
-
-const CONTROL_REFUSAL_STATUS = {
-  "unknown-generation": 404,
-  "stale-epoch": 409,
-  "not-ready": 409,
-  "not-previously-active": 409,
-  "facet-compatibility-mismatch": 409,
-  "run-active": 409,
-  "drops-active-commit": 409,
-} as const satisfies Record<ControlProblemCode, number>;
-
-function refusalResponse(
-  refusal: Extract<GenerationControlResult, { readonly ok: false }>,
-): Response {
-  return Response.json(refusal, { status: CONTROL_REFUSAL_STATUS[refusal.problem.code] });
-}
-
 type ControlCommandKind = "activate" | "rollback";
 
-export const handleGenerationControl = Effect.fnUntraced(
+const handleGenerationControl = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {
     const body = yield* decodeRequestBody(request, OwnerControlTarget);
 
@@ -88,14 +68,18 @@ export const handleGenerationControl = Effect.fnUntraced(
       ),
     );
 
-    return result.ok ? Response.json(result) : refusalResponse(result);
+    return result.ok
+      ? answer(
+          kind === "activate" ? "POST /api/generations/activate" : "POST /api/generations/rollback",
+          result,
+        )
+      : refusal(result);
   },
   (handled, _request, _supervisor, kind) =>
     handled.pipe(
       Effect.catchTag("InvalidRequestBody", () =>
         Effect.succeed(
           jsonError(
-            400,
             kind === "activate" ? "invalid-activation-request" : "invalid-rollback-request",
           ),
         ),
@@ -103,7 +87,7 @@ export const handleGenerationControl = Effect.fnUntraced(
     ),
 );
 
-export const handleGenerationSubmission = Effect.fnUntraced(function* (
+const handleGenerationSubmission = Effect.fnUntraced(function* (
   request: Request,
   supervisor: GenerationSubmissionSupervisor,
 ) {
@@ -117,11 +101,12 @@ export const handleGenerationSubmission = Effect.fnUntraced(function* (
 
   if (Result.isFailure(preparation)) {
     logRedactedCause(
-      "owner-api POST /api/generations/submit: preparation-failed",
+      "api POST /api/generations/submit: preparation-failed",
       preparation.failure.cause,
     );
 
-    return Response.json(
+    return answer(
+      "POST /api/generations/submit",
       {
         ok: false,
         error: { code: "preparation-failed" },
@@ -130,15 +115,28 @@ export const handleGenerationSubmission = Effect.fnUntraced(function* (
           harnessCommit: submitted.generation.harnessCommit,
         },
       },
-      { status: 500 },
+      500,
     );
   }
 
-  const result: GenerationSubmissionResult = {
+  return answer("POST /api/generations/submit", {
     ok: true,
     outcome: submitted,
     preparation: preparation.success,
-  };
-
-  return Response.json(result);
+  });
 }, invalidRequestBody("invalid-submission-request"));
+
+export const GENERATION_HANDLERS: Handlers<
+  GenerationStatusSupervisor & GenerationControlSupervisor & GenerationSubmissionSupervisor,
+  | "GET /api/status"
+  | "POST /api/generations/submit"
+  | "POST /api/generations/activate"
+  | "POST /api/generations/rollback"
+> = {
+  "GET /api/status": (_request, supervisor) => statusResponse(supervisor),
+  "POST /api/generations/submit": handleGenerationSubmission,
+  "POST /api/generations/activate": (request, supervisor) =>
+    handleGenerationControl(request, supervisor, "activate"),
+  "POST /api/generations/rollback": (request, supervisor) =>
+    handleGenerationControl(request, supervisor, "rollback"),
+};

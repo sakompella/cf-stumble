@@ -177,9 +177,9 @@ export function gitHubHandlers(
   | "FailedGitHub"
 > {
   return {
-    ClickedAuthorize: ({ path }) => ({
+    ClickedAuthorize: ({ endpoint }) => ({
       model: askingGitHub(model),
-      commands: [AuthorizeGitHub({ path })],
+      commands: [AuthorizeGitHub({ endpoint })],
     }),
     ClickedRefreshGitHub: () => ({ model: askingGitHub(model), commands: [RefreshGitHub()] }),
     SucceededGitHub: ({ github }) => ({ model: withGitHub(model, github) }),

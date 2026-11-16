@@ -5,7 +5,11 @@ import type { ChatGPT } from "../../../src/page/client/chatgpt.js";
 import { init } from "../../../src/page/client/update.js";
 import { findById, htmlOf, type Rendered } from "./rendered.js";
 
-const LOGIN = { attemptId: "attempt-1", authorizeUrl: "https://auth.example/authorize?state=s" };
+const LOGIN = {
+  attemptId: "attempt-1",
+  authorizeUrl: "https://auth.example/authorize?state=s",
+  expiresAt: 1,
+};
 
 const DISCONNECTED = chatGPTConnection({
   connection: { state: "disconnected" },

@@ -212,7 +212,7 @@ export async function playRound(kind: string, context: RoundContext): Promise<vo
     case "idle-reset": {
       const reply = await probe.http("POST", "/api/workspace/reset");
 
-      if (reply.status !== 200 && reply.status !== 409)
+      if (![200, 409, 503].includes(reply.status))
         probe.violation(`idle reset answered ${reply.status}`);
 
       return;

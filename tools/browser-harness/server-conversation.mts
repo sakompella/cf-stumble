@@ -1,14 +1,15 @@
 import type { ServerResponse } from "node:http";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
-import type { ConversationApiSupervisor } from "../../src/routes/conversations.js";
-import type { ConversationProblem } from "../../src/supervisor/conversations/conversation-result.js";
+import type { ANSWERS } from "../../src/api/answers.js";
+import type { ConversationProblemCode } from "../../src/api/problems.js";
 import { eventsFrom, parseEntriesRequest } from "../../src/entries-request.js";
 import { sendJson } from "./server-routes.mjs";
 import type { RequestRecord, ScenarioState } from "./server-state.mjs";
 
-type SupervisorAnswer<Call extends keyof ConversationApiSupervisor> = Awaited<
-  ReturnType<ConversationApiSupervisor[Call]>
->;
+type ConversationEndpoint =
+  | "POST /api/projects/:projectId/messages"
+  | "POST /api/projects/:projectId/abort"
+  | "POST /api/projects/:projectId/thread/fresh";
 
 const PROJECT_ROUTE = /^\/api\/projects\/([^/]+)\/(.+)$/u;
 
@@ -107,7 +108,7 @@ function refuse(
   res: ServerResponse,
   record: RequestRecord,
   status: number,
-  code: ConversationProblem["code"],
+  code: ConversationProblemCode,
 ): void {
   record.status = status;
   sendJson(res, status, { ok: false, problem: { code } });
@@ -117,7 +118,7 @@ function answer(
   res: ServerResponse,
   record: RequestRecord,
   status: number,
-  result: SupervisorAnswer<"abortProjectRun" | "freshProjectConversation" | "submitProjectMessage">,
+  result: (typeof ANSWERS)[ConversationEndpoint]["Encoded"],
 ): void {
   record.status = status;
   sendJson(res, status, result);
@@ -160,7 +161,10 @@ export async function serveConversation(
 
   if (action === "thread/fresh") {
     const conversationId = await state.conversations.fresh(projectId);
-    answer(res, record, 200, { ok: true, conversationId: String(conversationId) });
+    answer(res, record, 200, {
+      ok: true,
+      conversationId: String(conversationId),
+    });
 
     return;
   }

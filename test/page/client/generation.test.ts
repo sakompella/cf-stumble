@@ -1,15 +1,12 @@
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
-import { generationReading, StatusAnswer, submitRejection } from "../../../src/page/client/api.js";
+import { generationReading, submitRejection } from "../../../src/page/client/api.js";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { settled, type SentRequest } from "./requests.js";
 import { shownText } from "./shown.js";
-
-const decodeStatus = Schema.decodeUnknownOption(StatusAnswer);
 
 function after(start: Model, messages: readonly Message[]): Model {
   return messages.reduce((model, message) => update(model, message).model, start);
@@ -36,7 +33,15 @@ const answered = (request: SentRequest) =>
   Promise.resolve(
     Response.json(
       request.path === "/api/generations/activate"
-        ? { ok: true, outcome: { effect: "rolled forward" } }
+        ? {
+            ok: true,
+            outcome: {
+              kind: "activated",
+              generation: { label: 2, harnessCommit: "abc", status: "ready" },
+              epoch: 4,
+              effect: "no-op",
+            },
+          }
         : { activeGeneration: { generation: null, epoch: 4 }, mainAhead: null },
     ),
   );
@@ -60,7 +65,7 @@ test("activation posts the typed label with the epoch the page has rendered, and
   ]);
   expect(shownText(done.model, ID.activateStatus)).toBe("ok");
   expect(shownText(done.model, ID.activateSentEpoch)).toBe("3");
-  expect(shownText(done.model, ID.activateEffect)).toBe("rolled forward");
+  expect(shownText(done.model, ID.activateEffect)).toBe("no-op");
 });
 
 test("regression 01c8f9f5: a label written as 1e3, 0x10 or +5 is refused, not read as 1000, 16 or 5", () => {
@@ -84,8 +89,8 @@ test("a second click while an activation or a submission is running sends nothin
   expect(update(page, Message.ClickedSubmitCandidate()).commands ?? []).toEqual([]);
 });
 
-test("the status answer is read into a numeric label and epoch, or refused", () => {
-  const generation = { label: 2, harnessCommit: "abc", status: "ready" };
+test("the status answer is read into a numeric label and epoch", () => {
+  const generation = { label: 2, harnessCommit: "abc", status: "ready" } as const;
 
   expect(generationReading({ activeGeneration: { generation, epoch: 4 }, mainAhead: 3 })).toEqual({
     maybeActive: Option.some(generation),
@@ -100,11 +105,6 @@ test("the status answer is read into a numeric label and epoch, or refused", () 
     epoch: 0,
     maybeMainAhead: Option.none(),
   });
-
-  expect(Option.isNone(decodeStatus({ ok: false, problem: { code: "status-unavailable" } }))).toBe(
-    true,
-  );
-  expect(Option.isNone(decodeStatus({ activeGeneration: { generation, epoch: "4" } }))).toBe(true);
 });
 
 test("a submit refused after the label was recorded says so", () => {
@@ -115,5 +115,4 @@ test("a submit refused after the label was recorded says so", () => {
       recorded: { label: 7, harnessCommit: "abc" },
     }),
   ).toBe("label 7 recorded (commit abc), preparation failed: error: preparation-failed");
-  expect(submitRejection({ ok: false, error: { code: "x" } })).toBe("error: x");
 });

@@ -61,13 +61,13 @@ function gitHubPanel(model: Model, h: HtmlBuilder<Message>): Html {
         [
           button(
             ID.authorizeButton,
-            Message.ClickedAuthorize({ path: "/api/github/authorization" }),
+            Message.ClickedAuthorize({ endpoint: "POST /api/github/authorization" }),
             "Authorize GitHub",
             h,
           ),
           button(
             ID.completeAuthorizationButton,
-            Message.ClickedAuthorize({ path: "/api/github/authorization/complete" }),
+            Message.ClickedAuthorize({ endpoint: "POST /api/github/authorization/complete" }),
             "I authorized it",
             h,
           ),

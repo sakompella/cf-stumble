@@ -3,14 +3,21 @@ import { defineMessageUnion } from "foldkit/message";
 import { BackendSetting } from "../../backend-setting.js";
 import { ChatGPT } from "./chatgpt.js";
 import { Conversation } from "./conversation.js";
-import { ControlKind, GenerationReading, GitHubReport, Project, RunBudget } from "./model.js";
+import {
+  AuthorizationEndpoint,
+  ControlKind,
+  GenerationReading,
+  GitHubReport,
+  Project,
+  RunBudget,
+} from "./model.js";
 
 export const Message = defineMessageUnion({
   ClickedSidebarToggle: {},
   ClickedProject: { projectId: Schema.String },
   UpdatedConnectRepositoryInput: { value: Schema.String },
   ClickedConnect: {},
-  ClickedAuthorize: { path: Schema.String },
+  ClickedAuthorize: { endpoint: AuthorizationEndpoint },
   ClickedRefreshGitHub: {},
   ClickedChatGPTLogin: {},
   UpdatedChatGPTCallbackInput: { value: Schema.String },

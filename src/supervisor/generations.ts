@@ -1,3 +1,4 @@
+import type { ControlProblemCode } from "../api/problems.js";
 import { logEvent } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { Settlement } from "./conversations/index.js";
@@ -73,14 +74,7 @@ export type Submission = Readonly<{
   epoch: number;
 }>;
 
-export type ControlProblemCode =
-  | "unknown-generation"
-  | "not-ready"
-  | "not-previously-active"
-  | "facet-compatibility-mismatch"
-  | "stale-epoch"
-  | "run-active"
-  | "drops-active-commit";
+export type { ControlProblemCode };
 
 export type GenerationControlResult =
   | Readonly<{

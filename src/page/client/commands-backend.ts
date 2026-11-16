@@ -1,10 +1,9 @@
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
-import { BackendAnswer } from "./answers.js";
 import { type JsonBody } from "./api.js";
 import { BackendSetting } from "../../backend-setting.js";
 import { Message } from "./message.js";
-import { ownerRequest, rejectedAs } from "./owner-request.js";
+import { apiRequest, rejectedAs } from "./api-request.js";
 
 const BACKEND_MESSAGES = [
   Message.SucceededBackend,
@@ -12,14 +11,14 @@ const BACKEND_MESSAGES = [
   Message.FailedBackend,
 ] as const;
 
-function backendRequest(method: "GET" | "POST", maybeBody: Option.Option<JsonBody>) {
-  return ownerRequest(
-    { method, path: "/api/workspace/backend", maybeBody, answer: BackendAnswer },
+function backendRequest(
+  endpoint: "GET /api/workspace/backend" | "POST /api/workspace/backend",
+  maybeBody: Option.Option<JsonBody>,
+) {
+  return apiRequest(
+    { endpoint, maybeBody },
     {
-      answered: (answer) =>
-        answer.ok
-          ? Message.SucceededBackend({ backend: answer.backend })
-          : Message.RejectedBackend({ wording: `rejected: ${answer.problem.code}` }),
+      answered: (answer) => Message.SucceededBackend({ backend: answer.backend }),
       ...rejectedAs((wording) => Message.RejectedBackend({ wording })),
       failed: (detail) => Message.FailedBackend({ detail }),
     },
@@ -28,11 +27,11 @@ function backendRequest(method: "GET" | "POST", maybeBody: Option.Option<JsonBod
 
 export const FetchBackend = Command.define("FetchBackend", {
   messages: BACKEND_MESSAGES,
-  execute: backendRequest("GET", Option.none()),
+  execute: backendRequest("GET /api/workspace/backend", Option.none()),
 });
 
 export const ChangeBackend = Command.define("ChangeBackend", {
   args: { backend: BackendSetting },
   messages: BACKEND_MESSAGES,
-  execute: ({ backend }) => backendRequest("POST", Option.some({ backend })),
+  execute: ({ backend }) => backendRequest("POST /api/workspace/backend", Option.some({ backend })),
 });

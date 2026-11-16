@@ -18,7 +18,6 @@
     "src/github/repository-size-guard.ts": ["exports"],
     "src/page/client/api.ts": ["exports"],
     "src/project-catalog.ts": ["exports"],
-    "src/routes/generations.ts": ["types"],
     "src/selectable-projects.ts": ["exports"],
     "src/stumble-cli/orb/tunnel.ts": ["exports"],
     "src/workspace-command-timeout.ts": ["exports"],
