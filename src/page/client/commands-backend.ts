@@ -1,10 +1,10 @@
-import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
 import { BackendAnswer } from "./answers.js";
-import { type Answered, refusalWording, requestJson, type JsonBody } from "./api.js";
+import { type JsonBody } from "./api.js";
 import { BackendSetting } from "../../backend-setting.js";
 import { Message } from "./message.js";
+import { ownerRequest, rejectedAs } from "./owner-request.js";
 
 const BACKEND_MESSAGES = [
   Message.SucceededBackend,
@@ -12,25 +12,17 @@ const BACKEND_MESSAGES = [
   Message.FailedBackend,
 ] as const;
 
-type BackendAnswerMessage = Extract<
-  Message,
-  { readonly _tag: "SucceededBackend" | "RejectedBackend" }
->;
-
-function backendAnswer(answered: Answered<typeof BackendAnswer.Type>): BackendAnswerMessage {
-  return Option.match(answered.maybeAnswer, {
-    onNone: () => Message.RejectedBackend({ wording: refusalWording(answered) }),
-    onSome: (answer) =>
-      answer.ok
-        ? Message.SucceededBackend({ backend: answer.backend })
-        : Message.RejectedBackend({ wording: `rejected: ${answer.problem.code}` }),
-  });
-}
-
 function backendRequest(method: "GET" | "POST", maybeBody: Option.Option<JsonBody>) {
-  return requestJson(method, "/api/workspace/backend", maybeBody, BackendAnswer).pipe(
-    Effect.map(backendAnswer),
-    Effect.catch((detail) => Effect.succeed(Message.FailedBackend({ detail }))),
+  return ownerRequest(
+    { method, path: "/api/workspace/backend", maybeBody, answer: BackendAnswer },
+    {
+      answered: (answer) =>
+        answer.ok
+          ? Message.SucceededBackend({ backend: answer.backend })
+          : Message.RejectedBackend({ wording: `rejected: ${answer.problem.code}` }),
+      ...rejectedAs((wording) => Message.RejectedBackend({ wording })),
+      failed: (detail) => Message.FailedBackend({ detail }),
+    },
   );
 }
 

@@ -183,7 +183,12 @@ function mintedRequest(
 function sendResultHandlers(
   model: Model,
 ): Handlers<
-  "ClickedRetrySend" | "MintedRequestId" | "SucceededSend" | "RejectedSend" | "FailedSend"
+  | "ClickedRetrySend"
+  | "MintedRequestId"
+  | "SucceededSend"
+  | "RejectedSend"
+  | "HeldSend"
+  | "FailedSend"
 > {
   return {
     MintedRequestId: (minted) => mintedRequest(model, minted),
@@ -193,6 +198,13 @@ function sendResultHandlers(
     }),
     RejectedSend: ({ requestId, wording }) => ({
       model: { ...advanced(model, requestId, OutgoingEvent.Refused()), runNote: wording },
+    }),
+    HeldSend: ({ requestId, wording }) => ({
+      model: {
+        ...advanced(model, requestId, OutgoingEvent.Lost()),
+        pageError: wording,
+        runNote: "not confirmed: retry it in the conversation",
+      },
     }),
     FailedSend: ({ requestId, detail }) => ({
       model: {
@@ -217,6 +229,7 @@ export function composerHandlers(
   | "MintedRequestId"
   | "SucceededSend"
   | "RejectedSend"
+  | "HeldSend"
   | "FailedSend"
   | "ClickedCancelTurn"
   | "SucceededAbort"
