@@ -1,33 +1,11 @@
-import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
 import * as Schema from "effect/Schema";
 import { ChatGPTAnswer } from "./answers.js";
-import { type Answered, refusalWording, requestJson, type JsonBody } from "./api.js";
+import { type JsonBody } from "./api.js";
 import { chatGPTConnection } from "./chatgpt.js";
 import { Message } from "./message.js";
-
-type ChatGPTAnswerMessage = Extract<
-  Message,
-  { readonly _tag: "SucceededChatGPT" | "RejectedChatGPT" }
->;
-
-function chatGPTAnswer(answered: Answered<typeof ChatGPTAnswer.Type>): ChatGPTAnswerMessage {
-  return Option.match(answered.maybeAnswer, {
-    onNone: () =>
-      Message.RejectedChatGPT({ wording: refusalWording(answered), maybeChatGPT: Option.none() }),
-    onSome: (answer) =>
-      answer.ok
-        ? Message.SucceededChatGPT({ chatgpt: chatGPTConnection(answer.chatgpt) })
-        : Message.RejectedChatGPT({
-            wording: `rejected: ${answer.problem.code}`,
-            maybeChatGPT:
-              answer.chatgpt === undefined
-                ? Option.none()
-                : Option.some(chatGPTConnection(answer.chatgpt)),
-          }),
-  });
-}
+import { ownerRequest, rejectedAs } from "./owner-request.js";
 
 const CHATGPT_MESSAGES = [
   Message.SucceededChatGPT,
@@ -36,9 +14,22 @@ const CHATGPT_MESSAGES = [
 ] as const;
 
 function chatGPTRequest(method: "GET" | "POST", path: string, maybeBody: Option.Option<JsonBody>) {
-  return requestJson(method, path, maybeBody, ChatGPTAnswer).pipe(
-    Effect.map(chatGPTAnswer),
-    Effect.catch((detail) => Effect.succeed(Message.FailedChatGPT({ detail }))),
+  return ownerRequest(
+    { method, path, maybeBody, answer: ChatGPTAnswer },
+    {
+      answered: (answer) =>
+        answer.ok
+          ? Message.SucceededChatGPT({ chatgpt: chatGPTConnection(answer.chatgpt) })
+          : Message.RejectedChatGPT({
+              wording: `rejected: ${answer.problem.code}`,
+              maybeChatGPT:
+                answer.chatgpt === undefined
+                  ? Option.none()
+                  : Option.some(chatGPTConnection(answer.chatgpt)),
+            }),
+      ...rejectedAs((wording) => Message.RejectedChatGPT({ wording, maybeChatGPT: Option.none() })),
+      failed: (detail) => Message.FailedChatGPT({ detail }),
+    },
   );
 }
 

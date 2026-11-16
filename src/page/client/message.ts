@@ -62,6 +62,7 @@ export const Message = defineMessageUnion({
   MintedRequestId: { projectId: Schema.String, requestId: Schema.String, content: Schema.String },
   SucceededSend: { requestId: Schema.String, submissionId: Schema.Number },
   RejectedSend: { requestId: Schema.String, wording: Schema.String },
+  HeldSend: { requestId: Schema.String, wording: Schema.String },
   FailedSend: { requestId: Schema.String, detail: Schema.String },
 
   SucceededAbort: {},

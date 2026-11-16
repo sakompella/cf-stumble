@@ -113,3 +113,30 @@ test("a send that never got an answer is not confirmed either, and the page says
   expect(whoShown(failed.model)).toEqual(["you · not confirmed"]);
   expect(shownText(failed.model, ID.pageError)).toContain("offline");
 });
+
+test("a send the Worker accepted with an answer the page cannot read stays in the conversation as not confirmed, and retrying posts the same request id", async () => {
+  const unreadable = await settled(sentFromPrompt("do it"), () =>
+    Promise.resolve(Response.json({ ok: true, queued: "yes" }, { status: 202 })),
+  );
+
+  expect(whoShown(unreadable.model)).toEqual(["you · not confirmed"]);
+  expect(promptShown(unreadable.model)).toBe("");
+
+  const requestId = unreadable.sent[0]?.requestId ?? "";
+
+  const retried = await settled(
+    update(unreadable.model, Message.ClickedRetrySend({ requestId })),
+    accepted,
+  );
+
+  expect(retried.sent.map((sent) => sent.requestId)).toEqual([requestId]);
+  expect(whoShown(retried.model)).toEqual(["you · queued"]);
+});
+
+test("a send the Worker refuses because no generation is active stays retryable and the page says so, not that the Worker was unreachable", async () => {
+  const refused = await settled(sentFromPrompt("do it"), problem("no-active-generation", 503));
+
+  expect(whoShown(refused.model)).toEqual(["you · not confirmed"]);
+  expect(shownText(refused.model, ID.pageError)).toContain("no active generation");
+  expect(shownText(refused.model, ID.pageError)).not.toContain("could not reach");
+});
