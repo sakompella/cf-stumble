@@ -5,7 +5,7 @@ import { HARNESS_BUILD_CONFIGURATION, type HarnessBuildStepName } from "../../sr
 import {
   harnessBuildStep,
   planHarnessBuild,
-  planHarnessBuildRequest,
+  planHarnessBuildDiscard,
 } from "../../src/workspace/commands/build-harness.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { writeExecutable } from "./planned-shell-fixture.js";
@@ -94,10 +94,7 @@ describe("the discard request", () => {
       keep(join(buildDirectory("2".repeat(40)), "other-build.txt")),
     ];
 
-    const plan = planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, {
-      kind: "build-discard",
-      harnessCommit: head,
-    });
+    const plan = planHarnessBuildDiscard(HARNESS_BUILD_CONFIGURATION, head);
 
     const ran = runRooted(layout, rooted(plan.source, layout));
 

@@ -127,6 +127,10 @@ exit 128
       const ran = cloneFailing(message);
 
       expect(ran.status).toBe(PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE);
+      expect(
+        ran.stdout,
+        "the script names the verdict, so a full disk is not a size limit",
+      ).toContain("size-verdict=capacity-exceeded");
       expect(readdirSync(join(layout.workspace, "projects"))).toEqual([]);
     },
   );

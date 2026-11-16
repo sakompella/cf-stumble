@@ -19,20 +19,58 @@ import {
   REPOSITORY_SIZE_VERDICT_FUNCTION,
   repositorySizeVerdictSource,
 } from "../../github/index.js";
-import { WorkspaceUnavailable, type WorkspaceEffects, type WorkspaceFault } from "../operations.js";
+import {
+  WorkspaceUnavailable,
+  type CommandOutput,
+  type WorkspaceEffects,
+  type WorkspaceFault,
+} from "../operations.js";
 import { CLONE_INTO_STAGING, reconcileClone } from "./clone-script.js";
 import {
   answerDurableFailures,
-  commandResult,
   invalidRequest,
   syncIncomplete,
   timeoutOrUnavailable,
-  type WorkspaceCommandResult,
   type WorkspaceFailure,
   type WorkspacePlan,
 } from "./command-result.js";
 
 export const PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE = 122;
+
+const MEASURED_SIZE_VERDICTS = [
+  "tree-truncated",
+  "too-many-files",
+  "working-tree-too-large",
+  "repository-too-large",
+] as const;
+
+export const CLONE_SIZE_VERDICTS = [...MEASURED_SIZE_VERDICTS, "capacity-exceeded"] as const;
+
+export type CloneSizeVerdict = (typeof CLONE_SIZE_VERDICTS)[number];
+
+export type ProjectProvisionAnswer =
+  | Readonly<{ ok: true }>
+  | Readonly<{
+      ok: false;
+      error: Readonly<
+        | { code: "repository-too-large"; verdict: CloneSizeVerdict }
+        | { code: "clone-failed"; exitCode: number }
+      >;
+    }>
+  | WorkspaceFailure;
+
+const SIZE_VERDICT_LINE = /^size-verdict=(\S+)$/mu;
+
+function cloneAnswer(output: CommandOutput): ProjectProvisionAnswer {
+  if (output.exitCode === 0) return { ok: true };
+
+  const reported = SIZE_VERDICT_LINE.exec(output.stdout)?.[1];
+  const verdict = CLONE_SIZE_VERDICTS.find((known) => known === reported);
+
+  return output.exitCode === PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE && verdict !== undefined
+    ? { ok: false, error: { code: "repository-too-large", verdict } }
+    : { ok: false, error: { code: "clone-failed", exitCode: output.exitCode } };
+}
 
 export function projectProvisionLockPath(projectId: ProjectId): string {
   return `/tmp/cf-stumble-project-${projectId}.provision.lock`;
@@ -128,8 +166,9 @@ export function projectCloneSource(project: Project): string {
       beforeClone: [
         `  size_verdict="$(${REPOSITORY_SIZE_VERDICT_FUNCTION})"`,
         '  case "$size_verdict" in',
-        "    tree-truncated | too-many-files | working-tree-too-large | repository-too-large)",
+        `    ${MEASURED_SIZE_VERDICTS.join(" | ")})`,
         '      printf "repository exceeds a workspace size limit: %s\\n" "$size_verdict" >&2',
+        '      printf "size-verdict=%s\\n" "$size_verdict"',
         `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
         "      ;;",
         "  esac",
@@ -141,6 +180,7 @@ export function projectCloneSource(project: Project): string {
         "    clone_exit=$?",
         `    if printf '%s\\n' "$clone_output" | grep -Eiq 'no space left on device|disk quota exceeded|not enough space'; then`,
         '      printf "repository clone exceeded workspace capacity\\n" >&2',
+        '      printf "size-verdict=capacity-exceeded\\n"',
         `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
         "    fi",
         '    printf "%s\\n" "$clone_output" >&2',
@@ -188,7 +228,7 @@ export function executeProjectProvisionRequest(
     operations: WorkspaceEffects;
     request: ProjectProvisionRequest;
   }>,
-): Effect.Effect<WorkspaceCommandResult> {
+): Effect.Effect<ProjectProvisionAnswer> {
   const parsed = parseProjectProvisionRequest(input.request);
 
   if ("ok" in parsed) return Effect.succeed(parsed);
@@ -196,12 +236,7 @@ export function executeProjectProvisionRequest(
   return Effect.gen(function* () {
     const { operations } = input;
 
-    if (yield* isolateCloned(operations, parsed)) {
-      return {
-        ok: true,
-        result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-      } as const;
-    }
+    if (yield* isolateCloned(operations, parsed)) return { ok: true } as const;
 
     const plan = planProjectProvisionRequest(parsed);
 
@@ -211,6 +246,6 @@ export function executeProjectProvisionRequest(
       return syncIncomplete();
     }
 
-    return commandResult(output);
+    return cloneAnswer(output);
   }).pipe(answerDurableFailures("workspace.provision-project.clone", timeoutOrUnavailable));
 }

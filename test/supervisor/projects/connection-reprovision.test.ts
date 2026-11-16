@@ -47,7 +47,7 @@ test("keeps a project whose reprovision the clone size check refuses", async () 
   const subject = tenant("reprovision-too-large", { workspace, fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
-  workspace.cloneExitCode = 122;
+  workspace.cloneSizeVerdict = "working-tree-too-large";
   workspace.loseClone();
 
   const used = await subject.connections((connections) =>
@@ -58,7 +58,10 @@ test("keeps a project whose reprovision the clone size check refuses", async () 
     Effect.sync(() => connections.catalog()),
   );
 
-  expect(used).toEqual({ ok: false, problem: { code: "repository-too-large" } });
+  expect(used).toEqual({
+    ok: false,
+    problem: { code: "repository-too-large", verdict: "working-tree-too-large" },
+  });
   expect(listed.map((project) => project.id)).toContain("sample-repo-1");
 });
 

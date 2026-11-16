@@ -7,10 +7,9 @@ import {
 import type { HarnessCommit } from "../../harness-commit.js";
 import { ModuleMapStore } from "./store.js";
 import type { StoredModuleMapProblem } from "./store.js";
-import { buildModuleMap, type HarnessBuildProblem } from "./build.js";
+import { buildModuleMap, type BuildWorkspace, type HarnessBuildProblem } from "./build.js";
 import { SERVING_FACET_NAME } from "./facet-name.js";
 import type { ActiveGeneration } from "../generations.js";
-import type { WorkspaceHostRpc } from "../../workspace/index.js";
 
 export { MainLineage } from "./main-lineage.js";
 
@@ -24,10 +23,10 @@ const DECODED_MAPS_KEPT = 2;
 
 export class HarnessArtifacts {
   private readonly store: ModuleMapStore;
-  private readonly workspace: () => WorkspaceHostRpc<"build">;
+  private readonly workspace: () => BuildWorkspace;
   private readonly decoded = new Map<HarnessCommit, MainHarnessArtifact>();
 
-  constructor(bucket: R2Bucket, workspace: () => WorkspaceHostRpc<"build">) {
+  constructor(bucket: R2Bucket, workspace: () => BuildWorkspace) {
     this.store = new ModuleMapStore(bucket);
     this.workspace = workspace;
   }

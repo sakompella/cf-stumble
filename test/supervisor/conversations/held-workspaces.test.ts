@@ -1,7 +1,7 @@
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { selectableCatalog } from "../../../src/selectable-projects.js";
-import type { WorkspaceCommandResult } from "../../../src/workspace/commands/command-result.js";
+import type { ProjectProvisionAnswer } from "../../../src/workspace/commands/provision-project.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
 import { CLONED, HeldHost } from "./held-host.js";
 import { withHeldWorkspaces } from "./held-workspaces-fixture.js";
@@ -25,7 +25,7 @@ afterEach(async () => {
 
 test("a release during provisioning starts no capability RPC, so the workspace takes no turn lease", async () => {
   const host = new HeldHost();
-  const clone = pending<WorkspaceCommandResult>();
+  const clone = pending<ProjectProvisionAnswer>();
   host.clone = clone.promise;
 
   await withHeldWorkspaces("held-release-during-provision", host, async (held) => {

@@ -1,4 +1,5 @@
-import type { WorkspaceCommandResult } from "../../../src/workspace/commands/command-result.js";
+import type { CommandAnswer } from "../../../src/workspace/commands/command-result.js";
+import type { ProjectProvisionAnswer } from "../../../src/workspace/commands/provision-project.js";
 import type { ProjectCapabilityStub, WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import {
@@ -7,20 +8,19 @@ import {
   FakeProjectTransactions,
 } from "../../workspace/project/fakes.js";
 
-export const CLONED: WorkspaceCommandResult = {
-  ok: true,
-  result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-};
+export const CLONED: ProjectProvisionAnswer = { ok: true };
+
+const BUILT: CommandAnswer = { ok: true, output: { stdout: "", stderr: "", exitCode: 0 } };
 
 export class HeldHost implements WorkspaceHostRpc<
   "provision" | "ensureManagedInstructions" | "build" | "project"
 > {
   readonly steps: string[] = [];
   readonly turns = { ended: 0, disposed: 0 };
-  clone: Promise<WorkspaceCommandResult> = Promise.resolve(CLONED);
+  clone: Promise<ProjectProvisionAnswer> = Promise.resolve(CLONED);
   answer: Promise<unknown> = Promise.resolve();
 
-  provision(): Promise<WorkspaceCommandResult> {
+  provision(): Promise<ProjectProvisionAnswer> {
     this.steps.push("clone");
 
     return this.clone;
@@ -30,8 +30,8 @@ export class HeldHost implements WorkspaceHostRpc<
     return Promise.resolve({ ok: true, result: { kind: "written" } } as const);
   }
 
-  build(): Promise<WorkspaceCommandResult> {
-    return Promise.resolve(CLONED);
+  build(): Promise<CommandAnswer> {
+    return Promise.resolve(BUILT);
   }
 
   async project(budget: Readonly<{ remainingMs: number }>): Promise<ProjectCapabilityStub> {

@@ -1,8 +1,10 @@
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import { sampleProjectOne } from "../project-fixtures.js";
-import type { WorkspaceCommandResult } from "../../src/workspace/commands/command-result.js";
-import type { ProjectProvisionRequest } from "../../src/workspace/commands/provision-project.js";
+import type {
+  ProjectProvisionAnswer,
+  ProjectProvisionRequest,
+} from "../../src/workspace/commands/provision-project.js";
 import { ProvisionUnavailable } from "../../src/supervisor/readiness/provisioning.js";
 import { provisionerFor, ScriptedProvisionHost, TENANT_WORKSPACE } from "./provisioning-fakes.js";
 
@@ -72,14 +74,14 @@ test.each<readonly ["clone" | "instructions" | undefined, readonly string[], obj
 
 test("keeps a refused or unreachable workspace one typed failure", async () => {
   const refusing = new ScriptedProvisionHost();
-  refusing.provision = (request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> => {
+  refusing.provision = (request: ProjectProvisionRequest): Promise<ProjectProvisionAnswer> => {
     refusing.requests.push(request);
 
-    return Promise.resolve({ ok: false, error: { code: "unknown-command" } });
+    return Promise.resolve({ ok: false, error: { code: "workspace-unavailable" } });
   };
 
   const throwing = new ScriptedProvisionHost();
-  throwing.provision = (): Promise<WorkspaceCommandResult> =>
+  throwing.provision = (): Promise<ProjectProvisionAnswer> =>
     Promise.reject(new Error("fake workspace host failure"));
 
   const results = [

@@ -15,31 +15,23 @@ export type WorkspacePlan = Readonly<{
   timeoutMs: number;
 }>;
 
+type WorkspaceFailureCode =
+  | "invalid-request"
+  | "path-outside-root"
+  | "workspace-unavailable"
+  | "workspace-busy"
+  | "workspace-sync-incomplete";
+
 export type WorkspaceFailure = Readonly<{
   ok: false;
-  error: Readonly<{
-    code:
-      | "invalid-request"
-      | "path-outside-root"
-      | "unknown-command"
-      | "workspace-unavailable"
-      | "workspace-busy"
-      | "workspace-sync-incomplete";
-  }>;
+  error: Readonly<{ code: WorkspaceFailureCode }>;
 }>;
 
-export type WorkspaceCommandResult =
-  | Readonly<{
-      ok: true;
-      result:
-        | Readonly<{
-            kind: "command";
-            stdout: string;
-            stderr: string;
-            exitCode: number;
-          }>
-        | Readonly<{ kind: "module-map"; text: string }>;
-    }>
+export type CommandAnswer = Readonly<{ ok: true; output: CommandOutput }> | WorkspaceFailure;
+
+export type ModuleMapAnswer =
+  | Readonly<{ ok: true; moduleMap: string }>
+  | Readonly<{ ok: false; error: Readonly<{ code: "publish-failed"; output: CommandOutput }> }>
   | WorkspaceFailure;
 
 export type InstructionsWriteResult =
@@ -58,38 +50,38 @@ function unavailable(): WorkspaceFailure {
   return { ok: false, error: { code: "workspace-unavailable" } };
 }
 
-export function commandResult(output: CommandOutput): WorkspaceCommandResult {
-  return {
-    ok: true,
-    result: {
-      kind: "command",
-      stdout: output.stdout,
-      stderr: output.stderr,
-      exitCode: output.exitCode,
-    },
-  };
+export function commandAnswer(output: CommandOutput): CommandAnswer {
+  return { ok: true, output };
 }
 
 export function executePlan(
   operations: WorkspaceEffects,
   plan: WorkspacePlan,
-): Effect.Effect<WorkspaceCommandResult, WorkspaceFault> {
+): Effect.Effect<CommandAnswer, WorkspaceFault> {
   return operations
     .runCommand(plan.source, plan.cwd, plan.timeoutMs)
-    .pipe(Effect.map(commandResult));
+    .pipe(Effect.map(commandAnswer));
 }
 
 export function timeoutOrUnavailable(cause: unknown): string {
   return isTimeoutFailure(cause) ? "timeout" : "workspace-unavailable";
 }
 
+type AnswerFailures = <Answer>(
+  work: Effect.Effect<Answer | WorkspaceFailure, WorkspaceFault>,
+) => Effect.Effect<Answer | WorkspaceFailure>;
+
+function answerWith(failure: (cause: unknown) => WorkspaceFailure): AnswerFailures {
+  return function answer<Answer>(work: Effect.Effect<Answer | WorkspaceFailure, WorkspaceFault>) {
+    return answerFailures<Answer | WorkspaceFailure>(failure)(work);
+  };
+}
+
 export function answerDurableFailures(
   context: string,
   unavailableLabel: (cause: unknown) => string,
-): (
-  work: Effect.Effect<WorkspaceCommandResult, WorkspaceFault>,
-) => Effect.Effect<WorkspaceCommandResult> {
-  return answerFailures<WorkspaceCommandResult>((cause) => {
+): AnswerFailures {
+  return answerWith((cause) => {
     if (cause instanceof WorkspaceSyncIncomplete) {
       logRedactedCause(`${context}: sync-incomplete`, cause);
 
@@ -102,12 +94,8 @@ export function answerDurableFailures(
   });
 }
 
-export function answerUnavailable(
-  context: string,
-): (
-  work: Effect.Effect<WorkspaceCommandResult, WorkspaceFault>,
-) => Effect.Effect<WorkspaceCommandResult> {
-  return answerFailures<WorkspaceCommandResult>((cause) => {
+export function answerUnavailable(context: string): AnswerFailures {
+  return answerWith((cause) => {
     logRedactedCause(`${context}: ${timeoutOrUnavailable(cause)}`, cause);
 
     return unavailable();

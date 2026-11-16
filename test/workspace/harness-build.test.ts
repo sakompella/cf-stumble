@@ -1,8 +1,12 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
-import { HARNESS_BUILD_CONFIGURATION, type HarnessBuildRequest } from "../../src/harness-build.js";
-import { executeHarnessBuildRequest } from "../../src/workspace/commands/build-harness.js";
+import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
+import {
+  executeHarnessBuildDiscard,
+  executeHarnessBuildOutput,
+  executeHarnessBuildStep,
+} from "../../src/workspace/commands/build-harness.js";
 import { harnessBuildOutputPath } from "../../src/workspace-layout.js";
 import {
   workspaceEffects,
@@ -84,13 +88,28 @@ class FakeBuildOperations implements PromiseOperations {
   }
 }
 
-function build(operations: FakeBuildOperations, request: HarnessBuildRequest) {
+function request(operations: FakeBuildOperations) {
+  return {
+    configuration: HARNESS_BUILD_CONFIGURATION,
+    operations: workspaceEffects(operations),
+  };
+}
+
+function buildStep(operations: FakeBuildOperations, step: string, harnessCommit: string = commit) {
   return Effect.runPromise(
-    executeHarnessBuildRequest({
-      configuration: HARNESS_BUILD_CONFIGURATION,
-      operations: workspaceEffects(operations),
-      request,
-    }),
+    executeHarnessBuildStep({ ...request(operations), request: { harnessCommit, step } }),
+  );
+}
+
+function buildOutput(operations: FakeBuildOperations, harnessCommit: string = commit) {
+  return Effect.runPromise(
+    executeHarnessBuildOutput({ ...request(operations), request: harnessCommit }),
+  );
+}
+
+function discard(operations: FakeBuildOperations, harnessCommit: string = commit) {
+  return Effect.runPromise(
+    executeHarnessBuildDiscard({ ...request(operations), request: harnessCommit }),
   );
 }
 
@@ -98,16 +117,9 @@ test("a build phase answers with its exit code", async () => {
   const operations = new FakeBuildOperations();
   operations.exitCode = 3;
 
-  await expect(
-    build(operations, { kind: "build-step", harnessCommit: commit, step: "install" }),
-  ).resolves.toEqual({
+  await expect(buildStep(operations, "install")).resolves.toEqual({
     ok: true,
-    result: {
-      kind: "command",
-      stdout: "",
-      stderr: "",
-      exitCode: 3,
-    },
+    output: { stdout: "", stderr: "", exitCode: 3 },
   });
 });
 
@@ -115,35 +127,44 @@ test("a build step that cannot run is one workspace-unavailable failure", async 
   const operations = new FakeBuildOperations();
   operations.commandFailure = new Error("container exited before the command could run");
 
-  await expect(
-    build(operations, { kind: "build-step", harnessCommit: commit, step: "install" }),
-  ).resolves.toEqual({ ok: false, error: { code: "workspace-unavailable" } });
+  await expect(buildStep(operations, "install")).resolves.toEqual({
+    ok: false,
+    error: { code: "workspace-unavailable" },
+  });
+});
+
+test("a build step this Host does not know is refused and runs nothing, so it can never reach the scratch cleanup", async () => {
+  const operations = new FakeBuildOperations();
+
+  for (const step of ["clean", "discard", "build-discard", "rm", "", "constructor"]) {
+    await expect(buildStep(operations, step), step).resolves.toEqual({
+      ok: false,
+      error: { code: "invalid-request" },
+    });
+  }
+
+  expect(operations.calls).toEqual([]);
 });
 
 test("publishes the module map the build wrote and returns its text through the workspace filesystem", async () => {
   const operations = new FakeBuildOperations();
   operations.files.set(moduleMapPath, '{"entryModule":"main.js","modules":[]}');
 
-  const result = await build(operations, { kind: "build-output", harnessCommit: commit });
+  const result = await buildOutput(operations);
 
-  expect(result).toEqual({
-    ok: true,
-    result: { kind: "module-map", text: '{"entryModule":"main.js","modules":[]}' },
-  });
+  expect(result).toEqual({ ok: true, moduleMap: '{"entryModule":"main.js","modules":[]}' });
   expect(Object.getPrototypeOf(result), "the result crosses RPC as a plain value").toBe(
     Object.prototype,
   );
 });
 
-test("a publish step that fails answers with its exit code, not a module map", async () => {
+test("a publish step that fails answers publish-failed with its output, not a module map", async () => {
   const operations = new FakeBuildOperations();
   operations.exitCode = 3;
 
-  const result = await build(operations, { kind: "build-output", harnessCommit: commit });
-
-  expect(result).toEqual({
-    ok: true,
-    result: { kind: "command", stdout: "", stderr: "", exitCode: 3 },
+  await expect(buildOutput(operations)).resolves.toEqual({
+    ok: false,
+    error: { code: "publish-failed", output: { stdout: "", stderr: "", exitCode: 3 } },
   });
 });
 
@@ -151,12 +172,11 @@ test("rejects a commit that is not a harness commit, so no path can escape the b
   const operations = new FakeBuildOperations();
 
   for (const value of ["../../project", `${commit}/../../etc`, "not-a-commit", ""]) {
-    await expect(
-      build(operations, { kind: "build-output", harnessCommit: value }),
-    ).resolves.toEqual({
-      ok: false,
-      error: { code: "invalid-request" },
-    });
+    const refused = { ok: false, error: { code: "invalid-request" } };
+
+    await expect(buildOutput(operations, value)).resolves.toEqual(refused);
+    await expect(discard(operations, value)).resolves.toEqual(refused);
+    await expect(buildStep(operations, "install", value)).resolves.toEqual(refused);
   }
 
   expect(operations.calls).toEqual([]);
@@ -173,19 +193,16 @@ test("two commits published at once each read their own module map", async () =>
   operations.readFile = async (path) => {
     if (!interleaved) {
       interleaved = true;
-      await build(operations, { kind: "build-output", harnessCommit: other });
+      await buildOutput(operations, other);
     }
 
     return read(path);
   };
 
-  const published = await build(operations, { kind: "build-output", harnessCommit: commit });
-  await build(operations, { kind: "build-discard", harnessCommit: other });
+  const published = await buildOutput(operations);
+  await discard(operations, other);
 
-  expect(published).toEqual({
-    ok: true,
-    result: { kind: "module-map", text: '{"entryModule":"a.js","modules":[]}' },
-  });
+  expect(published).toEqual({ ok: true, moduleMap: '{"entryModule":"a.js","modules":[]}' });
   expect(operations.files.get(harnessBuildOutputPath(commit))).toBe(
     '{"entryModule":"a.js","modules":[]}',
   );

@@ -14,10 +14,7 @@ export function removeProjectDirectories(
     WORKSPACE_RPC_TIMEOUT_MS,
   ).pipe(
     Effect.match({
-      onSuccess: (result) =>
-        result.ok && result.result.kind === "command" && result.result.exitCode === 0
-          ? "removed"
-          : "failed",
+      onSuccess: (result) => (result.ok && result.output.exitCode === 0 ? "removed" : "failed"),
       onFailure: (cause) => {
         logRedactedCause(`project-disconnect.${projectId}: workspace-unavailable`, cause);
 

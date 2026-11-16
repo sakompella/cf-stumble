@@ -1,9 +1,12 @@
 import { resultOf } from "../../effect-result.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import type { HarnessBuildRequest, HarnessBuildStepName } from "../../../src/harness-build.js";
+import type { HarnessBuildStepName, HarnessBuildStepRequest } from "../../../src/harness-build.js";
 import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
 import type { CommandOutput } from "../../../src/workspace/index.js";
-import type { WorkspaceCommandResult } from "../../../src/workspace/commands/command-result.js";
+import type {
+  CommandAnswer,
+  ModuleMapAnswer,
+} from "../../../src/workspace/commands/command-result.js";
 import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 export const BUILD_COMMIT = testHarnessCommit("6000000000000000000000000000000000000001");
@@ -18,35 +21,43 @@ export function moduleMapFile(
   return JSON.stringify({ entryModule: "main.js", modules });
 }
 
-function answered(output: CommandOutput): Promise<WorkspaceCommandResult> {
-  return Promise.resolve({ ok: true, result: { kind: "command", ...output } });
-}
+export type BuildWorkspaceFake = WorkspaceHostRpc<"build" | "buildOutput" | "discardBuild">;
 
-export class FakeBuildHost implements WorkspaceHostRpc<"build"> {
-  readonly requests: HarnessBuildRequest[] = [];
+const PUBLISH_FAILED: ModuleMapAnswer = {
+  ok: false,
+  error: { code: "publish-failed", output: { stdout: "", stderr: "", exitCode: 1 } },
+};
+
+export class FakeBuildHost implements BuildWorkspaceFake {
+  readonly requests: string[] = [];
   output: string | undefined = moduleMapFile([helperModule, entryModule]);
-  answers: Partial<Record<HarnessBuildStepName, CommandOutput>> = {};
+  answers: Partial<Record<string, CommandOutput>> = {};
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
-    this.requests.push(request);
+  build(request: HarnessBuildStepRequest): Promise<CommandAnswer> {
+    this.requests.push(request.step);
 
-    if (request.kind === "build-output") {
-      return Promise.resolve(
-        this.output === undefined
-          ? { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 1 } }
-          : { ok: true, result: { kind: "module-map", text: this.output } },
-      );
-    }
+    return Promise.resolve({
+      ok: true,
+      output: this.answers[request.step] ?? { stdout: "", stderr: "", exitCode: 0 },
+    });
+  }
 
-    const answer = request.kind === "build-step" ? this.answers[request.step] : undefined;
+  buildOutput(): Promise<ModuleMapAnswer> {
+    this.requests.push("build-output");
 
-    return answered(answer ?? { stdout: "", stderr: "", exitCode: 0 });
+    return Promise.resolve(
+      this.output === undefined ? PUBLISH_FAILED : { ok: true, moduleMap: this.output },
+    );
+  }
+
+  discardBuild(): Promise<CommandAnswer> {
+    this.requests.push("build-discard");
+
+    return Promise.resolve({ ok: true, output: { stdout: "", stderr: "", exitCode: 0 } });
   }
 
   steps(): readonly string[] {
-    return this.requests.map((request) =>
-      request.kind === "build-step" ? request.step : request.kind,
-    );
+    return this.requests;
   }
 }
 
@@ -60,6 +71,6 @@ export function failingAt(
   return host;
 }
 
-export function built(host: WorkspaceHostRpc<"build">) {
+export function built(host: BuildWorkspaceFake) {
   return resultOf(buildModuleMap(() => host, BUILD_COMMIT));
 }

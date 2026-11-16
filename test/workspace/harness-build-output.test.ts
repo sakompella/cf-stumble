@@ -4,7 +4,7 @@ import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
-import { executeHarnessBuildRequest } from "../../src/workspace/commands/build-harness.js";
+import { executeHarnessBuildOutput } from "../../src/workspace/commands/build-harness.js";
 import {
   operationsOverPublishedModuleMap,
   OUTPUT_LIMIT_BYTES,
@@ -18,23 +18,23 @@ test("a module map larger than the output limits arrives whole, through the work
     const operations = await operationsOverPublishedModuleMap(state, commit);
 
     const answered = await Effect.runPromise(
-      executeHarnessBuildRequest({
+      executeHarnessBuildOutput({
         configuration: HARNESS_BUILD_CONFIGURATION,
         operations,
-        request: { kind: "build-output", harnessCommit: commit },
+        request: commit,
       }),
     );
 
-    if (!answered.ok || answered.result.kind !== "module-map") {
+    if (!answered.ok) {
       throw new Error(
-        `the build output must arrive as a module map result: ${JSON.stringify(answered).slice(0, 200)}`,
+        `the build output must arrive as a module map: ${JSON.stringify(answered).slice(0, 200)}`,
       );
     }
 
     expect(
-      answered.result.text.length,
+      answered.moduleMap.length,
       "the module map exceeds the 64 KiB command output limit",
     ).toBeGreaterThan(OUTPUT_LIMIT_BYTES);
-    expect(answered.result.text).toBe(oversizedModuleMap);
+    expect(answered.moduleMap).toBe(oversizedModuleMap);
   });
 });
