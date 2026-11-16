@@ -21,7 +21,6 @@ import {
   isolateShellBackend,
   ProjectRpcTarget,
   pruneWorkspaceSpills,
-  workspaceGit,
 } from "./project/index.js";
 import { WorkspacePlatform } from "./workspace-platform.js";
 import {
@@ -83,15 +82,12 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       env.ORB_PROVIDER_TOKEN,
       env.CF_VERSION_METADATA?.id ?? null,
       () => readBackendSetting(ctx.storage.kv) === "provider",
-      {
-        backend: isolateShellBackend(env.LOADER, env.ASSETS, {
-          id: ctx.id,
-          exports: ctx.exports,
-          isolateToken: this.#isolateToken,
-          workspace: () => this.#platform.workspace.stub(),
-        }),
-        git: workspaceGit,
-      },
+      isolateShellBackend(env.LOADER, env.ASSETS, {
+        id: ctx.id,
+        exports: ctx.exports,
+        isolateToken: this.#isolateToken,
+        workspace: () => this.#platform.workspace.stub(),
+      }),
     );
     this.#idle = new WorkspaceIdleController({
       nowMs: () => Date.now(),

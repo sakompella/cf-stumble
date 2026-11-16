@@ -27,17 +27,10 @@ class FakeProjectOperations implements PromiseOperations {
   exitCode = 0;
   stdout = "";
   commandFailure: Error | undefined;
-  cloneFailure: Error | undefined = new Error("the isolate clone is unavailable");
   private cloned = false;
 
   durableGitConfig: string | undefined =
     `[core]\n\tbare = false\n[remote "origin"]\n\turl = ${projectOne.repositoryUrl}\n`;
-
-  cloneProject(_project: Project): Promise<void> {
-    this.calls.push("clone");
-
-    return this.cloneFailure === undefined ? Promise.resolve() : Promise.reject(this.cloneFailure);
-  }
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     this.calls.push(`lstat:${path}`);
@@ -86,7 +79,7 @@ function provision(operations: FakeProjectOperations, request: ProjectProvisionR
   );
 }
 
-test("without an isolate clone, the container clone runs from above the not yet existing project root", async () => {
+test("the container clone runs from above the not yet existing project root", async () => {
   const operations = new FakeProjectOperations();
 
   await expect(provision(operations, provisionRequest(projectOne))).resolves.toEqual({

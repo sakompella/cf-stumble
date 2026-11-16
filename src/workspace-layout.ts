@@ -10,7 +10,7 @@ export const HARNESS_DIRECTORY = `${WORKSPACE_ROOT}/harness`;
 
 export const HARNESS_GIT_DIRECTORY = `${HARNESS_DIRECTORY}/.git`;
 
-export const PROJECTS_DIRECTORY = `${WORKSPACE_ROOT}/projects`;
+const PROJECTS_DIRECTORY = `${WORKSPACE_ROOT}/projects`;
 
 export const BUILD_SCRATCH_ROOT = "/tmp/cf-stumble-builds";
 

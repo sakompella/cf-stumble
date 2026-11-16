@@ -1,55 +1,30 @@
-import type { Workspace } from "@cloudflare/computer";
 import * as Effect from "effect/Effect";
 import type { HarnessBuildConfiguration } from "../harness-build.js";
 import type { HarnessCommit } from "../harness-commit.js";
-import { durableGitHubConfigurationSource } from "../github/index.js";
 import { shellQuote } from "../shell-quote.js";
-import { hasErrnoCode } from "./errno-code.js";
-import { cloneIntoPlace, githubToken } from "./isolate-clone.js";
-import { attemptWorkspace, type CommandOutput, type WorkspaceFault } from "./operations.js";
+import { cloneRepositorySource } from "./clone-script.js";
+import type { CommandOutput, WorkspaceFault } from "./operations.js";
 
-const HARNESS_CLONE_DEPTH = 50;
+const HARNESS_FETCH_DEPTH = 50;
 
-type HarnessWorkspace = Readonly<{
-  fs: Pick<Workspace["fs"], "readFile" | "readdir" | "stat" | "rm" | "mkdir" | "rename">;
-  git: Pick<Workspace["git"], "clone" | "configSet">;
-}>;
+const HARNESS_PROVISION_LOCK_PATH = "/tmp/cf-stumble-harness.provision.lock";
 
 type Container = (source: string) => Effect.Effect<CommandOutput, WorkspaceFault>;
 
-function failed(message: string): CommandOutput {
-  return { stdout: "", stderr: `${message}\n`, exitCode: 1 };
-}
+function harnessSource(configuration: HarnessBuildConfiguration, commit: HarnessCommit): string {
+  const dir = configuration.harnessRepositoryRoot;
+  const remote = configuration.harnessGitRemote;
 
-async function entryCount(workspace: HarnessWorkspace, path: string): Promise<number> {
-  try {
-    return (await workspace.fs.readdir(path)).length;
-  } catch (cause) {
-    if (hasErrnoCode(cause) && cause.code === "ENOENT") return 0;
-    throw cause;
-  }
-}
-
-async function isRepository(workspace: HarnessWorkspace, gitDir: string): Promise<boolean> {
-  try {
-    return (await workspace.fs.stat(gitDir)).isDirectory;
-  } catch (cause) {
-    if (hasErrnoCode(cause) && cause.code === "ENOENT") return false;
-    throw cause;
-  }
-}
-
-function harnessSource(dir: string, remote: string, commit: HarnessCommit): string {
   return [
-    "set -eu",
-    ...durableGitHubConfigurationSource(),
+    cloneRepositorySource({
+      remote,
+      root: dir,
+      gitDir: configuration.harnessGitDir,
+      lock: HARNESS_PROVISION_LOCK_PATH,
+    }),
     `cd ${shellQuote(dir)}`,
-    `if [ "$(git config --get-all remote.origin.url)" != ${shellQuote(remote)} ]; then`,
-    `  printf '%s has a different origin than %s\\n' ${shellQuote(dir)} ${shellQuote(remote)} >&2`,
-    "  exit 1",
-    "fi",
     `if ! git cat-file -e ${commit}^{commit} 2>/dev/null; then`,
-    `  if ! reason="$(git fetch --quiet --depth=${HARNESS_CLONE_DEPTH} origin ${commit} 2>&1 && git cat-file -e ${commit}^{commit} 2>&1)"; then`,
+    `  if ! reason="$(git fetch --quiet --depth=${HARNESS_FETCH_DEPTH} origin ${commit} 2>&1 && git cat-file -e ${commit}^{commit} 2>&1)"; then`,
     `    printf 'harness commit %s is not in %s%s\\n' ${commit} ${shellQuote(remote)} "\${reason:+: $reason}" >&2`,
     "    exit 1",
     "  fi",
@@ -82,31 +57,11 @@ function harnessSource(dir: string, remote: string, commit: HarnessCommit): stri
 }
 
 export function provisionHarness(
-  workspace: HarnessWorkspace,
   container: Container,
   configuration: HarnessBuildConfiguration,
   commit: HarnessCommit,
 ): Effect.Effect<CommandOutput, WorkspaceFault> {
-  const dir = configuration.harnessRepositoryRoot;
-  const remote = configuration.harnessGitRemote;
-
-  return Effect.gen(function* () {
-    if (!(yield* attemptWorkspace(() => isRepository(workspace, configuration.harnessGitDir)))) {
-      if ((yield* attemptWorkspace(() => entryCount(workspace, dir))) > 0) {
-        return failed(`${dir} is not a git repository and is not empty`);
-      }
-
-      yield* attemptWorkspace(() => workspace.fs.rm(dir, { recursive: true, force: true }));
-      yield* cloneIntoPlace(workspace, {
-        url: remote,
-        root: dir,
-        depth: HARNESS_CLONE_DEPTH,
-        token: yield* githubToken(workspace),
-      });
-    }
-
-    const ran = yield* container(harnessSource(dir, remote, commit));
-
-    return { stdout: "", stderr: ran.stderr, exitCode: ran.exitCode };
-  });
+  return container(harnessSource(configuration, commit)).pipe(
+    Effect.map((ran) => ({ stdout: "", stderr: ran.stderr, exitCode: ran.exitCode })),
+  );
 }

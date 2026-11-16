@@ -2,7 +2,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { HarnessBuildConfiguration } from "../harness-build.js";
 import type { HarnessCommit } from "../harness-commit.js";
-import type { Project } from "../project-catalog.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
 
@@ -12,18 +11,13 @@ export class WorkspaceSyncIncomplete extends Data.TaggedError("WorkspaceSyncInco
   readonly message: string;
 }> {}
 
-export class RepositoryNotEligible extends Data.TaggedError("RepositoryNotEligible")<{
-  readonly message: string;
-}> {}
-
 export class WorkspaceUnavailable extends Data.TaggedError("WorkspaceUnavailable")<{
   readonly cause: unknown;
 }> {}
 
-export type WorkspaceFault = WorkspaceUnavailable | WorkspaceSyncIncomplete | RepositoryNotEligible;
+export type WorkspaceFault = WorkspaceUnavailable | WorkspaceSyncIncomplete;
 
 export type WorkspaceEffects = Readonly<{
-  cloneProject(project: Project): Effect.Effect<void, WorkspaceFault>;
   provisionHarness(
     configuration: HarnessBuildConfiguration,
     commit: HarnessCommit,
