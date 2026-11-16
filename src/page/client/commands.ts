@@ -1,7 +1,7 @@
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
 import * as Schema from "effect/Schema";
-import { ConnectAnswer, GitHubAnswer, OkAnswer } from "./answers.js";
+import { GitHubAnswer } from "./answers.js";
 import { ANSWERS } from "../../api/answers.js";
 import {
   diagnosticsText,
@@ -9,7 +9,6 @@ import {
   gitHubReport,
   preparationText,
   projectsOf,
-  ProjectsAnswer,
   submitRejection,
 } from "./api.js";
 import { Message } from "./message.js";
@@ -46,7 +45,7 @@ export const FetchProjects = Command.define("FetchProjects", {
     {
       target: { endpoint: "GET /api/projects" },
       maybeBody: Option.none(),
-      answer: ProjectsAnswer,
+      answer: ANSWERS["GET /api/projects"],
     },
     {
       answered: (answer) => Message.SucceededFetchProjects({ projects: projectsOf(answer) }),
@@ -64,13 +63,11 @@ export const ConnectRepository = Command.define("ConnectRepository", {
       {
         target: { endpoint: "POST /api/projects/connect" },
         maybeBody: Option.some({ repositoryUrl }),
-        answer: ConnectAnswer,
+        answer: ANSWERS["POST /api/projects/connect"],
       },
       {
         answered: (answer) =>
-          answer.ok
-            ? Message.SucceededConnect({ isAlreadyConnected: answer.alreadyConnected })
-            : Message.RejectedConnect({ wording: `rejected: ${answer.problem.code}` }),
+          Message.SucceededConnect({ isAlreadyConnected: answer.alreadyConnected }),
         ...rejectedAs((wording) => Message.RejectedConnect({ wording })),
         failed: (detail) => Message.FailedConnect({ detail }),
       },
@@ -132,7 +129,7 @@ export const AbortRun = Command.define("AbortRun", {
       {
         target: { endpoint: "POST /api/projects/:projectId/abort", projectId },
         maybeBody: Option.none(),
-        answer: OkAnswer,
+        answer: ANSWERS["POST /api/projects/:projectId/abort"],
       },
       {
         answered: () => Message.SucceededAbort(),
@@ -150,7 +147,7 @@ export const ReplaceThread = Command.define("ReplaceThread", {
       {
         target: { endpoint: "POST /api/projects/:projectId/thread/fresh", projectId },
         maybeBody: Option.none(),
-        answer: OkAnswer,
+        answer: ANSWERS["POST /api/projects/:projectId/thread/fresh"],
       },
       {
         answered: () => Message.SucceededFreshThread({ streamId }),

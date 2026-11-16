@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
+import { MessageRequest, type AnswerOf } from "../api/answers.js";
 import { type EntriesRequest, eventsFrom, parseEntriesRequest } from "../entries-request.js";
 import {
+  answer,
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
@@ -10,7 +11,7 @@ import {
   type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
-import { DEFAULT_RUN_BUDGET_MINUTES, RUN_BUDGET_MINUTES } from "../turn-budget.js";
+import { DEFAULT_RUN_BUDGET_MINUTES } from "../turn-budget.js";
 import type {
   ConversationProblem,
   ConversationResult,
@@ -37,12 +38,6 @@ export type ConversationApiSupervisor = Readonly<{
   ) => Promise<ConversationResult<{ conversationId: string }>>;
 }>;
 
-const MessageBody = Schema.Struct({
-  content: Schema.String,
-  requestId: Schema.String,
-  budgetMinutes: Schema.optional(Schema.Literals(RUN_BUDGET_MINUTES)),
-});
-
 function problemResponse(problem: ConversationProblem): Response {
   return refusal({ ok: false, problem });
 }
@@ -65,13 +60,19 @@ function entriesPageResponse(page: string): Response {
   return noStoreResponse(page, "application/json; charset=utf-8");
 }
 
-function answer<T extends object>(
-  call: () => Promise<ConversationResult<T>>,
+type ConversationEndpoint =
+  | "POST /api/projects/:projectId/messages"
+  | "POST /api/projects/:projectId/abort"
+  | "POST /api/projects/:projectId/thread/fresh";
+
+function answered<E extends ConversationEndpoint>(
+  endpoint: E,
+  call: () => Promise<ConversationResult<AnswerOf<E>>>,
   status = 200,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(call).pipe(
     Effect.map((result) =>
-      result.ok ? Response.json(result, { status }) : problemResponse(result.problem),
+      result.ok ? answer(endpoint, result, status) : problemResponse(result.problem),
     ),
   );
 }
@@ -85,9 +86,10 @@ const messageResponse = Effect.fnUntraced(function* (
     content,
     requestId,
     budgetMinutes = DEFAULT_RUN_BUDGET_MINUTES,
-  } = yield* decodeRequestBody(request, MessageBody);
+  } = yield* decodeRequestBody(request, MessageRequest);
 
-  return yield* answer(
+  return yield* answered(
+    "POST /api/projects/:projectId/messages",
     () => supervisor.submitProjectMessage(projectId, content, requestId, budgetMinutes),
     202,
   );
@@ -138,7 +140,9 @@ export const CONVERSATION_HANDLERS: Handlers<
   "GET /api/projects/:projectId/events": eventsResponseFor,
   "GET /api/projects/:projectId/entries": entriesResponseFor,
   "POST /api/projects/:projectId/abort": (_request, projectId, supervisor) =>
-    answer(() => supervisor.abortProjectRun(projectId)),
+    answered("POST /api/projects/:projectId/abort", () => supervisor.abortProjectRun(projectId)),
   "POST /api/projects/:projectId/thread/fresh": (_request, projectId, supervisor) =>
-    answer(() => supervisor.freshProjectConversation(projectId)),
+    answered("POST /api/projects/:projectId/thread/fresh", () =>
+      supervisor.freshProjectConversation(projectId),
+    ),
 };

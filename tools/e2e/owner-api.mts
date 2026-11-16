@@ -6,10 +6,6 @@ const ChatGPTConnection = Schema.Struct({
   chatgpt: Schema.Struct({ connection: Schema.Struct({ state: Schema.String }) }),
 });
 
-const Disconnected = Schema.Struct({ workspace: Schema.String });
-
-const Connected = Schema.Struct({ project: Schema.Struct({ id: Schema.String }) });
-
 const Live = Schema.Struct({
   run: Schema.optional(Schema.Unknown),
   runFailure: Schema.optional(Schema.Struct({ reason: Schema.String })),
@@ -154,8 +150,12 @@ export class Owner {
   }
 
   async connect(repositoryUrl: string): Promise<string> {
-    return (await this.#json(this.post("/api/projects/connect", { repositoryUrl }), Connected))
-      .project.id;
+    return (
+      await this.#json(
+        this.post("/api/projects/connect", { repositoryUrl }),
+        ANSWERS["POST /api/projects/connect"],
+      )
+    ).project.id;
   }
 
   async disconnect(projectId: string): Promise<void> {
@@ -164,7 +164,9 @@ export class Owner {
 
     if (!response.ok) throw new Error(`disconnect ${projectId} answered ${text}`);
 
-    const { workspace } = Schema.decodeSync(Schema.fromJsonString(Disconnected))(text);
+    const { workspace } = Schema.decodeSync(
+      Schema.fromJsonString(ANSWERS["POST /api/projects/:projectId/disconnect"]),
+    )(text);
 
     if (workspace !== "removed") {
       throw new Error(`disconnect ${projectId} left its workspace files: ${workspace}`);

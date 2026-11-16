@@ -13,14 +13,6 @@ export const GitHubAnswer = Schema.Union([
   Schema.Struct({ ok: Schema.Literal(false), problem: RefusalProblem }),
 ]);
 
-export const ConnectAnswer = Schema.Union([
-  Schema.Struct({
-    ok: Schema.Literal(true),
-    alreadyConnected: Schema.Boolean,
-  }),
-  Schema.Struct({ ok: Schema.Literal(false), problem: RefusalProblem }),
-]);
-
 export const ChatGPTAnswer = Schema.Union([
   Schema.Struct({ ok: Schema.Literal(true), chatgpt: Schema.Json }),
   Schema.Struct({
@@ -29,8 +21,6 @@ export const ChatGPTAnswer = Schema.Union([
     chatgpt: Schema.optional(Schema.Json),
   }),
 ]);
-
-export const OkAnswer = Schema.Struct({ ok: Schema.Literal(true) });
 
 export const BackendAnswer = Schema.Union([
   Schema.Struct({ ok: Schema.Literal(true), backend: BackendSetting }),

@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { RUN_BUDGET_MINUTES } from "../turn-budget.js";
 import type { Endpoint } from "./endpoints.js";
 
 const Generation = Schema.Struct({
@@ -93,7 +94,64 @@ const ControlAnswer = Schema.Struct({
   }),
 });
 
+const Project = Schema.Struct({
+  id: Schema.String,
+  displayName: Schema.String,
+  repositoryUrl: Schema.String,
+});
+
+const ProjectsAnswer = Schema.Struct({
+  ok: Schema.Literal(true),
+  projects: Schema.Array(
+    Schema.Union([
+      Schema.Struct({
+        kind: Schema.Literal("harness"),
+        id: Schema.String,
+        displayName: Schema.String,
+      }),
+      Schema.Struct({ kind: Schema.Literal("repository"), ...Project.fields }),
+    ]),
+  ),
+});
+
+const ConnectAnswer = Schema.Struct({
+  ok: Schema.Literal(true),
+  project: Project,
+  alreadyConnected: Schema.Boolean,
+});
+
+const DisconnectAnswer = Schema.Struct({
+  ok: Schema.Literal(true),
+  projectId: Schema.String,
+  workspace: Schema.Literals(["removed", "failed"]),
+});
+
+const Accepted = Schema.Struct({ ok: Schema.Literal(true) });
+
+export const ConnectRequest = Schema.Struct({
+  repositoryUrl: Schema.String,
+  displayName: Schema.optionalKey(Schema.String),
+});
+
+export const MessageRequest = Schema.Struct({
+  content: Schema.String,
+  requestId: Schema.String,
+  budgetMinutes: Schema.optional(Schema.Literals(RUN_BUDGET_MINUTES)),
+});
+
 export const ANSWERS = {
+  "GET /api/projects": ProjectsAnswer,
+  "POST /api/projects/connect": ConnectAnswer,
+  "POST /api/projects/:projectId/disconnect": DisconnectAnswer,
+  "POST /api/projects/:projectId/messages": Schema.Struct({
+    ok: Schema.Literal(true),
+    submissionId: Schema.Number,
+  }),
+  "POST /api/projects/:projectId/abort": Accepted,
+  "POST /api/projects/:projectId/thread/fresh": Schema.Struct({
+    ok: Schema.Literal(true),
+    conversationId: Schema.String,
+  }),
   "GET /api/status": StatusAnswer,
   "POST /api/generations/submit": SubmitAnswer,
   "POST /api/generations/activate": ControlAnswer,

@@ -1,4 +1,7 @@
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { ANSWERS, type AnswerOf, type AnsweredEndpoint } from "../../src/api/answers.js";
 import { routeApiRequest } from "../../src/routes/index.js";
 import type { ApiSupervisor } from "../../src/routes/api.js";
 import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
@@ -77,4 +80,13 @@ export function controlRequest(path: string, body: string): Request {
     headers: { "content-type": "application/json" },
     body,
   });
+}
+
+export async function decodedAnswer<E extends AnsweredEndpoint>(
+  endpoint: E,
+  response: Response,
+): Promise<AnswerOf<E> | undefined> {
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(ANSWERS[endpoint])(await response.json()),
+  );
 }

@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
+import { ConnectRequest } from "../api/answers.js";
 import {
+  answer,
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
@@ -36,7 +37,9 @@ function disconnectResponse(
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.disconnectProject(projectId)).pipe(
     Effect.map((result) =>
-      result.ok ? Response.json(result) : refusal({ ok: false, problem: result.problem }),
+      result.ok
+        ? answer("POST /api/projects/:projectId/disconnect", result)
+        : refusal({ ok: false, problem: result.problem }),
     ),
   );
 }
@@ -57,16 +60,11 @@ function refreshResponse(
   );
 }
 
-const ConnectBody = Schema.Struct({
-  repositoryUrl: Schema.String,
-  displayName: Schema.optionalKey(Schema.String),
-});
-
 const connectResponse = Effect.fnUntraced(function* (
   request: Request,
   supervisor: ProjectApiSupervisor,
 ) {
-  const body = yield* decodeRequestBody(request, ConnectBody);
+  const body = yield* decodeRequestBody(request, ConnectRequest);
 
   const result = yield* callSupervisor(() =>
     supervisor.connectProject(body.repositoryUrl, body.displayName),
@@ -76,11 +74,7 @@ const connectResponse = Effect.fnUntraced(function* (
     return refusal({ ok: false, problem: result.problem });
   }
 
-  return Response.json({
-    ok: true,
-    project: result.project,
-    alreadyConnected: result.alreadyConnected,
-  });
+  return answer("POST /api/projects/connect", result);
 }, invalidRequestBody("invalid-connect-request"));
 
 function authorizationResponse(
@@ -107,7 +101,7 @@ export const PROJECT_HANDLERS: Handlers<
 > = {
   "GET /api/projects": (_request, supervisor) =>
     callSupervisor(() => supervisor.listProjects()).pipe(
-      Effect.map((projects) => Response.json({ ok: true, projects })),
+      Effect.map((projects) => answer("GET /api/projects", { ok: true, projects })),
     ),
   "POST /api/projects/connect": connectResponse,
   "POST /api/projects/:projectId/disconnect": (_request, projectId, supervisor) =>

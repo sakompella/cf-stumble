@@ -176,24 +176,12 @@ export function gitHubReport(
   });
 }
 
-const ProjectEntry = Schema.Struct({
-  kind: Schema.Literals(["harness", "repository"]),
-  id: Schema.String,
-  displayName: Schema.String,
-  repositoryUrl: Schema.optional(Schema.String),
-});
-
-export const ProjectsAnswer = Schema.Struct({
-  ok: Schema.Literal(true),
-  projects: Schema.Array(ProjectEntry),
-});
-
-export function projectsOf(answer: typeof ProjectsAnswer.Type): readonly Project[] {
+export function projectsOf(answer: AnswerOf<"GET /api/projects">): readonly Project[] {
   return answer.projects.map((entry) => ({
     id: entry.id,
     displayName: entry.displayName,
     isHarness: entry.kind === "harness",
-    location: entry.kind === "harness" ? HARNESS_DIRECTORY : (entry.repositoryUrl ?? ""),
+    location: entry.kind === "harness" ? HARNESS_DIRECTORY : entry.repositoryUrl,
   }));
 }
 

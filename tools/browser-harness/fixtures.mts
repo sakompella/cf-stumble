@@ -36,12 +36,7 @@ export function projectLocation(projectId: string): string {
   return CONNECTED_PROJECT_URL;
 }
 
-export type ProjectEntry = Readonly<{
-  kind: "repository" | "harness";
-  id: string;
-  displayName: string;
-  repositoryUrl?: string;
-}>;
+export type ProjectEntry = Encoded<"GET /api/projects">["projects"][number];
 
 export const BASELINE_PROJECTS: readonly ProjectEntry[] = [
   {
@@ -83,29 +78,17 @@ export function github(scenario: HarnessScenario): JsonValue {
   return CONNECTED_GITHUB;
 }
 
-function projectJson(project: ProjectEntry): JsonValue {
-  return project.repositoryUrl === undefined
-    ? { kind: project.kind, id: project.id, displayName: project.displayName }
-    : {
-        kind: project.kind,
-        id: project.id,
-        displayName: project.displayName,
-        repositoryUrl: project.repositoryUrl,
-      };
+export function projectsPayload(projects: readonly ProjectEntry[]): Encoded<"GET /api/projects"> {
+  return { ok: true, projects };
 }
 
-export function projectsPayload(projects: readonly ProjectEntry[]): JsonValue {
-  return { ok: true, projects: projects.map((project) => projectJson(project)) };
-}
-
-export function connectPayload(alreadyConnected: boolean): JsonValue {
+export function connectPayload(alreadyConnected: boolean): Encoded<"POST /api/projects/connect"> {
   return {
     ok: true,
     project: {
-      id: NEW_PROJECT.id,
-      displayName: NEW_PROJECT.displayName,
+      id: CONNECTED_PROJECT_ID,
+      displayName: "new-repo",
       repositoryUrl: CONNECTED_PROJECT_URL,
-      connectedAt: 1_760_000_000_000,
     },
     alreadyConnected,
   };

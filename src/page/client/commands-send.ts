@@ -5,7 +5,7 @@ import { Command } from "foldkit";
 import { unreadableText } from "./api.js";
 import { Message } from "./message.js";
 import { apiRequest } from "./api-request.js";
-import { SentMessage } from "./sent-message.js";
+import { ANSWERS } from "../../api/answers.js";
 import { sendRefusal } from "./send-refusals.js";
 
 export const MintRequestId = Command.define("MintRequestId", {
@@ -30,7 +30,7 @@ export const SendMessage = Command.define("SendMessage", {
       {
         target: { endpoint: "POST /api/projects/:projectId/messages", projectId },
         maybeBody: Option.some({ content, requestId, budgetMinutes }),
-        answer: SentMessage,
+        answer: ANSWERS["POST /api/projects/:projectId/messages"],
       },
       {
         answered: ({ submissionId }) => Message.SucceededSend({ requestId, submissionId }),

@@ -1,4 +1,6 @@
 import * as Schema from "effect/Schema";
+import { MessageRequest } from "../../../src/api/answers.ts";
+import { parseMessage } from "../../../src/supervisor/conversations/conversation-result.ts";
 import { generateBody } from "./http-bodies.mts";
 import type { Case, Credential, Header } from "./http-case.mts";
 import {
@@ -45,11 +47,6 @@ const SubmitBody = Schema.Struct({
   harnessCommit: Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u)),
 });
 
-const MessageBody = Schema.Struct({
-  content: Schema.String.check(Schema.isMinLength(1)),
-  requestId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
-});
-
 const decodeConnect = Schema.decodeUnknownOption(Schema.fromJsonString(ConnectBody), {
   onExcessProperty: "error",
 });
@@ -58,7 +55,7 @@ const decodeSubmit = Schema.decodeUnknownOption(Schema.fromJsonString(SubmitBody
   onExcessProperty: "error",
 });
 
-const decodeMessage = Schema.decodeUnknownOption(Schema.fromJsonString(MessageBody), {
+const decodeMessage = Schema.decodeUnknownOption(Schema.fromJsonString(MessageRequest), {
   onExcessProperty: "error",
 });
 
@@ -81,8 +78,7 @@ function messageIsLive(probe: Case): boolean {
 
   return (
     decoded._tag === "Some" &&
-    decoded.value.content.trim() !== "" &&
-    Buffer.byteLength(decoded.value.content) <= 100_000
+    parseMessage(decoded.value.content, decoded.value.requestId) !== undefined
   );
 }
 
