@@ -1,7 +1,6 @@
 import { Workspace } from "@cloudflare/computer";
 import { WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { computerStorage } from "../../src/workspace/workspace-platform.js";
-import type { GitHubCredentialRequest } from "../../src/workspace/github-credential.js";
 import type { ProjectProvisionRequest } from "../../src/workspace/commands/provision-project.js";
 import type { ProjectRemovalRequest } from "../../src/workspace/commands/remove-project.js";
 
@@ -18,11 +17,7 @@ export const REFUSED_REMOVAL: ProjectRemovalRequest = {
   projectId: "not-a-project",
 };
 
-export const REFUSED_CREDENTIAL: GitHubCredentialRequest = {
-  kind: "github-credential",
-  step: "install",
-  token: "not a token",
-};
+export const REFUSED_CREDENTIAL_TOKEN = "not a token";
 
 type StubbedMember = "fs" | "runtime" | "git";
 

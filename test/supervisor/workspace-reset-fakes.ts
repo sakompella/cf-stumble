@@ -1,19 +1,18 @@
 import { vi } from "vitest";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
-import type { GitHubCredentialResult } from "../../src/workspace/github-credential.js";
+import type { CredentialStatusResult } from "../../src/workspace/github-credential.js";
 import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 
 export function fakeWorkspace(resetResult: WorkspaceResetResult) {
   let credentialState: "connected" | "missing" = "connected";
 
-  const credential = vi.fn((): Promise<GitHubCredentialResult> =>
+  const credentialStatus = vi.fn((): Promise<CredentialStatusResult> =>
     Promise.resolve({
       ok: true,
-      result: {
-        kind: "credential-status",
-        state: credentialState,
-        login: credentialState === "connected" ? "reset-user" : undefined,
-      },
+      status:
+        credentialState === "connected"
+          ? { state: "connected", login: "reset-user" }
+          : { state: credentialState },
     }),
   );
 
@@ -23,8 +22,8 @@ export function fakeWorkspace(resetResult: WorkspaceResetResult) {
     return Promise.resolve(resetResult);
   });
 
-  const workspace: WorkspaceHostRpc<"credential" | "reset"> = {
-    credential,
+  const workspace: WorkspaceHostRpc<"credentialStatus" | "reset"> = {
+    credentialStatus,
     reset: resetWorkspace,
   };
 

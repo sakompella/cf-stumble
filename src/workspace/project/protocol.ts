@@ -41,7 +41,17 @@ export type ProjectFileInfo = {
 
 export type ProjectLstatInfo = ProjectFileInfo & { canonicalPath: ProjectResult<string> };
 
-export type WriteMode = "overwrite" | "append" | "create-exclusive";
+export const WRITE_MODES = ["overwrite", "append", "create-exclusive"] as const;
+
+export type WriteMode = (typeof WRITE_MODES)[number];
+
+export const EXEC_BACKEND_CHOICES = ["isolate", "container"] as const;
+
+export type ExecBackendChoice = (typeof EXEC_BACKEND_CHOICES)[number];
+
+const EXEC_FAILURE_CODES = ["backend-unavailable", "container-restarted"] as const;
+
+type ExecFailureCode = (typeof EXEC_FAILURE_CODES)[number];
 
 export type ExecEvent =
   | { kind: "stdout"; seq: number; data: string }
@@ -58,10 +68,54 @@ export type ExecEvent =
       kind: "terminal";
       seq: number;
       outcome: "failed";
-      error: { code: "backend-unavailable" | "container-restarted" };
+      error: { code: ExecFailureCode };
     };
 
-export type ExecBackendChoice = "isolate" | "container";
+function isOneOf<const Known extends string>(
+  known: readonly Known[],
+  value: unknown,
+): value is Known {
+  return known.some((item) => item === value);
+}
+
+function isSavedPaths(value: unknown): value is readonly string[] | undefined {
+  if (value === undefined) return true;
+
+  if (!Array.isArray(value)) return false;
+
+  return value.every((path): path is string => typeof path === "string");
+}
+
+export function isExecEvent(value: unknown): value is ExecEvent {
+  if (typeof value !== "object" || value === null) return false;
+
+  if (!("seq" in value) || typeof value.seq !== "number" || !("kind" in value)) return false;
+
+  if (value.kind === "stdout" || value.kind === "stderr") {
+    return "data" in value && typeof value.data === "string";
+  }
+
+  if (value.kind !== "terminal" || !("outcome" in value)) return false;
+
+  if (value.outcome === "exited") {
+    const saved = "fullOutputPaths" in value ? value.fullOutputPaths : undefined;
+
+    return "exitCode" in value && typeof value.exitCode === "number" && isSavedPaths(saved);
+  }
+
+  if (value.outcome === "failed") {
+    const error = "error" in value ? value.error : undefined;
+
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      isOneOf(EXEC_FAILURE_CODES, error.code)
+    );
+  }
+
+  return value.outcome === "killed" || value.outcome === "timed-out";
+}
 
 export type StartExecWire = Readonly<{
   command: string;

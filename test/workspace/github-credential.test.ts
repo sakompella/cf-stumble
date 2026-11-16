@@ -2,8 +2,9 @@ import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { REDACTED } from "../../src/github/redaction.js";
 import {
-  executeGitHubCredentialRequest,
-  type GitHubCredentialRequest,
+  checkGitHubRepositoryAccess,
+  installGitHubCredential,
+  readGitHubCredentialStatus,
 } from "../../src/workspace/github-credential.js";
 import {
   workspaceEffects,
@@ -50,27 +51,32 @@ class FilesystemlessOperations implements PromiseOperations {
   }
 }
 
-function credential(operations: FilesystemlessOperations, request: GitHubCredentialRequest) {
+function install(operations: FilesystemlessOperations, token = FAKE_TOKEN) {
   return Effect.runPromise(
-    executeGitHubCredentialRequest({
-      operations: workspaceEffects(operations),
-      installOperations: workspaceEffects(operations),
-      request,
-    }),
+    installGitHubCredential(
+      { lenient: workspaceEffects(operations), durable: workspaceEffects(operations) },
+      token,
+    ),
   );
 }
 
-function install(operations: FilesystemlessOperations, token = FAKE_TOKEN) {
-  return credential(operations, { kind: "github-credential", step: "install", token });
+function status(operations: FilesystemlessOperations) {
+  return Effect.runPromise(readGitHubCredentialStatus(workspaceEffects(operations)));
+}
+
+function verify(operations: FilesystemlessOperations, repositoryUrl: string) {
+  return Effect.runPromise(
+    checkGitHubRepositoryAccess(workspaceEffects(operations), repositoryUrl),
+  );
 }
 
 test("installs a credential in a workspace whose filesystem refuses everything, which staged the token in a /tmp the workspace filesystem does not have before d7f1481c", async () => {
   const operations = new FilesystemlessOperations();
-  operations.stdout = "installed";
+  operations.stdout = "connected octocat";
 
   await expect(install(operations)).resolves.toEqual({
     ok: true,
-    result: { kind: "credential-installed" },
+    status: { state: "connected", login: "octocat" },
   });
   expect(operations.stdins, "standard input is how gh reads the token").toEqual([
     `${FAKE_TOKEN}\n`,
@@ -122,22 +128,38 @@ test("reports a workspace image without gh instead of pretending to install", as
 
   await expect(install(operations)).resolves.toEqual({
     ok: true,
-    result: { kind: "credential-status", state: "tooling-missing", login: undefined },
+    status: { state: "tooling-missing" },
+  });
+});
+
+test("an install answers the status the same command observed after the login", async () => {
+  const operations = new FilesystemlessOperations();
+  operations.stdout = "unusable";
+
+  await expect(install(operations)).resolves.toEqual({ ok: true, status: { state: "unusable" } });
+  expect(operations.sources).toHaveLength(1);
+});
+
+test("an install whose observation reaches no verdict is a workspace-unavailable failure", async () => {
+  const operations = new FilesystemlessOperations();
+  operations.stdout = "unreachable";
+
+  await expect(install(operations)).resolves.toEqual({
+    ok: false,
+    error: { code: "workspace-unavailable", detail: "" },
   });
 });
 
 test.each([
-  ["connected octocat", "connected", "octocat"],
-  ["missing", "missing", undefined],
-  ["unusable", "unusable", undefined],
-  ["tooling-missing", "tooling-missing", undefined],
-])("reads %j as the %s credential state", async (stdout, state, login) => {
+  ["connected octocat", { state: "connected", login: "octocat" }],
+  ["missing", { state: "missing" }],
+  ["unusable", { state: "unusable" }],
+  ["tooling-missing", { state: "tooling-missing" }],
+])("reads %j as the credential status", async (stdout, expected) => {
   const operations = new FilesystemlessOperations();
   operations.stdout = stdout;
 
-  await expect(
-    credential(operations, { kind: "github-credential", step: "status" }),
-  ).resolves.toEqual({ ok: true, result: { kind: "credential-status", state, login } });
+  await expect(status(operations)).resolves.toEqual({ ok: true, status: expected });
 });
 
 test.each(["something unexpected", "", "unreachable"])(
@@ -146,19 +168,12 @@ test.each(["something unexpected", "", "unreachable"])(
     const operations = new FilesystemlessOperations();
     operations.stdout = stdout;
 
-    await expect(
-      credential(operations, { kind: "github-credential", step: "status" }),
-    ).resolves.toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
+    await expect(status(operations)).resolves.toEqual({
+      ok: false,
+      error: { code: "workspace-unavailable", detail: "" },
+    });
   },
 );
-
-function verify(operations: FilesystemlessOperations, repositoryUrl: string) {
-  return credential(operations, {
-    kind: "github-credential",
-    step: "verify-repository",
-    repositoryUrl,
-  });
-}
 
 test("checks one repository for both spellings of its URL", async () => {
   const operations = new FilesystemlessOperations();
@@ -172,7 +187,7 @@ test("checks one repository for both spellings of its URL", async () => {
   expect(answers).toEqual(
     Array.from({ length: 2 }, () => ({
       ok: true,
-      result: { kind: "repository-access", granted: true, detail: "" },
+      access: { granted: true },
     })),
   );
   expect(operations.sources[0]).toBe(operations.sources[1]);
@@ -184,28 +199,21 @@ test("a repository git cannot read is denied with git's reason, secrets redacted
 
   const refused = await verify(operations, "https://github.com/owner/repo");
 
-  if (!refused.ok || refused.result.kind !== "repository-access") {
+  if (!refused.ok || refused.access.granted) {
     throw new Error("a denied repository must still be a result");
   }
 
-  expect(refused.result.granted).toBe(false);
-  expect(refused.result.detail).toContain("could not read from");
-  expect(refused.result.detail).not.toContain(FAKE_TOKEN);
-  expect(refused.result.detail).not.toContain(SAMPLE_JWT);
+  expect(refused.access.detail).toContain("could not read from");
+  expect(refused.access.detail).not.toContain(FAKE_TOKEN);
+  expect(refused.access.detail).not.toContain(SAMPLE_JWT);
 });
 
 test("refuses an install token or repository URL that does not parse, and runs nothing", async () => {
   const operations = new FilesystemlessOperations();
+  const invalid = { ok: false, error: { code: "invalid-request", detail: "" } };
 
-  for (const request of [
-    { kind: "github-credential", step: "install", token: "has space" },
-    { kind: "github-credential", step: "verify-repository", repositoryUrl: "git@github.com:o/r" },
-  ] as const) {
-    await expect(credential(operations, request)).resolves.toEqual({
-      ok: false,
-      error: { code: "invalid-request", detail: "" },
-    });
-  }
+  await expect(install(operations, "has space")).resolves.toEqual(invalid);
+  await expect(verify(operations, "git@github.com:o/r")).resolves.toEqual(invalid);
 
   expect(operations.sources).toEqual([]);
 });

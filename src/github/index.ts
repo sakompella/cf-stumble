@@ -6,7 +6,6 @@ export {
   parseCredentialStatus,
   parseRepositoryAccess,
   repositoryAccessSource,
-  type GitHubCredentialState,
   type GitHubCredentialStatus,
   type RepositoryAccess,
 } from "./credential-commands.js";

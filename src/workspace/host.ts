@@ -31,18 +31,20 @@ import {
 import {
   ComputerWorkspaceOperations,
   ensureManagedInstructions,
-  executeGitHubCredentialRequest,
+  checkGitHubRepositoryAccess,
   executeHarnessBuildDiscard,
   executeHarnessBuildOutput,
   executeHarnessBuildStep,
   executeProjectProvisionRequest,
   executeProjectRemovalRequest,
   harnessBuildConfiguration,
+  installGitHubCredential,
+  readGitHubCredentialStatus,
   readHarnessLineage,
   UNKNOWN_LINEAGE,
-  type GitHubCredentialRequest,
-  type GitHubCredentialResult,
   type CommandAnswer,
+  type CredentialInstallResult,
+  type CredentialStatusResult,
   type HarnessBuildStepRequest,
   type HarnessLineage,
   type HarnessLineageRequest,
@@ -51,6 +53,7 @@ import {
   type ProjectProvisionAnswer,
   type ProjectProvisionRequest,
   type ProjectRemovalRequest,
+  type RepositoryAccessResult,
 } from "./commands/index.js";
 
 const CHANGE_REFUSED = { ok: false, error: { code: "workspace-busy" } } as const;
@@ -183,13 +186,21 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return this.#unlessResetting(CHANGE_REFUSED, () => ensureManagedInstructions(this.#lenient()));
   }
 
-  credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult> {
+  installCredential(token: string): Promise<CredentialInstallResult> {
     return this.#unlessResetting(CREDENTIAL_REFUSED, () =>
-      executeGitHubCredentialRequest({
-        operations: this.#lenient(),
-        installOperations: this.#durable(),
-        request,
-      }),
+      installGitHubCredential({ lenient: this.#lenient(), durable: this.#durable() }, token),
+    );
+  }
+
+  credentialStatus(): Promise<CredentialStatusResult> {
+    return this.#unlessResetting(CREDENTIAL_REFUSED, () =>
+      readGitHubCredentialStatus(this.#lenient()),
+    );
+  }
+
+  checkRepositoryAccess(repositoryUrl: string): Promise<RepositoryAccessResult> {
+    return this.#unlessResetting(CREDENTIAL_REFUSED, () =>
+      checkGitHubRepositoryAccess(this.#lenient(), repositoryUrl),
     );
   }
 

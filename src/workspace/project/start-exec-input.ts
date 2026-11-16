@@ -2,10 +2,12 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { AddressedPathText, decodeAddressedPathText, segmentsOfAddressedPath } from "./resolve.js";
 import {
+  EXEC_BACKEND_CHOICES,
   fail,
   MAX_EXEC_COMMAND_BYTES,
   MAX_EXEC_TIMEOUT_MS,
   ok,
+  WRITE_MODES,
   type ExecBackendChoice,
   type ProjectFailureDetail,
   type ProjectResult,
@@ -20,7 +22,7 @@ function isBytes(value: unknown): value is Uint8Array {
   return value instanceof Uint8Array;
 }
 
-const WriteModeText = Schema.Literals(["overwrite", "append", "create-exclusive"]);
+const WriteModeText = Schema.Literals(WRITE_MODES);
 
 const WriteFileInput = Schema.Struct({
   path: AddressedPathText,
@@ -61,7 +63,7 @@ const StartExecInput = Schema.Struct({
   command: CommandText,
   cwd: Schema.optional(Schema.String),
   timeoutMs: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))),
-  backend: Schema.optional(Schema.Literals(["isolate", "container"])),
+  backend: Schema.optional(Schema.Literals(EXEC_BACKEND_CHOICES)),
 });
 
 const decodeStartExecInput = Schema.decodeResult(StartExecInput, { onExcessProperty: "error" });

@@ -1,5 +1,6 @@
 import type * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
+import type { GitHubCredentialStatus } from "../../../src/github/index.js";
 import {
   authorizationTransition,
   AuthorizationEvent,
@@ -43,16 +44,10 @@ export const START: Snapshot = {
 
 const source = gs.sampledFrom(["device-authorization", "configured-token"] as const);
 
-const answerState = gs.sampledFrom([
-  "connected",
-  "missing",
-  "unusable",
-  "tooling-missing",
-] as const);
-
-const login = gs
-  .optional(gs.sampledFrom(["", "octocat", "hubot"]))
-  .map((value) => value ?? undefined);
+const credentialStatus = gs.oneOf<GitHubCredentialStatus>(
+  gs.sampledFrom(["octocat", "hubot"]).map((login) => ({ state: "connected", login })),
+  gs.sampledFrom(["missing", "unusable", "tooling-missing"] as const).map((state) => ({ state })),
+);
 
 const codes = gs.sampledFrom(["code-a", "code-b", "code-c"]);
 
@@ -75,7 +70,7 @@ const credentialEvent = gs.composite<CredentialEvent>((tc) => {
 
   return tc.draw(gs.booleans())
     ? CredentialEvent.Observed({
-        answer: { state: tc.draw(answerState), login: tc.draw(login) },
+        answer: tc.draw(credentialStatus),
         installedBy: tc.draw(gs.optional(source)) ?? undefined,
         now,
       })
@@ -105,9 +100,9 @@ function reconnect(reason: ReconnectReason, at: number): View {
   return { kind: "reconnect-required", at, reason };
 }
 
-function recordedByObserving(before: Recorded | null, event: Observed): Recorded {
+function recordedByObserving(before: Recorded | null, event: Observed, login: string): Recorded {
   return {
-    login: event.answer.login ?? before?.login ?? "",
+    login,
     source: event.installedBy ?? before?.source ?? "device-authorization",
     connectedAt: event.installedBy === undefined ? (before?.connectedAt ?? 0) : event.now,
   };
@@ -117,7 +112,11 @@ function viewAfterAnswer(model: Model, event: Observed): View {
   const { answer, now } = event;
 
   if (answer.state === "connected") {
-    return { kind: "connected", at: now, recorded: recordedByObserving(model.recorded, event) };
+    return {
+      kind: "connected",
+      at: now,
+      recorded: recordedByObserving(model.recorded, event, answer.login),
+    };
   }
 
   if (answer.state === "tooling-missing") return { kind: "tooling-missing", at: now };

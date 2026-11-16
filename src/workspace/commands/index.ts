@@ -30,9 +30,12 @@ export {
 } from "./command-result.js";
 
 export {
-  executeGitHubCredentialRequest,
-  type GitHubCredentialRequest,
-  type GitHubCredentialResult,
+  checkGitHubRepositoryAccess,
+  installGitHubCredential,
+  readGitHubCredentialStatus,
+  type CredentialInstallResult,
+  type CredentialStatusResult,
+  type RepositoryAccessResult,
 } from "../github-credential.js";
 
 export { ensureManagedInstructions } from "../managed-instructions.js";

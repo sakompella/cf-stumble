@@ -10,11 +10,14 @@ import {
 import { executeProjectProvisionRequest } from "../../../src/workspace/commands/provision-project.js";
 import { executeProjectRemovalRequest } from "../../../src/workspace/commands/remove-project.js";
 import {
-  executeGitHubCredentialRequest,
-  type GitHubCredentialRequest,
-  type GitHubCredentialResult,
+  checkGitHubRepositoryAccess,
+  installGitHubCredential,
+  readGitHubCredentialStatus,
+  type CredentialInstallResult,
+  type CredentialStatusResult,
+  type RepositoryAccessResult,
 } from "../../../src/workspace/github-credential.js";
-import type { GitHubCredentialState } from "../../../src/github/index.js";
+import type { GitHubCredentialStatus } from "../../../src/github/index.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
   type HarnessBuildStepRequest,
@@ -65,6 +68,8 @@ export class HeldCommand {
   }
 }
 
+type CredentialRequest = Readonly<{ method: string; token?: string; repositoryUrl?: string }>;
+
 export class FakeTenantWorkspace implements PromiseOperations {
   readonly commands: string[] = [];
   readonly writes: (readonly [string, string])[] = [];
@@ -73,7 +78,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
   readonly provisionRequests: ProjectProvisionRequest[] = [];
   readonly names: string[] = [];
 
-  credentialState: GitHubCredentialState | "unreachable" = "missing";
+  credentialState: GitHubCredentialStatus["state"] | "unreachable" = "missing";
   login = "octocat";
   repositoryAccess: "granted" | "denied" = "granted";
   cloneExitCode = 0;
@@ -141,7 +146,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
 
     const heldIndex = this.held.findIndex((command) => source.includes(command.fragment));
     const [held] = heldIndex >= 0 ? this.held.splice(heldIndex, 1) : [];
-    const output = held === undefined ? this.answer(source) : await this.heldOutput(held);
+    const output = held === undefined ? this.answer(source) : await this.heldOutput(held, source);
 
     if (output.exitCode === 0) this.persist(source);
 
@@ -182,7 +187,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
         this.credentialState === "tooling-missing" ? "tooling-missing" : "connected";
 
       return this.output(
-        this.credentialState === "tooling-missing" ? "tooling-missing" : "installed",
+        this.credentialState === "tooling-missing" ? "tooling-missing" : `connected ${this.login}`,
       );
     }
 
@@ -209,10 +214,14 @@ export class FakeTenantWorkspace implements PromiseOperations {
     return { stdout: "", stderr: "", exitCode: unauthorized ? 128 : this.cloneExitCode };
   }
 
-  private async heldOutput(command: HeldCommand): Promise<CommandOutput> {
+  private async heldOutput(command: HeldCommand, source: string): Promise<CommandOutput> {
     command.start();
 
-    return { stdout: "", stderr: "", exitCode: await command.exitCode };
+    const exitCode = await command.exitCode;
+
+    return source.includes("gh auth login")
+      ? { ...this.answer(source), exitCode }
+      : { stdout: "", stderr: "", exitCode };
   }
 
   private output(stdout: string): CommandOutput {
@@ -225,20 +234,38 @@ export class FakeTenantWorkspace implements PromiseOperations {
     return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
   }
 
-  credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult> {
+  installCredential(token: string): Promise<CredentialInstallResult> {
+    return this.credentialRequest({ method: "installCredential", token }, () =>
+      installGitHubCredential(
+        { lenient: workspaceEffects(this), durable: workspaceEffects(this) },
+        token,
+      ),
+    );
+  }
+
+  credentialStatus(): Promise<CredentialStatusResult> {
+    return this.credentialRequest({ method: "credentialStatus" }, () =>
+      readGitHubCredentialStatus(workspaceEffects(this)),
+    );
+  }
+
+  checkRepositoryAccess(repositoryUrl: string): Promise<RepositoryAccessResult> {
+    return this.credentialRequest({ method: "checkRepositoryAccess", repositoryUrl }, () =>
+      checkGitHubRepositoryAccess(workspaceEffects(this), repositoryUrl),
+    );
+  }
+
+  private credentialRequest<A>(
+    request: CredentialRequest,
+    run: () => Effect.Effect<A>,
+  ): Promise<A> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
 
     this.credentialRequests.push(JSON.stringify(request));
 
-    return Effect.runPromise(
-      executeGitHubCredentialRequest({
-        operations: workspaceEffects(this),
-        installOperations: workspaceEffects(this),
-        request,
-      }),
-    );
+    return Effect.runPromise(run());
   }
 
   provision(request: ProjectProvisionRequest): Promise<ProjectProvisionAnswer> {
