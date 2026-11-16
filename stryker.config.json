@@ -15,6 +15,7 @@
     "src/workspace/project/exec-routing.ts",
     "src/workspace/project/exec-selection.ts",
     "src/workspace/project/start-exec-input.ts",
+    "src/workspace/project/write-forms.ts",
     "src/github/redaction.ts",
     "src/model-route-stream-parse.ts",
     "src/facet/generation-1/route-events.ts",

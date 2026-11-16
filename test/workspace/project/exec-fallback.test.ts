@@ -182,6 +182,31 @@ const WRITES: ReadonlyArray<readonly [string, readonly BackendExecEvent[], strin
     "exceeded execution deadline",
   ],
   ["rm -rf build", [err("partial failure\n")], "partial failure"],
+  [
+    "yq -i '.version = 2' config.yaml",
+    [err("bash: yq: iteration limit exceeded (100000)\n"), exit(126)],
+    "iteration limit exceeded",
+  ],
+  [
+    "sort -o sorted.txt words.txt",
+    [err("bash: sort: iteration limit exceeded (100000)\n"), exit(126)],
+    "iteration limit exceeded",
+  ],
+  [
+    `awk '{ print > "out.txt" }' in.txt`,
+    [err("bash: awk: iteration limit exceeded (100000)\n"), exit(126)],
+    "iteration limit exceeded",
+  ],
+  [
+    "curl -o page.html https://example.com",
+    [err("bash: curl exceeded execution deadline (30000ms)\n"), exit(124)],
+    "exceeded execution deadline",
+  ],
+  [
+    "xan split -c 2 data.csv",
+    [err("bash: xan: output part limit exceeded (100000)\n"), exit(126)],
+    "limit exceeded",
+  ],
 ];
 
 test.each(WRITES)(

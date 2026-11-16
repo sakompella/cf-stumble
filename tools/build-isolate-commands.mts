@@ -8,7 +8,7 @@ const OUTPUT_PATH = "src/workspace/project/isolate-commands.generated.ts";
 
 await writeFile(
   resolve(repoRoot, OUTPUT_PATH),
-  `export const ISOLATE_COMMAND_NAMES: readonly string[] = ${JSON.stringify(JUST_BASH_COMMAND_NAMES)};\n`,
+  `export type IsolateCommandName = ${JUST_BASH_COMMAND_NAMES.map((name) => JSON.stringify(name)).join(" | ")};\n`,
 );
 
 console.log(`Wrote ${OUTPUT_PATH}: ${String(JUST_BASH_COMMAND_NAMES.length)} commands`);
