@@ -19,7 +19,10 @@ test("refuses provisioning on use when the clone's sync does not complete", asyn
     connections.ensureProvisioned(projectIdOf("sample-repo-1")),
   );
 
-  expect(used).toEqual({ ok: false, problem: { code: "provisioning-failed" } });
+  expect(used).toEqual({
+    ok: false,
+    problem: { code: "host-unavailable", detail: "workspace-sync-incomplete" },
+  });
 });
 
 test("provisions again every time a project is used", async () => {
@@ -35,7 +38,7 @@ test("provisions again every time a project is used", async () => {
   );
 
   expect(used).toMatchObject({ ok: true, project: { id: "sample-repo-1" } });
-  expect(unknown).toEqual({ ok: false, problem: { code: "unknown-project-id" } });
+  expect(unknown).toEqual({ ok: false, problem: { code: "unknown-project-id", detail: "" } });
   expect(
     subject.workspace.provisionRequests.map((request) => request.projectId),
     "the connection provisioned once and the use provisioned again",
@@ -60,7 +63,7 @@ test("keeps a project whose reprovision the clone size check refuses", async () 
 
   expect(used).toEqual({
     ok: false,
-    problem: { code: "repository-too-large", verdict: "working-tree-too-large" },
+    problem: { code: "repository-too-large", detail: "working-tree-too-large" },
   });
   expect(listed.map((project) => project.id)).toContain("sample-repo-1");
 });
