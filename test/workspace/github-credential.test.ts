@@ -131,7 +131,6 @@ test.each([
   ["missing", "missing", undefined],
   ["unusable", "unusable", undefined],
   ["tooling-missing", "tooling-missing", undefined],
-  ["something unexpected", "unusable", undefined],
 ])("reads %j as the %s credential state", async (stdout, state, login) => {
   const operations = new FilesystemlessOperations();
   operations.stdout = stdout;
@@ -140,6 +139,18 @@ test.each([
     credential(operations, { kind: "github-credential", step: "status" }),
   ).resolves.toEqual({ ok: true, result: { kind: "credential-status", state, login } });
 });
+
+test.each(["something unexpected", "", "unreachable"])(
+  "an unknown status output (%j) is a workspace-unavailable failure, not a verdict",
+  async (stdout) => {
+    const operations = new FilesystemlessOperations();
+    operations.stdout = stdout;
+
+    await expect(
+      credential(operations, { kind: "github-credential", step: "status" }),
+    ).resolves.toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
+  },
+);
 
 function verify(operations: FilesystemlessOperations, repositoryUrl: string) {
   return credential(operations, {

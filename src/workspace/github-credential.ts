@@ -16,6 +16,7 @@ import { WORKSPACE_SHORT_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout
 import {
   answerFailures,
   WorkspaceSyncIncomplete,
+  WorkspaceUnavailable,
   type CommandOutput,
   type WorkspaceEffects,
   type WorkspaceFault,
@@ -135,7 +136,15 @@ function credentialStatus(
 ): Effect.Effect<GitHubCredentialStatus, WorkspaceFault> {
   return operations
     .runCommand(credentialStatusSource(), "/", WORKSPACE_SHORT_COMMAND_TIMEOUT_MS)
-    .pipe(Effect.map((output) => parseCredentialStatus(output.stdout)));
+    .pipe(
+      Effect.flatMap((output) => {
+        const status = parseCredentialStatus(output.stdout);
+
+        return status === undefined
+          ? Effect.fail(new WorkspaceUnavailable({ cause: "the status check reached no verdict" }))
+          : Effect.succeed(status);
+      }),
+    );
 }
 
 function credentialStatusResult(

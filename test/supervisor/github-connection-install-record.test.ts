@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 test.each(["unavailable", "tooling-missing"] as const)(
-  "a device authorization whose install ends %s replaces the connected record",
+  "a device authorization whose install ends %s",
   async (failure) => {
     await runInDurableObject(
       env.SUPERVISOR.getByName(`install-record-${failure}`),
@@ -50,10 +50,19 @@ test.each(["unavailable", "tooling-missing"] as const)(
         else workspace.credentialState = "tooling-missing";
         const result = await Effect.runPromise(github.completeAuthorization(NOW + 2_000));
 
+        if (failure === "unavailable") {
+          expect(result, "the install did not run, so the record has nothing new to say").toEqual({
+            ok: false,
+            problem: "workspace-unavailable",
+          });
+          expect(github.lastKnown(NOW + 3_000).github?.state).toBe("connected");
+          expect(github.lastKnown(NOW + 3_000).checkedAt).toBe(NOW);
+
+          return;
+        }
+
         if (!result.ok) throw new Error("authorization result must carry install status");
-        expect(result.status.state).toBe(
-          failure === "unavailable" ? "reconnect-required" : "tooling-missing",
-        );
+        expect(result.status.state).toBe("tooling-missing");
         expect(github.lastKnown(NOW + 3_000)).toEqual({
           github: result.status,
           checkedAt: NOW + 2_000,

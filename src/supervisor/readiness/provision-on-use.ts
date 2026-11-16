@@ -67,9 +67,9 @@ export function provisionOnUse(
       Result.isFailure(provisioned) &&
       provisioned.failure instanceof ProvisionFailed
     ) {
-      const status = yield* github.ensureCredential(Date.now());
+      const status = yield* Effect.result(github.ensureCredential(Date.now()));
 
-      if (status.state === "connected") {
+      if (Result.isSuccess(status) && status.success.state === "connected") {
         provisioned = yield* Effect.result(provision);
       }
     }

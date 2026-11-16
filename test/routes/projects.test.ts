@@ -29,8 +29,6 @@ test("connects the repository the body names, and nothing else it carries", asyn
           ok: true,
           alreadyConnected: false,
           project: connectedProject,
-          github: { state: "connected", login: "octocat", source: "configured-token" },
-          checkedAt: 3_000,
         });
       },
     }),
@@ -41,7 +39,6 @@ test("connects the repository the body names, and nothing else it carries", asyn
   await expect(response.json()).resolves.toMatchObject({
     ok: true,
     alreadyConnected: false,
-    checkedAt: 3_000,
   });
 });
 
@@ -51,6 +48,7 @@ test.each([
   ["repository-too-large", 413],
   ["tooling-missing", 503],
   ["provisioning-failed", 503],
+  ["workspace-unavailable", 503],
 ] as const)("answers a %s connection with %i", async (code, status) => {
   const response = await ownerApiResponse(
     post("/api/projects/connect", { repositoryUrl: "https://github.com/sample/repo-1" }),
@@ -59,8 +57,6 @@ test.each([
         Promise.resolve({
           ok: false,
           problem: { code, detail: "" },
-          github: { state: "disconnected" },
-          checkedAt: null,
         }),
     }),
   );
@@ -106,6 +102,7 @@ test.each([
   ["authorization-denied", 403],
   ["provider-unavailable", 502],
   ["not-configured", 503],
+  ["workspace-unavailable", 503],
 ] as const)("answers the %s authorization outcome with %i", async (problem, status) => {
   const response = await ownerApiResponse(
     post("/api/github/authorization/complete", {}),
@@ -114,6 +111,22 @@ test.each([
 
   expect(response.status).toBe(status);
   await expect(response.json()).resolves.toEqual({ ok: false, problem: { code: problem } });
+});
+
+test("answers a GitHub check that could not reach the workspace with 503", async () => {
+  const response = await ownerApiResponse(
+    post("/api/github/connection/refresh", {}),
+    supervisor({
+      refreshGitHubConnection: () =>
+        Promise.resolve({ ok: false, problem: "workspace-unavailable" }),
+    }),
+  );
+
+  expect(response.status).toBe(503);
+  await expect(response.json()).resolves.toEqual({
+    ok: false,
+    problem: { code: "workspace-unavailable" },
+  });
 });
 
 test("disconnects the project id in the path", async () => {

@@ -1,6 +1,6 @@
 import { devShellTool } from "../dev-shell-tool.js";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import {
@@ -110,4 +110,74 @@ exit 0
   expect(helper.stdout.trim()).toBe("!gh auth git-credential");
 
   rmSync(area, { recursive: true, force: true });
+});
+
+function statusAnswer(gh: Readonly<{ tokenStored: boolean; user: string; userFailure?: string }>) {
+  const area = scratchDirectory("cf-stumble-credential-status-");
+  const areaStubs = join(area, "bin");
+  const lookups = join(area, "lookups.log");
+
+  mkdirSync(areaStubs);
+  writeExecutable(
+    join(areaStubs, "gh"),
+    `#!/bin/sh
+case "$1 $2" in
+  "auth token") exit ${gh.tokenStored ? 0 : 1} ;;
+  "api user")
+    printf 'api user\\n' >> "${lookups}"
+    ${
+      gh.userFailure === undefined
+        ? `printf '%s\\n' '${gh.user}'; exit 0`
+        : `printf '%s\\n' '${gh.userFailure}' >&2; exit 1`
+    }
+    ;;
+esac
+exit 1
+`,
+  );
+
+  const ran = spawnSync(devShellTool("sh"), ["-c", credentialStatusSource()], {
+    encoding: "utf8",
+    env: { PATH: `${areaStubs}:${process.env["PATH"] ?? ""}` },
+  });
+
+  expect(ran.status, ran.stderr).toBe(0);
+
+  const answer = ran.stdout.trim();
+  const askedGitHub = existsSync(lookups);
+
+  rmSync(area, { recursive: true, force: true });
+
+  return { answer, askedGitHub };
+}
+
+test("a stored token that GitHub rejects with a 401 reads as unusable", () => {
+  expect(
+    statusAnswer({
+      tokenStored: true,
+      user: "",
+      userFailure: "gh: Bad credentials (HTTP 401)",
+    }).answer,
+  ).toBe("unusable");
+});
+
+test.each([
+  'Get "https://api.github.com/user": dial tcp: lookup api.github.com: no such host',
+  "gh: Bad Gateway (HTTP 502)",
+  "gh: API rate limit exceeded (HTTP 403)",
+])("a check that GitHub could not answer (%s) reads as no verdict, not as unusable", (failure) => {
+  expect(statusAnswer({ tokenStored: true, user: "", userFailure: failure }).answer).toBe(
+    "unreachable",
+  );
+});
+
+test("a workspace with no stored token reads as missing without asking GitHub", () => {
+  expect(statusAnswer({ tokenStored: false, user: "octocat" })).toEqual({
+    answer: "missing",
+    askedGitHub: false,
+  });
+});
+
+test("a stored token that GitHub accepts reads as connected with the login", () => {
+  expect(statusAnswer({ tokenStored: true, user: "octocat" }).answer).toBe("connected octocat");
 });

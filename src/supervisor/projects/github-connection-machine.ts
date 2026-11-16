@@ -14,11 +14,7 @@ const Recorded = Schema.Struct({
 
 export type Recorded = typeof Recorded.Type;
 
-export const ReconnectReason = Schema.Literals([
-  "credential-missing",
-  "credential-rejected",
-  "workspace-unavailable",
-]);
+export const ReconnectReason = Schema.Literals(["credential-missing", "credential-rejected"]);
 
 export type ReconnectReason = typeof ReconnectReason.Type;
 
@@ -62,11 +58,7 @@ export type CredentialEvent = Data.TaggedEnum<{
     readonly installedBy: CredentialSource | undefined;
     readonly now: number;
   };
-  WorkspaceUnreachable: { readonly now: number };
-  InstallRefused: {
-    readonly reason: "credential-rejected" | "workspace-unavailable";
-    readonly now: number;
-  };
+  InstallRefused: { readonly now: number };
 }>;
 
 export const CredentialEvent = Data.taggedEnum<CredentialEvent>();
@@ -168,8 +160,7 @@ export function credentialTransition(
 
   return CredentialEvent.$match(event, {
     Observed: ({ answer, installedBy, now }) => observed(recorded, answer, installedBy, now),
-    WorkspaceUnreachable: ({ now }) => reconnectRequired("workspace-unavailable", recorded, now),
-    InstallRefused: ({ reason, now }) => reconnectRequired(reason, recorded, now),
+    InstallRefused: ({ now }) => reconnectRequired("credential-rejected", recorded, now),
   });
 }
 

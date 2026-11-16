@@ -40,11 +40,8 @@ export const Message = defineMessageUnion({
   RejectedFetchProjects: { wording: Schema.String },
   FailedFetchProjects: { detail: Schema.String },
 
-  SucceededConnect: {
-    isAlreadyConnected: Schema.Boolean,
-    maybeGitHub: Schema.Option(GitHubReport),
-  },
-  RejectedConnect: { wording: Schema.String, maybeGitHub: Schema.Option(GitHubReport) },
+  SucceededConnect: { isAlreadyConnected: Schema.Boolean },
+  RejectedConnect: { wording: Schema.String },
   FailedConnect: { detail: Schema.String },
 
   SucceededGitHub: { github: GitHubReport },

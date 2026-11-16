@@ -70,3 +70,35 @@ test("the last-known check time stays with its state until a request replaces th
     "",
   );
 });
+
+test.each([
+  {
+    refusal: "a mistyped repository URL",
+    code: "invalid-repository-url",
+    status: 400,
+  },
+  { refusal: "a connect during a workspace reset", code: "workspace-busy", status: 409 },
+])("$refusal leaves the GitHub panel showing the stored status", async ({ code, status }) => {
+  const connected = after(init().model, [
+    Message.SucceededGitHub({
+      github: gitHubReport(CONNECTED_GITHUB, LATE_MORNING, LATE_MORNING),
+    }),
+    Message.UpdatedConnectRepositoryInput({ value: "https:/github.com/octocat" }),
+  ]);
+
+  const done = await settled(update(connected, Message.ClickedConnect()), ({ method }) =>
+    Promise.resolve(
+      method === "POST"
+        ? Response.json({ ok: false, problem: { code, detail: "" } }, { status })
+        : Response.json({ ok: true, github: CONNECTED_GITHUB, checkedAt: LATE_MORNING }),
+    ),
+  );
+
+  expect(done.sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
+    "POST /api/projects/connect",
+    "GET /api/github/connection",
+  ]);
+  expect(shownText(done.model, ID.githubState)).toBe("connected");
+  expect(shownText(done.model, ID.githubDetail)).toBe("octocat (device-authorization)");
+  expect(shownText(done.model, ID.connectStatus)).toBe(`rejected: ${code}`);
+});

@@ -154,11 +154,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   refreshGitHubConnection(now: number = Date.now()) {
-    const { github } = this.#parts;
-
-    return runAtEntryPoint(
-      github.ensureCredential(now).pipe(Effect.map(() => github.lastKnown(now))),
-    );
+    return runAtEntryPoint(this.#parts.github.refresh(now));
   }
 
   resetWorkspace(): Promise<SupervisorWorkspaceReset> {

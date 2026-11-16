@@ -28,6 +28,7 @@ test("resets the named workspace while preserving the projects and generations",
   const getByName = replaceWorkspaceHost(env.WORKSPACE_HOST, fake.workspace);
 
   await expect(control.refreshGitHubConnection(NOW)).resolves.toEqual({
+    ok: true,
     github: { state: "connected", login: "reset-user", source: "configured-token" },
     checkedAt: NOW,
   });
