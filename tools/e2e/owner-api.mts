@@ -19,6 +19,8 @@ const ChatGPTConnection = Schema.Struct({
   chatgpt: Schema.Struct({ connection: Schema.Struct({ state: Schema.String }) }),
 });
 
+const Disconnected = Schema.Struct({ workspace: Schema.String });
+
 const Connected = Schema.Struct({ project: Schema.Struct({ id: Schema.String }) });
 
 const Live = Schema.Struct({
@@ -170,7 +172,16 @@ export class Owner {
   }
 
   async disconnect(projectId: string): Promise<void> {
-    await this.post(`/api/projects/${projectId}/disconnect`);
+    const response = await this.post(`/api/projects/${projectId}/disconnect`);
+    const text = await response.text();
+
+    if (!response.ok) throw new Error(`disconnect ${projectId} answered ${text}`);
+
+    const { workspace } = Schema.decodeUnknownSync(Schema.fromJsonString(Disconnected))(text);
+
+    if (workspace !== "removed") {
+      throw new Error(`disconnect ${projectId} left its workspace files: ${workspace}`);
+    }
   }
 
   async abort(projectId: string): Promise<void> {

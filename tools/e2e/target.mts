@@ -140,7 +140,12 @@ export class Target {
   async restore(): Promise<void> {
     const owner = await this.#owner();
 
-    if (this.#connectedProject !== undefined) await owner.disconnect(this.#connectedProject);
+    if (this.#connectedProject !== undefined) {
+      await owner.abort(this.#connectedProject);
+      await owner.waitSettled(this.#connectedProject, AbortSignal.timeout(MINUTE_MS));
+      await owner.disconnect(this.#connectedProject);
+      this.connectedProject = undefined;
+    }
 
     if (this.#restoreLabel !== undefined) {
       await owner.abort(HARNESS_PROJECT);
