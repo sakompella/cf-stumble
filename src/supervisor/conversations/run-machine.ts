@@ -10,7 +10,7 @@ export type RunEnding = typeof Ending.Type;
 const runFields = {
   run: Schema.NullOr(Schema.Number),
   deadline: Schema.Number,
-  instance: Schema.NullOr(Schema.Number),
+  instance: Schema.Number,
   continues: Schema.Number,
 };
 
@@ -102,7 +102,7 @@ function adopted(active: ActiveRun, report: RunningConversation, event: Reported
   const { instance, now } = event;
   const run = active.run ?? report.run ?? null;
 
-  if (RunState.guards.Running(active) && active.instance !== null && active.instance !== instance) {
+  if (RunState.guards.Running(active) && active.instance !== instance) {
     return RunState.cases.Running.make({
       run,
       deadline: now + PROJECT_RUN_DEADLINE_MS,
@@ -114,7 +114,7 @@ function adopted(active: ActiveRun, report: RunningConversation, event: Reported
   const fields = {
     run,
     deadline: active.deadline,
-    instance: active.instance ?? instance,
+    instance: active.instance,
     continues: active.continues,
   };
 
@@ -140,7 +140,7 @@ function reportedOn(active: ActiveRun, event: Reported, outcome: RunOutcome): Ru
     return stay(adopted(active, report, event));
   }
 
-  const owned = active.instance === null || active.instance === instance;
+  const owned = active.instance === instance;
 
   const settled = RunCommand.Settled({
     outcome: owned ? outcome : "replaced",
