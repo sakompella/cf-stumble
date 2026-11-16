@@ -10,13 +10,19 @@ type Fake = Readonly<{
   deps: ReleaseDeps;
   submitted: string[];
   activations: number[];
+  activatedLabels: number[];
   activatedAtMs: number[];
   forced: boolean[];
 }>;
 
-function fake(answers: readonly ActivationAnswer[], changed = true, ready = true): Fake {
+function fake(
+  answers: readonly ActivationAnswer[],
+  changed = true,
+  preparations: readonly string[] = [],
+): Fake {
   const submitted: string[] = [];
   const activations: number[] = [];
+  const activatedLabels: number[] = [];
   const activatedAtMs: number[] = [];
   const forced: boolean[] = [];
   let clock = 0;
@@ -25,6 +31,7 @@ function fake(answers: readonly ActivationAnswer[], changed = true, ready = true
   return {
     submitted,
     activations,
+    activatedLabels,
     activatedAtMs,
     forced,
     deps: {
@@ -33,10 +40,18 @@ function fake(answers: readonly ActivationAnswer[], changed = true, ready = true
         submit: (harnessCommit) => {
           submitted.push(harnessCommit);
 
-          return Promise.resolve({ label: 7, ready, reason: "conversation-failed: no answer" });
+          const code = preparations[submitted.length - 1];
+
+          return Promise.resolve({
+            label: 6 + submitted.length,
+            ready: code === undefined,
+            reason: code ?? "ready",
+            code,
+          });
         },
-        activate: (_label, observedEpoch, force) => {
+        activate: (label, observedEpoch, force) => {
           activations.push(observedEpoch);
+          activatedLabels.push(label);
           activatedAtMs.push(clock);
           forced.push(force);
           epoch += 1;
@@ -126,9 +141,29 @@ describe("activation answers other than success", () => {
   });
 
   it("fails when the startup check is not ready", async () => {
-    const { deps, activations } = fake([], true, false);
+    const { deps, activations } = fake([], true, ["conversation-failed"]);
 
     await assert.rejects(releaseGeneration(MAIN, deps), /not ready: conversation-failed/u);
+    assert.deepEqual(activations, []);
+  });
+
+  it("prepares main's commit again when the platform restarted the workspace mid-build (deploy 43934982845)", async () => {
+    const { deps, submitted, activatedLabels } = fake([], true, ["build-workspace-unavailable"]);
+
+    assert.match(await releaseGeneration(MAIN, deps), /Activated generation 8/u);
+    assert.deepEqual(submitted, [MAIN, MAIN]);
+    assert.deepEqual(activatedLabels, [8]);
+  });
+
+  it("fails when the workspace is unavailable again on the second preparation", async () => {
+    const unavailable = "build-workspace-unavailable";
+    const { deps, submitted, activations } = fake([], true, [unavailable, unavailable]);
+
+    await assert.rejects(
+      releaseGeneration(MAIN, deps),
+      /generation 8 .* not ready: build-workspace/u,
+    );
+    assert.equal(submitted.length, 2);
     assert.deepEqual(activations, []);
   });
 });

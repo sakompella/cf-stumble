@@ -79,6 +79,7 @@ const owner: ReleaseOwner = {
     return {
       label: outcome.generation.label,
       ready: preparation.ok && preparation.report.stage === "ready",
+      code: preparation.ok ? undefined : preparation.problem.code,
       reason: preparation.ok
         ? `${preparation.report.stage}: ${preparation.report.reason}`
         : preparation.problem.code,
