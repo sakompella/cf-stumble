@@ -5,7 +5,7 @@ import {
   projectsPayload,
   refreshPayload,
   chatgptPayload,
-  STATUS_PAYLOAD,
+  statusPayload,
 } from "./fixtures.mjs";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import type { ANSWERS, AnsweredEndpoint } from "../../src/api/answers.js";
@@ -38,7 +38,10 @@ function readString(body: JsonValue, key: string): string | undefined {
   return value !== undefined && isJsonString(value) ? value : undefined;
 }
 
-type JsonState = Pick<ScenarioState, "scenario" | "projects" | "isChatGPTConnected">;
+type JsonState = Pick<
+  ScenarioState,
+  "scenario" | "projects" | "isChatGPTConnected" | "generationLabel"
+>;
 
 type Answer<E extends AnsweredEndpoint> = Readonly<{
   status: number;
@@ -85,7 +88,10 @@ type ServedRoutes = {
 
 export const JSON_ROUTES = {
   "GET /api/projects": (state) => ({ status: 200, payload: projectsPayload(state.projects) }),
-  "GET /api/status": () => ({ status: 200, payload: STATUS_PAYLOAD }),
+  "GET /api/status": (state) => ({
+    status: 200,
+    payload: statusPayload(state.generationLabel),
+  }),
   "GET /api/chatgpt/connection": (state) => ({
     status: 200,
     payload: chatgptPayload(state.isChatGPTConnected),

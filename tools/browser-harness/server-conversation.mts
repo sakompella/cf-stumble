@@ -65,7 +65,9 @@ async function streamEvents(
   const counts = state.openEventStreams;
   counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
 
+  state.eventStreams.add(res);
   res.on("close", () => {
+    state.eventStreams.delete(res);
     counts.set(projectId, (counts.get(projectId) ?? 1) - 1);
     void stream.stop();
   });

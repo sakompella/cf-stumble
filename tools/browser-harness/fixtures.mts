@@ -104,13 +104,17 @@ export function refreshPayload(
   return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }
 
-export const STATUS_PAYLOAD: Encoded<"GET /api/status"> = {
-  activeGeneration: {
-    generation: { label: 1, harnessCommit: "abc123", status: "ready" },
-    epoch: 3,
-  },
-  mainAhead: 2,
-};
+export const INITIAL_GENERATION_LABEL = 1;
+
+export function statusPayload(label: number): Encoded<"GET /api/status"> {
+  return {
+    activeGeneration: {
+      generation: { label, harnessCommit: `commit-${label}`, status: "ready" },
+      epoch: 2 + label,
+    },
+    mainAhead: 2,
+  };
+}
 
 export function chatgptPayload(isConnected: boolean): Encoded<"GET /api/chatgpt/connection"> {
   return {

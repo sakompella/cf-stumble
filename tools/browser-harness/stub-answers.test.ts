@@ -34,6 +34,7 @@ test("every answer the stub sends decodes with the API's answer schema for its e
       scenario: tc.draw(gs.sampledFrom(SCENARIOS)),
       projects: [...BASELINE_PROJECTS],
       isChatGPTConnected: false,
+      generationLabel: 1,
     };
 
     const calls = tc.draw(gs.arrays(gs.sampledFrom(ENDPOINTS), { minSize: 1, maxSize: 6 }));

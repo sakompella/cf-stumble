@@ -177,6 +177,23 @@ test("a dropped stream says it is reconnecting and keeps the conversation it sho
   expect(rowsShown(dropped)).toEqual([{ who: "you", text: "hi" }]);
 });
 
+test("a stream that ends after it was live reads the generation status again, and one that never was live does not", () => {
+  const page = readyPage();
+  const ended = Message.DisconnectedEvents({ streamId: page.eventsStreamId, detail: "x" });
+
+  expect(commandNames(page, ended)).toEqual(["FetchStatus"]);
+
+  const reconnecting = after(page, [ended]);
+
+  expect(commandNames(reconnecting, ended)).toEqual([]);
+
+  const opening = after(init().model, [Message.SucceededFetchProjects({ projects: PROJECTS })]);
+
+  expect(commandNames(opening, Message.DisconnectedEvents({ streamId: 1, detail: "" }))).toEqual(
+    [],
+  );
+});
+
 test("a fresh thread needs two clicks and no active run, and starts the conversation over", () => {
   const armed = after(readyPage(), [Message.ClickedFreshThread()]);
 

@@ -1,6 +1,13 @@
 import * as Option from "effect/Option";
 import { ChatGPT } from "./chatgpt.js";
-import { AbortRun, FetchChatGPT, MintRequestId, ReplaceThread, SendMessage } from "./commands.js";
+import {
+  AbortRun,
+  FetchChatGPT,
+  FetchStatus,
+  MintRequestId,
+  ReplaceThread,
+  SendMessage,
+} from "./commands.js";
 import { advanceFreshThread, FreshThread, FreshThreadEvent, Ground } from "./fresh-thread.js";
 import { EMPTY_CONVERSATION, newestEntryId, type Conversation } from "./conversation.js";
 import type { Model } from "./model.js";
@@ -317,6 +324,9 @@ export function streamHandlers(
     RefusedEvents: ({ streamId, wording }) =>
       forStream(streamId, () => showing(StreamPhase.Refused({ wording }))),
     DisconnectedEvents: ({ streamId, detail }) =>
-      forStream(streamId, () => showing(StreamPhase.Reconnecting({ detail }))),
+      forStream(streamId, () => ({
+        model: { ...model, streamPhase: StreamPhase.Reconnecting({ detail }) },
+        commands: StreamPhase.guards.Live(model.streamPhase) ? [FetchStatus()] : [],
+      })),
   };
 }

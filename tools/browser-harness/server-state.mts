@@ -1,5 +1,11 @@
+import type { ServerResponse } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
-import { BASELINE_PROJECTS, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
+import {
+  BASELINE_PROJECTS,
+  INITIAL_GENERATION_LABEL,
+  type HarnessScenario,
+  type ProjectEntry,
+} from "./fixtures.mjs";
 import type { Conversations } from "./conversations.mjs";
 import type { JsonValue } from "../json.mjs";
 
@@ -16,6 +22,8 @@ export type ScenarioState = {
   readonly scenario: HarnessScenario;
   projects: ProjectEntry[];
   isChatGPTConnected: boolean;
+  generationLabel: number;
+  readonly eventStreams: Set<ServerResponse>;
   requests: RequestRecord[];
   conversations: Conversations;
   readonly openEventStreams: Map<string, number>;
@@ -29,6 +37,8 @@ export function initialState(
     scenario,
     projects: [...BASELINE_PROJECTS],
     isChatGPTConnected: scenario === "chatgpt-connected",
+    generationLabel: INITIAL_GENERATION_LABEL,
+    eventStreams: new Set(),
     requests: [],
     conversations,
     openEventStreams: new Map(),
