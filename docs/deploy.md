@@ -125,7 +125,8 @@ After a production deploy of `main`, the deploy job runs `tools/release-generati
 - 409 `run-active`: the job tries again every 30 seconds for 15 minutes, then reports in the job summary that the generation is ready and stops without failing the deploy.
 - 409 `stale-epoch`: it reads the epoch again and resends.
 - 409 `drops-active-commit`: `main` does not contain the active generation's commit, usually an agent change whose pull request is not merged yet. The job reports this in the job summary and leaves the active generation in place. Merge the pull request, or activate the new generation with `"force":true` to drop that change.
-- A startup check that does not answer `ready` fails the job; the deploy itself has already finished.
+- `build-workspace-unavailable` from the submit: the deploy restarts the Workspace Host on the new version within seconds (see "Durable Objects and new versions"), which can end the build that the release started right after the deploy (the deploy of 3b5a74a5, run 43934982845, failed this way and a rerun activated generation 43). The Supervisor says nothing changed, so the job submits the same commit once more, which gets a new label, and activates that one. A second `build-workspace-unavailable` fails the job.
+- Any other startup check that does not answer `ready` fails the job; the deploy itself has already finished.
 
 The step authenticates as the owner with the repository secret `OWNER_PASSWORD`, the same password as the Worker secret. Set it once with `gh secret set OWNER_PASSWORD --repo <owner>/<repository>`, which reads it from standard input. Deploys of other stages do not run the release.
 

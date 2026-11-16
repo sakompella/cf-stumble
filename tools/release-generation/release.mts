@@ -1,6 +1,11 @@
 export type ActiveCommit = Readonly<{ harnessCommit: string | undefined; epoch: number }>;
 
-export type Submitted = Readonly<{ label: number; ready: boolean; reason: string }>;
+export type Submitted = Readonly<{
+  label: number;
+  ready: boolean;
+  reason: string;
+  code: string | undefined;
+}>;
 
 export type ActivationAnswer = Readonly<{ ok: boolean; code: string | undefined }>;
 
@@ -18,6 +23,8 @@ export type ReleaseDeps = Readonly<{
   now: () => number;
 }>;
 
+const WORKSPACE_UNAVAILABLE = "build-workspace-unavailable";
+
 export const RUN_ACTIVE_RETRY_MS = 15 * 60_000;
 
 export const RUN_ACTIVE_POLL_MS = 30_000;
@@ -32,7 +39,9 @@ export async function releaseGeneration(target: string, deps: ReleaseDeps): Prom
     return `Skipped: nothing the facet bundles changed since the active generation's ${active}.`;
   }
 
-  const submitted = await owner.submit(target);
+  const first = await owner.submit(target);
+
+  const submitted = first.code === WORKSPACE_UNAVAILABLE ? await owner.submit(target) : first;
 
   if (!submitted.ready) {
     throw new Error(
