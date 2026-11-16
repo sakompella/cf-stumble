@@ -26,7 +26,7 @@ type RunRow = Readonly<{
   run: number | null;
   deadline: number;
   ending: RunEnding | null;
-  instance: number | null;
+  instance: number;
   continues: number;
 }>;
 
@@ -40,16 +40,6 @@ export type Settlement = Readonly<{
   outcome: RunOutcome;
   errorCode: string | null;
 }>;
-
-function addContinuesColumn(sql: SqlStorage): void {
-  const columns = sql
-    .exec<{ readonly name: string }>("PRAGMA table_info(conversation_runs)")
-    .toArray();
-
-  if (!columns.some((column) => column.name === "continues")) {
-    sql.exec("ALTER TABLE conversation_runs ADD COLUMN continues INTEGER NOT NULL DEFAULT 0");
-  }
-}
 
 export class DeadlineAborts {
   readonly #ending = new Set<string>();
@@ -108,7 +98,6 @@ export class ConversationRuns {
         continues INTEGER NOT NULL DEFAULT 0
       );
     `);
-    addContinuesColumn(storage.sql);
   }
 
   cancelled(conversationId: string): string {

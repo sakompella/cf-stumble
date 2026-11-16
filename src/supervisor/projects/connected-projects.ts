@@ -6,7 +6,6 @@ import {
   type Project,
   type ProjectCatalog,
   type ProjectId,
-  type PublicRepositoryUrl,
 } from "../../project-catalog.js";
 import {
   lifecycleStep,
@@ -33,22 +32,7 @@ export type ConnectProjectResult =
   | (Readonly<{ ok: true }> & ProjectTransition)
   | Readonly<{ ok: false; problem: ConnectProjectProblem }>;
 
-interface ConnectProjectInput {
-  readonly repositoryUrl: string;
-  readonly displayName?: string | undefined;
-}
-
-const DISPLAY_NAME_LIMIT = 80;
-
 const decodeState = Schema.decodeUnknownSync(ProjectState);
-
-function chosenDisplayName(value: string | undefined, repositoryUrl: PublicRepositoryUrl): string {
-  const trimmed = (value ?? "").trim();
-
-  return trimmed.length === 0
-    ? defaultProjectDisplayName(repositoryUrl)
-    : trimmed.slice(0, DISPLAY_NAME_LIMIT);
-}
 
 export class ConnectedProjects {
   private readonly storage: DurableObjectStorage;
@@ -93,18 +77,18 @@ export class ConnectedProjects {
     return row === undefined ? undefined : decodeState(row.state);
   }
 
-  connect(input: ConnectProjectInput, now: number): ConnectProjectResult {
-    const repositoryUrl = canonicalRepositoryUrl(input.repositoryUrl);
-    const id = repositoryUrl === undefined ? undefined : projectIdForRepository(repositoryUrl);
+  connect(repositoryUrl: string, now: number): ConnectProjectResult {
+    const canonical = canonicalRepositoryUrl(repositoryUrl);
+    const id = canonical === undefined ? undefined : projectIdForRepository(canonical);
 
-    if (repositoryUrl === undefined || id === undefined) {
+    if (canonical === undefined || id === undefined) {
       return { ok: false, problem: { code: "invalid-repository-url" } };
     }
 
     const created = {
       id,
-      displayName: chosenDisplayName(input.displayName, repositoryUrl),
-      repositoryUrl,
+      displayName: defaultProjectDisplayName(canonical),
+      repositoryUrl: canonical,
     };
 
     return this.storage.transactionSync(() => {

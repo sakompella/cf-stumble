@@ -1,6 +1,6 @@
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { ProjectRpcTarget } from "../../src/workspace/project/index.js";
+import { projectTarget } from "../workspace/project/target-helpers.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
@@ -9,11 +9,7 @@ import {
   FACET_COMPATIBILITY_METHOD,
   STARTUP_CHECK_CONVERSATION,
 } from "../supervisor/helpers.js";
-import {
-  FakeExecBackend,
-  FakeProjectFilesystemProvider,
-  FakeProjectTransactions,
-} from "../workspace/project/fakes.js";
+import { FakeExecBackend, FakeProjectFilesystemProvider } from "../workspace/project/fakes.js";
 import {
   ownerSession,
   servingScriptedGeneration,
@@ -66,12 +62,7 @@ class LiveWorkWorkspace extends FakeTenantWorkspace {
   resets = 0;
 
   project(budget: Readonly<{ remainingMs: number }>) {
-    const target = new ProjectRpcTarget(
-      new FakeProjectFilesystemProvider(),
-      new FakeProjectTransactions(),
-      this.execBackend,
-      budget,
-    );
+    const target = projectTarget(new FakeProjectFilesystemProvider(), this.execBackend, budget);
 
     const held = Object.assign(target, { [Symbol.dispose]: () => {} });
 

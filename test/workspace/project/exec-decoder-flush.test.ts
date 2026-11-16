@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import type { ExecEvent } from "../../../src/workspace/project/protocol.js";
 import { withDecodedEvents } from "./decoded-events.js";
+import { targetOptions } from "./target-helpers.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -20,6 +21,7 @@ async function startOperation() {
       new FakeProjectFilesystemProvider(),
       new FakeProjectTransactions(),
       execBackend,
+      targetOptions(),
     ),
   );
 

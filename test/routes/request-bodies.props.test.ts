@@ -73,10 +73,7 @@ const BODY_ROUTES: readonly BodyRoute[] = [
   {
     path: "/api/projects/connect",
     good: { repositoryUrl: "https://github.com/sample/repo-1" },
-    badBodies: [
-      '{"repositoryUrl":"https://github.com/sample/repo-1","displayName":3}',
-      '{"repositoryUrl":"https://github.com/sample/repo-1","displayName":null}',
-    ],
+    badBodies: [],
     refusalCode: "invalid-connect-request",
     reachedStatus: 409,
     supervisorReached: (reached) => ({

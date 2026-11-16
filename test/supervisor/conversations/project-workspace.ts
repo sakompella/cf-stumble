@@ -20,6 +20,7 @@ import {
 } from "../../workspace/project/fakes.js";
 import { FakeTenantWorkspace } from "../projects/fake-tenant-workspace.js";
 import { eventuallyTruthy } from "../../eventually.js";
+import { targetOptions } from "../../workspace/project/target-helpers.js";
 
 const answered = (stdout: string): readonly BackendExecEvent[] => [
   ...(stdout === "" ? [] : [{ name: "stdout", data: new TextEncoder().encode(stdout) } as const]),
@@ -77,10 +78,12 @@ export class ProjectWorkspace extends FakeTenantWorkspace {
 
     return Promise.resolve(
       new RpcStub(
-        new Target(this.files, new FakeProjectTransactions(), this.execs, {
-          remainingMs,
-          endLease,
-        }),
+        new Target(
+          this.files,
+          new FakeProjectTransactions(),
+          this.execs,
+          targetOptions({ remainingMs, endLease }),
+        ),
       ),
     );
   }

@@ -2,12 +2,8 @@ import { ConnectedProjects } from "../../../src/supervisor/projects/connected-pr
 import { sampleCatalog } from "../../project-fixtures.js";
 import { LifecycleEvent } from "../../../src/supervisor/projects/project-lifecycle-machine.js";
 
-export function seedConnected(
-  projects: ConnectedProjects,
-  input: Readonly<{ repositoryUrl: string; displayName?: string }>,
-  now: number,
-) {
-  const connected = projects.connect(input, now);
+export function seedConnected(projects: ConnectedProjects, repositoryUrl: string, now: number) {
+  const connected = projects.connect(repositoryUrl, now);
 
   if (!connected.ok) return connected;
 
@@ -33,10 +29,6 @@ export function seedSampleProjects(storage: DurableObjectStorage): void {
   const projects = new ConnectedProjects(storage);
 
   for (const project of sampleCatalog) {
-    seedConnected(
-      projects,
-      { repositoryUrl: project.repositoryUrl, displayName: project.displayName },
-      0,
-    );
+    seedConnected(projects, project.repositoryUrl, 0);
   }
 }

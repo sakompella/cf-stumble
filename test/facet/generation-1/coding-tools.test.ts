@@ -4,9 +4,9 @@ import { AssistantEntry, createRegistry, Harness, MemoryStorage } from "@earendi
 import { expect, test } from "vitest";
 import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
 import { CodingTools } from "../../../src/facet/generation-1/coding-tools.js";
-import { createComputerEnv } from "../../../src/facet/generation-1/execution-env.js";
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
 import type { ProjectRpcTargetContract } from "../../../src/workspace/project/protocol.js";
+import { envWithoutGenerations } from "./generation-control.js";
 import { NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
 
 const refused = () => Promise.reject(new Error("not used"));
@@ -93,7 +93,7 @@ function openHarness(capability: ModelCapability) {
     {
       models,
       registry,
-      env: ({ cwd }) => (cwd === undefined ? undefined : createComputerEnv({ cwd, target })),
+      env: ({ cwd }) => (cwd === undefined ? undefined : envWithoutGenerations({ cwd, target })),
     },
     BACKGROUND_CONTEXT,
   );

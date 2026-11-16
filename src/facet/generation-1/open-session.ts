@@ -41,7 +41,7 @@ export type Session = Readonly<{ harness: Harness; host: ConversationHost }>;
 export type SessionInput = Readonly<{
   storage: DurableObjectStorage;
   host: ConversationHost;
-  generations: GenerationControl | undefined;
+  generations: GenerationControl;
   model: ModelCapability;
   abort(reason: string): void;
 }>;

@@ -18,7 +18,7 @@ import {
 
 const DIGITS = /^\d+$/u;
 
-export function controlLabel(raw: string): Option.Option<number> {
+function controlLabel(raw: string): Option.Option<number> {
   const trimmed = raw.trim();
   const value = Number(trimmed);
 

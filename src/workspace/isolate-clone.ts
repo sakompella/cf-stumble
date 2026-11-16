@@ -2,8 +2,8 @@ import type { Workspace } from "@cloudflare/computer";
 import * as Effect from "effect/Effect";
 import type { Project } from "../project-catalog.js";
 import { attemptWorkspace, RepositoryNotEligible, type WorkspaceFault } from "./operations.js";
-import { GITHUB_CLI_CONFIG_DIRECTORY, projectDirectory } from "../workspace-layout.js";
-import { githubCloneHeaders, githubTokenFromHosts } from "./project/index.js";
+import { projectDirectory } from "../workspace-layout.js";
+import { githubCloneHeaders, readGitHubToken } from "./project/index.js";
 
 const ISOLATE_CLONE_DEPTH = 1;
 
@@ -12,12 +12,7 @@ const ISOLATE_CLONE_MAX_KB = 20_000;
 export function githubToken(
   workspace: Readonly<{ fs: Pick<Workspace["fs"], "readFile"> }>,
 ): Effect.Effect<string | undefined> {
-  return Effect.tryPromise(() =>
-    workspace.fs.readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`, "utf8"),
-  ).pipe(
-    Effect.orElseSucceed(() => ""),
-    Effect.map(githubTokenFromHosts),
-  );
+  return Effect.promise(() => readGitHubToken(workspace.fs));
 }
 
 function assertSmallRepository(

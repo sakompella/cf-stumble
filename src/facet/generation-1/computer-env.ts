@@ -9,7 +9,7 @@ import { createComputerEnv } from "./execution-env.js";
 
 export async function computerEnv(
   host: ConversationHost,
-  generations: GenerationControl | undefined,
+  generations: GenerationControl,
   conversationId: string,
   cwd: string,
   signal: AbortSignal | undefined,

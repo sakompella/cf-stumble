@@ -87,11 +87,7 @@ export class ProjectConnections {
     return selectableCatalog(this.projects.catalog());
   }
 
-  connect(
-    repositoryUrl: string,
-    displayName: string | undefined,
-    now: number,
-  ): Effect.Effect<ConnectRepositoryResult> {
+  connect(repositoryUrl: string, now: number): Effect.Effect<ConnectRepositoryResult> {
     return Effect.gen({ self: this }, function* () {
       const canonical = canonicalRepositoryUrl(repositoryUrl);
       const projectId = canonical === undefined ? undefined : projectIdForRepository(canonical);
@@ -132,7 +128,7 @@ export class ProjectConnections {
 
       if (accessRefusal !== undefined) return accessRefusal;
 
-      return yield* this.lifecycle.withLock(projectId, this.store(canonical, displayName, now));
+      return yield* this.lifecycle.withLock(projectId, this.store(canonical, now));
     });
   }
 
@@ -193,7 +189,6 @@ export class ProjectConnections {
 
   private store(
     repositoryUrl: PublicRepositoryUrl,
-    displayName: string | undefined,
     now: number,
   ): Effect.Effect<ConnectRepositoryResult> {
     return Effect.gen({ self: this }, function* () {
@@ -203,7 +198,7 @@ export class ProjectConnections {
         yield* recover(this.effects(), known);
       }
 
-      const connected = this.projects.connect({ repositoryUrl, displayName }, now);
+      const connected = this.projects.connect(repositoryUrl, now);
 
       if (!connected.ok) {
         return refused({ code: connected.problem.code, detail: "" });

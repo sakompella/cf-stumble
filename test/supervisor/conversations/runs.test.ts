@@ -20,31 +20,3 @@ test("a failing alarm write rejects the entry point that asked for it", async ()
     },
   );
 });
-
-test("a run stored before automatic continues existed still reads and settles after the upgrade", async () => {
-  await runInDurableObject(
-    env.SUPERVISOR.getByName("runs-continues-column"),
-    (_instance, state) => {
-      const { sql } = state.storage;
-
-      sql.exec("DROP TABLE conversation_runs");
-      sql.exec(`
-      CREATE TABLE conversation_runs (
-        conversation_id TEXT PRIMARY KEY,
-        run INTEGER,
-        deadline INTEGER NOT NULL,
-        ending TEXT CHECK (ending IN ('cancelled', 'interrupted')),
-        instance INTEGER
-      )
-    `);
-      sql.exec("INSERT INTO conversation_runs VALUES ('7', 3, 0, NULL, 1)");
-
-      const runs = new ConversationRuns(state.storage);
-
-      expect(runs.expired(1)).toEqual(["7"]);
-      expect(runs.reconcile({ running: [], failed: {} }, 1, 1, null)).toMatchObject([
-        { conversationId: "7", outcome: "completed" },
-      ]);
-    },
-  );
-});

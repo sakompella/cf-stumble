@@ -1,7 +1,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { getOrThrow } from "@earendil-works/pi-durable/env";
 import { expect, test } from "vitest";
-import { createComputerEnv } from "../../../src/facet/generation-1/execution-env.js";
+import { envWithoutGenerations } from "./generation-control.js";
 import type {
   ProjectResult,
   ProjectRpcTargetContract,
@@ -87,7 +87,11 @@ function streamingTarget(
 
 test("the env sends no backend by default and the chosen one when asked", async () => {
   const started: StartExecWire[] = [];
-  const env = createComputerEnv({ cwd: "/workspace/project", target: recordingTarget(started) });
+
+  const env = envWithoutGenerations({
+    cwd: "/workspace/project",
+    target: recordingTarget(started),
+  });
 
   getOrThrow(await env.exec("ls", {}, BACKGROUND_CONTEXT));
   getOrThrow(await env.onBackend("isolate").exec("ls", {}, BACKGROUND_CONTEXT));
@@ -97,7 +101,7 @@ test("the env sends no backend by default and the chosen one when asked", async 
 });
 
 test("the env names its own spill file when the runtime cut the output", async () => {
-  const env = createComputerEnv({
+  const env = envWithoutGenerations({
     cwd: "/workspace/project",
     target: streamingTarget([
       { kind: "stdout", seq: 0, data: "x".repeat(96) },
@@ -126,7 +130,7 @@ test("the env names its own spill file when the runtime cut the output", async (
 });
 
 test("the env names the saved runtime file when it spilled nothing of its own", async () => {
-  const env = createComputerEnv({
+  const env = envWithoutGenerations({
     cwd: "/workspace/project",
     target: streamingTarget(
       [
@@ -156,7 +160,7 @@ test("the env names the saved runtime file when it spilled nothing of its own", 
 });
 
 test("the env spills output to a file it can read back when the runtime cut nothing", async () => {
-  const env = createComputerEnv({
+  const env = envWithoutGenerations({
     cwd: "/workspace/project",
     target: streamingTarget([
       { kind: "stdout", seq: 0, data: "abc\n" },
@@ -175,7 +179,7 @@ test("the env spills output to a file it can read back when the runtime cut noth
 });
 
 test("the env reports no spill for output that fits and the runtime did not cut", async () => {
-  const env = createComputerEnv({
+  const env = envWithoutGenerations({
     cwd: "/workspace/project",
     target: streamingTarget([
       { kind: "stdout", seq: 0, data: "abc\n" },
@@ -207,7 +211,7 @@ test.each([
     const readFile = (path: string): Promise<ProjectResult<Uint8Array>> =>
       Promise.resolve({ ok: false, error: { code, path } });
 
-    const env = createComputerEnv({
+    const env = envWithoutGenerations({
       cwd: "/workspace/project",
       target: { ...streamingTarget([]), readFile },
     });
@@ -224,7 +228,7 @@ test.each([
 );
 
 test("a command the container restart ended names container-restarted to the model", async () => {
-  const env = createComputerEnv({
+  const env = envWithoutGenerations({
     cwd: "/workspace/project",
     target: streamingTarget([
       { kind: "terminal", seq: 0, outcome: "failed", error: { code: "container-restarted" } },

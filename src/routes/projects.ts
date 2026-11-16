@@ -20,10 +20,7 @@ import type {
 
 export type ProjectApiSupervisor = Readonly<{
   listProjects: () => Promise<SelectableCatalog>;
-  connectProject: (
-    repositoryUrl: string,
-    displayName: string | undefined,
-  ) => Promise<ConnectRepositoryResult>;
+  connectProject: (repositoryUrl: string) => Promise<ConnectRepositoryResult>;
   getGitHubConnection: () => Promise<GitHubConnectionRecord>;
   refreshGitHubConnection: () => Promise<GitHubRefreshOutcome>;
   startGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
@@ -72,9 +69,7 @@ const connectResponse = Effect.fnUntraced(function* (
 ) {
   const body = yield* decodeRequestBody(request, ConnectRequest);
 
-  const result = yield* callSupervisor(() =>
-    supervisor.connectProject(body.repositoryUrl, body.displayName),
-  );
+  const result = yield* callSupervisor(() => supervisor.connectProject(body.repositoryUrl));
 
   if (!result.ok) {
     return refusal({ ok: false, problem: result.problem });

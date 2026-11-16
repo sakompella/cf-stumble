@@ -6,6 +6,7 @@ import { MainFacet } from "../../../src/facet/generation-1/main-facet.js";
 import { RUN_NOTICE_KIND } from "../../../src/run-notice.js";
 import { eventually } from "../../eventually.js";
 import { entriesText, hostWith } from "./conversation-host.js";
+import { unscriptedGenerations } from "./generation-control.js";
 import { NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
 
 afterEach(async () => {
@@ -47,7 +48,7 @@ test("a reply cut off at the output limit is followed by a notice the model read
   await runInDurableObject(env.SUPERVISOR.getByName("run-notice-length"), async (_i, state) => {
     const facet = new MainFacet(state, env);
 
-    await facet.attach(host, capability);
+    await facet.attach(host, capability, unscriptedGenerations);
     const id = await facet.createConversation("/workspace");
 
     await facet.submit(id, "plan it", "r1");
@@ -74,7 +75,7 @@ test("a deadline abort leaves one notice however often it repeats, and an owner 
   await runInDurableObject(env.SUPERVISOR.getByName("run-notice-deadline"), async (_i, state) => {
     const facet = new MainFacet(state, env);
 
-    await facet.attach(host, capability);
+    await facet.attach(host, capability, unscriptedGenerations);
     const cancelled = await facet.createConversation("/workspace");
     const expired = await facet.createConversation("/workspace");
 
@@ -123,7 +124,7 @@ test("a deadline abort after progress continues the run while another run fits i
   await runInDurableObject(env.SUPERVISOR.getByName("run-continue"), async (_i, state) => {
     const facet = new MainFacet(state, env);
 
-    await facet.attach(reporting, capability);
+    await facet.attach(reporting, capability, unscriptedGenerations);
     const id = await facet.createConversation("/workspace");
 
     await facet.submit(id, "work", "r1", 30);
@@ -151,7 +152,7 @@ test("a deadline abort after progress only notices when the budget is one run", 
   await runInDurableObject(env.SUPERVISOR.getByName("run-continue-spent"), async (_i, state) => {
     const facet = new MainFacet(state, env);
 
-    await facet.attach(host, capability);
+    await facet.attach(host, capability, unscriptedGenerations);
     const id = await facet.createConversation("/workspace");
 
     await facet.submit(id, "work", "r1", 8);

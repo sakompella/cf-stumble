@@ -1,16 +1,17 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
+import type { ProjectRpcTargetOptions } from "../../../src/workspace/project/target.js";
 import { ContainerRestartedError } from "../../../src/workspace/project/exec-backend.js";
 import { withDecodedEvents } from "./decoded-events.js";
 import { deferredExec } from "./deferred-exec.js";
-import { encode } from "./target-helpers.js";
+import { encode, targetOptions } from "./target-helpers.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
   FakeProjectTransactions,
 } from "./fakes.js";
 
-function makeTarget(options: ConstructorParameters<typeof ProjectRpcTarget>[3] = {}) {
+function makeTarget(options: Partial<ProjectRpcTargetOptions> = {}) {
   const provider = new FakeProjectFilesystemProvider();
   const execBackend = new FakeExecBackend();
 
@@ -18,7 +19,7 @@ function makeTarget(options: ConstructorParameters<typeof ProjectRpcTarget>[3] =
     provider,
     new FakeProjectTransactions(),
     execBackend,
-    options,
+    targetOptions(options),
   );
 
   const target = withDecodedEvents(rawTarget);

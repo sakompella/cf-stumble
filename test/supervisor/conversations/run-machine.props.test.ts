@@ -14,7 +14,7 @@ import { PROJECT_RUN_DEADLINE_MS } from "../../../src/turn-budget.js";
 type Open = {
   run: number | null;
   deadline: number;
-  instance: number | null;
+  instance: number;
   continues: number;
   ending: RunEnding | null;
 };
@@ -100,18 +100,18 @@ function expectedReport(
 
   if (continuing) {
     const kept = open.run ?? report.run ?? null;
-    const takenOver = open.ending === null && open.instance !== null && open.instance !== by;
+    const takenOver = open.ending === null && open.instance !== by;
 
     return {
       next: takenOver
         ? { ...open, run: kept, deadline: now + PROJECT_RUN_DEADLINE_MS, instance: by }
-        : { ...open, run: kept, instance: open.instance ?? by },
+        : { ...open, run: kept },
       commands,
     };
   }
 
   if (open !== null) {
-    const ours = open.instance === null || open.instance === by;
+    const ours = open.instance === by;
     const outcome = ours ? endedOutcome(open, code, signs) : "replaced";
 
     commands.push({
@@ -208,7 +208,7 @@ const initial = gs.composite<World>((tc) => {
   const fields = {
     run: tc.draw(gs.optional(gs.integers({ minValue: 0, maxValue: 2 }))),
     deadline: tc.draw(gs.integers({ minValue: 0, maxValue: 2 * PROJECT_RUN_DEADLINE_MS })),
-    instance: tc.draw(gs.optional(instance)),
+    instance: tc.draw(instance),
     continues: tc.draw(gs.integers({ minValue: 0, maxValue: 6 })),
   };
 

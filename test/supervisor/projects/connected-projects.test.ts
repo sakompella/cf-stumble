@@ -22,7 +22,7 @@ test.each([1, 2, 3])("holds %i connected repositories and resolves every one", a
     for (let index = 0; index < count; index += 1) {
       const connected = seedConnected(
         projects,
-        { repositoryUrl: `https://github.com/sample/repo-${index}` },
+        `https://github.com/sample/repo-${index}`,
         NOW + index,
       );
 
@@ -40,17 +40,9 @@ test.each([1, 2, 3])("holds %i connected repositories and resolves every one", a
 
 test("connecting the same repository again converges on the project already there", async () => {
   await withProjects("catalog-converges", (projects) => {
-    const first = seedConnected(
-      projects,
-      { repositoryUrl: "https://github.com/Sample/Repo-1", displayName: "first name" },
-      NOW,
-    );
+    const first = seedConnected(projects, "https://github.com/Sample/Repo-1", NOW);
 
-    const again = seedConnected(
-      projects,
-      { repositoryUrl: "https://github.com/Sample/Repo-1.git/", displayName: "second name" },
-      NOW + 1_000,
-    );
+    const again = seedConnected(projects, "https://github.com/Sample/Repo-1.git/", NOW + 1_000);
 
     expect(first).toMatchObject({ ok: true, alreadyConnected: false });
     expect(again).toEqual({
@@ -58,7 +50,7 @@ test("connecting the same repository again converges on the project already ther
       alreadyConnected: true,
       project: {
         id: projectIdForRepository("https://github.com/Sample/Repo-1"),
-        displayName: "first name",
+        displayName: "Sample/Repo-1",
         repositoryUrl: "https://github.com/Sample/Repo-1",
       },
     });
@@ -66,25 +58,17 @@ test("connecting the same repository again converges on the project already ther
   });
 });
 
-test("identity survives the order of connection and the name a project is shown under", async () => {
+test("identity survives the order of connection", async () => {
   const forward = await withProjects("catalog-order-forward", (projects) => {
-    seedConnected(projects, { repositoryUrl: "https://github.com/sample/alpha" }, NOW);
-    seedConnected(
-      projects,
-      { repositoryUrl: "https://github.com/sample/beta", displayName: "B" },
-      NOW + 1,
-    );
+    seedConnected(projects, "https://github.com/sample/alpha", NOW);
+    seedConnected(projects, "https://github.com/sample/beta", NOW + 1);
 
     return projects.catalog().map((project) => project.id);
   });
 
   const reversed = await withProjects("catalog-order-reversed", (projects) => {
-    seedConnected(projects, { repositoryUrl: "https://github.com/sample/beta" }, NOW);
-    seedConnected(
-      projects,
-      { repositoryUrl: "https://github.com/sample/alpha", displayName: "A" },
-      NOW + 1,
-    );
+    seedConnected(projects, "https://github.com/sample/beta", NOW);
+    seedConnected(projects, "https://github.com/sample/alpha", NOW + 1);
 
     return projects
       .catalog()
@@ -105,7 +89,7 @@ test("connects repositories that differ only in punctuation as separate projects
     ];
 
     for (const [index, repositoryUrl] of urls.entries()) {
-      expect(seedConnected(projects, { repositoryUrl }, NOW + index)).toMatchObject({
+      expect(seedConnected(projects, repositoryUrl, NOW + index)).toMatchObject({
         ok: true,
         alreadyConnected: false,
       });
@@ -121,13 +105,9 @@ test("connects repositories that differ only in punctuation as separate projects
 
 test("converges on one project when the same repository is written in another case", async () => {
   await withProjects("catalog-case", (projects) => {
-    seedConnected(projects, { repositoryUrl: "https://github.com/Sample/My.Repo" }, NOW);
+    seedConnected(projects, "https://github.com/Sample/My.Repo", NOW);
 
-    const again = seedConnected(
-      projects,
-      { repositoryUrl: "https://github.com/sample/my.repo" },
-      NOW + 1,
-    );
+    const again = seedConnected(projects, "https://github.com/sample/my.repo", NOW + 1);
 
     expect(again).toMatchObject({
       ok: true,
@@ -142,7 +122,7 @@ test.each(["http://github.com/sample/repo", ""])(
   "refuses %j as a repository to connect",
   async (repositoryUrl) => {
     await withProjects(`catalog-refuses-${repositoryUrl.length}`, (projects) => {
-      expect(seedConnected(projects, { repositoryUrl }, NOW)).toEqual({
+      expect(seedConnected(projects, repositoryUrl, NOW)).toEqual({
         ok: false,
         problem: { code: "invalid-repository-url" },
       });
@@ -151,13 +131,9 @@ test.each(["http://github.com/sample/repo", ""])(
   },
 );
 
-test("names a project after its repository when nobody chooses a name", async () => {
+test("names a project after its repository", async () => {
   await withProjects("catalog-default-name", (projects) => {
-    seedConnected(
-      projects,
-      { repositoryUrl: "https://github.com/sample/repo-1", displayName: "  " },
-      NOW,
-    );
+    seedConnected(projects, "https://github.com/sample/repo-1", NOW);
 
     expect(projects.catalog()[0]).toEqual({
       id: "sample-repo-1",
@@ -169,11 +145,7 @@ test("names a project after its repository when nobody chooses a name", async ()
 
 test("a disconnected project leaves the catalog and stops resolving", async () => {
   await withProjects("catalog-disconnect", (projects) => {
-    const connected = seedConnected(
-      projects,
-      { repositoryUrl: "https://github.com/sample/repo-1" },
-      NOW,
-    );
+    const connected = seedConnected(projects, "https://github.com/sample/repo-1", NOW);
 
     if (!connected.ok) {
       throw new Error("this repository must connect");

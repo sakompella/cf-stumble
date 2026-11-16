@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { WorkspaceIdleController } from "../../../src/workspace/idle-controller.js";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import { deferredExec } from "./deferred-exec.js";
+import { targetOptions } from "./target-helpers.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -32,7 +33,7 @@ function makeTarget() {
     new FakeProjectFilesystemProvider(),
     new FakeProjectTransactions(),
     execBackend,
-    { activity: idle },
+    targetOptions({ activity: idle }),
   );
 
   return { clock, idle, execBackend, target };

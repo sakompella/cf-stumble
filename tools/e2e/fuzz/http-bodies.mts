@@ -96,7 +96,6 @@ const VALID_VALUES: Readonly<Record<RouteBody, (random: Random) => JsonRecord>> 
     repositoryUrl: random.chance(0.5)
       ? `https://github.com/fz-${hex(random, 8)}/nope-${hex(random, 6)}`
       : random.pick(REPOSITORY_URLS),
-    ...(random.chance(0.3) && { displayName: random.pick(NASTY_STRINGS) }),
   }),
   submit: (random) => ({
     harnessCommit: random.pick([
@@ -173,15 +172,7 @@ export type GeneratedBody = Readonly<{ spec: BodySpec | undefined }>;
 
 const BIG_SIZES = [100_001, 500_000, 2_000_000, 8_000_000];
 
-const BIG_KEYS = [
-  "content",
-  "repositoryUrl",
-  "callbackUrl",
-  "attemptId",
-  "displayName",
-  "harnessCommit",
-  "x",
-];
+const BIG_KEYS = ["content", "repositoryUrl", "callbackUrl", "attemptId", "harnessCommit", "x"];
 
 function bigBody(random: Random, kind: RouteBody, huge: boolean): BodySpec {
   const size = huge ? random.pick([40_000_000, 80_000_000]) : random.pick(BIG_SIZES);

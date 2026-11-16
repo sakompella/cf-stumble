@@ -37,13 +37,13 @@ export function harnessBuildConfiguration(
     : { ...HARNESS_BUILD_CONFIGURATION, harnessGitRemote: trimmed };
 }
 
-export type HarnessBuildStep = Readonly<{
+type HarnessBuildStep = Readonly<{
   name: HarnessBuildStepName;
   source: string;
   cwd: string;
 }>;
 
-export type HarnessBuildPlan = Readonly<{
+type HarnessBuildPlan = Readonly<{
   directory: string;
   steps: readonly HarnessBuildStep[];
   moduleMapPath: string;
@@ -117,7 +117,7 @@ type ParsedHarnessBuildStepRequest = Readonly<{
   step: HarnessBuildStepName;
 }>;
 
-export function parseHarnessBuildStepRequest(
+function parseHarnessBuildStepRequest(
   request: HarnessBuildStepRequest,
 ): ParsedHarnessBuildStepRequest | WorkspaceFailure {
   const harnessCommit = parseHarnessCommit(request.harnessCommit);
@@ -142,7 +142,7 @@ function publishModuleMapSource(plan: HarnessBuildPlan): string {
   ].join("\n");
 }
 
-export function planHarnessBuildStep(
+function planHarnessBuildStep(
   configuration: HarnessBuildConfiguration,
   request: ParsedHarnessBuildStepRequest,
 ): WorkspacePlan {

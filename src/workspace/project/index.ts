@@ -4,7 +4,7 @@ export { chosenExecBackend } from "./exec-selection.js";
 
 export { workspaceGit } from "./git-fs.js";
 
-export { githubCloneHeaders, githubTokenFromHosts } from "./github-remote.js";
+export { githubCloneHeaders, readGitHubToken } from "./github-remote.js";
 
 export { IsolateEgressGateway } from "./isolate-egress.js";
 

@@ -40,7 +40,6 @@ const ConnectBody = Schema.Struct({
   repositoryUrl: Schema.String.check(
     Schema.isPattern(/^https:\/\/github\.com\/[^/?#@]+\/[^/?#@]+$/iu),
   ),
-  displayName: Schema.optionalKey(Schema.String),
 });
 
 const SubmitBody = Schema.Struct({

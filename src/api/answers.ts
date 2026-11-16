@@ -129,10 +129,7 @@ const DisconnectAnswer = Schema.Struct({
 
 const Accepted = Schema.Struct({ ok: Schema.Literal(true) });
 
-export const ConnectRequest = Schema.Struct({
-  repositoryUrl: Schema.String,
-  displayName: Schema.optionalKey(Schema.String),
-});
+export const ConnectRequest = Schema.Struct({ repositoryUrl: Schema.String });
 
 export const MessageRequest = Schema.Struct({
   content: Schema.String,

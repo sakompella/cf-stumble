@@ -1,10 +1,8 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import {
-  githubTokenForIsolateEgress,
-  isolateEgressFetch,
-} from "../../../src/workspace/project/isolate-egress.js";
+import { readGitHubToken } from "../../../src/workspace/project/github-remote.js";
+import { isolateEgressFetch } from "../../../src/workspace/project/isolate-egress.js";
 
 const ORIGINS = [
   "https://api.github.com",
@@ -167,7 +165,7 @@ test("the egress token is the gh hosts file's github.com token, else the configu
     const hostsFile = tc.draw(gs.sampledFrom(Object.values(HOSTS_FILES)));
     const configured = tc.draw(gs.sampledFrom([undefined, "configured-token"]));
 
-    const token = await githubTokenForIsolateEgress(
+    const token = await readGitHubToken(
       {
         readFile: () =>
           hostsFile === undefined
