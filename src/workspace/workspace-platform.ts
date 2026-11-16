@@ -2,7 +2,6 @@ import {
   Workspace,
   type DurableObjectStorageLike,
   type WorkspaceBackend,
-  type WorkspaceOptions,
 } from "@cloudflare/computer";
 import { ContainerBackend } from "@cloudflare/computer/backends/container";
 import * as Effect from "effect/Effect";
@@ -37,11 +36,6 @@ export function computerStorage(storage: DurableObjectStorage): DurableObjectSto
 
 type ProviderBackend = Readonly<{ egressPort: number; backend: ContainerBackend }>;
 
-type IsolateWorkspace = Readonly<{
-  backend: WorkspaceBackend;
-  git: NonNullable<WorkspaceOptions["git"]>;
-}>;
-
 export class WorkspacePlatform {
   #container: SnapshotContainerAPI | undefined;
   readonly lifecycle = new ContainerLifecycle();
@@ -52,7 +46,7 @@ export class WorkspacePlatform {
   readonly #platformContainer: DurableObjectState["container"];
   readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
-  readonly #isolate: IsolateWorkspace;
+  readonly #isolateBackend: WorkspaceBackend;
   #providerBackend: ProviderBackend | undefined;
   #workspace: Workspace;
 
@@ -61,7 +55,7 @@ export class WorkspacePlatform {
     providerToken: string | undefined,
     version: string | null,
     usesProvider: () => boolean,
-    isolate: IsolateWorkspace,
+    isolateBackend: WorkspaceBackend,
   ) {
     this.#state = state;
     logEvent("info", "do.started", { class: "WorkspaceHost", version });
@@ -81,7 +75,7 @@ export class WorkspacePlatform {
       logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
       this.#outliveRestart();
     });
-    this.#isolate = isolate;
+    this.#isolateBackend = isolateBackend;
     this.#workspace = this.#newWorkspace();
     this.#outliveRestart();
   }
@@ -228,8 +222,7 @@ export class WorkspacePlatform {
     return new Workspace({
       storage: computerStorage(this.#state.storage),
       sessionId: this.#state.id.toString(),
-      backends: [this.#workspaceBackend, this.#isolate.backend],
-      git: this.#isolate.git,
+      backends: [this.#workspaceBackend, this.#isolateBackend],
       output: WORKSPACE_OUTPUT_OPTIONS,
     });
   }

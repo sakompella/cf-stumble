@@ -55,7 +55,8 @@ call with `model-unavailable`, unless the stored token is still valid.
 `response.failed` with `subscription_sharing_usage_limit_exceeded`, which once failed every turn
 until ChatGPT was disconnected. A
 call is treated as refused for a usage limit when the provider answers HTTP 429, or its error
-code or type is `subscription_sharing_usage_limit_exceeded`, `rate_limit_exceeded`,
+code or type is `subscription_sharing_usage_limit_exceeded`,
+`subscription_sharing_workplace_individual_usage_limit_exceeded`, `rate_limit_exceeded`,
 `rate_limit_error` or `insufficient_quota`, in the response body or in the stream
 (`src/chatgpt/responses.ts`). If nothing of that call reached the caller yet, the route sends one
 `provider-fallback` event and answers the call from Workers AI. Generation 0 keeps that event as a

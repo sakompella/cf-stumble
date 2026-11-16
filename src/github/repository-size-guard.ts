@@ -1,4 +1,4 @@
-import type { PublicRepositoryUrl } from "../project-catalog.js";
+import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { shellQuote } from "../shell-quote.js";
 
 export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
@@ -30,8 +30,12 @@ const TREE_FILTER = [
   "end",
 ].join(" ");
 
-function repositoryApiPath(repositoryUrl: PublicRepositoryUrl): string | undefined {
-  const url = new URL(repositoryUrl);
+function repositoryApiPath(repositoryUrl: string): string | undefined {
+  const canonical = canonicalRepositoryUrl(repositoryUrl);
+
+  if (canonical === undefined) return undefined;
+
+  const url = new URL(canonical);
   const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
 
   return url.hostname === "github.com" && segments.length === 2
@@ -39,7 +43,7 @@ function repositoryApiPath(repositoryUrl: PublicRepositoryUrl): string | undefin
     : undefined;
 }
 
-export function repositorySizeVerdictSource(repositoryUrl: PublicRepositoryUrl): string {
+export function repositorySizeVerdictSource(repositoryUrl: string): string {
   const apiPath = repositoryApiPath(repositoryUrl);
 
   if (apiPath === undefined) {

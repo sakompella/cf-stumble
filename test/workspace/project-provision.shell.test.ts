@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { CLONE_SIZE_FAILURE_EXIT_CODE } from "../../src/workspace/clone-script.js";
 import {
-  PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
   projectCloneSource,
   projectProvisionLockPath,
 } from "../../src/workspace/commands/provision-project.js";
@@ -126,7 +126,7 @@ exit 128
     (message) => {
       const ran = cloneFailing(message);
 
-      expect(ran.status).toBe(PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE);
+      expect(ran.status).toBe(CLONE_SIZE_FAILURE_EXIT_CODE);
       expect(
         ran.stdout,
         "the script names the verdict, so a full disk is not a size limit",

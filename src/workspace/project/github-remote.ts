@@ -1,9 +1,6 @@
-import { Buffer } from "node:buffer";
 import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
 
 const GITHUB_HOST = "github.com";
-
-const GITHUB_ORIGIN = `https://${GITHUB_HOST}`;
 
 const HOST_LINE = /^(\S+):\s*$/u;
 
@@ -39,20 +36,4 @@ export async function readGitHubToken(
     .catch(() => "");
 
   return githubTokenFromHosts(hosts) ?? fallbackToken;
-}
-
-function isGitHubRemote(url: string): boolean {
-  try {
-    return new URL(url).origin === GITHUB_ORIGIN;
-  } catch {
-    return false;
-  }
-}
-
-export function githubCloneHeaders(url: string, token: string | undefined) {
-  if (token === undefined || !isGitHubRemote(url)) return {};
-
-  return {
-    Authorization: `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
-  };
 }
