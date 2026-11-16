@@ -34,19 +34,11 @@
           "@effect/platform-node/NodeServices#layer"
         ],
         "diagnosticSeverity": {
+          "anyUnknownInErrorContext": "error",
+          "effectTryWithoutCatch": "error",
           "schemaNumber": "off",
           "unknownInEffectCatch": "off"
-        },
-        "overrides": [
-          {
-            "include": ["test/**/*.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "globalErrorInEffectFailure": "off"
-              }
-            }
-          }
-        ]
+        }
       }
     ]
   }

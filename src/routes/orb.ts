@@ -1,6 +1,11 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../diagnostics.js";
 import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH } from "../orb-protocol.js";
+
+class WorkspaceHostUnreachable extends Data.TaggedError("WorkspaceHostUnreachable")<{
+  readonly cause: unknown;
+}> {}
 
 type OrbWorkspaceHost = Readonly<{ fetch(request: Request): Promise<Response> }>;
 
@@ -13,9 +18,9 @@ export function routeOrbRequest(
   if (pathname === ORB_PROVIDER_PATH || pathname === ORB_COMPUTERD_PATH)
     return Effect.tryPromise({
       try: () => host().fetch(request),
-      catch: (cause) => cause,
+      catch: (cause) => new WorkspaceHostUnreachable({ cause }),
     }).pipe(
-      Effect.catch((cause) =>
+      Effect.catch(({ cause }) =>
         Effect.sync(() => {
           logRedactedCause("routes.orb: workspace-host-unavailable", cause);
 

@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
+import { ContainerStopFailed } from "../../src/workspace/container-lifecycle.js";
 import { afterIdleStop, WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 import type { ExecBackend } from "../../src/workspace/project/exec-backend.js";
 import { eventually, tick } from "../eventually.js";
@@ -117,7 +118,8 @@ test("a failed stop for a backend change rejects, and work waiting on the stop s
     containerRunning: () => true,
     pullContainer: () => Promise.resolve(),
     closeWorkspace: () => Promise.resolve(),
-    stopContainer: () => Effect.fail(new Error("provider stop failed")),
+    stopContainer: () =>
+      Effect.fail(new ContainerStopFailed({ cause: new Error("provider stop failed") })),
   });
 
   const backendChange = idle.stopForBackendChange();
