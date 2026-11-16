@@ -102,3 +102,19 @@ test("a fresh thread answers the conversation the Supervisor started", async () 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toEqual({ ok: true, conversationId: "c2" });
 });
+
+test.each([
+  ["run-active", 409],
+  ["workspace-busy", 409],
+  ["workspace-unavailable", 503],
+] as const)("a workspace reset refused with %s answers %i", async (code, status) => {
+  const response = await apiResponse(
+    new Request("https://cf-stumble.test/api/workspace/reset", { method: "POST" }),
+    supervisor({
+      resetWorkspace: () => Promise.resolve({ ok: false, problem: { code } }),
+    }),
+  );
+
+  expect(response.status).toBe(status);
+  await expect(response.json()).resolves.toEqual({ ok: false, problem: { code } });
+});

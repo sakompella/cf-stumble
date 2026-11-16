@@ -1,5 +1,5 @@
+import type { ChatGPTLoginProblemCode } from "../api/problems.js";
 import { blockingLimit, ChatGPTAccount, type ReconnectReason, type UsageLimit } from "./account.js";
-import type { CallbackProblem } from "./oauth.js";
 import { SignIn } from "./sign-in.js";
 
 export type ChatGPTConnectionStatus =
@@ -19,13 +19,7 @@ export type ChatGPTConnectionView = Readonly<{
   model: string;
 }>;
 
-export type ChatGPTLoginFailure =
-  | "no-sign-in"
-  | "expired"
-  | CallbackProblem
-  | "exchange-refused"
-  | "exchange-unavailable"
-  | "missing-scope";
+export type ChatGPTLoginFailure = ChatGPTLoginProblemCode;
 
 export type ChatGPTLoginOutcome =
   | Readonly<{ ok: true; chatgpt: ChatGPTConnectionView }>

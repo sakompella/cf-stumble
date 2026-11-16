@@ -6,6 +6,7 @@ import {
   decodeRequestBody,
   invalidRequestBody,
   jsonError,
+  refusal,
   type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
@@ -36,16 +37,6 @@ export type ConversationApiSupervisor = Readonly<{
   ) => Promise<ConversationResult<{ conversationId: string }>>;
 }>;
 
-const PROBLEM_STATUS = {
-  "invalid-project-id": 400,
-  "invalid-message": 400,
-  "unknown-project-id": 404,
-  "workspace-busy": 409,
-  "no-active-generation": 503,
-  "mount-failed": 503,
-  "generation-failed": 503,
-} as const satisfies Record<ConversationProblem["code"], number>;
-
 const MessageBody = Schema.Struct({
   content: Schema.String,
   requestId: Schema.String,
@@ -53,7 +44,7 @@ const MessageBody = Schema.Struct({
 });
 
 function problemResponse(problem: ConversationProblem): Response {
-  return Response.json({ ok: false, problem }, { status: PROBLEM_STATUS[problem.code] });
+  return refusal({ ok: false, problem });
 }
 
 function noStoreResponse(body: ReadableStream<Uint8Array> | string, contentType: string): Response {
@@ -109,7 +100,7 @@ function eventsResponseFor(
 ): Effect.Effect<Response, SupervisorCallFailed> {
   const from = eventsFrom(new URL(request.url).searchParams);
 
-  if (from === null) return Effect.succeed(jsonError(400, "invalid-events-request"));
+  if (from === null) return Effect.succeed(jsonError("invalid-events-request"));
 
   return callSupervisor(() => supervisor.projectEvents(projectId, from)).pipe(
     Effect.map((result) =>
@@ -125,7 +116,7 @@ function entriesResponseFor(
 ): Effect.Effect<Response, SupervisorCallFailed> {
   const query = parseEntriesRequest(new URL(request.url).searchParams);
 
-  if (query === undefined) return Effect.succeed(jsonError(400, "invalid-entries-request"));
+  if (query === undefined) return Effect.succeed(jsonError("invalid-entries-request"));
 
   return callSupervisor(() => supervisor.projectEntries(projectId, query)).pipe(
     Effect.map((result) =>

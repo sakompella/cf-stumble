@@ -1,14 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import type {
-  ChatGPTConnectionView,
-  ChatGPTLoginFailure,
-  ChatGPTLoginOutcome,
-} from "../chatgpt/index.js";
+import type { ChatGPTConnectionView, ChatGPTLoginOutcome } from "../chatgpt/index.js";
 import {
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
+  refusal,
   type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
@@ -23,10 +20,6 @@ export type ChatGPTApiSupervisor = {
   readonly disconnectChatGPT: () => Promise<ChatGPTConnectionView>;
 };
 
-function loginStatus(code: ChatGPTLoginFailure): number {
-  return code === "exchange-unavailable" ? 503 : 400;
-}
-
 const CompleteBody = Schema.Struct({ attemptId: Schema.String, callbackUrl: Schema.String });
 
 const completeResponse = Effect.fnUntraced(function* (
@@ -39,9 +32,7 @@ const completeResponse = Effect.fnUntraced(function* (
     supervisor.completeChatGPTLogin(body.attemptId, body.callbackUrl),
   );
 
-  return outcome.ok
-    ? Response.json(outcome)
-    : Response.json(outcome, { status: loginStatus(outcome.problem.code) });
+  return outcome.ok ? Response.json(outcome) : refusal(outcome);
 }, invalidRequestBody("invalid-chatgpt-request"));
 
 function viewResponse(

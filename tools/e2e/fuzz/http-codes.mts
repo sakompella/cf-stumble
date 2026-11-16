@@ -1,63 +1,16 @@
-export const KNOWN_CODES: ReadonlySet<string> = new Set([
-  "invalid-submission-request",
-  "invalid-activation-request",
-  "invalid-rollback-request",
-  "invalid-connect-request",
-  "invalid-message-request",
-  "invalid-events-request",
-  "invalid-entries-request",
-  "invalid-chatgpt-request",
-  "invalid-backend-request",
-  "cross-origin-request",
-  "not-found",
-  "invalid-project-id",
-  "invalid-message",
-  "unknown-project-id",
-  "workspace-busy",
-  "no-active-generation",
-  "mount-failed",
-  "generation-failed",
-  "invalid-repository-url",
-  "repository-not-accessible",
-  "repository-too-large",
-  "workspace-unavailable",
-  "tooling-missing",
-  "provisioning-failed",
-  "run-active",
-  "not-configured",
-  "provider-unavailable",
-  "no-pending-authorization",
-  "authorization-expired",
-  "authorization-denied",
-  "unknown-generation",
-  "stale-epoch",
-  "not-ready",
-  "not-previously-active",
-  "facet-compatibility-mismatch",
-  "drops-active-commit",
-  "no-sign-in",
-  "expired",
-  "bad-address",
-  "provider-refused",
-  "wrong-sign-in",
-  "missing-code",
-  "missing-client",
-  "exchange-refused",
-  "exchange-unavailable",
-  "missing-scope",
-]);
+import { ERROR_STATUS, PROBLEM_STATUS } from "../../../src/api/problems.ts";
 
-export const INTENDED_SERVER_CODES: ReadonlySet<string> = new Set([
-  "workspace-unavailable",
-  "tooling-missing",
-  "provisioning-failed",
-  "no-active-generation",
-  "mount-failed",
-  "generation-failed",
-  "not-configured",
-  "provider-unavailable",
-  "exchange-unavailable",
-]);
+const PROBLEMS: readonly (readonly [string, number])[] = Object.entries(PROBLEM_STATUS);
+
+export const KNOWN_CODES: ReadonlySet<string> = new Set(
+  [...PROBLEMS, ...Object.entries(ERROR_STATUS)].flatMap(([code, status]) =>
+    status === 500 ? [] : [code],
+  ),
+);
+
+export const INTENDED_SERVER_CODES: ReadonlySet<string> = new Set(
+  PROBLEMS.flatMap(([code, status]) => (status >= 500 ? [code] : [])),
+);
 
 export const EDGE_STATUSES: ReadonlySet<number> = new Set([400, 403, 405, 413, 414, 421, 431, 501]);
 

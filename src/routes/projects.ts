@@ -4,6 +4,7 @@ import {
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
+  refusal,
   type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
@@ -12,7 +13,6 @@ import type {
   ConnectRepositoryResult,
   DisconnectRepositoryResult,
   GitHubAuthorizationOutcome,
-  GitHubAuthorizationProblem,
   GitHubConnectionRecord,
 } from "../supervisor/projects/index.js";
 
@@ -29,49 +29,16 @@ export type ProjectApiSupervisor = Readonly<{
   disconnectProject: (projectId: string) => Promise<DisconnectRepositoryResult>;
 }>;
 
-const CONNECT_STATUS = {
-  "invalid-repository-url": 400,
-  "repository-not-accessible": 403,
-  "repository-too-large": 413,
-  "workspace-unavailable": 503,
-  "tooling-missing": 503,
-  "provisioning-failed": 503,
-  "workspace-busy": 409,
-} as const satisfies Record<string, number>;
-
-const DISCONNECT_STATUS = {
-  "invalid-project-id": 400,
-  "unknown-project-id": 404,
-  "run-active": 409,
-  "workspace-busy": 409,
-} as const satisfies Record<
-  Extract<DisconnectRepositoryResult, { ok: false }>["problem"]["code"],
-  number
->;
-
 function disconnectResponse(
   projectId: string,
   supervisor: ProjectApiSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.disconnectProject(projectId)).pipe(
     Effect.map((result) =>
-      result.ok
-        ? Response.json(result)
-        : Response.json(
-            { ok: false, problem: result.problem },
-            { status: DISCONNECT_STATUS[result.problem.code] },
-          ),
+      result.ok ? Response.json(result) : refusal({ ok: false, problem: result.problem }),
     ),
   );
 }
-
-const AUTHORIZATION_STATUS = {
-  "not-configured": 503,
-  "provider-unavailable": 502,
-  "no-pending-authorization": 409,
-  "authorization-expired": 410,
-  "authorization-denied": 403,
-} as const satisfies Record<GitHubAuthorizationProblem, number>;
 
 function recordResponse(record: GitHubConnectionRecord): Response {
   return Response.json({ ok: true, github: record.github, checkedAt: record.checkedAt });
@@ -101,14 +68,11 @@ const connectResponse = Effect.fnUntraced(function* (
   );
 
   if (!result.ok) {
-    return Response.json(
-      {
-        ok: false,
-        problem: result.problem,
-        ...("github" in result && { github: result.github, checkedAt: result.checkedAt }),
-      },
-      { status: CONNECT_STATUS[result.problem.code] },
-    );
+    return refusal({
+      ok: false,
+      problem: result.problem,
+      ...("github" in result && { github: result.github, checkedAt: result.checkedAt }),
+    });
   }
 
   return Response.json({
@@ -127,10 +91,7 @@ function authorizationResponse(
     Effect.map((result) =>
       result.ok
         ? Response.json({ ok: true, github: result.status, checkedAt: result.checkedAt })
-        : Response.json(
-            { ok: false, problem: { code: result.problem } },
-            { status: AUTHORIZATION_STATUS[result.problem] },
-          ),
+        : refusal({ ok: false, problem: { code: result.problem } }),
     ),
   );
 }

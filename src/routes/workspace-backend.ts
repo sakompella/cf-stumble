@@ -1,7 +1,13 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { BackendSetting, type WorkspaceBackendChange } from "../backend-setting.js";
-import { callSupervisor, decodeRequestBody, invalidRequestBody, type Handlers } from "./json.js";
+import {
+  callSupervisor,
+  decodeRequestBody,
+  invalidRequestBody,
+  refusal,
+  type Handlers,
+} from "./json.js";
 
 export type WorkspaceBackendApiSupervisor = Readonly<{
   getWorkspaceBackend: () => Promise<BackendSetting>;
@@ -17,7 +23,7 @@ const changeResponse = Effect.fnUntraced(function* (
   const body = yield* decodeRequestBody(request, ChangeBody);
   const change = yield* callSupervisor(() => supervisor.setWorkspaceBackend(body.backend));
 
-  return Response.json(change, { status: change.ok ? 200 : 409 });
+  return change.ok ? Response.json(change) : refusal(change);
 }, invalidRequestBody("invalid-backend-request"));
 
 export const WORKSPACE_BACKEND_HANDLERS: Handlers<

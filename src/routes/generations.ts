@@ -10,7 +10,6 @@ import {
 } from "../generation-requests.js";
 import {
   type ActivationCommand,
-  type ControlProblemCode,
   type GenerationControlResult,
   type GenerationLabel,
   type Submission,
@@ -21,6 +20,7 @@ import {
   decodeRequestBody,
   invalidRequestBody,
   jsonError,
+  refusal,
   type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
@@ -60,22 +60,6 @@ export type GenerationSubmissionResult = Readonly<{
   preparation: StartupCheckResult;
 }>;
 
-const CONTROL_REFUSAL_STATUS = {
-  "unknown-generation": 404,
-  "stale-epoch": 409,
-  "not-ready": 409,
-  "not-previously-active": 409,
-  "facet-compatibility-mismatch": 409,
-  "run-active": 409,
-  "drops-active-commit": 409,
-} as const satisfies Record<ControlProblemCode, number>;
-
-function refusalResponse(
-  refusal: Extract<GenerationControlResult, { readonly ok: false }>,
-): Response {
-  return Response.json(refusal, { status: CONTROL_REFUSAL_STATUS[refusal.problem.code] });
-}
-
 type ControlCommandKind = "activate" | "rollback";
 
 const handleGenerationControl = Effect.fnUntraced(
@@ -89,14 +73,13 @@ const handleGenerationControl = Effect.fnUntraced(
       ),
     );
 
-    return result.ok ? Response.json(result) : refusalResponse(result);
+    return result.ok ? Response.json(result) : refusal(result);
   },
   (handled, _request, _supervisor, kind) =>
     handled.pipe(
       Effect.catchTag("InvalidRequestBody", () =>
         Effect.succeed(
           jsonError(
-            400,
             kind === "activate" ? "invalid-activation-request" : "invalid-rollback-request",
           ),
         ),
