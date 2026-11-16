@@ -8,25 +8,45 @@ const Commit = Schema.Struct({ tree: Sha });
 
 const Contents = Schema.Struct({ content: Schema.String });
 
-const OPEN_SESSION = "src/facet/generation-1/open-session.ts";
-
 const FACET_FILE = "src/facet/generation-1/fuzz-exec.ts";
 
-const EDITS: ReadonlyArray<readonly [string, string]> = [
-  [
-    'import { CodingTools } from "./coding-tools.js";',
-    'import { CodingTools } from "./coding-tools.js";\nimport { FuzzTools, fuzzModel } from "./fuzz-exec.js";',
-  ],
-  ["routeProvider(input.model)", "routeProvider(fuzzModel(input.model))"],
-  [
-    "registry.install(CodingTools);",
-    "registry.install(CodingTools);\n  registry.install(FuzzTools);",
-  ],
-];
+type Edits = ReadonlyArray<readonly [string, string]>;
 
-export function patchOpenSession(source: string): string {
-  return EDITS.reduce((text, [from, to]) => {
-    if (!text.includes(from)) throw new Error(`open-session.ts no longer contains ${from}`);
+const FACET_PATCHES: ReadonlyMap<string, Edits> = new Map([
+  [
+    "src/facet/generation-1/open-session.ts",
+    [
+      [
+        'import { ROUTE_MODEL, routeProvider } from "./route-provider.js";',
+        'import { fuzzModel } from "./fuzz-exec.js";\nimport { ROUTE_MODEL, routeProvider } from "./route-provider.js";',
+      ],
+      ["routeProvider(input.model)", "routeProvider(fuzzModel(input.model))"],
+    ],
+  ],
+  [
+    "src/facet/generation-1/registry.ts",
+    [
+      [
+        'import { CodingTools } from "./coding-tools.js";',
+        'import { CodingTools } from "./coding-tools.js";\nimport { FuzzTools } from "./fuzz-exec.js";',
+      ],
+      [
+        "registry.install(CodingTools);",
+        "registry.install(CodingTools);\n  registry.install(FuzzTools);",
+      ],
+    ],
+  ],
+]);
+
+export const PATCHED_FACET_FILES: readonly string[] = [...FACET_PATCHES.keys()];
+
+export function patchFacetFile(path: string, source: string): string {
+  const edits = FACET_PATCHES.get(path);
+
+  if (edits === undefined) throw new Error(`the exec fuzzer has no patch for ${path}`);
+
+  return edits.reduce((text, [from, to]) => {
+    if (!text.includes(from)) throw new Error(`${path} no longer contains ${from}`);
 
     return text.replace(from, to);
   }, source);
@@ -63,16 +83,22 @@ export class FuzzCommits {
   async branchWithFacet(base: string, branch: string, facetSource: string): Promise<string> {
     const parent = await this.#call("GET", `/git/commits/${base}`, Commit);
 
-    const session = await this.#call("GET", `/contents/${OPEN_SESSION}?ref=${base}`, Contents);
+    const patched = await Promise.all(
+      PATCHED_FACET_FILES.map(async (path) => {
+        const file = await this.#call("GET", `/contents/${path}?ref=${base}`, Contents);
 
-    const patched = patchOpenSession(Buffer.from(session.content, "base64").toString("utf8"));
+        return {
+          path,
+          mode: "100644",
+          type: "blob",
+          content: patchFacetFile(path, Buffer.from(file.content, "base64").toString("utf8")),
+        };
+      }),
+    );
 
     const tree = await this.#call("POST", "/git/trees", Sha, {
       base_tree: parent.tree.sha,
-      tree: [
-        { path: OPEN_SESSION, mode: "100644", type: "blob", content: patched },
-        { path: FACET_FILE, mode: "100644", type: "blob", content: facetSource },
-      ],
+      tree: [...patched, { path: FACET_FILE, mode: "100644", type: "blob", content: facetSource }],
     });
 
     const commit = await this.#call("POST", "/git/commits", Sha, {
