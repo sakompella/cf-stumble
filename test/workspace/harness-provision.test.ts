@@ -10,29 +10,19 @@ import { runInterruptible } from "./workspace-results.js";
 
 const ROOT = HARNESS_BUILD_CONFIGURATION.harnessRepositoryRoot;
 
+const HOST_GIT_READ = "Git objects are read in the container, not on the Workspace Host";
+
 const REMOTE = HARNESS_BUILD_CONFIGURATION.harnessGitRemote;
 
-const history = Array.from({ length: 1_000 }, (_, index) =>
-  testHarnessCommit(index.toString(16).padStart(40, "a")),
-);
-
-function commitAt(index: number): HarnessCommit {
-  return history[index] ?? testHarnessCommit("7".repeat(40));
-}
-
-const person = { name: "a", email: "a@example.com", timestamp: 0, timezoneOffset: 0 };
+const COMMIT = testHarnessCommit("a".repeat(40));
 
 type Checkout = {
   origin: string;
-  commits: Set<string>;
-  head: string;
   config: Map<string, unknown>;
 };
 
-function checkoutOf(origin: string, depth: number): Checkout {
-  const commits = history.slice(0, depth);
-
-  return { origin, commits: new Set(commits), head: commits.at(-1) ?? "", config: new Map() };
+function checkoutOf(origin: string): Checkout {
+  return { origin, config: new Map() };
 }
 
 function notFound(): Promise<never> {
@@ -55,12 +45,11 @@ class FakeHarnessWorkspace {
   readonly checkouts = new Map<string, Checkout>();
   readonly strays = new Map<string, string[]>();
   containerRuns = 0;
-  fetchedCommit: string | undefined;
   cloneHangs = false;
   containerOutput: CommandOutput = { stdout: "", stderr: "", exitCode: 0 };
 
-  cloned(origin: string = REMOTE, depth = 50): this {
-    this.checkouts.set(ROOT, checkoutOf(origin, depth));
+  cloned(origin: string = REMOTE): this {
+    this.checkouts.set(ROOT, checkoutOf(origin));
 
     return this;
   }
@@ -114,7 +103,7 @@ class FakeHarnessWorkspace {
         return new Promise<void>(() => {});
       }
 
-      this.checkouts.set(dir, checkoutOf(options.url, options.depth ?? 1));
+      this.checkouts.set(dir, checkoutOf(options.url));
 
       return Promise.resolve();
     },
@@ -123,36 +112,12 @@ class FakeHarnessWorkspace {
 
       return Promise.resolve();
     },
-    configGet: (options: { dir?: string }) => Promise.resolve(this.at(options.dir ?? "").origin),
-    show: (options: { dir?: string; ref: string }) =>
-      this.at(options.dir ?? "").commits.has(options.ref)
-        ? Promise.resolve({
-            oid: options.ref,
-            message: "",
-            tree: "",
-            parent: [],
-            author: person,
-            committer: person,
-          })
-        : Promise.reject(new Error("missing commit")),
+    configGet: (): Promise<never> => Promise.reject(new Error(HOST_GIT_READ)),
+    show: (): Promise<never> => Promise.reject(new Error(HOST_GIT_READ)),
   };
 
-  readonly container = (source: string) => {
-    const checkout = this.checkouts.get(ROOT);
-    const fetched = /origin ([0-9a-f]{40})/u.exec(source)?.[1];
-
+  readonly container = (_source: string) => {
     this.containerRuns += 1;
-
-    if (checkout === undefined || this.containerOutput.exitCode !== 0) {
-      return Effect.succeed(this.containerOutput);
-    }
-
-    if (fetched !== undefined) {
-      checkout.commits.add(fetched);
-      this.fetchedCommit = fetched;
-    } else if (this.fetchedCommit !== undefined) {
-      checkout.head = this.fetchedCommit;
-    }
 
     return Effect.succeed(this.containerOutput);
   };
@@ -169,7 +134,7 @@ const ok = { stdout: "", stderr: "", exitCode: 0 };
 test("clones a missing harness at its root with file modes ignored, then advances it in the container", async () => {
   const workspace = new FakeHarnessWorkspace();
 
-  await expect(provision(workspace, commitAt(3))).resolves.toEqual(ok);
+  await expect(provision(workspace, COMMIT)).resolves.toEqual(ok);
   expect(workspace.paths(), "no staging tree is left beside the checkout").toEqual([ROOT]);
   expect(workspace.checkouts.get(ROOT)?.origin).toBe(REMOTE);
   expect(workspace.checkouts.get(ROOT)?.config.get("core.fileMode")).toBe(false);
@@ -181,7 +146,7 @@ test("a clone cut off part way leaves the harness root free, so the next provisi
   workspace.cloneHangs = true;
 
   const cutOff = runInterruptible(
-    provisionHarness(workspace, workspace.container, HARNESS_BUILD_CONFIGURATION, commitAt(3)),
+    provisionHarness(workspace, workspace.container, HARNESS_BUILD_CONFIGURATION, COMMIT),
   );
 
   await eventually(() => {
@@ -192,7 +157,7 @@ test("a clone cut off part way leaves the harness root free, so the next provisi
 
   workspace.cloneHangs = false;
 
-  await expect(provision(workspace, commitAt(3))).resolves.toEqual(ok);
+  await expect(provision(workspace, COMMIT)).resolves.toEqual(ok);
   expect(workspace.paths()).toEqual([ROOT]);
   expect(workspace.checkouts.get(ROOT)?.origin).toBe(REMOTE);
 });
@@ -201,7 +166,7 @@ test("refuses a populated directory that is not a repository and leaves it alone
   const workspace = new FakeHarnessWorkspace();
   workspace.strays.set(ROOT, ["owned.txt"]);
 
-  await expect(provision(workspace, commitAt(0))).resolves.toEqual({
+  await expect(provision(workspace, COMMIT)).resolves.toEqual({
     stdout: "",
     stderr: `${ROOT} is not a git repository and is not empty\n`,
     exitCode: 1,
@@ -211,49 +176,30 @@ test("refuses a populated directory that is not a repository and leaves it alone
   expect(workspace.containerRuns).toBe(0);
 });
 
-test("refuses a checkout whose origin is another repository and leaves it alone", async () => {
-  const workspace = new FakeHarnessWorkspace().cloned("https://github.com/someone/else.git");
+test("provisioning an existing checkout reads no Git objects on the Workspace Host", async () => {
+  const workspace = new FakeHarnessWorkspace().cloned();
 
-  await expect(provision(workspace, commitAt(0))).resolves.toEqual({
-    stdout: "",
-    stderr: `${ROOT} has a different origin than ${REMOTE}\n`,
-    exitCode: 1,
-  });
-  expect(workspace.checkouts.get(ROOT)?.origin).toBe("https://github.com/someone/else.git");
-  expect(workspace.containerRuns).toBe(0);
+  await expect(provision(workspace, COMMIT)).resolves.toEqual(ok);
+  expect(workspace.containerRuns).toBe(1);
 });
 
-test("fetches a commit the checkout lacks in the container, which brings the checkout to it", async () => {
+test("a failing container script fails the provision with its exit code and message", async () => {
   const workspace = new FakeHarnessWorkspace().cloned();
-  const commit = commitAt(600);
+  workspace.containerOutput = { stdout: "", stderr: "fatal: not a repository\n", exitCode: 128 };
 
-  await expect(provision(workspace, commit)).resolves.toEqual(ok);
-  expect(workspace.checkouts.get(ROOT)?.commits.has(commit)).toBe(true);
-  expect(workspace.checkouts.get(ROOT)?.head).toBe(commit);
-});
-
-test("fails naming the commit, the remote and Git's reason when the container cannot fetch it", async () => {
-  const workspace = new FakeHarnessWorkspace().cloned();
-  const absent = testHarnessCommit("f".repeat(40));
-  workspace.containerOutput = {
+  await expect(provision(workspace, COMMIT)).resolves.toEqual({
     stdout: "",
-    stderr: "fatal: remote error: upload-pack: not our ref\n",
+    stderr: "fatal: not a repository\n",
     exitCode: 128,
-  };
-
-  await expect(provision(workspace, absent)).resolves.toEqual({
-    stdout: "",
-    stderr: `harness commit ${absent} is not in ${REMOTE}: fatal: remote error: upload-pack: not our ref\n`,
-    exitCode: 1,
   });
 });
 
 test("reports what the container's advance of the checkout says", async () => {
   const workspace = new FakeHarnessWorkspace().cloned();
-  const message = `harness checkout has local changes; left at ${commitAt(0).slice(0, 7)}\n`;
+  const message = `harness checkout has local changes; left at ${COMMIT.slice(0, 7)}\n`;
   workspace.containerOutput = { stdout: "", stderr: message, exitCode: 0 };
 
-  await expect(provision(workspace, commitAt(0))).resolves.toEqual({
+  await expect(provision(workspace, COMMIT)).resolves.toEqual({
     stdout: "",
     stderr: message,
     exitCode: 0,
