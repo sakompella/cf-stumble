@@ -34,6 +34,7 @@ export type Report = Readonly<{
   rounds: number;
   steps: number;
   divergences: readonly Divergence[];
+  remoteMismatches: readonly string[];
   classes: ReadonlyMap<string, number>;
 }>;
 
@@ -87,6 +88,7 @@ function known(item: Case): string {
 
 class Session {
   readonly divergences: Divergence[] = [];
+  readonly remoteMismatches: string[] = [];
   readonly classes = new Map<string, number>();
   readonly #seen = new Set<string>(KNOWN);
   readonly #options: FuzzOptions;
@@ -128,6 +130,7 @@ class Session {
       await this.#replay(cases, directory, oracle);
 
       for (const line of await checkRemote(this.#options, oracle, generator.pushedBranches())) {
+        this.remoteMismatches.push(`round ${this.rounds}: ${line}`);
         console.error(`fuzz git: remote divergence round ${this.rounds}: ${line}`);
       }
     } finally {
@@ -195,6 +198,7 @@ export async function fuzzGit(options: FuzzOptions): Promise<Report> {
     rounds: session.rounds,
     steps: session.steps,
     divergences: session.divergences,
+    remoteMismatches: session.remoteMismatches,
     classes: session.classes,
   };
 }
