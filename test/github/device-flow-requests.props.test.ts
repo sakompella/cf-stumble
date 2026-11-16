@@ -1,6 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
 import {
   redeemDeviceAuthorization,
@@ -29,6 +30,10 @@ function recorder(response: () => Response) {
 async function formOf(call: Exchange | undefined): Promise<Record<string, string>> {
   return Object.fromEntries(new URLSearchParams(await new Response(call?.body).text()));
 }
+
+const decodeAuthorizationForm = Schema.decodeUnknownSync(
+  Schema.Struct({ client_id: Schema.String, scope: Schema.String }),
+);
 
 const formHeaders = {
   accept: "application/json",
@@ -88,10 +93,10 @@ test("a blank client id never reaches the provider, any other is sent with the s
       method: "POST",
       headers: formHeaders,
     });
-    const form = await formOf(configured.calls[0]);
+    const form = decodeAuthorizationForm(await formOf(configured.calls[0]));
 
     expect(form.client_id).toBe(clientId);
-    expect(form.scope?.split(" ")).toEqual(["repo", "read:org"]);
+    expect(form.scope.split(" ")).toEqual(["repo", "read:org"]);
   }));
 
 type Timing = Readonly<{ sent?: number | string | null; usable?: number }>;

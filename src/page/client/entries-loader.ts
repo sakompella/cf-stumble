@@ -7,16 +7,12 @@ import { encodeEntriesRequest } from "../../entries-request.js";
 import { endpointPath } from "../../api/endpoints.js";
 import { answerOf, fetchEffect } from "./api.js";
 
+const hasEntryFields = Schema.is(
+  Schema.Struct({ id: Schema.Number, conversationId: Schema.Number, kind: Schema.String }),
+);
+
 function isEntryRecord(value: unknown): value is EntryRecord {
-  return (
-    Predicate.isObject(value) &&
-    "id" in value &&
-    typeof value.id === "number" &&
-    "conversationId" in value &&
-    typeof value.conversationId === "number" &&
-    "kind" in value &&
-    typeof value.kind === "string"
-  );
+  return hasEntryFields(value);
 }
 
 function isCursor(value: unknown): value is Cursor {

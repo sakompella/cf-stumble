@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
 import { chatgptTurn } from "../../src/chatgpt/index.js";
 import { modelEventStream } from "../../src/model-route-turn.js";
@@ -60,6 +61,16 @@ const WITH_OTHER_INPUT: ModelRouteRequest = {
   messages: [{ role: "user", content: "Summarize the diff" }],
 };
 
+const decodeModelCall = Schema.decodeUnknownSync(
+  Schema.Struct({
+    instructionsHash: Schema.String,
+    toolsHash: Schema.String,
+    firstInputHash: Schema.String,
+    inputItems: Schema.Number,
+    usageFields: Schema.optionalKey(Schema.String),
+  }),
+);
+
 const WITH_TOOLS: ModelRouteRequest = {
   messages: [...HI.messages],
   tools: [
@@ -81,7 +92,7 @@ test("an answered call logs prompt fingerprints that describe its instructions, 
   const [first, again, otherInstructions, otherInput, otherTools] = named(
     logged(),
     "chatgpt.model-call",
-  );
+  ).map((row) => decodeModelCall(row));
 
   for (const row of [first, again, otherInstructions, otherInput, otherTools]) {
     expect(row?.instructionsHash ?? "").not.toBe("");

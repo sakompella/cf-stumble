@@ -1,7 +1,9 @@
 import { vi, type MockInstance } from "vitest";
 import type { LogFields } from "../src/diagnostics.js";
 
-export function capturedEvents(): () => LogFields[] {
+export type LoggedEvent = LogFields & Readonly<{ event?: string; outcome?: string }>;
+
+export function capturedEvents(): () => LoggedEvent[] {
   const spies = [
     vi.spyOn(console, "log").mockImplementation(() => {}),
     vi.spyOn(console, "warn").mockImplementation(() => {}),
@@ -16,11 +18,11 @@ export function capturedEvents(): () => LogFields[] {
     );
 }
 
-function isLogFields(value: unknown): value is LogFields {
+function isLogFields(value: unknown): value is LoggedEvent {
   return typeof value === "object" && value !== null;
 }
 
-export function named(events: readonly LogFields[], event: string): LogFields[] {
+export function named(events: readonly LoggedEvent[], event: string): LoggedEvent[] {
   return events.filter((entry) => entry.event === event);
 }
 
