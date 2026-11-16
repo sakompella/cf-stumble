@@ -240,3 +240,19 @@ test("a command the container restart ended names container-restarted to the mod
   expect(result.ok).toBe(false);
   expect(result.ok ? "" : result.error.message).toContain("container-restarted");
 });
+
+test("a failed terminal frame with a code outside the protocol is refused as malformed", async () => {
+  const env = envWithoutGenerations({
+    cwd: "/workspace/project",
+    target: streamingTarget([
+      { kind: "terminal", seq: 0, outcome: "failed", error: { code: "teapot" } },
+    ]),
+  });
+
+  const result = await env.exec("make", {}, BACKGROUND_CONTEXT);
+  const message = result.ok ? "" : result.error.message;
+
+  expect(result.ok).toBe(false);
+  expect(message).toContain("malformed");
+  expect(message).not.toContain("teapot");
+});
