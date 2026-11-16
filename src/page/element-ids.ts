@@ -27,6 +27,11 @@ export const OWNER_PAGE_IDS = {
   connectRepositoryInput: "connect-repository-input",
   connectButton: "connect-project-button",
   connectStatus: "connect-project-status",
+  disconnectButton: "disconnect-project-button",
+  disconnectPrompt: "disconnect-project-prompt",
+  disconnectConfirmButton: "disconnect-project-confirm-button",
+  disconnectCancelButton: "disconnect-project-cancel-button",
+  disconnectStatus: "disconnect-project-status",
 
   conversation: "conversation",
   messageList: "conversation-messages",

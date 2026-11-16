@@ -189,7 +189,9 @@ export class ServingConversations {
   }
 
   release<Marked>(projectId: SelectableProject["id"], mark: () => Marked) {
-    return this.#projects.release(projectId, () => this.running(), mark);
+    const isRunning = (conversationId: string) => this.#runs.isRunning(conversationId, Date.now());
+
+    return this.#projects.release(projectId, isRunning, mark);
   }
 
   alarm(now: number): Effect.Effect<void> {

@@ -2,7 +2,7 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { projectTarget } from "../workspace/project/target-helpers.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
-import { sampleProjectOne } from "../project-fixtures.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import {
   ANSWER_STARTUP_CHECK,
@@ -127,4 +127,49 @@ test("a second client cannot reset the workspace or disconnect the project under
   expect(removals(workspace)).toHaveLength(1);
   expect((await owner.post("/api/workspace/reset")).status).toBe(200);
   expect(workspace.resets).toBe(1);
+});
+
+test("a run in one project does not block disconnecting another project", async () => {
+  const workspace = stubExternalBoundaries(new LiveWorkWorkspace());
+  const owner = ownerSession();
+  await servingScriptedGeneration(owner, generationSource);
+  const running = `/api/projects/${sampleProjectOne.id}`;
+  const idle = `/api/projects/${sampleProjectTwo.id}`;
+
+  for (const project of [sampleProjectOne, sampleProjectTwo]) {
+    const connected = await owner.post("/api/projects/connect", {
+      repositoryUrl: project.repositoryUrl,
+    });
+
+    expect(connected.status).toBe(200);
+  }
+
+  await owner.post(`${idle}/messages`, { content: "open a thread", requestId: "idle-tab" });
+  await eventually(() => {
+    expect(workspace.execBackend.handles).toHaveLength(1);
+  });
+  await runInDurableObject(owner.supervisor, () => {
+    workspace.execBackend.handles[0]?.push({ name: "exit", exitCode: 0 });
+  });
+
+  const submitted = await owner.post(`${running}/messages`, {
+    content: "run the command",
+    requestId: "busy-tab",
+  });
+
+  expect(submitted.status).toBe(202);
+  await eventually(() => {
+    expect(workspace.execBackend.handles).toHaveLength(2);
+  });
+
+  const other = await owner.post(`${idle}/disconnect`);
+
+  expect(other.status).toBe(200);
+  expect(removals(workspace), "only the idle project's clone was removed").toHaveLength(1);
+  expect(workspace.execBackend.handles[1]?.killCalls, "the other run was left running").toBe(0);
+
+  const busy = await owner.post(`${running}/disconnect`);
+
+  expect(busy.status).toBe(409);
+  await expect(busy.json()).resolves.toMatchObject({ problem: { code: "run-active" } });
 });

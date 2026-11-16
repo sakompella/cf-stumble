@@ -1,35 +1,13 @@
-import * as Option from "effect/Option";
 import type { Html, HtmlBuilder } from "foldkit/html";
-import { OWNER_PAGE_CLASSES as CLASS, OWNER_PAGE_IDS as ID } from "../element-ids.js";
+import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import { Message } from "./message.js";
-import type { Model, Project } from "./model.js";
+import type { Model } from "./model.js";
 import { conversationView } from "./view-conversation.js";
 import { backendPanel } from "./view-backend.js";
 import { chatGPTPanel } from "./view-chatgpt.js";
+import { connectPanels, projectListView } from "./view-repositories.js";
 import { generationBarView } from "./view-generation.js";
-import { controlRow, valueRow } from "./view-parts.js";
-
-function projectButton(project: Project, model: Model, h: HtmlBuilder<Message>): Html {
-  const isSelected = Option.contains(model.maybeProjectId, project.id);
-
-  return h.li(
-    [h.Key(project.id)],
-    [
-      h.button(
-        [
-          h.Class(
-            isSelected ? `${CLASS.projectButton} ${CLASS.selectedProject}` : CLASS.projectButton,
-          ),
-          h.Type("button"),
-          h.DataAttribute("project-id", project.id),
-          h.AriaCurrent(isSelected ? "true" : "false"),
-          h.OnClick(Message.ClickedProject({ projectId: project.id })),
-        ],
-        [project.displayName, h.span([h.Class("repo")], [project.location])],
-      ),
-    ],
-  );
-}
+import { valueRow } from "./view-parts.js";
 
 function button(id: string, message: Message, label: string, h: HtmlBuilder<Message>): Html {
   return h.button([h.Id(id), h.Type("button"), h.OnClick(message)], [label]);
@@ -78,29 +56,6 @@ function gitHubPanel(model: Model, h: HtmlBuilder<Message>): Html {
   );
 }
 
-function connectPanel(model: Model, h: HtmlBuilder<Message>): Html {
-  return h.div(
-    [h.Class("sidebar-panel")],
-    [
-      h.h3([], ["Connect a repository"]),
-      controlRow(
-        {
-          label: "repository url",
-          inputId: ID.connectRepositoryInput,
-          isNumber: false,
-          value: model.connectRepositoryInput,
-          onInput: (value) => Message.UpdatedConnectRepositoryInput({ value }),
-          buttonId: ID.connectButton,
-          buttonText: "Connect",
-          onClick: Message.ClickedConnect(),
-        },
-        h,
-      ),
-      valueRow("result", ID.connectStatus, model.connectStatus, h),
-    ],
-  );
-}
-
 function sidebarView(model: Model, h: HtmlBuilder<Message>): Html {
   const isExpanded = model.isSidebarExpanded;
 
@@ -122,14 +77,11 @@ function sidebarView(model: Model, h: HtmlBuilder<Message>): Html {
         [
           h.h2([], ["Projects"]),
           h.p([h.Class("note"), h.Id(ID.projectListStatus)], [model.projectListStatus]),
-          h.ul(
-            [h.Id(ID.projectList)],
-            model.projects.map((project) => projectButton(project, model, h)),
-          ),
+          projectListView(model, h),
           gitHubPanel(model, h),
           chatGPTPanel(model, h),
           backendPanel(model, h),
-          connectPanel(model, h),
+          ...connectPanels(model, h),
         ],
       ),
     ],

@@ -24,7 +24,7 @@ A connected project is a row in `connected_projects` with a `state`: `provisioni
 
 ## Disconnecting a repository
 
-`POST /api/projects/{id}/disconnect` needs an `Origin` that matches the request origin. It refuses an invalid or unknown id, the harness project, and a project with an active turn (`src/routes/projects.ts`).
+`POST /api/projects/{id}/disconnect` needs an `Origin` that matches the request origin. It refuses an invalid or unknown id, the harness project, and a project with an active turn (`src/routes/projects.ts`). A turn in another project does not block it. The page offers it as **Disconnect repository** in the sidebar for the selected connected project, after a confirmation; refusal wording is in `src/page/client/disconnect.ts`.
 
 On success the Supervisor removes the project thread and catalog row, then asks the Workspace Host to remove the clone and its `.provisioning` directory (`src/workspace/commands/remove-project.ts`). This deletes uncommitted work in the clone. Workspace removal is best effort: `ok: true, workspace: "failed"` means the thread and row are gone although cleanup failed. A refusal leaves the project connected.
 

@@ -87,13 +87,15 @@ export class ProjectThreads {
 
   release<Marked>(
     projectId: SelectableProject["id"],
-    running: () => boolean,
+    isRunning: (conversationId: string) => boolean,
     mark: () => Marked,
   ): Effect.Effect<Readonly<{ marked: Marked }> | null> {
     return this.#queue.withLock(
       projectId,
       Effect.sync(() => {
-        if (running()) return null;
+        const conversationId = this.#pointers.conversationOf(projectId);
+
+        if (conversationId !== undefined && isRunning(conversationId)) return null;
 
         this.#pointers.forget(projectId);
 
