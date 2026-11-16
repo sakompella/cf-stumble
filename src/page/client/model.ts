@@ -104,6 +104,7 @@ export type ControlPanel = typeof ControlPanel.Type;
 
 export const Model = Schema.Struct({
   pageError: Schema.String,
+  isOnline: Schema.Boolean,
   isSidebarExpanded: Schema.Boolean,
 
   projectListStatus: Schema.String,

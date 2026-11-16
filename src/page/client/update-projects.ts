@@ -12,7 +12,7 @@ import { DisconnectChatGPT, FinishChatGPTLogin, StartChatGPTLogin } from "./comm
 import type { GitHubReport, Model, Project } from "./model.js";
 import { keepingAddress, pendingLogin, withAddress } from "./chatgpt.js";
 import { StreamPhase } from "./stream-phase.js";
-import { withOpenedStream } from "./update-conversation.js";
+import { withOpenedStream } from "./update-fresh-thread.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 export { backendHandlers, FetchBackend } from "./update-backend.js";

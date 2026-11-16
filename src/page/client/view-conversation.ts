@@ -33,7 +33,9 @@ function runState(model: Model): string {
     return model.runNote;
   }
 
-  return inbox.length === 0 ? "running" : `running · ${inbox.length} queued`;
+  const running = inbox.length === 0 ? "running" : `running · ${inbox.length} queued`;
+
+  return model.runNote === "" ? running : `${running} · ${model.runNote}`;
 }
 
 function turnButtons(model: Model, h: HtmlBuilder<Message>): Html {
@@ -116,7 +118,10 @@ export function conversationView(model: Model, h: HtmlBuilder<Message>): Html {
         [h.Class("conversation-head")],
         [
           h.h2([h.Id(ID.conversationProject)], [model.conversationProject]),
-          h.span([h.Class("note"), h.Id(ID.conversationState)], [streamWording(model.streamPhase)]),
+          h.span(
+            [h.Class("note"), h.Id(ID.conversationState)],
+            [model.isOnline ? streamWording(model.streamPhase) : "offline"],
+          ),
         ],
       ),
       lazyTranscript(conversationTranscript, [

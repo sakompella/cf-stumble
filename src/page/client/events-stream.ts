@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Subscription } from "foldkit";
+import { Dom, Subscription } from "foldkit";
 import { answerOf, fetchEffect, problemText, endpointPath, transportDetail } from "./api.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
@@ -80,7 +80,21 @@ function connection({
   );
 }
 
+const connectivity = Stream.merge(
+  Dom.streamFromEvent({
+    target: () => window,
+    type: "online",
+    mapEvent: () => Message.ChangedConnectivity({ isOnline: true }),
+  }),
+  Dom.streamFromEvent({
+    target: () => window,
+    type: "offline",
+    mapEvent: () => Message.ChangedConnectivity({ isOnline: false }),
+  }),
+);
+
 export const subscriptions = Subscription.make<Model, Message, TranscriptService>()((entry) => ({
+  connectivity: Subscription.persistentEntry(connectivity),
   events: entry(
     { maybeStream: MaybeTranscriptKey },
     {

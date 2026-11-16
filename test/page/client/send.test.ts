@@ -6,8 +6,8 @@ import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { openedTranscript } from "./transcript-resource.js";
-import { promptShown, shownText, whoShown } from "./shown.js";
-import { received, viewing } from "./views.js";
+import { promptShown, runShown, shownText, streamShown, whoShown } from "./shown.js";
+import { received, running, viewing } from "./views.js";
 
 const transcript = openedTranscript();
 
@@ -29,9 +29,9 @@ const PROJECTS = [
   { id: "repo", displayName: "hello-world", isHarness: false, location: "https://github.com/o/r" },
 ];
 
-function sentFromPrompt(text: string): UpdateResult {
+function sentFromPrompt(text: string, conversation = viewing()): UpdateResult {
   const listed = update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS })).model;
-  const ready = update(listed, received(listed, viewing())).model;
+  const ready = update(listed, received(listed, conversation)).model;
   const typed = update(ready, Message.UpdatedPrompt({ value: text })).model;
 
   return update(typed, Message.ClickedSendTurn());
@@ -139,4 +139,45 @@ test("a send the Worker refuses because no generation is active stays retryable 
   expect(whoShown(refused.model)).toEqual(["you · not confirmed"]);
   expect(shownText(refused.model, ID.pageError)).toContain("no active generation");
   expect(shownText(refused.model, ID.pageError)).not.toContain("could not reach");
+});
+
+const offline = () => Promise.reject(new Error("Failed to fetch"));
+
+test("a send lost while the stream was down is sent again, once, under its own request id, when the stream returns", async () => {
+  const lost = await settled(sentFromPrompt("do it"), offline);
+  const requestId = lost.sent[0]?.requestId ?? "";
+
+  const dropped = update(
+    lost.model,
+    Message.DisconnectedEvents({ streamId: lost.model.eventsStreamId, detail: "x" }),
+  ).model;
+
+  expect(update(lost.model, received(lost.model, viewing())).commands ?? []).toEqual([]);
+
+  const back = await settled(update(dropped, received(dropped, viewing())), accepted);
+
+  expect(back.sent.map((sent) => sent.requestId)).toEqual([requestId]);
+  expect(whoShown(back.model)).toEqual(["you · queued"]);
+});
+
+test("a send lost offline is sent again when the browser is back online, and the page says offline meanwhile", async () => {
+  const lost = await settled(sentFromPrompt("do it"), offline);
+  const requestId = lost.sent[0]?.requestId ?? "";
+  const off = update(lost.model, Message.ChangedConnectivity({ isOnline: false })).model;
+
+  expect(streamShown(off)).toBe("offline");
+  expect(whoShown(off)).toEqual(["you · not confirmed"]);
+
+  const back = update(off, Message.ChangedConnectivity({ isOnline: true }));
+  const sent = await settled(back, accepted);
+
+  expect(streamShown(back.model)).toBe("live");
+  expect(sent.sent.map((request) => request.requestId)).toEqual([requestId]);
+  expect(whoShown(sent.model)).toEqual(["you · queued"]);
+});
+
+test("the note about an unconfirmed message is shown while a run is going", async () => {
+  const lost = await settled(sentFromPrompt("do it", running()), offline);
+
+  expect(runShown(lost.model)).toMatch(/^running · not confirmed/u);
 });

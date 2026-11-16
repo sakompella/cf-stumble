@@ -21,13 +21,14 @@ import {
   projectHandlers,
 } from "./update-projects.js";
 import type { UpdateReturn } from "./update-shared.js";
-import { composerHandlers, INITIAL_CONVERSATION, streamHandlers } from "./update-conversation.js";
+import { conversationHandlers, INITIAL_CONVERSATION } from "./update-conversation.js";
 
 const EMPTY_PANEL = { labelInput: "", request: ControlRequest.Idle() };
 
 export const init: Runtime.ElementInit<Model, Message> = () => ({
   model: {
     pageError: "",
+    isOnline: true,
     isSidebarExpanded: true,
     projectListStatus: "reading",
     projects: [],
@@ -64,8 +65,7 @@ export function update(model: Model, message: Message): UpdateReturn {
     ...gitHubHandlers(model),
     ...chatGPTHandlers(model),
     ...backendHandlers(model),
-    ...composerHandlers(model),
-    ...streamHandlers(model),
+    ...conversationHandlers(model),
     ...statusHandlers(model),
     ...submitHandlers(model),
     ...controlHandlers(model),

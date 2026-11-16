@@ -5,21 +5,26 @@ import { startHarnessServer, type HarnessServer } from "../browser-harness/serve
 
 type OwnerPageFixtures = {
   scenario: HarnessScenario;
+  allowedConsoleErrors: readonly RegExp[];
   server: HarnessServer;
   owner: Page;
 };
 
 export const test = base.extend<OwnerPageFixtures>({
   scenario: ["ready", { option: true }],
+  allowedConsoleErrors: [[], { option: true }],
   server: async ({ scenario }, use) => {
     const server = await startHarnessServer(scenario);
     await use(server);
     await server.close();
   },
-  owner: async ({ page, server }, use) => {
+  owner: async ({ page, server, allowedConsoleErrors }, use) => {
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
-      if (message.type() === "error") {
+      if (
+        message.type() === "error" &&
+        !allowedConsoleErrors.some((allowed) => allowed.test(message.text()))
+      ) {
         consoleErrors.push(message.text());
       }
     });
