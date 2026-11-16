@@ -3,7 +3,7 @@ import type { WorkspaceHost } from "../../src/workspace/host.js";
 import { withHost } from "./idle-host.js";
 import {
   REFUSED_BUILD,
-  REFUSED_CREDENTIAL,
+  REFUSED_CREDENTIAL_TOKEN,
   REFUSED_PROVISION,
   REFUSED_REMOVAL,
   restoreWorkspaceMembers,
@@ -28,7 +28,7 @@ test("each tracked RPC arms the idle alarm one limit after it ends", async () =>
     build: (host: WorkspaceHost) => host.build(REFUSED_BUILD),
     provision: (host: WorkspaceHost) => host.provision(REFUSED_PROVISION),
     removeProject: (host: WorkspaceHost) => host.removeProject(REFUSED_REMOVAL),
-    credential: (host: WorkspaceHost) => host.credential(REFUSED_CREDENTIAL),
+    installCredential: (host: WorkspaceHost) => host.installCredential(REFUSED_CREDENTIAL_TOKEN),
     ensureManagedInstructions: (host: WorkspaceHost) => host.ensureManagedInstructions(),
   };
 
@@ -192,10 +192,8 @@ test("a reset refuses while a file change or credential request is in flight and
         projectId: sampleProjectOne.id,
         repositoryUrl: sampleProjectOne.repositoryUrl,
       }),
-    credentialInstall: (host: WorkspaceHost) =>
-      host.credential({ kind: "github-credential", step: "install", token: FAKE_TOKEN }),
-    credentialStatus: (host: WorkspaceHost) =>
-      host.credential({ kind: "github-credential", step: "status" }),
+    credentialInstall: (host: WorkspaceHost) => host.installCredential(FAKE_TOKEN),
+    credentialStatus: (host: WorkspaceHost) => host.credentialStatus(),
     ensureManagedInstructions: (host: WorkspaceHost) => host.ensureManagedInstructions(),
   };
 
@@ -254,17 +252,9 @@ async function changesDuringReset(host: WorkspaceHost) {
     provision: await host.provision(REFUSED_PROVISION),
     removeProject: await host.removeProject(REFUSED_REMOVAL),
     ensureManagedInstructions: await host.ensureManagedInstructions(),
-    credentialInstall: await host.credential({
-      kind: "github-credential",
-      step: "install",
-      token: FAKE_TOKEN,
-    }),
-    credentialStatus: await host.credential({ kind: "github-credential", step: "status" }),
-    credentialRepositoryCheck: await host.credential({
-      kind: "github-credential",
-      step: "verify-repository",
-      repositoryUrl: sampleProjectOne.repositoryUrl,
-    }),
+    credentialInstall: await host.installCredential(FAKE_TOKEN),
+    credentialStatus: await host.credentialStatus(),
+    credentialRepositoryCheck: await host.checkRepositoryAccess(sampleProjectOne.repositoryUrl),
     reset: await host.reset(),
     capability: await capabilityAnswer(host),
   };

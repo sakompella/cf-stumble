@@ -3,16 +3,11 @@ import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, test } from "vitest";
 import { WorkspaceHost } from "../../src/workspace/host.js";
-import type { GitHubCredentialRequest } from "../../src/workspace/github-credential.js";
 import { restoreWorkspaceMembers, stubWorkspaceMember } from "./host-fixtures.js";
 
 afterEach(restoreWorkspaceMembers);
 
-const installRequest: GitHubCredentialRequest = {
-  kind: "github-credential",
-  step: "install",
-  token: "ghp_cfstumbleFAKEtokenFAKEtoken0123456789",
-};
+const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 function hostAnswering<T>(
   name: string,
@@ -52,7 +47,7 @@ const pending: ExecSyncResult = {
 
 test("the Host refuses an install whose workspace copy is still pending, and logs it out", async () => {
   const seen = await hostAnswering("credential-host-pending", pending, async (host, sources) => ({
-    result: await host.credential(installRequest),
+    result: await host.installCredential(FAKE_TOKEN),
     sources,
   }));
 
@@ -64,16 +59,13 @@ test("the Host refuses an install whose workspace copy is still pending, and log
 
 test("the Host installs once the workspace copy is complete, and its status read needs no sync", async () => {
   const installed = await hostAnswering("credential-host-complete", complete, (host) =>
-    host.credential(installRequest),
+    host.installCredential(FAKE_TOKEN),
   );
 
   const status = await hostAnswering("credential-host-status", pending, (host) =>
-    host.credential({ kind: "github-credential", step: "status" }),
+    host.credentialStatus(),
   );
 
-  expect(installed).toEqual({ ok: true, result: { kind: "credential-installed" } });
-  expect(status).toEqual({
-    ok: true,
-    result: { kind: "credential-status", state: "connected", login: "octocat" },
-  });
+  expect(installed).toEqual({ ok: true, status: { state: "connected", login: "octocat" } });
+  expect(status).toEqual({ ok: true, status: { state: "connected", login: "octocat" } });
 });

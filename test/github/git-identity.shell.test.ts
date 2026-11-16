@@ -63,7 +63,7 @@ function runInstall(): string {
   );
 
   expect(ran.status, ran.stderr).toBe(0);
-  expect(ran.stdout).toBe("installed\n");
+  expect(ran.stdout).toBe("connected octo-owner\n");
 
   return join(directory, "workspace/.gitconfig");
 }

@@ -56,7 +56,13 @@ export type ConnectRepositoryResult =
   | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy"; detail: "" }> }>;
 
 type ConnectionsNamespace = WorkspaceHostNamespace<
-  "credential" | "provision" | "build" | "ensureManagedInstructions" | "removeProject"
+  | "installCredential"
+  | "credentialStatus"
+  | "checkRepositoryAccess"
+  | "provision"
+  | "build"
+  | "ensureManagedInstructions"
+  | "removeProject"
 >;
 
 interface ProjectConnectionsInput {

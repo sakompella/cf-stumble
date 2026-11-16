@@ -18,22 +18,22 @@ const events: readonly Event[] = [
     now: 1,
   }),
   CredentialEvent.Observed({
-    answer: { state: "connected", login: undefined },
+    answer: { state: "connected", login: "hubot" },
     installedBy: undefined,
     now: 2,
   }),
   CredentialEvent.Observed({
-    answer: { state: "missing", login: undefined },
+    answer: { state: "missing" },
     installedBy: undefined,
     now: 3,
   }),
   CredentialEvent.Observed({
-    answer: { state: "unusable", login: undefined },
+    answer: { state: "unusable" },
     installedBy: undefined,
     now: 4,
   }),
   CredentialEvent.Observed({
-    answer: { state: "tooling-missing", login: undefined },
+    answer: { state: "tooling-missing" },
     installedBy: undefined,
     now: 5,
   }),

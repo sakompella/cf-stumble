@@ -1,10 +1,7 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
-import {
-  executeGitHubCredentialRequest,
-  type GitHubCredentialRequest,
-} from "../../src/workspace/github-credential.js";
+import { installGitHubCredential } from "../../src/workspace/github-credential.js";
 import {
   workspaceEffects,
   type PromiseOperations,
@@ -35,16 +32,10 @@ class RecordingOperations implements PromiseOperations {
     this.sources.push(source);
 
     return this.failure === undefined
-      ? Promise.resolve({ stdout: "installed", stderr: "", exitCode: 0 })
+      ? Promise.resolve({ stdout: "connected octocat", stderr: "", exitCode: 0 })
       : Promise.reject(this.failure);
   }
 }
-
-const installRequest: GitHubCredentialRequest = {
-  kind: "github-credential",
-  step: "install",
-  token: FAKE_TOKEN,
-};
 
 test("an install whose workspace copy is still pending, with the token in the sync error, never logs the token", async () => {
   capturedEvents();
@@ -55,11 +46,10 @@ test("an install whose workspace copy is still pending, with the token in the sy
   });
 
   const result = await Effect.runPromise(
-    executeGitHubCredentialRequest({
-      operations: workspaceEffects(lenient),
-      installOperations: workspaceEffects(strict),
-      request: installRequest,
-    }),
+    installGitHubCredential(
+      { lenient: workspaceEffects(lenient), durable: workspaceEffects(strict) },
+      FAKE_TOKEN,
+    ),
   );
 
   expect(result).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
@@ -73,11 +63,10 @@ async function outcomeWhenLogout(logoutFailure?: Error) {
   strict.failure = new WorkspaceSyncIncomplete({ message: "pending" });
 
   const result = await Effect.runPromise(
-    executeGitHubCredentialRequest({
-      operations: workspaceEffects(lenient),
-      installOperations: workspaceEffects(strict),
-      request: installRequest,
-    }),
+    installGitHubCredential(
+      { lenient: workspaceEffects(lenient), durable: workspaceEffects(strict) },
+      FAKE_TOKEN,
+    ),
   );
 
   return {

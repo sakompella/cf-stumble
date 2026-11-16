@@ -10,14 +10,25 @@ export function durableGitHubConfigurationSource(): readonly string[] {
   ];
 }
 
-export type GitHubCredentialState = "connected" | "missing" | "unusable" | "tooling-missing";
-
-export type GitHubCredentialStatus = Readonly<{
-  state: GitHubCredentialState;
-  login: string | undefined;
-}>;
+export type GitHubCredentialStatus =
+  | Readonly<{ state: "connected"; login: string }>
+  | Readonly<{ state: "missing" | "unusable" | "tooling-missing" }>;
 
 const LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u;
+
+function loginVerdictSource(whenConnected: readonly string[]): readonly string[] {
+  return [
+    'if login="$(gh api user --jq .login 2>&1)"; then',
+    ...whenConnected.map((line) => `  ${line}`),
+    "  printf 'connected %s\\n' \"$login\"",
+    "  exit 0",
+    "fi",
+    'case "$login" in',
+    "  *'(HTTP 401)'*) printf 'unusable\\n' ;;",
+    "  *) printf 'unreachable\\n' ;;",
+    "esac",
+  ];
+}
 
 export function installCredentialSource(): string {
   return [
@@ -30,12 +41,10 @@ export function installCredentialSource(): string {
     "fi",
     `gh auth login --hostname ${GITHUB_HOSTNAME} --with-token`,
     `gh auth setup-git --hostname ${GITHUB_HOSTNAME}`,
-    'login="$(gh api user --jq .login 2>/dev/null || true)"',
-    'if [ -n "$login" ]; then',
-    '  git config --global user.name "$login"',
-    '  git config --global user.email "${login}@users.noreply.github.com"',
-    "fi",
-    "printf 'installed\\n'",
+    ...loginVerdictSource([
+      'git config --global user.name "$login"',
+      'git config --global user.email "${login}@users.noreply.github.com"',
+    ]),
   ].join("\n");
 }
 
@@ -59,14 +68,7 @@ export function credentialStatusSource(): string {
     "  printf 'missing\\n'",
     "  exit 0",
     "fi",
-    'if login="$(gh api user --jq .login 2>&1)"; then',
-    "  printf 'connected %s\\n' \"$login\"",
-    "  exit 0",
-    "fi",
-    'case "$login" in',
-    "  *'(HTTP 401)'*) printf 'unusable\\n' ;;",
-    "  *) printf 'unreachable\\n' ;;",
-    "esac",
+    ...loginVerdictSource([]),
   ].join("\n");
 }
 
@@ -93,7 +95,7 @@ export function parseCredentialStatus(stdout: string): GitHubCredentialStatus | 
     case "missing":
     case "unusable":
     case "tooling-missing":
-      return { state, login: undefined };
+      return { state };
     default:
       return undefined;
   }

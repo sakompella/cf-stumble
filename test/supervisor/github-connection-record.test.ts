@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
-import type { GitHubCredentialResult } from "../../src/workspace/github-credential.js";
+import type { CredentialStatusResult } from "../../src/workspace/github-credential.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import { connectSampleProjects } from "./helpers.js";
@@ -11,19 +11,19 @@ afterEach(async () => {
   await reset();
 });
 
-function workspaceAnswering(answer: GitHubCredentialResult) {
-  const credential = vi.fn(() => Promise.resolve(answer));
+function workspaceAnswering(answer: CredentialStatusResult) {
+  const credentialStatus = vi.fn(() => Promise.resolve(answer));
 
-  const getByName = replaceWorkspaceHost<WorkspaceHostRpc<"credential">>(env.WORKSPACE_HOST, {
-    credential,
+  const getByName = replaceWorkspaceHost<WorkspaceHostRpc<"credentialStatus">>(env.WORKSPACE_HOST, {
+    credentialStatus,
   });
 
-  return { credential, getByName };
+  return { credentialStatus, getByName };
 }
 
-const CONNECTED: GitHubCredentialResult = {
+const CONNECTED: CredentialStatusResult = {
   ok: true,
-  result: { kind: "credential-status", state: "connected", login: "octocat" },
+  status: { state: "connected", login: "octocat" },
 };
 
 test("repeated reads of the project list and the connection never reach the Workspace Host", async () => {
@@ -55,7 +55,7 @@ test("a refresh asks the workspace once, and later reads report what it found an
     checkedAt: refreshed.ok ? refreshed.checkedAt : null,
   });
 
-  expect(host.credential).toHaveBeenCalledOnce();
+  expect(host.credentialStatus).toHaveBeenCalledOnce();
 });
 
 test("a check that could not reach the workspace leaves the last verdict and its time standing", async () => {
@@ -63,7 +63,7 @@ test("a check that could not reach the workspace leaves the last verdict and its
   const host = workspaceAnswering(CONNECTED);
   const connected = { state: "connected", login: "octocat", source: "device-authorization" };
   const refreshed = await control.refreshGitHubConnection();
-  host.credential.mockRejectedValue(new Error("the Workspace Host went away"));
+  host.credentialStatus.mockRejectedValue(new Error("the Workspace Host went away"));
 
   await expect(control.refreshGitHubConnection()).resolves.toEqual({
     ok: false,
@@ -77,24 +77,24 @@ test("a check that could not reach the workspace leaves the last verdict and its
 });
 
 function heldCheckWorkspace(resetAnswer: WorkspaceResetResult) {
-  const held = { started: (): void => {}, answer: (_result: GitHubCredentialResult): void => {} };
+  const held = { started: (): void => {}, answer: (_result: CredentialStatusResult): void => {} };
 
   const started = new Promise<void>((resolve) => {
     held.started = resolve;
   });
 
-  const answer = new Promise<GitHubCredentialResult>((resolve) => {
+  const answer = new Promise<CredentialStatusResult>((resolve) => {
     held.answer = resolve;
   });
 
-  const credential = vi.fn(() => {
+  const credentialStatus = vi.fn(() => {
     held.started();
 
     return answer;
   });
 
-  const workspace: WorkspaceHostRpc<"credential" | "reset"> = {
-    credential,
+  const workspace: WorkspaceHostRpc<"credentialStatus" | "reset"> = {
+    credentialStatus,
     reset: () => Promise.resolve(resetAnswer),
   };
 
