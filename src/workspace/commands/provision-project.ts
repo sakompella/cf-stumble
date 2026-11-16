@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import { logEvent } from "../../diagnostics.js";
 import {
   canonicalRepositoryUrl,
   parseProjectId,
@@ -7,25 +6,14 @@ import {
   type Project,
   type ProjectId,
 } from "../../project-catalog.js";
-import { shellQuote } from "../../shell-quote.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js";
+import { projectDirectory, projectGitDirectory } from "../../workspace-layout.js";
+import type { CommandOutput, WorkspaceEffects, WorkspaceFault } from "../operations.js";
 import {
-  PROJECTS_DIRECTORY,
-  projectDirectory,
-  projectGitDirectory,
-} from "../../workspace-layout.js";
-import {
-  durableGitHubConfigurationSource,
-  REPOSITORY_SIZE_VERDICT_FUNCTION,
-  repositorySizeVerdictSource,
-} from "../../github/index.js";
-import {
-  WorkspaceUnavailable,
-  type CommandOutput,
-  type WorkspaceEffects,
-  type WorkspaceFault,
-} from "../operations.js";
-import { CLONE_INTO_STAGING, reconcileClone } from "./clone-script.js";
+  cloneRepositorySource,
+  CLONE_SIZE_FAILURE_EXIT_CODE,
+  MEASURED_SIZE_VERDICTS,
+} from "../clone-script.js";
 import {
   answerDurableFailures,
   invalidRequest,
@@ -34,15 +22,6 @@ import {
   type WorkspaceFailure,
   type WorkspacePlan,
 } from "./command-result.js";
-
-export const PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE = 122;
-
-const MEASURED_SIZE_VERDICTS = [
-  "tree-truncated",
-  "too-many-files",
-  "working-tree-too-large",
-  "repository-too-large",
-] as const;
 
 export const CLONE_SIZE_VERDICTS = [...MEASURED_SIZE_VERDICTS, "capacity-exceeded"] as const;
 
@@ -67,7 +46,7 @@ function cloneAnswer(output: CommandOutput): ProjectProvisionAnswer {
   const reported = SIZE_VERDICT_LINE.exec(output.stdout)?.[1];
   const verdict = CLONE_SIZE_VERDICTS.find((known) => known === reported);
 
-  return output.exitCode === PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE && verdict !== undefined
+  return output.exitCode === CLONE_SIZE_FAILURE_EXIT_CODE && verdict !== undefined
     ? { ok: false, error: { code: "repository-too-large", verdict } }
     : { ok: false, error: { code: "clone-failed", exitCode: output.exitCode } };
 }
@@ -148,79 +127,12 @@ function cloneMarkersAreDurable(
 }
 
 export function projectCloneSource(project: Project): string {
-  const { repositoryUrl } = project;
-  const root = projectDirectory(project.id);
-
-  return [
-    "set -eu",
-    ...durableGitHubConfigurationSource(),
-    `projects=${shellQuote(PROJECTS_DIRECTORY)}`,
-    `lock=${shellQuote(projectProvisionLockPath(project.id))}`,
-    `repository=${shellQuote(root)}`,
-    `git_dir=${shellQuote(projectGitDirectory(project.id))}`,
-    `staging=${shellQuote(`${root}.provisioning`)}`,
-    `expected_remote=${shellQuote(repositoryUrl)}`,
-    repositorySizeVerdictSource(repositoryUrl),
-    'mkdir -p "$projects"',
-    ...reconcileClone({
-      beforeClone: [
-        `  size_verdict="$(${REPOSITORY_SIZE_VERDICT_FUNCTION})"`,
-        '  case "$size_verdict" in',
-        `    ${MEASURED_SIZE_VERDICTS.join(" | ")})`,
-        '      printf "repository exceeds a workspace size limit: %s\\n" "$size_verdict" >&2',
-        '      printf "size-verdict=%s\\n" "$size_verdict"',
-        `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
-        "      ;;",
-        "  esac",
-      ],
-      cloneIntoStaging: [
-        `  if clone_output="$(${CLONE_INTO_STAGING} 2>&1)"; then`,
-        "    :",
-        "  else",
-        "    clone_exit=$?",
-        `    if printf '%s\\n' "$clone_output" | grep -Eiq 'no space left on device|disk quota exceeded|not enough space'; then`,
-        '      printf "repository clone exceeded workspace capacity\\n" >&2',
-        '      printf "size-verdict=capacity-exceeded\\n"',
-        `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
-        "    fi",
-        '    printf "%s\\n" "$clone_output" >&2',
-        '    exit "$clone_exit"',
-        "  fi",
-      ],
-    }),
-  ].join("\n");
-}
-
-function isolateCloned(operations: WorkspaceEffects, project: Project): Effect.Effect<boolean> {
-  return Effect.gen(function* () {
-    if (yield* cloneMarkersAreDurable(operations, project)) return true;
-
-    yield* operations.cloneProject(project);
-
-    const durable = yield* cloneMarkersAreDurable(operations, project);
-
-    if (!durable) logCloneFallback("the clone ran but its markers are missing");
-
-    return durable;
-  }).pipe(
-    Effect.catch((fault) =>
-      Effect.sync(() => {
-        logCloneFallback(faultReason(fault));
-
-        return false;
-      }),
-    ),
-  );
-}
-
-function logCloneFallback(reason: string): void {
-  logEvent("warn", "workspace.isolate-clone.fell-back", { reason });
-}
-
-function faultReason(fault: WorkspaceFault): string {
-  const cause = fault instanceof WorkspaceUnavailable ? fault.cause : fault;
-
-  return cause instanceof Error ? cause.message : String(cause);
+  return cloneRepositorySource({
+    remote: project.repositoryUrl,
+    root: projectDirectory(project.id),
+    gitDir: projectGitDirectory(project.id),
+    lock: projectProvisionLockPath(project.id),
+  });
 }
 
 export function executeProjectProvisionRequest(
@@ -236,7 +148,7 @@ export function executeProjectProvisionRequest(
   return Effect.gen(function* () {
     const { operations } = input;
 
-    if (yield* isolateCloned(operations, parsed)) return { ok: true } as const;
+    if (yield* cloneMarkersAreDurable(operations, parsed)) return { ok: true } as const;
 
     const plan = planProjectProvisionRequest(parsed);
 

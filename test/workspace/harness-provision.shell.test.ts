@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, expect, test } from "vitest";
@@ -67,33 +67,6 @@ function commits(repository: string, label: string, count: number): void {
   if (ran.status !== 0) throw new Error(`git fast-import: ${ran.stderr}`);
 }
 
-function unsupported(): Promise<never> {
-  return Promise.reject(new Error("not used once the checkout exists"));
-}
-
-const workspace: Parameters<typeof provisionHarness>[0] = {
-  fs: {
-    readFile: unsupported,
-    readdir: unsupported,
-    stat: (path) =>
-      Promise.resolve({
-        name: ".git",
-        parentPath: path,
-        size: 0,
-        mtime: 0,
-        inode: 1,
-        mode: 0o755,
-        isFile: false,
-        isDirectory: true,
-        isSymbolicLink: false,
-      }),
-    rm: unsupported,
-    mkdir: unsupported,
-    rename: unsupported,
-  },
-  git: { clone: unsupported, configSet: unsupported },
-};
-
 function container(source: string) {
   return Effect.sync(() => {
     const ran = runRooted(layout, rooted(source, layout));
@@ -103,9 +76,7 @@ function container(source: string) {
 }
 
 function provision(commit = testHarnessCommit(git(harness(), "rev-parse", "HEAD"))) {
-  return Effect.runPromise(
-    provisionHarness(workspace, container, HARNESS_BUILD_CONFIGURATION, commit),
-  );
+  return Effect.runPromise(provisionHarness(container, HARNESS_BUILD_CONFIGURATION, commit));
 }
 
 const ok = { stdout: "", stderr: "", exitCode: 0 };
@@ -197,4 +168,48 @@ test("fails and leaves the checkout alone when its origin is another repository"
     exitCode: 1,
   });
   expect(git(harness(), "rev-parse", "HEAD")).toBe(head);
+});
+
+function provisionFrom(directory: string, commit: ReturnType<typeof testHarnessCommit>) {
+  return Effect.runPromise(
+    provisionHarness(
+      (source) =>
+        Effect.sync(() => {
+          const ran = runRooted(
+            layout,
+            rooted(source, layout).replaceAll(
+              HARNESS_BUILD_CONFIGURATION.harnessGitRemote,
+              `file://${directory}`,
+            ),
+          );
+
+          return { stdout: ran.stdout, stderr: ran.stderr, exitCode: ran.status ?? 1 };
+        }),
+      HARNESS_BUILD_CONFIGURATION,
+      commit,
+    ),
+  );
+}
+
+test("clones a harness that is missing, with file modes ignored, and leaves no staging tree", async () => {
+  rmSync(harness(), { recursive: true });
+  const head = git(origin.path, "rev-parse", "HEAD");
+
+  await expect(provisionFrom(origin.path, testHarnessCommit(head))).resolves.toEqual(ok);
+  expect(git(harness(), "rev-parse", "HEAD")).toBe(head);
+  expect(git(harness(), "config", "core.fileMode")).toBe("false");
+  expect(readdirSync(layout.workspace)).toEqual(["harness"]);
+});
+
+test("refuses a populated directory that is not a repository and leaves it alone", async () => {
+  rmSync(harness(), { recursive: true });
+  mkdirSync(harness());
+  writeFileSync(join(harness(), "owned.txt"), "precious");
+
+  const result = await provisionFrom(origin.path, testHarnessCommit("a".repeat(40)));
+
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("is not a git repository and is not empty");
+  expect(readdirSync(harness())).toEqual(["owned.txt"]);
+  expect(existsSync(`${harness()}.provisioning`)).toBe(false);
 });

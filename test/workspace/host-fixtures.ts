@@ -19,9 +19,9 @@ export const REFUSED_REMOVAL: ProjectRemovalRequest = {
 
 export const REFUSED_CREDENTIAL_TOKEN = "not a token";
 
-type StubbedMember = "fs" | "runtime";
+type StubbedMember = "fs" | "runtime" | "git";
 
-const STUBBED_MEMBERS: readonly StubbedMember[] = ["fs", "runtime"];
+const STUBBED_MEMBERS: readonly StubbedMember[] = ["fs", "runtime", "git"];
 
 const originalMembers = STUBBED_MEMBERS.map(
   (member) => [member, Object.getOwnPropertyDescriptor(Workspace.prototype, member)] as const,

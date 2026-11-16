@@ -1,6 +1,5 @@
 import type { HarnessBuildConfiguration } from "../../src/harness-build.js";
 import type { HarnessCommit } from "../../src/harness-commit.js";
-import type { Project } from "../../src/project-catalog.js";
 import {
   attemptWorkspace,
   type CommandOutput,
@@ -15,7 +14,6 @@ export {
 } from "../../src/workspace/operations.js";
 
 export type PromiseOperations = Readonly<{
-  cloneProject?(project: Project): Promise<void>;
   provisionHarness?(
     configuration: HarnessBuildConfiguration,
     commit: HarnessCommit,
@@ -35,15 +33,9 @@ export type PromiseOperations = Readonly<{
 type Mutable = { -readonly [K in keyof WorkspaceEffects]: WorkspaceEffects[K] };
 
 export function workspaceEffects(operations: PromiseOperations): WorkspaceEffects {
-  const { cloneProject, provisionHarness } = operations;
+  const { provisionHarness } = operations;
 
   const effects: Mutable = {
-    cloneProject: (project: Project) =>
-      attemptWorkspace(() =>
-        cloneProject === undefined
-          ? Promise.reject(new Error("this fake clones no project"))
-          : cloneProject.call(operations, project),
-      ),
     lstat: (path) => attemptWorkspace(() => operations.lstat(path)),
     readFile: (path) => attemptWorkspace(() => operations.readFile(path)),
     removeTree: (path) =>
