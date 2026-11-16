@@ -6,7 +6,7 @@ import type {
   GenerationActor,
   GenerationControlResult,
   GenerationLabel,
-} from "./generations.js";
+} from "./generation-state.js";
 import { WORKSPACE_BUSY, type WorkspaceHostNamespace } from "../workspace/index.js";
 import type { EntriesRequest } from "../entries-request.js";
 import { runAtEntryPoint } from "../run-entry-point.js";

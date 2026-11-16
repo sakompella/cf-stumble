@@ -4,7 +4,8 @@ import { FACET_COMPATIBILITY } from "../../facet/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
 import type { ScopedWorkspace } from "../conversations/index.js";
 import type { PreparationReply } from "../generation-machine.js";
-import type { Generation, GenerationActor, GenerationLabel, Generations } from "../generations.js";
+import type { Generations } from "../generations.js";
+import type { Generation, GenerationActor, GenerationLabel } from "../generation-state.js";
 import {
   runStartupCheck,
   type StartupCheckDeadlines,

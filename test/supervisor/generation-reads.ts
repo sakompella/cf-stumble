@@ -2,7 +2,8 @@ import { FACET_COMPATIBILITY } from "../../src/facet/runtime-contract.js";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
-import { Generations, type Generation } from "../../src/supervisor/generations.js";
+import { Generations } from "../../src/supervisor/generations.js";
+import type { Generation } from "../../src/supervisor/generation-state.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { label as generationLabel } from "./generations/fixtures.js";
 

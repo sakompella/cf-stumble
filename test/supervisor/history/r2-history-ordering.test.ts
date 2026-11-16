@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
-import type { GenerationStatus } from "../../../src/supervisor/generations.js";
+import type { GenerationStatus } from "../../../src/supervisor/generation-state.js";
 import type { GenerationChange } from "../../../src/supervisor/history/commits.js";
 import { GenerationHistory } from "../../../src/supervisor/history/log.js";
 import { r2History } from "../../../src/supervisor/history/r2-history.js";

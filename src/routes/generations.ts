@@ -8,12 +8,12 @@ import {
   GenerationSubmissionRequest,
   type OwnerStatus,
 } from "../generation-requests.js";
-import {
-  type ActivationCommand,
-  type GenerationControlResult,
-  type GenerationLabel,
-  type Submission,
-} from "../supervisor/generations.js";
+import type {
+  ActivationCommand,
+  GenerationControlResult,
+  GenerationLabel,
+  Submission,
+} from "../supervisor/generation-state.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
 import {
   answer,

@@ -9,7 +9,7 @@ import {
   type Step,
 } from "../../../src/supervisor/generation-machine.js";
 import type { RunOutcome } from "../../../src/supervisor/conversations/index.js";
-import type { PreparationOutcome } from "../../../src/supervisor/generations.js";
+import type { PreparationOutcome } from "../../../src/supervisor/generation-state.js";
 import {
   Serving,
   type LabeledGeneration,

@@ -1,4 +1,3 @@
-import type { ControlProblemCode } from "../api/problems.js";
 import { logEvent } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { Settlement } from "./conversations/index.js";
@@ -16,8 +15,16 @@ import {
   Serving,
   wireGeneration,
   wireRecord,
+  type ActivationCommand,
+  type ActiveGeneration,
+  type Generation,
+  type GenerationActor,
+  type GenerationControlResult,
+  type GenerationLabel,
   type LabeledGeneration,
+  type PreparationOutcome,
   type Selection,
+  type Submission,
 } from "./generation-state.js";
 import {
   generationFromRow,
@@ -30,68 +37,6 @@ import {
   type SelectionRow,
 } from "./generation-rows.js";
 import type { GenerationChange } from "./history/commits.js";
-
-export type GenerationStatus = "candidate" | "ready" | "failed";
-
-export type GenerationActor = "owner" | "conversation" | "probation";
-
-declare const generationLabelBrand: unique symbol;
-
-export type GenerationLabel = number & {
-  readonly [generationLabelBrand]: "GenerationLabel";
-};
-
-export function isGenerationLabel(value: number): value is GenerationLabel {
-  return Number.isSafeInteger(value) && value >= 0;
-}
-
-export type Generation = Readonly<{
-  label: GenerationLabel;
-  harnessCommit: HarnessCommit;
-  status: GenerationStatus;
-}>;
-
-export type GenerationRecord = Readonly<{
-  generation: Generation;
-  wasActive: boolean;
-  compatibility: string | undefined;
-}>;
-
-export type ActiveGeneration = Readonly<{
-  generation: Generation | undefined;
-  epoch: number;
-}>;
-
-export type ActivationCommand = Readonly<{
-  kind: "activate" | "rollback";
-  label: GenerationLabel;
-  observedEpoch: number;
-}>;
-
-export type Submission = Readonly<{
-  kind: "candidate-submitted";
-  generation: Generation;
-  epoch: number;
-}>;
-
-export type { ControlProblemCode };
-
-export type GenerationControlResult =
-  | Readonly<{
-      ok: true;
-      outcome: Readonly<{
-        kind: "activated" | "rolled-back";
-        generation: Generation;
-        epoch: number;
-        effect: "activated" | "no-op";
-        droppedCommit?: HarnessCommit;
-      }>;
-    }>
-  | Readonly<{ ok: false; problem: Readonly<{ code: ControlProblemCode }> }>;
-
-export type PreparationOutcome =
-  | Readonly<{ status: "ready"; compatibility: string }>
-  | Readonly<{ status: "failed" }>;
 
 export class Generations {
   readonly #storage: DurableObjectStorage;

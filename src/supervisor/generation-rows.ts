@@ -3,10 +3,11 @@ import {
   GenerationState,
   Serving,
   wireRecord,
+  type GenerationLabel,
+  type GenerationStatus,
   type LabeledGeneration,
   type Selection,
 } from "./generation-state.js";
-import type { GenerationLabel, GenerationStatus } from "./generations.js";
 
 export type GenerationRow = {
   readonly label: GenerationLabel;

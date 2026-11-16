@@ -2,7 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import { isGenerationLabel } from "../../../src/supervisor/generations.js";
+import { isGenerationLabel } from "../../../src/supervisor/generation-state.js";
 
 const safeIntegers = gs.integers().map((value) => ({ value, accepted: value >= 0 }));
 

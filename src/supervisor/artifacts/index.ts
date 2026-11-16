@@ -9,7 +9,7 @@ import { ModuleMapStore } from "./store.js";
 import type { StoredModuleMapProblem } from "./store.js";
 import { buildModuleMap, type BuildWorkspace, type HarnessBuildProblem } from "./build.js";
 import { SERVING_FACET_NAME } from "./facet-name.js";
-import type { ActiveGeneration } from "../generations.js";
+import type { ActiveGeneration } from "../generation-state.js";
 
 export { MainLineage } from "./main-lineage.js";
 

@@ -1,4 +1,7 @@
-import { isGenerationLabel, type GenerationLabel } from "../../../src/supervisor/generations.js";
+import {
+  isGenerationLabel,
+  type GenerationLabel,
+} from "../../../src/supervisor/generation-state.js";
 
 export function label(value: number): GenerationLabel {
   if (!isGenerationLabel(value)) throw new Error(`invalid test label ${value}`);
