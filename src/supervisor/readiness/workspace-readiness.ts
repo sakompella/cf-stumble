@@ -107,7 +107,7 @@ export class WorkspaceReadiness {
 }
 
 function endWorkspaceTurn(capability: ProjectCapabilityStub): Effect.Effect<void> {
-  return Effect.tryPromise(() => capability.endTurn()).pipe(
+  return Effect.tryPromise({ try: () => capability.endTurn(), catch: hostRejected }).pipe(
     Effect.ignore,
     Effect.ensuring(
       Effect.sync(() => {

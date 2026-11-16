@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
-import { Generations, type GenerationLabel } from "../../../src/supervisor/generations.js";
+import { Generations } from "../../../src/supervisor/generations.js";
+import type { GenerationLabel } from "../../../src/supervisor/generation-state.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   fixtureMainHarnessCommit,

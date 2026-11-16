@@ -83,19 +83,19 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
     const turn = withFallback(chatgpt, workersAi);
 
     return runAtEntryPoint(
-      Effect.tryPromise(() => holder.admitModelTurn(this.ctx.props.instance)).pipe(
+      Effect.tryPromise({
+        try: () => holder.admitModelTurn(this.ctx.props.instance),
+        catch: (): ValidationFailure => ({
+          ok: false,
+          error: { code: "invalid-request", reason: SUPERVISOR_UNAVAILABLE },
+        }),
+      }).pipe(
         Effect.map((admitted): ReadableStream<Uint8Array> | ValidationFailure =>
           admitted
             ? modelEventStream(turn)
             : { ok: false, error: { code: "invalid-request", reason: GENERATION_REPLACED } },
         ),
-        Effect.orElseSucceed(
-          () =>
-            ({
-              ok: false,
-              error: { code: "invalid-request", reason: SUPERVISOR_UNAVAILABLE },
-            }) satisfies ValidationFailure,
-        ),
+        Effect.catch(Effect.succeed),
       ),
     );
   }

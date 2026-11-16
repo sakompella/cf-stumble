@@ -8,7 +8,7 @@ import {
   type GenerationControlResult,
   type GenerationLabel,
   type Submission,
-} from "./supervisor/generations.js";
+} from "./supervisor/generation-state.js";
 import type { StartupCheckResult } from "./supervisor/startup-check/index.js";
 
 export type { ActiveGeneration };

@@ -6,20 +6,20 @@ import {
   type TranscriptView,
 } from "@earendil-works/pi-durable";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { conversationOf, type Conversation } from "./conversation.js";
 
 const parseLine = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.Json)));
 
+const hasViewFields = Schema.is(
+  Schema.Struct({
+    entries: Schema.Array(Schema.Unknown),
+    docs: Schema.Record(Schema.String, Schema.Unknown),
+  }),
+);
+
 function isConversationView(value: unknown): value is ConversationView {
-  return (
-    Predicate.isObject(value) &&
-    "entries" in value &&
-    Array.isArray(value.entries) &&
-    "docs" in value &&
-    Predicate.isObject(value.docs)
-  );
+  return hasViewFields(value);
 }
 
 function isOps(value: readonly unknown[]): value is readonly Op[] {

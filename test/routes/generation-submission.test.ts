@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { Generation, GenerationStatus } from "../../src/supervisor/generations.js";
+import type { Generation, GenerationStatus } from "../../src/supervisor/generation-state.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label as generationLabel } from "../supervisor/generations/fixtures.js";
 import { controlRequest, apiResponse, apiSupervisor as supervisor } from "./helpers.js";

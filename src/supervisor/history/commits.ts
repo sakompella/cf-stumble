@@ -1,4 +1,4 @@
-import type { GenerationActor, GenerationRecord } from "../generations.js";
+import type { GenerationActor, GenerationRecord } from "../generation-state.js";
 
 export type GenerationChange = Readonly<{
   kind: "submitted" | "prepared" | "activated" | "rolled-back" | "probation-failed" | "proven";

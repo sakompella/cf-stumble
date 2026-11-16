@@ -1,16 +1,15 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import { loaderFor } from "../../../src/page/client/entries-loader.js";
 import {
-  managedResources,
   TranscriptResource,
   type TranscriptService,
 } from "../../../src/page/client/transcript-store.js";
+import { heldTranscript } from "../../../src/page/client/view-reader.js";
 
 export function openedTranscript(projectId = "repo") {
-  const held = Effect.runSync(
-    Effect.scoped(managedResources.transcript.acquire({ streamId: 1, projectId })),
-  );
+  const held = heldTranscript(loaderFor(projectId));
 
   const ref = Ref.makeUnsafe(Option.some(held));
 

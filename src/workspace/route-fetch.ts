@@ -1,6 +1,11 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { ORB_COMPUTERD_PATH, ORB_PROVIDER_PATH, ORB_TOKEN_HEADER } from "../orb-protocol.js";
 import { providerTokenMatches } from "./provider-token.js";
+
+class ContainerFetchFailed extends Data.TaggedError("ContainerFetchFailed")<{
+  readonly cause: unknown;
+}> {}
 
 type Fetching = Readonly<{ handleFetch(request: Request): Promise<Response> }>;
 
@@ -31,7 +36,7 @@ function accepted(
 
   return Effect.tryPromise({
     try: () => computerd.handleFetch(new Request("http://computer.internal/api", request)),
-    catch: (cause) => cause,
+    catch: (cause) => new ContainerFetchFailed({ cause }),
   }).pipe(Effect.catch(() => refused("the provider container is unavailable", 502)));
 }
 
@@ -41,7 +46,7 @@ export function routeFetch(request: Request, routes: FetchRoutes): Effect.Effect
   if (pathname !== ORB_PROVIDER_PATH && pathname !== ORB_COMPUTERD_PATH)
     return Effect.tryPromise({
       try: () => routes.container.handleFetch(request),
-      catch: (cause) => cause,
+      catch: (cause) => new ContainerFetchFailed({ cause }),
     }).pipe(Effect.catch(() => refused("the workspace container is unavailable", 502)));
 
   return providerTokenMatches(routes.token, request.headers.get(ORB_TOKEN_HEADER)).pipe(

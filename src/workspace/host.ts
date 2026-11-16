@@ -99,8 +99,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       containerRunning: () => this.#platform.containerRunning(),
       pullContainer: () => this.#platform.pullContainer(),
       closeWorkspace: () => this.#platform.workspace.close(),
-      stopContainer: (reason) =>
-        this.#platform.stopContainer(reason).pipe(Effect.mapError(({ cause }) => cause)),
+      stopContainer: (reason) => this.#platform.stopContainer(reason),
     });
   }
 

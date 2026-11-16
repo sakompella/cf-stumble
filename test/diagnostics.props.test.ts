@@ -30,11 +30,12 @@ const surrounding = gs.text({ alphabet: 'abc -:/="', maxSize: 20 });
 
 const padding = gs.integers({ minValue: 0, maxValue: 300 }).map((length) => "x".repeat(length));
 
+const LogEntryValue = Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null]);
+
 const decodeEntry = Schema.decodeUnknownSync(
-  Schema.Record(
-    Schema.String,
-    Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null]),
-  ),
+  Schema.StructWithRest(Schema.Struct({ ts: LogEntryValue }), [
+    Schema.Record(Schema.String, LogEntryValue),
+  ]),
 );
 
 const isText = Schema.is(Schema.String);
@@ -74,9 +75,8 @@ test("every logged event is one JSON-stable object on the console of its level t
     const event = tc.draw(gs.text({ alphabet: "abc.-", minSize: 1, maxSize: 12 }));
     const level = tc.draw(gs.sampledFrom(["info", "warn", "error"] as const));
 
-    const fields: LogFields = Object.fromEntries(
-      tc.draw(gs.arrays(gs.tuples(fieldKey, fieldValue), { maxSize: 5 })),
-    );
+    const fields: LogFields & Readonly<{ ts?: string | number | boolean | null }> =
+      Object.fromEntries(tc.draw(gs.arrays(gs.tuples(fieldKey, fieldValue), { maxSize: 5 })));
 
     const consoles = {
       log: vi.spyOn(console, "log").mockImplementation(() => {}),

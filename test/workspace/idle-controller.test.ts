@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
-import type { LogFields } from "../../src/diagnostics.js";
 import { eventually } from "../eventually.js";
-import { capturedEvents, named } from "../log-capture.js";
+import { capturedEvents, named, type LoggedEvent } from "../log-capture.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -247,7 +246,7 @@ test("a stop for a backend change pulls before it closes and destroys", async ()
   expect(calls).toEqual(["pull", "close", "destroy"]);
 });
 
-function flaggedWrites(events: readonly LogFields[]): LogFields[] {
+function flaggedWrites(events: readonly LoggedEvent[]): LoggedEvent[] {
   return named(events, "workspace.container.idle-stop").filter(
     (event) => event.outcome === "writes-may-be-lost",
   );

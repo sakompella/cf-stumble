@@ -244,14 +244,7 @@ function errorBodyFields(body: string): LogFields {
 
   if (Option.isNone(reply)) return {};
 
-  const { error, error_description } = reply.value;
-  const fields: Record<string, string> = {};
-
-  if (error !== undefined) fields.error = error;
-
-  if (error_description !== undefined) fields.error_description = error_description;
-
-  return fields;
+  return reply.value;
 }
 
 export function requestTokens(

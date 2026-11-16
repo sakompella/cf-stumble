@@ -36,6 +36,7 @@ export default defineConfig({
     "typescript/no-misused-promises": "error",
     "typescript/use-unknown-in-catch-callback-variable": "error",
     "eslint/no-useless-assignment": "error",
+    "import/no-cycle": "error",
     "typescript/prefer-readonly-parameter-types": "off",
     "eslint/max-lines": ["warn", { max: 300, skipBlankLines: true, skipComments: false }],
     "eslint/max-lines-per-function": [

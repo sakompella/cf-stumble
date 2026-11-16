@@ -34,7 +34,10 @@ export function decodeRequestBody<S extends Schema.ConstraintDecoder<unknown>>(
 ): Effect.Effect<S["Type"], InvalidRequestBody> {
   const decode = Schema.decodeUnknownEffect(schema, { onExcessProperty: "error" });
 
-  return Effect.tryPromise(() => request.json()).pipe(
+  return Effect.tryPromise({
+    try: () => request.json(),
+    catch: () => new InvalidRequestBody(),
+  }).pipe(
     Effect.flatMap((body) => decode(body)),
     Effect.mapError(() => new InvalidRequestBody()),
   );

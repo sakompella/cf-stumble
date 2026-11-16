@@ -20,7 +20,7 @@ import {
   type GenerationStatusView,
 } from "../../generation-requests.js";
 import { whileServing } from "../../generation-replaced.js";
-import type { GenerationControlResult, Submission } from "../generations.js";
+import type { GenerationControlResult, Submission } from "../generation-state.js";
 import type { StartupCheckResult } from "../startup-check/index.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 

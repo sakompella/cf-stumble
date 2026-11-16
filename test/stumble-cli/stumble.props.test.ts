@@ -3,7 +3,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 import type { GenerationControl } from "../../src/generation-requests.js";
 import { runStumble } from "../../src/stumble-cli/index.js";
-import type { Generation } from "../../src/supervisor/generations.js";
+import type { Generation } from "../../src/supervisor/generation-state.js";
 import { label as generationLabel, testHarnessCommit } from "../supervisor/generations/fixtures.js";
 
 type Selection = { label: number | undefined; epoch: number };

@@ -6,7 +6,7 @@ import type {
   GenerationActor,
   GenerationControlResult,
   GenerationLabel,
-} from "./generations.js";
+} from "./generation-state.js";
 import { WORKSPACE_BUSY, type WorkspaceHostNamespace } from "../workspace/index.js";
 import type { EntriesRequest } from "../entries-request.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
@@ -18,6 +18,8 @@ import type {
   SupervisorWorkspaceReset,
   WorkspaceBackendChange,
 } from "./supervisor-env.js";
+
+const WORKSPACE_UNAVAILABLE = { ok: false, problem: { code: "workspace-unavailable" } } as const;
 
 const RUN_ACTIVE = { ok: false, problem: { code: "run-active" } } as const;
 
@@ -175,17 +177,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
         const namespace: WorkspaceHostNamespace<"reset"> = this.env.WORKSPACE_HOST;
 
-        const result = yield* Effect.tryPromise(() =>
-          namespace.getByName(this.#parts.workspaceName).reset(),
-        ).pipe(
-          Effect.orElseSucceed(
-            () =>
-              ({
-                ok: false,
-                problem: { code: "workspace-unavailable" },
-              }) as const,
-          ),
-        );
+        const result = yield* Effect.tryPromise({
+          try: () => namespace.getByName(this.#parts.workspaceName).reset(),
+          catch: () => WORKSPACE_UNAVAILABLE,
+        }).pipe(Effect.catch(Effect.succeed));
 
         if (result.ok) {
           this.#parts.readiness.forget();

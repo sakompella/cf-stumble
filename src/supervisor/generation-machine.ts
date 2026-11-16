@@ -2,23 +2,21 @@ import * as Data from "effect/Data";
 import * as Schema from "effect/Schema";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { RunOutcome } from "./conversations/index.js";
+import type { ControlProblemCode } from "../api/problems.js";
 import {
   GenerationState,
   Serving,
   wireGeneration,
+  type ActivationCommand,
+  type Generation,
+  type GenerationActor,
+  type GenerationControlResult,
+  type GenerationLabel,
   type LabeledGeneration,
+  type PreparationOutcome,
   type Selection,
+  type Submission,
 } from "./generation-state.js";
-import type {
-  ActivationCommand,
-  ControlProblemCode,
-  Generation,
-  GenerationActor,
-  GenerationControlResult,
-  GenerationLabel,
-  PreparationOutcome,
-  Submission,
-} from "./generations.js";
 import type { GenerationChange } from "./history/commits.js";
 
 export type GenerationCommand = Data.TaggedEnum<{

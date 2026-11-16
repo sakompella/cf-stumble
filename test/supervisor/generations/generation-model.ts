@@ -6,13 +6,13 @@ import type {
   RollbackReply,
 } from "../../../src/supervisor/generation-machine.js";
 import type {
-  ControlProblemCode,
   Generation,
   GenerationActor,
   GenerationControlResult,
   PreparationOutcome,
   Submission,
-} from "../../../src/supervisor/generations.js";
+} from "../../../src/supervisor/generation-state.js";
+import type { ControlProblemCode } from "../../../src/api/problems.js";
 import type { GenerationChange } from "../../../src/supervisor/history/commits.js";
 import { label as generationLabel } from "./fixtures.js";
 
