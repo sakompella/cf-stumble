@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { logRedactedCause } from "../../diagnostics.js";
 import { parseMainHarnessArtifactJson } from "../../facet/index.js";
@@ -15,8 +16,6 @@ type StoredModuleMap =
   | Readonly<{ kind: "stored"; artifact: MainHarnessArtifact }>
   | Readonly<{ kind: "absent" }>;
 
-type StoredModuleMapResult = Result.Result<StoredModuleMap, StoredModuleMapProblem>;
-
 function moduleMapKey(harnessCommit: string): string {
   return `module-maps/${harnessCommit}.json`;
 }
@@ -28,65 +27,70 @@ export class ModuleMapStore {
     this.bucket = bucket;
   }
 
-  async read(harnessCommit: HarnessCommit): Promise<StoredModuleMapResult> {
-    let text: string | undefined;
+  read(harnessCommit: HarnessCommit): Effect.Effect<StoredModuleMap, StoredModuleMapProblem> {
+    return Effect.tryPromise({
+      try: async () => {
+        const object = await this.bucket.get(moduleMapKey(harnessCommit));
 
-    try {
-      const object = await this.bucket.get(moduleMapKey(harnessCommit));
-      text = await object?.text();
-    } catch (cause) {
-      logRedactedCause(`artifact-store.read ${harnessCommit}: artifact-read-failed`, cause);
+        return object?.text();
+      },
+      catch: (cause) => {
+        logRedactedCause(`artifact-store.read ${harnessCommit}: artifact-read-failed`, cause);
 
-      return Result.fail({ code: "artifact-read-failed", harnessCommit });
-    }
-
-    return text === undefined ? Result.succeed({ kind: "absent" }) : decoded(text, harnessCommit);
+        return { code: "artifact-read-failed", harnessCommit } as const;
+      },
+    }).pipe(
+      Effect.flatMap((text) =>
+        text === undefined
+          ? Effect.succeed({ kind: "absent" } as const)
+          : decoded(text, harnessCommit),
+      ),
+    );
   }
 
-  async write(
-    artifact: MainHarnessArtifact,
-  ): Promise<Result.Result<MainHarnessArtifact, StoredModuleMapProblem>> {
-    let stored: R2Object | null;
-
-    try {
-      stored = await this.bucket.put(
-        moduleMapKey(artifact.harnessCommit),
-        encodeModuleMap(artifact),
-        {
+  write(artifact: MainHarnessArtifact): Effect.Effect<MainHarnessArtifact, StoredModuleMapProblem> {
+    return Effect.tryPromise({
+      try: () =>
+        this.bucket.put(moduleMapKey(artifact.harnessCommit), encodeModuleMap(artifact), {
           onlyIf: { etagDoesNotMatch: "*" },
-        },
-      );
-    } catch (cause) {
-      logRedactedCause(
-        `artifact-store.write ${artifact.harnessCommit}: artifact-write-failed`,
-        cause,
-      );
+        }),
+      catch: (cause) => {
+        logRedactedCause(
+          `artifact-store.write ${artifact.harnessCommit}: artifact-write-failed`,
+          cause,
+        );
 
-      return Result.fail({ code: "artifact-write-failed", harnessCommit: artifact.harnessCommit });
-    }
-
-    return stored === null ? this.existing(artifact.harnessCommit) : Result.succeed(artifact);
+        return { code: "artifact-write-failed", harnessCommit: artifact.harnessCommit } as const;
+      },
+    }).pipe(
+      Effect.flatMap((stored) =>
+        stored === null ? this.existing(artifact.harnessCommit) : Effect.succeed(artifact),
+      ),
+    );
   }
 
-  private async existing(
+  private existing(
     harnessCommit: HarnessCommit,
-  ): Promise<Result.Result<MainHarnessArtifact, StoredModuleMapProblem>> {
-    const read = await this.read(harnessCommit);
-
-    if (Result.isFailure(read)) return Result.fail(read.failure);
-
-    return read.success.kind === "stored"
-      ? Result.succeed(read.success.artifact)
-      : Result.fail({ code: "artifact-write-failed", harnessCommit });
+  ): Effect.Effect<MainHarnessArtifact, StoredModuleMapProblem> {
+    return this.read(harnessCommit).pipe(
+      Effect.flatMap((read) =>
+        read.kind === "stored"
+          ? Effect.succeed(read.artifact)
+          : Effect.fail({ code: "artifact-write-failed", harnessCommit } as const),
+      ),
+    );
   }
 }
 
-function decoded(text: string, harnessCommit: HarnessCommit): StoredModuleMapResult {
+function decoded(
+  text: string,
+  harnessCommit: HarnessCommit,
+): Effect.Effect<StoredModuleMap, StoredModuleMapProblem> {
   const parsed = parseMainHarnessArtifactJson(text);
 
   if (Result.isFailure(parsed) || parsed.success.harnessCommit !== harnessCommit) {
-    return Result.fail({ code: "corrupt-artifact", harnessCommit });
+    return Effect.fail({ code: "corrupt-artifact", harnessCommit });
   }
 
-  return Result.succeed({ kind: "stored", artifact: parsed.success });
+  return Effect.succeed({ kind: "stored", artifact: parsed.success });
 }

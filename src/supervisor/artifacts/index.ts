@@ -41,9 +41,7 @@ export class HarnessArtifacts {
 
       const built = yield* buildModuleMap(this.workspace, harnessCommit);
 
-      const written = yield* Effect.promise(() => this.store.write(built)).pipe(
-        Effect.flatMap(Effect.fromResult),
-      );
+      const written = yield* this.store.write(built);
 
       return this.remembered(written);
     });
@@ -86,12 +84,13 @@ export class HarnessArtifacts {
   private read(
     harnessCommit: HarnessCommit,
   ): Effect.Effect<MainHarnessArtifact | undefined, StoredModuleMapProblem> {
-    return Effect.promise(() => this.store.read(harnessCommit)).pipe(
-      Effect.flatMap(Effect.fromResult),
-      Effect.map((stored) =>
-        stored.kind === "stored" ? this.remembered(stored.artifact) : undefined,
-      ),
-    );
+    return this.store
+      .read(harnessCommit)
+      .pipe(
+        Effect.map((stored) =>
+          stored.kind === "stored" ? this.remembered(stored.artifact) : undefined,
+        ),
+      );
   }
 
   private remembered(artifact: MainHarnessArtifact): MainHarnessArtifact {

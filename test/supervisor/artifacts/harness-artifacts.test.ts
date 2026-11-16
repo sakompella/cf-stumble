@@ -71,7 +71,7 @@ test("builds, stores in R2, then loads a module map when nothing is stored", asy
     throw new Error(`a successful build must prepare: ${artifact.failure.code}`);
   }
 
-  const stored = await new ModuleMapStore(env.MODULE_MAPS).read(commits.built);
+  const stored = await resultOf(new ModuleMapStore(env.MODULE_MAPS).read(commits.built));
   const object = await env.MODULE_MAPS.get(`module-maps/${commits.built}.json`);
 
   expect(host.builds()).toBe(1);

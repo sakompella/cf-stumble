@@ -6,11 +6,10 @@ import { seedSampleProjects } from "./projects/seed-connected.js";
 import {
   fixtureMainHarnessArtifact,
   fixtureMainHarnessCommit,
-  parsedArtifact,
   servingFacetSource,
 } from "../facet/fixture.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/artifact.js";
-import { ModuleMapStore } from "../../src/supervisor/artifacts/index.js";
+import { storeModuleMap } from "./store-module-map.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { label as generationLabel, testHarnessCommit } from "./generations/fixtures.js";
 
@@ -32,7 +31,7 @@ export const commits = {
   secretReply: "6123456789abcdef0123456789abcdef01234567",
 } as const;
 
-export { generationLabel, testHarnessCommit };
+export { generationLabel, storeModuleMap, testHarnessCommit };
 
 export {
   fixtureMainHarnessCommit,
@@ -96,14 +95,6 @@ export async function servedText(control: DurableObjectStub<Supervisor>): Promis
   if (!result.ok) return `refused: ${result.problem.code}`;
 
   return new Response(result.events).text();
-}
-
-export async function storeModuleMap(input: MainHarnessArtifactInput): Promise<void> {
-  const written = await new ModuleMapStore(env.MODULE_MAPS).write(parsedArtifact(input));
-
-  if (written._tag === "Failure") {
-    throw new Error(`a stored module map must be written: ${written.failure.code}`);
-  }
 }
 
 export async function historyEventText(key: string): Promise<string> {
