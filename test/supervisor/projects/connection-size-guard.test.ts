@@ -13,9 +13,18 @@ test.each([
   {
     clone: "measures as too large",
     arrange: (workspace: FakeTenantWorkspace) => {
-      workspace.cloneExitCode = 122;
+      workspace.cloneSizeVerdict = "too-many-files";
     },
     code: "repository-too-large",
+    detail: "repository exceeds a workspace size limit: too-many-files",
+  },
+  {
+    clone: "fills the workspace disk",
+    arrange: (workspace: FakeTenantWorkspace) => {
+      workspace.cloneSizeVerdict = "capacity-exceeded";
+    },
+    code: "repository-too-large",
+    detail: "repository exceeds a workspace size limit: capacity-exceeded",
   },
   {
     clone: "fails",
@@ -23,6 +32,7 @@ test.each([
       workspace.cloneExitCode = 128;
     },
     code: "provisioning-failed",
+    detail: "",
   },
   {
     clone: "does not reach the durable store",
@@ -30,6 +40,7 @@ test.each([
       workspace.commandSync = "incomplete";
     },
     code: "provisioning-failed",
+    detail: "",
   },
 ])("refuses a repository whose clone $clone, and keeps it out of the catalog", async (row) => {
   const workspace = new FakeTenantWorkspace();
@@ -48,6 +59,9 @@ test.each([
     Effect.sync(() => connections.catalog()),
   );
 
-  expect(refused).toMatchObject({ ok: false, problem: { code: row.code } });
+  expect(refused).toMatchObject({
+    ok: false,
+    problem: { code: row.code, detail: row.detail },
+  });
   expect(listed).toEqual([HARNESS_PROJECT]);
 });

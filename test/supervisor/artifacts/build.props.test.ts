@@ -2,12 +2,11 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
-import {
-  HARNESS_BUILD_STEP_NAMES,
-  type HarnessBuildRequest,
-  type HarnessBuildStepName,
-} from "../../../src/harness-build.js";
-import type { WorkspaceCommandResult } from "../../../src/workspace/commands/command-result.js";
+import { HARNESS_BUILD_STEP_NAMES, type HarnessBuildStepName } from "../../../src/harness-build.js";
+import type {
+  CommandAnswer,
+  ModuleMapAnswer,
+} from "../../../src/workspace/commands/command-result.js";
 import {
   BUILD_COMMIT,
   built,
@@ -16,7 +15,7 @@ import {
   moduleMapFile,
 } from "./scripted-build-host.js";
 
-type StepFault = "exit" | "refused" | "thrown" | "wrong-answer";
+type StepFault = "exit" | "refused" | "thrown";
 
 type OutputFault = "missing" | "refused" | "unparsable" | "without-entry";
 
@@ -33,7 +32,7 @@ const scenarios = gs.composite<Scenario>((tc) => {
     step: failing
       ? {
           name: tc.draw(gs.sampledFrom(HARNESS_BUILD_STEP_NAMES)),
-          fault: tc.draw(gs.sampledFrom(["exit", "refused", "thrown", "wrong-answer"] as const)),
+          fault: tc.draw(gs.sampledFrom(["exit", "refused", "thrown"] as const)),
           exitCode: tc.draw(gs.integers({ minValue: 1, maxValue: 255 })),
         }
       : null,
@@ -44,23 +43,28 @@ const scenarios = gs.composite<Scenario>((tc) => {
   };
 });
 
-function command(exitCode: number): Promise<WorkspaceCommandResult> {
+function command(exitCode: number): Promise<CommandAnswer> {
   return Promise.resolve({
     ok: true,
-    result: { kind: "command", stdout: "", stderr: "", exitCode },
+    output: { stdout: "", stderr: "", exitCode },
   });
 }
 
-const refused: Promise<WorkspaceCommandResult> = Promise.resolve({
+const refused: Promise<CommandAnswer> = Promise.resolve({
   ok: false,
   error: { code: "workspace-unavailable" },
 });
 
-function mapText(text: string): Promise<WorkspaceCommandResult> {
-  return Promise.resolve({ ok: true, result: { kind: "module-map", text } });
+function mapText(moduleMap: string): Promise<ModuleMapAnswer> {
+  return Promise.resolve({ ok: true, moduleMap });
 }
 
-function stepAnswer(scenario: Scenario, step: HarnessBuildStepName) {
+const publishFailed: Promise<ModuleMapAnswer> = Promise.resolve({
+  ok: false,
+  error: { code: "publish-failed", output: { stdout: "", stderr: "", exitCode: 1 } },
+});
+
+function stepAnswer(scenario: Scenario, step: string) {
   const fault = scenario.step?.name === step ? scenario.step : null;
 
   if (fault === null) return command(0);
@@ -69,59 +73,63 @@ function stepAnswer(scenario: Scenario, step: HarnessBuildStepName) {
 
   if (fault.fault === "refused") return refused;
 
-  if (fault.fault === "thrown") return Promise.reject(new Error("the workspace is gone"));
-
-  return mapText(moduleMapFile([entryModule]));
+  return Promise.reject(new Error("the workspace is gone"));
 }
 
-function outputAnswer({ output }: Scenario): Promise<WorkspaceCommandResult> {
-  if (output === "missing") return command(1);
+function outputAnswer({ output }: Scenario): Promise<ModuleMapAnswer> {
+  if (output === "missing") return publishFailed;
 
-  if (output === "refused") return refused;
+  if (output === "refused")
+    return Promise.resolve({ ok: false, error: { code: "workspace-unavailable" } });
 
   if (output === "unparsable") return mapText("{");
 
   return mapText(moduleMapFile(output === null ? [helperModule, entryModule] : [helperModule]));
 }
 
-function cleanupAnswer({ cleanup }: Scenario): Promise<WorkspaceCommandResult> {
+function cleanupAnswer({ cleanup }: Scenario): Promise<CommandAnswer> {
   if (cleanup === "thrown") return Promise.reject(new Error("the container stopped"));
 
   return command(cleanup === "removed" ? 0 : 1);
 }
 
 function scripted(scenario: Scenario) {
-  const requests: HarnessBuildRequest[] = [];
+  const requests: string[] = [];
 
   const host = {
-    build: (request: HarnessBuildRequest) => {
-      requests.push(request);
+    build: (request: { harnessCommit: string; step: string }) => {
+      requests.push(`${request.step} ${request.harnessCommit}`);
 
-      if (request.kind === "build-step") return stepAnswer(scenario, request.step);
+      return stepAnswer(scenario, request.step);
+    },
+    buildOutput: (harnessCommit: string) => {
+      requests.push(`output ${harnessCommit}`);
 
-      return request.kind === "build-output" ? outputAnswer(scenario) : cleanupAnswer(scenario);
+      return outputAnswer(scenario);
+    },
+    discardBuild: (harnessCommit: string) => {
+      requests.push(`discard ${harnessCommit}`);
+
+      return cleanupAnswer(scenario);
     },
   };
 
   return { host, requests };
 }
 
-function expectedRequests({ step }: Scenario): HarnessBuildRequest[] {
+function expectedRequests({ step }: Scenario): string[] {
   const until =
     step === null
       ? HARNESS_BUILD_STEP_NAMES.length
       : HARNESS_BUILD_STEP_NAMES.indexOf(step.name) + 1;
 
-  const steps = HARNESS_BUILD_STEP_NAMES.slice(0, until).map((name): HarnessBuildRequest => ({
-    kind: "build-step",
-    harnessCommit: BUILD_COMMIT,
-    step: name,
-  }));
+  const steps = HARNESS_BUILD_STEP_NAMES.slice(0, until).map((name) => `${name} ${BUILD_COMMIT}`);
 
-  const output: HarnessBuildRequest[] =
-    step === null ? [{ kind: "build-output", harnessCommit: BUILD_COMMIT }] : [];
-
-  return [...steps, ...output, { kind: "build-discard", harnessCommit: BUILD_COMMIT }];
+  return [
+    ...steps,
+    ...(step === null ? [`output ${BUILD_COMMIT}`] : []),
+    `discard ${BUILD_COMMIT}`,
+  ];
 }
 
 function expectedProblem({ step, output }: Scenario) {

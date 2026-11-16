@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import {
+  CLONE_SIZE_VERDICTS,
   executeProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
@@ -24,6 +25,7 @@ function provisionRequest(project: Project): ProjectProvisionRequest {
 class FakeProjectOperations implements PromiseOperations {
   readonly calls: string[] = [];
   exitCode = 0;
+  stdout = "";
   commandFailure: Error | undefined;
   cloneFailure: Error | undefined = new Error("the isolate clone is unavailable");
   private cloned = false;
@@ -74,7 +76,7 @@ class FakeProjectOperations implements PromiseOperations {
 
     if (this.exitCode === 0) this.cloned = true;
 
-    return Promise.resolve({ stdout: "", stderr: "", exitCode: this.exitCode });
+    return Promise.resolve({ stdout: this.stdout, stderr: "", exitCode: this.exitCode });
   }
 }
 
@@ -89,19 +91,43 @@ test("without an isolate clone, the container clone runs from above the not yet 
 
   await expect(provision(operations, provisionRequest(projectOne))).resolves.toEqual({
     ok: true,
-    result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
   });
 
   expect(operations.calls.filter((call) => call.startsWith("command:"))).toEqual(["command:/"]);
 });
 
-test("reports a failing clone with its exit code instead of continuing", async () => {
+test("reports a failing clone as clone-failed with its exit code instead of continuing", async () => {
   const operations = new FakeProjectOperations();
   operations.exitCode = 128;
 
   await expect(provision(operations, provisionRequest(projectOne))).resolves.toEqual({
-    ok: true,
-    result: { kind: "command", stdout: "", stderr: "", exitCode: 128 },
+    ok: false,
+    error: { code: "clone-failed", exitCode: 128 },
+  });
+});
+
+test.each(CLONE_SIZE_VERDICTS)(
+  "a clone the script stopped for %s answers repository-too-large with that verdict",
+  async (verdict) => {
+    const operations = new FakeProjectOperations();
+    operations.exitCode = 122;
+    operations.stdout = `size-verdict=${verdict}\n`;
+
+    await expect(provision(operations, provisionRequest(projectOne))).resolves.toEqual({
+      ok: false,
+      error: { code: "repository-too-large", verdict },
+    });
+  },
+);
+
+test("exit 122 without a verdict the script prints is a failed clone, not a size verdict", async () => {
+  const operations = new FakeProjectOperations();
+  operations.exitCode = 122;
+  operations.stdout = "size-verdict=nonsense\n";
+
+  await expect(provision(operations, provisionRequest(projectOne))).resolves.toEqual({
+    ok: false,
+    error: { code: "clone-failed", exitCode: 122 },
   });
 });
 

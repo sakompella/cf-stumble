@@ -6,21 +6,19 @@ import {
   type ProjectCatalog,
   type ProjectId,
 } from "../../project-catalog.js";
-import {
-  PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
-  type WorkspaceHostNamespace,
-} from "../../workspace/index.js";
+import type { CloneSizeVerdict, WorkspaceHostNamespace } from "../../workspace/index.js";
 import type { GitHubConnection } from "../projects/index.js";
 import type { ProvisionFence } from "./provision-fence.js";
-import { provisionProjectWorkspace, ProvisionFailed } from "./provisioning.js";
+import {
+  provisionProjectWorkspace,
+  ProvisionFailed,
+  ProvisionTooLarge,
+  type ProvisionProblem,
+} from "./provisioning.js";
 
-type ProjectUseProblem = Readonly<{
-  code:
-    | "invalid-project-id"
-    | "unknown-project-id"
-    | "repository-too-large"
-    | "provisioning-failed";
-}>;
+type ProjectUseProblem =
+  | Readonly<{ code: "invalid-project-id" | "unknown-project-id" | "provisioning-failed" }>
+  | Readonly<{ code: "repository-too-large"; verdict: CloneSizeVerdict }>;
 
 export type ProjectUseResult =
   | Readonly<{ ok: true; project: Project }>
@@ -34,10 +32,10 @@ export type ProvisionSources = Readonly<{
   catalog: () => ProjectCatalog;
 }>;
 
-function failedStepExitCode<A, E>(result: Result.Result<A, E>): number | undefined {
-  return Result.isFailure(result) && result.failure instanceof ProvisionFailed
-    ? result.failure.exitCode
-    : undefined;
+function useProblem(failure: ProvisionProblem): ProjectUseProblem {
+  return failure instanceof ProvisionTooLarge
+    ? { code: "repository-too-large", verdict: failure.verdict }
+    : { code: "provisioning-failed" };
 }
 
 export function provisionOnUse(
@@ -64,12 +62,10 @@ export function provisionOnUse(
 
     const credentialWasWorking = github.credentialWorking();
 
-    const firstExitCode = failedStepExitCode(provisioned);
-
     if (
       !credentialWasWorking &&
-      firstExitCode !== undefined &&
-      firstExitCode !== PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE
+      Result.isFailure(provisioned) &&
+      provisioned.failure instanceof ProvisionFailed
     ) {
       const status = yield* github.ensureCredential(Date.now());
 
@@ -79,15 +75,7 @@ export function provisionOnUse(
     }
 
     if (Result.isFailure(provisioned)) {
-      return {
-        ok: false,
-        problem: {
-          code:
-            failedStepExitCode(provisioned) === PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE
-              ? "repository-too-large"
-              : "provisioning-failed",
-        },
-      } as const;
+      return { ok: false, problem: useProblem(provisioned.failure) } as const;
     }
 
     return { ok: true, project: resolved.project } as const;

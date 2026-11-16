@@ -33,7 +33,9 @@ import {
   ComputerWorkspaceOperations,
   ensureManagedInstructions,
   executeGitHubCredentialRequest,
-  executeHarnessBuildRequest,
+  executeHarnessBuildDiscard,
+  executeHarnessBuildOutput,
+  executeHarnessBuildStep,
   executeProjectProvisionRequest,
   executeProjectRemovalRequest,
   harnessBuildConfiguration,
@@ -41,13 +43,15 @@ import {
   UNKNOWN_LINEAGE,
   type GitHubCredentialRequest,
   type GitHubCredentialResult,
-  type HarnessBuildRequest,
+  type CommandAnswer,
+  type HarnessBuildStepRequest,
   type HarnessLineage,
   type HarnessLineageRequest,
   type InstructionsWriteResult,
+  type ModuleMapAnswer,
+  type ProjectProvisionAnswer,
   type ProjectProvisionRequest,
   type ProjectRemovalRequest,
-  type WorkspaceCommandResult,
 } from "./commands/index.js";
 
 const CHANGE_REFUSED = { ok: false, error: { code: "workspace-busy" } } as const;
@@ -125,12 +129,32 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
+  build(request: HarnessBuildStepRequest): Promise<CommandAnswer> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
-      executeHarnessBuildRequest({
+      executeHarnessBuildStep({
         configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
         operations: this.#lenient(),
         request,
+      }),
+    );
+  }
+
+  buildOutput(harnessCommit: string): Promise<ModuleMapAnswer> {
+    return this.#unlessResetting(CHANGE_REFUSED, () =>
+      executeHarnessBuildOutput({
+        configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
+        operations: this.#lenient(),
+        request: harnessCommit,
+      }),
+    );
+  }
+
+  discardBuild(harnessCommit: string): Promise<CommandAnswer> {
+    return this.#unlessResetting(CHANGE_REFUSED, () =>
+      executeHarnessBuildDiscard({
+        configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
+        operations: this.#lenient(),
+        request: harnessCommit,
       }),
     );
   }
@@ -141,7 +165,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
+  provision(request: ProjectProvisionRequest): Promise<ProjectProvisionAnswer> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
       executeProjectProvisionRequest({
         operations: this.#durable(),
@@ -150,7 +174,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult> {
+  removeProject(request: ProjectRemovalRequest): Promise<CommandAnswer> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
       executeProjectRemovalRequest({
         operations: this.#durable(),

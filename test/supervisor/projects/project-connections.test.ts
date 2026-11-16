@@ -109,7 +109,6 @@ test("disconnecting a project removes its clone and leaves the harness checkout"
   const subject = tenant("disconnect-project", { workspace, fallbackToken: FAKE_TOKEN });
 
   await workspace.build({
-    kind: "build-step",
     harnessCommit: testHarnessCommit("1".repeat(40)),
     step: "provision",
   });

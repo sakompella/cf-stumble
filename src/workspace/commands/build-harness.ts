@@ -3,8 +3,9 @@ import {
   HARNESS_BUILD_CONFIGURATION,
   type HarnessBuildConfiguration,
   type HarnessBuildPhase,
-  type HarnessBuildRequest,
+  isHarnessBuildStep,
   type HarnessBuildStepName,
+  type HarnessBuildStepRequest,
 } from "../../harness-build.js";
 import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js";
 import { invariant } from "../../invariant.js";
@@ -14,13 +15,14 @@ import {
   harnessBuildOutputPath,
   WORKSPACE_ROOT,
 } from "../../workspace-layout.js";
-import type { WorkspaceEffects } from "../operations.js";
+import type { CommandOutput, WorkspaceEffects, WorkspaceFault } from "../operations.js";
 import {
   answerUnavailable,
-  commandResult,
+  commandAnswer,
   executePlan,
   invalidRequest,
-  type WorkspaceCommandResult,
+  type CommandAnswer,
+  type ModuleMapAnswer,
   type WorkspaceFailure,
   type WorkspacePlan,
 } from "./command-result.js";
@@ -110,20 +112,19 @@ export function harnessBuildStep(
   return step;
 }
 
-type ParsedHarnessBuildRequest =
-  | Readonly<{ kind: "build-step"; harnessCommit: HarnessCommit; step: HarnessBuildStepName }>
-  | Readonly<{ kind: "build-output" | "build-discard"; harnessCommit: HarnessCommit }>;
+type ParsedHarnessBuildStepRequest = Readonly<{
+  harnessCommit: HarnessCommit;
+  step: HarnessBuildStepName;
+}>;
 
-export function parseHarnessBuildRequest(
-  request: HarnessBuildRequest,
-): ParsedHarnessBuildRequest | WorkspaceFailure {
+export function parseHarnessBuildStepRequest(
+  request: HarnessBuildStepRequest,
+): ParsedHarnessBuildStepRequest | WorkspaceFailure {
   const harnessCommit = parseHarnessCommit(request.harnessCommit);
 
-  if (harnessCommit === undefined) return invalidRequest();
-
-  return request.kind === "build-step"
-    ? { kind: "build-step", harnessCommit, step: request.step }
-    : { kind: request.kind, harnessCommit };
+  return harnessCommit === undefined || !isHarnessBuildStep(request.step)
+    ? invalidRequest()
+    : { harnessCommit, step: request.step };
 }
 
 function publishModuleMapSource(plan: HarnessBuildPlan): string {
@@ -141,25 +142,14 @@ function publishModuleMapSource(plan: HarnessBuildPlan): string {
   ].join("\n");
 }
 
-export function planHarnessBuildRequest(
+export function planHarnessBuildStep(
   configuration: HarnessBuildConfiguration,
-  request: ParsedHarnessBuildRequest,
+  request: ParsedHarnessBuildStepRequest,
 ): WorkspacePlan {
-  const plan = planHarnessBuild(configuration, request.harnessCommit);
-
-  if (request.kind !== "build-step") {
-    return {
-      kind: "run-command",
-      source:
-        request.kind === "build-output"
-          ? publishModuleMapSource(plan)
-          : `rm -rf -- ${shellQuote(plan.directory)} ${shellQuote(plan.outputPath)}`,
-      cwd: WORKSPACE_ROOT,
-      timeoutMs: configuration.stepTimeoutMs,
-    };
-  }
-
-  const step = harnessBuildStep(plan, request.step);
+  const step = harnessBuildStep(
+    planHarnessBuild(configuration, request.harnessCommit),
+    request.step,
+  );
 
   return {
     kind: "run-command",
@@ -169,46 +159,86 @@ export function planHarnessBuildRequest(
   };
 }
 
-export function executeHarnessBuildRequest(
-  input: Readonly<{
-    operations: WorkspaceEffects;
-    configuration: HarnessBuildConfiguration;
-    request: HarnessBuildRequest;
-  }>,
-): Effect.Effect<WorkspaceCommandResult> {
-  const parsed = parseHarnessBuildRequest(input.request);
+export function planHarnessBuildDiscard(
+  configuration: HarnessBuildConfiguration,
+  harnessCommit: HarnessCommit,
+): WorkspacePlan {
+  const plan = planHarnessBuild(configuration, harnessCommit);
+
+  return {
+    kind: "run-command",
+    source: `rm -rf -- ${shellQuote(plan.directory)} ${shellQuote(plan.outputPath)}`,
+    cwd: WORKSPACE_ROOT,
+    timeoutMs: configuration.stepTimeoutMs,
+  };
+}
+
+type HarnessBuildInput<Request> = Readonly<{
+  operations: WorkspaceEffects;
+  configuration: HarnessBuildConfiguration;
+  request: Request;
+}>;
+
+export function executeHarnessBuildStep(
+  input: HarnessBuildInput<HarnessBuildStepRequest>,
+): Effect.Effect<CommandAnswer> {
+  const parsed = parseHarnessBuildStepRequest(input.request);
 
   if ("ok" in parsed) return Effect.succeed(parsed);
 
   const { operations, configuration } = input;
 
   return Effect.suspend(() =>
-    parsed.kind === "build-step" && parsed.step === "provision"
+    parsed.step === "provision"
       ? operations
           .provisionHarness(configuration, parsed.harnessCommit)
-          .pipe(Effect.map(commandResult))
-      : parsed.kind === "build-output"
-        ? executePlan(operations, planHarnessBuildRequest(configuration, parsed)).pipe(
-            Effect.flatMap(
-              readPublishedModuleMap(operations, harnessBuildOutputPath(parsed.harnessCommit)),
-            ),
-          )
-        : executePlan(operations, planHarnessBuildRequest(configuration, parsed)),
-  ).pipe(answerUnavailable(`workspace.harness-build.${parsed.kind}`));
+          .pipe(Effect.map(commandAnswer))
+      : executePlan(operations, planHarnessBuildStep(configuration, parsed)),
+  ).pipe(answerUnavailable("workspace.harness-build.build-step"));
 }
 
-function readPublishedModuleMap(
-  operations: WorkspaceEffects,
-  outputPath: string,
-): (result: WorkspaceCommandResult) => Effect.Effect<WorkspaceCommandResult> {
-  return (result) =>
-    result.ok && result.result.kind === "command" && result.result.exitCode === 0
-      ? operations.readFile(outputPath).pipe(
-          Effect.map((text): WorkspaceCommandResult => ({
-            ok: true,
-            result: { kind: "module-map", text },
-          })),
-          Effect.orElseSucceed(() => result),
-        )
-      : Effect.succeed(result);
+export function executeHarnessBuildDiscard(
+  input: HarnessBuildInput<string>,
+): Effect.Effect<CommandAnswer> {
+  const harnessCommit = parseHarnessCommit(input.request);
+
+  if (harnessCommit === undefined) return Effect.succeed(invalidRequest());
+
+  return Effect.suspend(() =>
+    executePlan(input.operations, planHarnessBuildDiscard(input.configuration, harnessCommit)),
+  ).pipe(answerUnavailable("workspace.harness-build.build-discard"));
+}
+
+export function executeHarnessBuildOutput(
+  input: HarnessBuildInput<string>,
+): Effect.Effect<ModuleMapAnswer> {
+  const harnessCommit = parseHarnessCommit(input.request);
+
+  if (harnessCommit === undefined) return Effect.succeed(invalidRequest());
+
+  const { operations, configuration } = input;
+  const outputPath = harnessBuildOutputPath(harnessCommit);
+
+  return Effect.suspend(() =>
+    operations
+      .runCommand(
+        publishModuleMapSource(planHarnessBuild(configuration, harnessCommit)),
+        WORKSPACE_ROOT,
+        configuration.stepTimeoutMs,
+      )
+      .pipe(
+        Effect.flatMap((output): Effect.Effect<ModuleMapAnswer, WorkspaceFault> =>
+          output.exitCode === 0
+            ? operations.readFile(outputPath).pipe(
+                Effect.map((moduleMap) => ({ ok: true, moduleMap }) as const),
+                Effect.orElseSucceed(() => publishFailed(output)),
+              )
+            : Effect.succeed(publishFailed(output)),
+        ),
+      ),
+  ).pipe(answerUnavailable("workspace.harness-build.build-output"));
+}
+
+function publishFailed(output: CommandOutput): ModuleMapAnswer {
+  return { ok: false, error: { code: "publish-failed", output } };
 }

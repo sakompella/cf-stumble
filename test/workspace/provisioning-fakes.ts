@@ -1,11 +1,9 @@
-import type {
-  InstructionsWriteResult,
-  WorkspaceCommandResult,
-} from "../../src/workspace/commands/command-result.js";
+import type { InstructionsWriteResult } from "../../src/workspace/commands/command-result.js";
 import type { Project } from "../../src/project-catalog.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   parseProjectProvisionRequest,
+  type ProjectProvisionAnswer,
   type ProjectProvisionRequest,
 } from "../../src/workspace/commands/provision-project.js";
 import { ProvisionFence } from "../../src/supervisor/readiness/provision-fence.js";
@@ -26,13 +24,10 @@ export class FakeProvisionHost implements WorkspaceHostRpc<
     this.steps.push("clone");
   }
 
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
+  provision(request: ProjectProvisionRequest): Promise<ProjectProvisionAnswer> {
     this.record(request);
 
-    return Promise.resolve({
-      ok: true,
-      result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-    });
+    return Promise.resolve({ ok: true });
   }
 
   ensureManagedInstructions(): Promise<InstructionsWriteResult> {
@@ -59,7 +54,7 @@ export function delayedProvisionHost(): DelayedProvision {
   const host = new (class extends FakeProvisionHost {
     calls = 0;
 
-    override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
+    override provision(request: ProjectProvisionRequest): Promise<ProjectProvisionAnswer> {
       this.calls += 1;
 
       if (this.calls === 1) {
@@ -68,10 +63,7 @@ export function delayedProvisionHost(): DelayedProvision {
 
         return new Promise((resolve) => {
           releaseClone = () => {
-            resolve({
-              ok: true,
-              result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-            });
+            resolve({ ok: true });
           };
         });
       }
@@ -90,7 +82,7 @@ export function delayedProvisionHost(): DelayedProvision {
 }
 
 export class NeverSettlingProvisionHost extends FakeProvisionHost {
-  override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
+  override provision(request: ProjectProvisionRequest): Promise<ProjectProvisionAnswer> {
     this.record(request);
 
     return new Promise(() => {});
@@ -100,7 +92,7 @@ export class NeverSettlingProvisionHost extends FakeProvisionHost {
 export class ScriptedProvisionHost extends FakeProvisionHost {
   failingStep: "clone" | "instructions" | undefined;
 
-  override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
+  override provision(request: ProjectProvisionRequest): Promise<ProjectProvisionAnswer> {
     this.record(request);
     const parsed = parseProjectProvisionRequest(request);
 
@@ -108,18 +100,11 @@ export class ScriptedProvisionHost extends FakeProvisionHost {
       return Promise.resolve(parsed);
     }
 
-    return Promise.resolve({
-      ok: true,
-      result:
-        this.failingStep === "clone"
-          ? {
-              kind: "command",
-              stdout: "",
-              stderr: "fatal: could not read from remote repository",
-              exitCode: 128,
-            }
-          : { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-    });
+    return Promise.resolve(
+      this.failingStep === "clone"
+        ? { ok: false, error: { code: "clone-failed", exitCode: 128 } }
+        : { ok: true },
+    );
   }
 
   override ensureManagedInstructions(): Promise<InstructionsWriteResult> {

@@ -1,5 +1,5 @@
 import { commandProgram } from "./exec-program.js";
-import { ISOLATE_PROGRAMS } from "./isolate-programs.js";
+import { ISOLATE_PROGRAMS, isolateProgramWrites } from "./isolate-programs.js";
 import type { ExecBackendChoice } from "./protocol.js";
 
 type ExecRoute = ExecBackendChoice | "refused";
@@ -92,26 +92,6 @@ function segmentRunsInIsolate(words: readonly string[]): boolean {
   return program !== "awk" || !rest.some((word) => AWK_LOOP.test(word));
 }
 
-const WRITE_PROGRAMS: ReadonlySet<string> = new Set([
-  "chmod",
-  "cp",
-  "gunzip",
-  "gzip",
-  "ln",
-  "mkdir",
-  "mv",
-  "rm",
-  "rmdir",
-  "split",
-  "tar",
-  "tee",
-  "touch",
-]);
-
-function sedInPlace(word: string): boolean {
-  return word.startsWith("--in-place") || (/^-[^-]/u.test(word) && word.includes("i"));
-}
-
 function segmentMayWrite(words: readonly string[]): boolean {
   const remaining = withoutAssignments(words);
 
@@ -119,7 +99,7 @@ function segmentMayWrite(words: readonly string[]): boolean {
 
   const [program = "", ...rest] = remaining;
 
-  return program === "sed" ? rest.some(sedInPlace) : WRITE_PROGRAMS.has(program);
+  return isolateProgramWrites(program, rest);
 }
 
 export function commandMayWrite(command: string): boolean {

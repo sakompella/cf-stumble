@@ -1,9 +1,9 @@
 export {
-  PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
   UNKNOWN_LINEAGE,
+  type CloneSizeVerdict,
+  type CommandAnswer,
   type HarnessLineage,
-  type WorkspaceCommandResult,
-  type WorkspaceFailure,
+  type ProjectProvisionAnswer,
 } from "./commands/index.js";
 
 export { type CommandOutput } from "./operations.js";

@@ -9,7 +9,11 @@ import {
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
 } from "../../src/supervisor/readiness/provisioning.js";
-import type { WorkspaceCommandResult, WorkspaceHostRpc } from "../../src/workspace/index.js";
+import type {
+  CommandAnswer,
+  ProjectProvisionAnswer,
+  WorkspaceHostRpc,
+} from "../../src/workspace/index.js";
 import { runToResult } from "./workspace-results.js";
 
 type BuildRequest = Parameters<WorkspaceHostRpc<"build">["build"]>[0];
@@ -32,12 +36,12 @@ class FakeHarnessHost implements WorkspaceHostRpc<"build" | "ensureManagedInstru
   readonly builds: BuildRequest[] = [];
   instructions = 0;
 
-  build(request: BuildRequest): Promise<WorkspaceCommandResult> {
+  build(request: BuildRequest): Promise<CommandAnswer> {
     this.builds.push(request);
 
     return Promise.resolve({
       ok: true,
-      result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
+      output: { stdout: "", stderr: "", exitCode: 0 },
     });
   }
 
@@ -51,7 +55,7 @@ class FakeHarnessHost implements WorkspaceHostRpc<"build" | "ensureManagedInstru
 class DelayedProjectHost {
   readonly started: Promise<void>;
   private resolveStarted = () => {};
-  private resolveClone: ((result: WorkspaceCommandResult) => void) | undefined;
+  private resolveClone: ((result: ProjectProvisionAnswer) => void) | undefined;
 
   constructor() {
     this.started = new Promise((resolve) => {
@@ -59,7 +63,7 @@ class DelayedProjectHost {
     });
   }
 
-  provision(): Promise<WorkspaceCommandResult> {
+  provision(): Promise<ProjectProvisionAnswer> {
     this.resolveStarted();
 
     return new Promise((resolve) => {
@@ -68,10 +72,7 @@ class DelayedProjectHost {
   }
 
   release(): void {
-    this.resolveClone?.({
-      ok: true,
-      result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-    });
+    this.resolveClone?.({ ok: true });
   }
 }
 
@@ -90,7 +91,7 @@ test("provisions the harness checkout and managed instructions on use", async ()
   );
 
   expect(Result.isSuccess(outcome)).toBe(true);
-  expect(host.builds).toEqual([{ kind: "build-step", harnessCommit, step: "provision" }]);
+  expect(host.builds).toEqual([{ harnessCommit, step: "provision" }]);
   expect(host.instructions).toBe(1);
 });
 

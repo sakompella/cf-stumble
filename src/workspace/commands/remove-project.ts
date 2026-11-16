@@ -9,10 +9,10 @@ import { projectProvisionLockPath } from "./provision-project.js";
 import { removedDirectories, removedFromStore } from "./remove-project-store.js";
 import {
   answerDurableFailures,
-  commandResult,
+  commandAnswer,
   invalidRequest,
   syncIncomplete,
-  type WorkspaceCommandResult,
+  type CommandAnswer,
   type WorkspaceFailure,
   type WorkspacePlan,
 } from "./command-result.js";
@@ -60,7 +60,7 @@ export function executeProjectRemovalRequest(
     operations: WorkspaceEffects;
     request: ProjectRemovalRequest;
   }>,
-): Effect.Effect<WorkspaceCommandResult> {
+): Effect.Effect<CommandAnswer> {
   const parsed = parseProjectRemovalRequest(input.request);
 
   if ("ok" in parsed) return Effect.succeed(parsed);
@@ -74,6 +74,6 @@ export function executeProjectRemovalRequest(
       return syncIncomplete();
     }
 
-    return commandResult(output);
+    return commandAnswer(output);
   }).pipe(answerDurableFailures("workspace.project-removal", () => "workspace-unavailable"));
 }

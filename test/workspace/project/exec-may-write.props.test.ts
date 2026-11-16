@@ -3,7 +3,23 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 import { commandMayWrite } from "../../../src/workspace/project/exec-routing.js";
 
-const READERS = ["cat", "grep", "seq", "ls", "head", "wc", "sort", "echo", "find", "sed"];
+const READERS = [
+  "cat",
+  "grep",
+  "seq",
+  "ls",
+  "head",
+  "wc",
+  "sort",
+  "echo",
+  "find",
+  "sed",
+  "yq",
+  "awk",
+  "curl",
+  "xan",
+  "zcat",
+];
 
 const WRITERS = [
   "chmod",
@@ -24,6 +40,30 @@ const WRITERS = [
 const READ_FLAGS = ["-n", "-e", "--expression", "-r", "-E", "--quiet", "-s"];
 
 const IN_PLACE_FLAGS = ["-i", "-nri", "-i.bak", "--in-place", "--in-place=bak"];
+
+const WRITE_FORMS = new Map<string, readonly string[]>(
+  Object.entries({
+    sed: [...IN_PLACE_FLAGS, "-f", "'w out.txt'", "'1w out.txt'", "'s/a/b/w out.txt'"],
+    yq: ["-i", "-ri", "--inplace"],
+    sort: ["-o", "-oout.txt", "--output=out.txt", "--output"],
+    curl: [
+      "-o",
+      "-O",
+      "-sSLO",
+      "--output",
+      "--output=out.txt",
+      "--remote-name",
+      "-c",
+      "--cookie-jar",
+    ],
+    awk: [
+      `'{print > "out.txt"}'`,
+      `'{print >> "out.txt"}'`,
+      `'BEGIN{printf "x" > "out.txt"}'`,
+      `'BEGIN{"touch out.txt" | getline}'`,
+    ],
+  }),
+);
 
 const WRITE_REDIRECTS = [">", ">>", ">&", "2>", "1> "];
 
@@ -49,10 +89,14 @@ function drawArgument(tc: hegel.TestCase, program: string): Segment {
     return { text: `${tc.draw(gs.sampledFrom(WRITE_REDIRECTS))}${tc.draw(word)}`, writes: true };
   }
 
-  const inPlace = tc.draw(gs.booleans());
-  const flag = tc.draw(gs.sampledFrom(inPlace ? IN_PLACE_FLAGS : READ_FLAGS));
+  const writeForms = WRITE_FORMS.get(program);
+  const writes = tc.draw(gs.booleans());
 
-  return { text: flag, writes: inPlace && program === "sed" };
+  if (writes && writeForms !== undefined) {
+    return { text: tc.draw(gs.sampledFrom(writeForms)), writes: true };
+  }
+
+  return { text: tc.draw(gs.sampledFrom(writes ? IN_PLACE_FLAGS : READ_FLAGS)), writes: false };
 }
 
 function drawSegment(tc: hegel.TestCase): Segment {
@@ -96,7 +140,7 @@ test("a command may write exactly when a segment runs a writing program, edits i
   );
 });
 
-test("each documented program writes or reads on its own, and sed edits in place only with an in-place flag", () => {
+test("each documented program writes or reads on its own, and a program that writes only with some arguments does so exactly then", () => {
   for (const program of WRITERS) {
     expect(commandMayWrite(`${program} a b`), program).toBe(true);
   }
@@ -111,5 +155,38 @@ test("each documented program writes or reads on its own, and sed edits in place
 
   for (const flag of READ_FLAGS) {
     expect(commandMayWrite(`sed ${flag} s/a/b/ file`), flag).toBe(false);
+  }
+
+  for (const command of [
+    "yq -i '.a = 2' config.yaml",
+    "yq --inplace '.a = 2' config.yaml",
+    "sort -o sorted.txt words.txt",
+    "sort --output=sorted.txt words.txt",
+    "sort -oout.txt words.txt",
+    "curl -c jar.txt https://example.com",
+    "curl --cookie-jar jar.txt https://example.com",
+    "curl --remote-name https://example.com/a.tgz",
+    `awk '{print > "out.txt"}' in.txt`,
+    `awk '{print >> "out.txt"}' in.txt`,
+    "curl -o page.html https://example.com",
+    "curl -sSLO https://example.com/archive.tgz",
+    "xan split -c 2 data.csv",
+    "xan partition id data.csv",
+    "sed -n '/a/w matches.txt' in.txt",
+  ]) {
+    expect(commandMayWrite(command), command).toBe(true);
+  }
+
+  for (const command of [
+    "yq '.a' config.yaml",
+    "yq -r '.a' config.yaml",
+    "sort -rn words.txt",
+    "awk '{print $1}' in.txt",
+    "curl -sSL https://example.com/data.json",
+    "xan select id data.csv",
+    "xan count data.csv",
+    "zcat archive.gz",
+  ]) {
+    expect(commandMayWrite(command), command).toBe(false);
   }
 });

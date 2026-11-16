@@ -37,10 +37,7 @@ export const HARNESS_BUILD_CONFIGURATION = {
 
 export type HarnessBuildStepName = "provision" | "isolate" | "checkout" | HarnessBuildPhaseName;
 
-export type HarnessBuildRequest =
-  | Readonly<{ kind: "build-step"; harnessCommit: string; step: HarnessBuildStepName }>
-  | Readonly<{ kind: "build-output"; harnessCommit: string }>
-  | Readonly<{ kind: "build-discard"; harnessCommit: string }>;
+export type HarnessBuildStepRequest = Readonly<{ harnessCommit: string; step: string }>;
 
 export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
   "provision",
@@ -48,3 +45,7 @@ export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
   "checkout",
   ...HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.name),
 ];
+
+export function isHarnessBuildStep(name: string): name is HarnessBuildStepName {
+  return HARNESS_BUILD_STEP_NAMES.some((known) => known === name);
+}

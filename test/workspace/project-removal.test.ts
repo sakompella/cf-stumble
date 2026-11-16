@@ -80,7 +80,7 @@ test("a removal answers done once the store holds neither the clone nor its stag
     ),
   ).resolves.toEqual({
     ok: true,
-    result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
+    output: { stdout: "", stderr: "", exitCode: 0 },
   });
 });
 
@@ -130,7 +130,7 @@ test("directories that the command left in the durable store are removed from th
     Effect.runPromise(
       executeProjectRemovalRequest({ operations: workspaceEffects(operations), request }),
     ),
-  ).resolves.toMatchObject({ ok: true, result: { exitCode: 0 } });
+  ).resolves.toMatchObject({ ok: true, output: { exitCode: 0 } });
 
   expect(operations.remaining.has(clone)).toBe(false);
 });

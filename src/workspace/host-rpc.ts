@@ -9,6 +9,8 @@ type HostRpc = Readonly<
   Pick<
     WorkspaceHost,
     | "build"
+    | "buildOutput"
+    | "discardBuild"
     | "lineage"
     | "provision"
     | "removeProject"

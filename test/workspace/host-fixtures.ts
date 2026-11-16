@@ -2,14 +2,10 @@ import { Workspace } from "@cloudflare/computer";
 import { WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { computerStorage } from "../../src/workspace/workspace-platform.js";
 import type { GitHubCredentialRequest } from "../../src/workspace/github-credential.js";
-import type { HarnessBuildRequest } from "../../src/harness-build.js";
 import type { ProjectProvisionRequest } from "../../src/workspace/commands/provision-project.js";
 import type { ProjectRemovalRequest } from "../../src/workspace/commands/remove-project.js";
 
-export const REFUSED_BUILD: HarnessBuildRequest = {
-  kind: "build-output",
-  harnessCommit: "not-a-commit",
-};
+export const REFUSED_BUILD = { harnessCommit: "not-a-commit", step: "install" };
 
 export const REFUSED_PROVISION: ProjectProvisionRequest = {
   kind: "provision-project",

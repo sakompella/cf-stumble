@@ -56,14 +56,14 @@ test("an isolate clone provisions the project without a container command", asyn
     return Promise.resolve();
   });
 
-  await expect(run()).resolves.toMatchObject({ ok: true, result: { exitCode: 0 } });
+  await expect(run()).resolves.toEqual({ ok: true });
   expect(commands).toEqual([]);
 });
 
 test("a project that is already cloned is neither cloned nor run again", async () => {
   const { run, commands, state } = workspaceWith(true, () => Promise.resolve());
 
-  await expect(run()).resolves.toMatchObject({ ok: true, result: { exitCode: 0 } });
+  await expect(run()).resolves.toEqual({ ok: true });
   expect(state.isolateClones).toBe(0);
   expect(commands).toEqual([]);
 });
@@ -77,7 +77,7 @@ test.each([
     const events = capturedEvents();
     const { run, commands } = workspaceWith(false, clone);
 
-    await expect(run()).resolves.toMatchObject({ ok: true, result: { exitCode: 0 } });
+    await expect(run()).resolves.toEqual({ ok: true });
     expect(commands).toHaveLength(1);
 
     const fellBack = named(events(), "workspace.isolate-clone.fell-back");

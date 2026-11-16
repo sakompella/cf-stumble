@@ -8,11 +8,11 @@ import { parsedArtifact } from "../../facet/fixture.js";
 import {
   BUILD_COMMIT,
   built,
+  type BuildWorkspaceFake,
   entryModule,
   FakeBuildHost,
   helperModule,
 } from "./scripted-build-host.js";
-import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -42,14 +42,18 @@ test("a build returns the module map the workspace wrote, under the requested co
   ).toBe(true);
 });
 
-function oneCallStub(): WorkspaceHostRpc<"build"> {
+function oneCallStub(): BuildWorkspaceFake {
   const host = new FakeBuildHost();
 
+  const once = <A>(call: () => Promise<A>): Promise<A> =>
+    host.requests.length === 0
+      ? call()
+      : Promise.reject(new Error("this Durable Object instance is no longer active"));
+
   return {
-    build: (request) =>
-      host.requests.length === 0
-        ? host.build(request)
-        : Promise.reject(new Error("this Durable Object instance is no longer active")),
+    build: (request) => once(() => host.build(request)),
+    buildOutput: () => once(() => host.buildOutput()),
+    discardBuild: () => once(() => host.discardBuild()),
   };
 }
 
@@ -82,9 +86,7 @@ test("a step the workspace never answers fails as unavailable at the RPC deadlin
   const build = host.build.bind(host);
 
   host.build = (request) =>
-    request.kind === "build-step" && request.step === "install"
-      ? build(request).then(() => new Promise(() => {}))
-      : build(request);
+    request.step === "install" ? build(request).then(() => new Promise(() => {})) : build(request);
 
   const building = built(host);
   await vi.advanceTimersByTimeAsync(WORKSPACE_RPC_TIMEOUT_MS);

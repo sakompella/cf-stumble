@@ -54,11 +54,13 @@ test.each([
     const jwt = syntheticJwt();
     const host = new FakeBuildHost();
 
+    const refuse = () =>
+      Promise.reject(new Error(`refused ${jwt.token} for x:${FAKE_TOKEN}@github.com`));
+
     const result = await built({
-      build: (request) =>
-        kind === "build" || request.kind === kind
-          ? Promise.reject(new Error(`refused ${jwt.token} for x:${FAKE_TOKEN}@github.com`))
-          : host.build(request),
+      build: (request) => (kind === "build" ? refuse() : host.build(request)),
+      buildOutput: () => (kind === "build-output" ? refuse() : host.buildOutput()),
+      discardBuild: () => host.discardBuild(),
     });
 
     expect(Result.isFailure(result) ? result.failure.code : "ok").toBe(code);

@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
 import {
-  executeHarnessBuildRequest,
+  executeHarnessBuildDiscard,
+  executeHarnessBuildOutput,
+  executeHarnessBuildStep,
   readHarnessLineage,
   type HarnessLineage,
   type HarnessLineageRequest,
@@ -15,14 +17,19 @@ import {
 import type { GitHubCredentialState } from "../../../src/github/index.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
-  type HarnessBuildRequest,
+  type HarnessBuildStepRequest,
 } from "../../../src/harness-build.js";
-import type { ProjectProvisionRequest } from "../../../src/workspace/commands/provision-project.js";
+import type {
+  CloneSizeVerdict,
+  ProjectProvisionAnswer,
+  ProjectProvisionRequest,
+} from "../../../src/workspace/commands/provision-project.js";
 import type { ProjectRemovalRequest } from "../../../src/workspace/commands/remove-project.js";
 import { ensureManagedInstructions } from "../../../src/workspace/managed-instructions.js";
 import type {
+  CommandAnswer,
   InstructionsWriteResult,
-  WorkspaceCommandResult,
+  ModuleMapAnswer,
 } from "../../../src/workspace/commands/command-result.js";
 import {
   workspaceEffects,
@@ -70,6 +77,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
   login = "octocat";
   repositoryAccess: "granted" | "denied" = "granted";
   cloneExitCode = 0;
+  cloneSizeVerdict: CloneSizeVerdict | undefined;
   lineageOutput = "contains unknown\nactive \ntarget ";
   cloneNeedsCredential = false;
   unavailable = false;
@@ -194,6 +202,10 @@ export class FakeTenantWorkspace implements PromiseOperations {
 
     const unauthorized = this.cloneNeedsCredential && this.credentialState !== "connected";
 
+    if (!unauthorized && this.cloneSizeVerdict !== undefined) {
+      return { stdout: `size-verdict=${this.cloneSizeVerdict}\n`, stderr: "", exitCode: 122 };
+    }
+
     return { stdout: "", stderr: "", exitCode: unauthorized ? 128 : this.cloneExitCode };
   }
 
@@ -229,7 +241,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
     );
   }
 
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
+  provision(request: ProjectProvisionRequest): Promise<ProjectProvisionAnswer> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
@@ -241,16 +253,36 @@ export class FakeTenantWorkspace implements PromiseOperations {
     );
   }
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
+  build(request: HarnessBuildStepRequest): Promise<CommandAnswer> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
 
     return Effect.runPromise(
-      executeHarnessBuildRequest({
+      executeHarnessBuildStep({
         configuration: HARNESS_BUILD_CONFIGURATION,
         operations: workspaceEffects(this),
         request,
+      }),
+    );
+  }
+
+  buildOutput(harnessCommit: string): Promise<ModuleMapAnswer> {
+    return Effect.runPromise(
+      executeHarnessBuildOutput({
+        configuration: HARNESS_BUILD_CONFIGURATION,
+        operations: workspaceEffects(this),
+        request: harnessCommit,
+      }),
+    );
+  }
+
+  discardBuild(harnessCommit: string): Promise<CommandAnswer> {
+    return Effect.runPromise(
+      executeHarnessBuildDiscard({
+        configuration: HARNESS_BUILD_CONFIGURATION,
+        operations: workspaceEffects(this),
+        request: harnessCommit,
       }),
     );
   }
@@ -259,7 +291,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
     return Effect.runPromise(readHarnessLineage(workspaceEffects(this), request));
   }
 
-  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult> {
+  removeProject(request: ProjectRemovalRequest): Promise<CommandAnswer> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }

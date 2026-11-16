@@ -1,6 +1,11 @@
-export type { HarnessBuildRequest } from "../../harness-build.js";
+export type { HarnessBuildStepRequest } from "../../harness-build.js";
 
-export { executeHarnessBuildRequest, harnessBuildConfiguration } from "./build-harness.js";
+export {
+  executeHarnessBuildDiscard,
+  executeHarnessBuildOutput,
+  executeHarnessBuildStep,
+  harnessBuildConfiguration,
+} from "./build-harness.js";
 
 export {
   readHarnessLineage,
@@ -11,16 +16,17 @@ export {
 
 export {
   executeProjectProvisionRequest,
-  PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
+  type CloneSizeVerdict,
+  type ProjectProvisionAnswer,
   type ProjectProvisionRequest,
 } from "./provision-project.js";
 
 export { executeProjectRemovalRequest, type ProjectRemovalRequest } from "./remove-project.js";
 
 export {
+  type CommandAnswer,
   type InstructionsWriteResult,
-  type WorkspaceCommandResult,
-  type WorkspaceFailure,
+  type ModuleMapAnswer,
 } from "./command-result.js";
 
 export {

@@ -225,14 +225,15 @@ export class ProjectConnections {
       const settled = yield* execute(this.effects(), connected.project.id, connected.commands);
 
       if (settled.provision !== undefined && !settled.provision.ok) {
+        const { problem } = settled.provision;
+
         return this.refused(
-          {
-            code:
-              settled.provision.problem.code === "repository-too-large"
-                ? "repository-too-large"
-                : "provisioning-failed",
-            detail: "",
-          },
+          problem.code === "repository-too-large"
+            ? {
+                code: "repository-too-large",
+                detail: `repository exceeds a workspace size limit: ${problem.verdict}`,
+              }
+            : { code: "provisioning-failed", detail: "" },
           github,
         );
       }

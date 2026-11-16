@@ -1,5 +1,8 @@
-import type { HarnessBuildRequest, HarnessBuildStepName } from "../../../src/harness-build.js";
-import type { WorkspaceCommandResult } from "../../../src/workspace/commands/command-result.js";
+import type { HarnessBuildStepName, HarnessBuildStepRequest } from "../../../src/harness-build.js";
+import type {
+  CommandAnswer,
+  ModuleMapAnswer,
+} from "../../../src/workspace/commands/command-result.js";
 import type { WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
 
 const builtModuleMapFile = JSON.stringify({
@@ -20,32 +23,38 @@ export default { fetch() { return new Response(body); } };
   ],
 });
 
-export class BuildHost implements WorkspaceHostRpc<"build"> {
-  readonly requests: HarnessBuildRequest[] = [];
+export class BuildHost implements WorkspaceHostRpc<"build" | "buildOutput" | "discardBuild"> {
+  readonly requests: string[] = [];
   failing: HarnessBuildStepName | undefined;
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
-    this.requests.push(request);
-    const failed = request.kind === "build-step" && request.step === this.failing;
-
-    if (request.kind === "build-output") {
-      return Promise.resolve({
-        ok: true,
-        result: { kind: "module-map", text: builtModuleMapFile },
-      });
-    }
+  build(request: HarnessBuildStepRequest): Promise<CommandAnswer> {
+    this.requests.push(request.step);
 
     return Promise.resolve({
       ok: true,
-      result: { kind: "command", stdout: "", stderr: "", exitCode: failed ? 2 : 0 },
+      output: { stdout: "", stderr: "", exitCode: request.step === this.failing ? 2 : 0 },
     });
   }
 
+  buildOutput(): Promise<ModuleMapAnswer> {
+    this.requests.push("output");
+
+    return Promise.resolve({ ok: true, moduleMap: builtModuleMapFile });
+  }
+
+  discardBuild(): Promise<CommandAnswer> {
+    this.requests.push("discard");
+
+    return Promise.resolve({ ok: true, output: { stdout: "", stderr: "", exitCode: 0 } });
+  }
+
   builds(): number {
-    return this.requests.filter((request) => request.kind === "build-output").length;
+    return this.requests.filter((request) => request === "output").length;
   }
 }
 
-export const unreachableHost: WorkspaceHostRpc<"build"> = {
-  build: () => Promise.resolve({ ok: false, error: { code: "unknown-command" } }),
+export const unreachableHost: WorkspaceHostRpc<"build" | "buildOutput" | "discardBuild"> = {
+  build: () => Promise.resolve({ ok: false, error: { code: "workspace-unavailable" } }),
+  buildOutput: () => Promise.resolve({ ok: false, error: { code: "workspace-unavailable" } }),
+  discardBuild: () => Promise.resolve({ ok: false, error: { code: "workspace-unavailable" } }),
 };
