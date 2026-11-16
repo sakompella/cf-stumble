@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
-import type * as Scope from "effect/Scope";
 import type { MainFacetModel } from "../../facet/index.js";
 import { FACET_COMPATIBILITY } from "../../facet/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
-import type { ProjectCapabilityStub } from "../../workspace/index.js";
+import type { ScopedWorkspace } from "../conversations/index.js";
 import type { PreparationReply } from "../generation-machine.js";
 import type { Generation, GenerationActor, GenerationLabel, Generations } from "../generations.js";
 import {
@@ -23,9 +22,7 @@ export type StartupCheckHost = Readonly<{
   artifacts: HarnessArtifacts;
   generations: Generations;
   model: () => MainFacetModel;
-  workspace: (
-    remainingMs: number,
-  ) => Effect.Effect<ProjectCapabilityStub | null, never, Scope.Scope>;
+  workspace: (remainingMs: number) => ScopedWorkspace;
 }>;
 
 type StartupCheckReport = StartupCheckOutcome &

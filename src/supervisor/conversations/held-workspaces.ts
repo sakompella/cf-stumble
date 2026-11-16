@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -6,28 +7,39 @@ import { runAtEntryPoint } from "../../run-entry-point.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { SelectableProject } from "../../selectable-projects.js";
 import type { ProjectCapabilityStub } from "../../workspace/index.js";
+import { WorkspaceUnavailable } from "../readiness/index.js";
 
-export type ScopedWorkspace = Effect.Effect<ProjectCapabilityStub | null, never, Scope.Scope>;
+export type ScopedWorkspace = Effect.Effect<
+  ProjectCapabilityStub,
+  WorkspaceUnavailable,
+  Scope.Scope
+>;
 
 export type ObtainWorkspace = (project: SelectableProject, remainingMs: number) => ScopedWorkspace;
 
 type HeldWorkspace = Readonly<{
-  capability: Promise<ProjectCapabilityStub | null>;
+  capability: Promise<ProjectCapabilityStub>;
   scope: Scope.Closeable;
 }>;
 
-function holdWorkspace(scope: Scope.Scope, obtain: ScopedWorkspace) {
+function holdWorkspace(
+  scope: Scope.Scope,
+  obtain: ScopedWorkspace,
+): Promise<ProjectCapabilityStub> {
   return runAtEntryPoint(
-    Effect.forkIn(Scope.provide(obtain, scope), scope).pipe(
-      Effect.flatMap(Fiber.await),
-      Effect.map((exit) => (Exit.isSuccess(exit) ? exit.value : null)),
-    ),
-  );
+    Effect.forkIn(Scope.provide(obtain, scope), scope).pipe(Effect.flatMap(Fiber.await)),
+  ).then((exit) => {
+    if (Exit.isSuccess(exit)) return exit.value;
+
+    throw Cause.hasInterruptsOnly(exit.cause)
+      ? new WorkspaceUnavailable({ code: "released", detail: "" })
+      : Cause.squash(exit.cause);
+  });
 }
 
 export function heldWorkspace(obtain: ScopedWorkspace) {
   const scope = Scope.makeUnsafe();
-  let capability: Promise<ProjectCapabilityStub | null> | undefined;
+  let capability: Promise<ProjectCapabilityStub> | undefined;
 
   return {
     capability: () => (capability ??= holdWorkspace(scope, obtain)),
@@ -51,8 +63,6 @@ export class HeldWorkspaces {
   ): Promise<ProjectRpcTargetContract & Disposable> {
     const held = this.#held.get(conversationId) ?? this.#hold(conversationId, project, remainingMs);
     const capability = await held.capability;
-
-    if (capability === null) throw new Error("the workspace is unavailable");
 
     return capability.dup();
   }
@@ -107,10 +117,8 @@ export class HeldWorkspaces {
     const held = { capability, scope };
 
     this.#held.set(conversationId, held);
-    void capability.then((obtained) => {
-      if (obtained === null && this.#held.get(conversationId) === held) {
-        this.#held.delete(conversationId);
-      }
+    void capability.catch(() => {
+      if (this.#held.get(conversationId) === held) this.#held.delete(conversationId);
     });
 
     return held;
