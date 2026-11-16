@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
-import { controlRequest, ownerApiResponse, ownerApiSupervisor } from "./helpers.js";
+import { controlRequest, apiResponse, apiSupervisor } from "./helpers.js";
 
 test("the setting is read and changed through the supervisor", async () => {
   const set: string[] = [];
 
-  const supervisor = ownerApiSupervisor({
+  const supervisor = apiSupervisor({
     getWorkspaceBackend: () => Promise.resolve("cloudflare"),
     setWorkspaceBackend: (backend) => {
       set.push(backend);
@@ -13,12 +13,12 @@ test("the setting is read and changed through the supervisor", async () => {
     },
   });
 
-  const read = await ownerApiResponse(
+  const read = await apiResponse(
     new Request("https://cf-stumble.test/api/workspace/backend"),
     supervisor,
   );
 
-  const changed = await ownerApiResponse(
+  const changed = await apiResponse(
     controlRequest("/api/workspace/backend", JSON.stringify({ backend: "provider" })),
     supervisor,
   );
@@ -29,17 +29,17 @@ test("the setting is read and changed through the supervisor", async () => {
 });
 
 test("a busy workspace answers 409 and an unknown value 400", async () => {
-  const supervisor = ownerApiSupervisor({
+  const supervisor = apiSupervisor({
     setWorkspaceBackend: () =>
       Promise.resolve({ ok: false, problem: { code: "workspace-busy" } } as const),
   });
 
-  const busy = await ownerApiResponse(
+  const busy = await apiResponse(
     controlRequest("/api/workspace/backend", JSON.stringify({ backend: "cloudflare" })),
     supervisor,
   );
 
-  const unknown = await ownerApiResponse(
+  const unknown = await apiResponse(
     controlRequest("/api/workspace/backend", JSON.stringify({ backend: "mars" })),
     supervisor,
   );

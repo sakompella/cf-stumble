@@ -1,12 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { BackendSetting, type WorkspaceBackendChange } from "../backend-setting.js";
-import {
-  callSupervisor,
-  decodeRequestBody,
-  invalidRequestBody,
-  type SupervisorCallFailed,
-} from "./json.js";
+import { callSupervisor, decodeRequestBody, invalidRequestBody, type Handlers } from "./json.js";
 
 export type WorkspaceBackendApiSupervisor = Readonly<{
   getWorkspaceBackend: () => Promise<BackendSetting>;
@@ -25,16 +20,13 @@ const changeResponse = Effect.fnUntraced(function* (
   return Response.json(change, { status: change.ok ? 200 : 409 });
 }, invalidRequestBody("invalid-backend-request"));
 
-export function routeWorkspaceBackendRequest(
-  request: Request,
-  supervisor: WorkspaceBackendApiSupervisor,
-): Effect.Effect<Response, SupervisorCallFailed> | undefined {
-  if (new URL(request.url).pathname !== "/api/workspace/backend") return undefined;
-
-  if (request.method === "GET")
-    return callSupervisor(() => supervisor.getWorkspaceBackend()).pipe(
+export const WORKSPACE_BACKEND_HANDLERS: Handlers<
+  WorkspaceBackendApiSupervisor,
+  "GET /api/workspace/backend" | "POST /api/workspace/backend"
+> = {
+  "GET /api/workspace/backend": (_request, supervisor) =>
+    callSupervisor(() => supervisor.getWorkspaceBackend()).pipe(
       Effect.map((backend) => Response.json({ ok: true, backend })),
-    );
-
-  return request.method === "POST" ? changeResponse(request, supervisor) : undefined;
-}
+    ),
+  "POST /api/workspace/backend": changeResponse,
+};

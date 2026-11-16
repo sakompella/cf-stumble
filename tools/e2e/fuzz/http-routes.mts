@@ -1,6 +1,10 @@
+import {
+  ENDPOINT_ROUTES,
+  matchEndpoint,
+  type Endpoint,
+  type Method,
+} from "../../../src/api/endpoints.ts";
 import type { Random } from "./random.mts";
-
-export type Method = "GET" | "POST";
 
 export type RouteBody =
   | "none"
@@ -25,39 +29,58 @@ export type Targets = Readonly<{
 
 const UNKNOWN_PROJECT = "fz-unknown";
 
+const FUZZ: Readonly<Record<Endpoint, Readonly<{ body: RouteBody; spends?: string }>>> = {
+  "GET /api/status": { body: "none" },
+  "GET /api/projects": { body: "none" },
+  "POST /api/projects/connect": { body: "connect", spends: "connect" },
+  "POST /api/projects/:projectId/disconnect": { body: "none" },
+  "POST /api/projects/:projectId/messages": { body: "message" },
+  "GET /api/projects/:projectId/events": { body: "none" },
+  "GET /api/projects/:projectId/entries": { body: "none" },
+  "POST /api/projects/:projectId/abort": { body: "none" },
+  "POST /api/projects/:projectId/thread/fresh": { body: "none" },
+  "GET /api/github/connection": { body: "none" },
+  "POST /api/github/connection/refresh": { body: "none", spends: "github" },
+  "POST /api/github/authorization": { body: "none", spends: "github" },
+  "POST /api/github/authorization/complete": { body: "none", spends: "github" },
+  "GET /api/chatgpt/connection": { body: "none" },
+  "POST /api/chatgpt/login": { body: "none", spends: "chatgpt" },
+  "POST /api/chatgpt/login/complete": { body: "complete" },
+  "POST /api/chatgpt/disconnect": { body: "none" },
+  "POST /api/generations/submit": { body: "submit", spends: "submit" },
+  "POST /api/generations/activate": { body: "control" },
+  "POST /api/generations/rollback": { body: "control" },
+  "POST /api/workspace/reset": { body: "none", spends: "reset" },
+  "GET /api/workspace/backend": { body: "none" },
+  "POST /api/workspace/backend": { body: "backend" },
+};
+
+const API_ROUTES: readonly Route[] = ENDPOINT_ROUTES.map(({ endpoint, method, pattern }) => ({
+  method,
+  path: pattern,
+  ...FUZZ[endpoint],
+}));
+
+const PROJECT_PREFIX = "/api/projects/:projectId";
+
 const FIXED: readonly Route[] = [
   { method: "GET", path: "/", body: "none" },
   { method: "GET", path: "/health", body: "none" },
   { method: "GET", path: "/favicon.svg", body: "none" },
-  { method: "GET", path: "/api/status", body: "none" },
-  { method: "GET", path: "/api/projects", body: "none" },
-  { method: "GET", path: "/api/github/connection", body: "none" },
-  { method: "GET", path: "/api/chatgpt/connection", body: "none" },
-  { method: "GET", path: "/api/workspace/backend", body: "none" },
   { method: "GET", path: "/orb/provider", body: "none" },
   { method: "GET", path: "/orb/computerd", body: "none" },
-  { method: "POST", path: "/api/projects/connect", body: "connect", spends: "connect" },
-  { method: "POST", path: "/api/github/connection/refresh", body: "none", spends: "github" },
-  { method: "POST", path: "/api/github/authorization", body: "none", spends: "github" },
-  { method: "POST", path: "/api/github/authorization/complete", body: "none", spends: "github" },
-  { method: "POST", path: "/api/chatgpt/login", body: "none", spends: "chatgpt" },
-  { method: "POST", path: "/api/chatgpt/login/complete", body: "complete" },
-  { method: "POST", path: "/api/chatgpt/disconnect", body: "none" },
-  { method: "POST", path: "/api/generations/submit", body: "submit", spends: "submit" },
-  { method: "POST", path: "/api/generations/activate", body: "control" },
-  { method: "POST", path: "/api/generations/rollback", body: "control" },
-  { method: "POST", path: "/api/workspace/reset", body: "none", spends: "reset" },
-  { method: "POST", path: "/api/workspace/backend", body: "backend" },
+  ...API_ROUTES.filter((route) => !route.path.startsWith(PROJECT_PREFIX)),
 ];
 
-const PROJECT_ROUTES: readonly Route[] = [
-  { method: "POST", path: "/messages", body: "message" },
-  { method: "GET", path: "/events", body: "none" },
-  { method: "GET", path: "/entries", body: "none" },
-  { method: "POST", path: "/abort", body: "none" },
-  { method: "POST", path: "/thread/fresh", body: "none" },
-  { method: "POST", path: "/disconnect", body: "none" },
-];
+const PROJECT_ROUTES: readonly Route[] = API_ROUTES.flatMap((route) =>
+  route.path.startsWith(PROJECT_PREFIX)
+    ? [{ ...route, path: route.path.slice(PROJECT_PREFIX.length) }]
+    : [],
+);
+
+export const SPENDING_PATHS: ReadonlyMap<string, string> = new Map(
+  API_ROUTES.flatMap((route) => (route.spends === undefined ? [] : [[route.path, route.spends]])),
+);
 
 const PROJECT_IDS = [
   "fz-unknown",
@@ -129,26 +152,14 @@ export function isOrb(raw: string): boolean {
   return normalizedPath(raw).startsWith("/orb/");
 }
 
-const FIXED_KEYS = new Set(FIXED.map((route) => `${route.method} ${route.path}`));
-
-const PROJECT_KEYS = new Set(PROJECT_ROUTES.map((route) => `${route.method} ${route.path}`));
-
 export function isKnownRoute(method: string, raw: string, scriptPath: string): boolean {
   const path = normalizedPath(raw);
 
-  if (FIXED_KEYS.has(`${effectiveMethod(method)} ${path}`)) return true;
+  if (FIXED.some((route) => route.method === effectiveMethod(method) && route.path === path)) {
+    return true;
+  }
 
   if (effectiveMethod(method) === "GET" && path === scriptPath) return true;
 
-  const project = /^\/api\/projects\/([^/]+)(\/.+)$/u.exec(path);
-
-  if (project?.[1] === undefined || project[2] === undefined) return false;
-
-  try {
-    decodeURIComponent(project[1]);
-  } catch {
-    return false;
-  }
-
-  return PROJECT_KEYS.has(`${effectiveMethod(method)} ${project[2]}`);
+  return matchEndpoint(effectiveMethod(method), path) !== undefined;
 }

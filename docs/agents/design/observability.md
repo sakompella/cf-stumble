@@ -110,11 +110,11 @@ Supervisor, so `stumble gen status` stays the authority for the active generatio
 
 - Workers Logs (`workers/observability/telemetry/query`): every fetch invocation of the Worker, with
   its end time, `$workers.wallTimeMs`, and URL, from the first metrics bucket of the window back
-  through one run deadline plus the idle limit. Only owner API routes that can reach the workspace
+  through one run deadline plus the idle limit. Only API routes that can reach the workspace
   count as work. The same query set also reads the `run.started` and `run.settled` events of
   conversation runs, so a queued run counts from when it actually ran, not from when its message
-  was admitted; a failed or row-limited run query makes the whole check `unknown`. `src/routes/route-pattern.ts` lists
-  each route as `record-only` (status, project list, GitHub and ChatGPT connection, the backend
+  was admitted; a failed or row-limited run query makes the whole check `unknown`. `src/api/endpoints.ts` lists
+  each endpoint as `record-only` (status, project list, GitHub and ChatGPT connection, the backend
   setting (a change stops the container and never keeps it awake), and a
   project's events, abort and fresh thread: the Supervisor and the facet answer without the
   workspace; the page keeps an events stream open) or `workspace` (messages, disconnect, connect,
@@ -158,9 +158,10 @@ needs Account Analytics Read, and the `i generations` line needs Workers R2 Stor
 `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. The token goes in
 the `Authorization` header only and is never printed. Use `--worker <name>` for another Worker.
 
-**Unknown.** Missing data never reads as fine. A request to an `/api/` route that
-`route-pattern.ts` does not list counts as record-only, since the router answers it 404 without the
-Supervisor; a workspace route left out of the table therefore shows up as `ran-past-idle`. A
+**Unknown.** Missing data never reads as fine. A request to an `/api/` path that
+`src/api/endpoints.ts` does not list counts as record-only, since the Worker answers it 404 without
+the Supervisor. The Worker dispatches from the same table, so a served route cannot be missing from
+it. A
 missing token or account, a failed call, a missing application, an unexpected response, or a query
 that hit its row limit (2,000 requests or 5,000 usage rows) prints one `unknown` line with the
 reason. Use a shorter `--since` after a row limit.

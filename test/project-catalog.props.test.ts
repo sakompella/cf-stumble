@@ -7,7 +7,8 @@ import {
   PROJECT_ID_LIMIT,
   projectIdForRepository,
 } from "../src/project-catalog.js";
-import { projectIdFromPath, routePattern } from "../src/routes/route-pattern.js";
+import { matchEndpoint } from "../src/api/endpoints.js";
+import { routePattern } from "../src/routes/route-pattern.js";
 import { HARNESS_PROJECT_ID } from "../src/selectable-projects.js";
 
 const alphanumeric = gs.text({ alphabet: "abcXYZ012", minSize: 1, maxSize: 8 });
@@ -128,7 +129,11 @@ test("an id derived for a repository of any GitHub size is the id its API routes
     const path = `/api/projects/${id ?? ""}/messages`;
 
     expect(routePattern(path)).toBe("/api/projects/:projectId/messages");
-    expect(projectIdFromPath(path, "/messages")).toBe(id);
+    expect(matchEndpoint("POST", path)).toEqual({
+      kind: "project",
+      endpoint: "POST /api/projects/:projectId/messages",
+      projectId: id,
+    });
     expect(id?.length).toBeLessThanOrEqual(PROJECT_ID_LIMIT);
     expect(id).not.toBe(HARNESS_PROJECT_ID);
   });

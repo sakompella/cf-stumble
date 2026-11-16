@@ -6,9 +6,9 @@ import {
   decodeRequestBody,
   invalidRequestBody,
   jsonError,
+  type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
-import { projectIdFromPath, type ProjectRouteSuffix } from "./route-pattern.js";
 import { DEFAULT_RUN_BUDGET_MINUTES, RUN_BUDGET_MINUTES } from "../turn-budget.js";
 import type {
   ConversationProblem,
@@ -102,59 +102,52 @@ const messageResponse = Effect.fnUntraced(function* (
   );
 }, invalidRequestBody("invalid-message-request"));
 
-function routeFor(
+function eventsResponseFor(
   request: Request,
-  method: "GET" | "POST",
-  suffix: ProjectRouteSuffix,
-): string | undefined {
-  return request.method === method
-    ? projectIdFromPath(new URL(request.url).pathname, suffix)
-    : undefined;
-}
-
-export function routeConversationRequest(
-  request: Request,
+  projectId: string,
   supervisor: ConversationApiSupervisor,
-): Effect.Effect<Response, SupervisorCallFailed> | undefined {
-  const messages = routeFor(request, "POST", "/messages");
+): Effect.Effect<Response, SupervisorCallFailed> {
+  const from = eventsFrom(new URL(request.url).searchParams);
 
-  if (messages !== undefined) return messageResponse(request, supervisor, messages);
+  if (from === null) return Effect.succeed(jsonError(400, "invalid-events-request"));
 
-  const events = routeFor(request, "GET", "/events");
-
-  if (events !== undefined) {
-    const from = eventsFrom(new URL(request.url).searchParams);
-
-    if (from === null) return Effect.succeed(jsonError(400, "invalid-events-request"));
-
-    return callSupervisor(() => supervisor.projectEvents(events, from)).pipe(
-      Effect.map((result) =>
-        result.ok ? eventsResponse(result.events) : problemResponse(result.problem),
-      ),
-    );
-  }
-
-  const entries = routeFor(request, "GET", "/entries");
-
-  if (entries !== undefined) {
-    const query = parseEntriesRequest(new URL(request.url).searchParams);
-
-    if (query === undefined) return Effect.succeed(jsonError(400, "invalid-entries-request"));
-
-    return callSupervisor(() => supervisor.projectEntries(entries, query)).pipe(
-      Effect.map((result) =>
-        result.ok ? entriesPageResponse(result.page) : problemResponse(result.problem),
-      ),
-    );
-  }
-
-  const abort = routeFor(request, "POST", "/abort");
-
-  if (abort !== undefined) return answer(() => supervisor.abortProjectRun(abort));
-
-  const fresh = routeFor(request, "POST", "/thread/fresh");
-
-  if (fresh !== undefined) return answer(() => supervisor.freshProjectConversation(fresh));
-
-  return undefined;
+  return callSupervisor(() => supervisor.projectEvents(projectId, from)).pipe(
+    Effect.map((result) =>
+      result.ok ? eventsResponse(result.events) : problemResponse(result.problem),
+    ),
+  );
 }
+
+function entriesResponseFor(
+  request: Request,
+  projectId: string,
+  supervisor: ConversationApiSupervisor,
+): Effect.Effect<Response, SupervisorCallFailed> {
+  const query = parseEntriesRequest(new URL(request.url).searchParams);
+
+  if (query === undefined) return Effect.succeed(jsonError(400, "invalid-entries-request"));
+
+  return callSupervisor(() => supervisor.projectEntries(projectId, query)).pipe(
+    Effect.map((result) =>
+      result.ok ? entriesPageResponse(result.page) : problemResponse(result.problem),
+    ),
+  );
+}
+
+export const CONVERSATION_HANDLERS: Handlers<
+  ConversationApiSupervisor,
+  | "POST /api/projects/:projectId/messages"
+  | "GET /api/projects/:projectId/events"
+  | "GET /api/projects/:projectId/entries"
+  | "POST /api/projects/:projectId/abort"
+  | "POST /api/projects/:projectId/thread/fresh"
+> = {
+  "POST /api/projects/:projectId/messages": (request, projectId, supervisor) =>
+    messageResponse(request, supervisor, projectId),
+  "GET /api/projects/:projectId/events": eventsResponseFor,
+  "GET /api/projects/:projectId/entries": entriesResponseFor,
+  "POST /api/projects/:projectId/abort": (_request, projectId, supervisor) =>
+    answer(() => supervisor.abortProjectRun(projectId)),
+  "POST /api/projects/:projectId/thread/fresh": (_request, projectId, supervisor) =>
+    answer(() => supervisor.freshProjectConversation(projectId)),
+};

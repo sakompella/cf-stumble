@@ -11,7 +11,13 @@ import {
   validAuthorization,
 } from "./http-headers.mts";
 import { mutatePath, randomQuery } from "./http-paths.mts";
-import { normalizedPath, pickRoute, unknownProject, type Targets } from "./http-routes.mts";
+import {
+  normalizedPath,
+  pickRoute,
+  SPENDING_PATHS,
+  unknownProject,
+  type Targets,
+} from "./http-routes.mts";
 import type { Random } from "./random.mts";
 
 export type Generator = Readonly<{ next: () => Case }>;
@@ -24,16 +30,6 @@ const SPEND_LIMITS: ReadonlyMap<string, number> = new Map([
   ["reset", 2],
   ["github", 6],
   ["chatgpt", 4],
-]);
-
-const SPENDING_PATHS: ReadonlyMap<string, string> = new Map([
-  ["/api/projects/connect", "connect"],
-  ["/api/generations/submit", "submit"],
-  ["/api/workspace/reset", "reset"],
-  ["/api/github/connection/refresh", "github"],
-  ["/api/github/authorization", "github"],
-  ["/api/github/authorization/complete", "github"],
-  ["/api/chatgpt/login", "chatgpt"],
 ]);
 
 const WRITE_METHODS = ["POST", "PUT", "DELETE", "PATCH", "OPTIONS", "post", "BREW"];

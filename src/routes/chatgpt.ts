@@ -9,6 +9,7 @@ import {
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
+  type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
 
@@ -49,26 +50,18 @@ function viewResponse(
   return callSupervisor(read).pipe(Effect.map((chatgpt) => Response.json({ ok: true, chatgpt })));
 }
 
-export function routeChatGPTApiRequest(
-  request: Request,
-  supervisor: ChatGPTApiSupervisor,
-): Effect.Effect<Response, SupervisorCallFailed> | undefined {
-  const pathname = new URL(request.url).pathname;
-
-  if (request.method === "GET" && pathname === "/api/chatgpt/connection") {
-    return viewResponse(() => supervisor.getChatGPTConnection());
-  }
-
-  if (request.method !== "POST") return undefined;
-
-  switch (pathname) {
-    case "/api/chatgpt/login":
-      return viewResponse(() => supervisor.startChatGPTLogin());
-    case "/api/chatgpt/login/complete":
-      return completeResponse(request, supervisor);
-    case "/api/chatgpt/disconnect":
-      return viewResponse(() => supervisor.disconnectChatGPT());
-    default:
-      return undefined;
-  }
-}
+export const CHATGPT_HANDLERS: Handlers<
+  ChatGPTApiSupervisor,
+  | "GET /api/chatgpt/connection"
+  | "POST /api/chatgpt/login"
+  | "POST /api/chatgpt/login/complete"
+  | "POST /api/chatgpt/disconnect"
+> = {
+  "GET /api/chatgpt/connection": (_request, supervisor) =>
+    viewResponse(() => supervisor.getChatGPTConnection()),
+  "POST /api/chatgpt/login": (_request, supervisor) =>
+    viewResponse(() => supervisor.startChatGPTLogin()),
+  "POST /api/chatgpt/login/complete": completeResponse,
+  "POST /api/chatgpt/disconnect": (_request, supervisor) =>
+    viewResponse(() => supervisor.disconnectChatGPT()),
+};

@@ -21,6 +21,7 @@ import {
   decodeRequestBody,
   invalidRequestBody,
   jsonError,
+  type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
 
@@ -28,7 +29,7 @@ export type GenerationStatusSupervisor = {
   readonly getStatus: () => Promise<OwnerStatus>;
 };
 
-export function statusResponse(
+function statusResponse(
   supervisor: GenerationStatusSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.getStatus()).pipe(
@@ -77,7 +78,7 @@ function refusalResponse(
 
 type ControlCommandKind = "activate" | "rollback";
 
-export const handleGenerationControl = Effect.fnUntraced(
+const handleGenerationControl = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {
     const body = yield* decodeRequestBody(request, OwnerControlTarget);
 
@@ -103,7 +104,7 @@ export const handleGenerationControl = Effect.fnUntraced(
     ),
 );
 
-export const handleGenerationSubmission = Effect.fnUntraced(function* (
+const handleGenerationSubmission = Effect.fnUntraced(function* (
   request: Request,
   supervisor: GenerationSubmissionSupervisor,
 ) {
@@ -117,7 +118,7 @@ export const handleGenerationSubmission = Effect.fnUntraced(function* (
 
   if (Result.isFailure(preparation)) {
     logRedactedCause(
-      "owner-api POST /api/generations/submit: preparation-failed",
+      "api POST /api/generations/submit: preparation-failed",
       preparation.failure.cause,
     );
 
@@ -142,3 +143,18 @@ export const handleGenerationSubmission = Effect.fnUntraced(function* (
 
   return Response.json(result);
 }, invalidRequestBody("invalid-submission-request"));
+
+export const GENERATION_HANDLERS: Handlers<
+  GenerationStatusSupervisor & GenerationControlSupervisor & GenerationSubmissionSupervisor,
+  | "GET /api/status"
+  | "POST /api/generations/submit"
+  | "POST /api/generations/activate"
+  | "POST /api/generations/rollback"
+> = {
+  "GET /api/status": (_request, supervisor) => statusResponse(supervisor),
+  "POST /api/generations/submit": handleGenerationSubmission,
+  "POST /api/generations/activate": (request, supervisor) =>
+    handleGenerationControl(request, supervisor, "activate"),
+  "POST /api/generations/rollback": (request, supervisor) =>
+    handleGenerationControl(request, supervisor, "rollback"),
+};

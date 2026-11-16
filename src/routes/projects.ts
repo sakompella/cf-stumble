@@ -4,9 +4,9 @@ import {
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
+  type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
-import { projectIdFromPath } from "./route-pattern.js";
 import type { SelectableCatalog } from "../selectable-projects.js";
 import type {
   ConnectRepositoryResult,
@@ -135,54 +135,30 @@ function authorizationResponse(
   );
 }
 
-export function routeProjectApiRequest(
-  request: Request,
-  supervisor: ProjectApiSupervisor,
-): Effect.Effect<Response, SupervisorCallFailed> | undefined {
-  const pathname = new URL(request.url).pathname;
-  const isGet = request.method === "GET";
-  const isPost = request.method === "POST";
-
-  if (isGet && pathname === "/api/projects") {
-    return callSupervisor(() => supervisor.listProjects()).pipe(
+export const PROJECT_HANDLERS: Handlers<
+  ProjectApiSupervisor,
+  | "GET /api/projects"
+  | "POST /api/projects/connect"
+  | "POST /api/projects/:projectId/disconnect"
+  | "GET /api/github/connection"
+  | "POST /api/github/connection/refresh"
+  | "POST /api/github/authorization"
+  | "POST /api/github/authorization/complete"
+> = {
+  "GET /api/projects": (_request, supervisor) =>
+    callSupervisor(() => supervisor.listProjects()).pipe(
       Effect.map((projects) => Response.json({ ok: true, projects })),
-    );
-  }
-
-  if (isGet && pathname === "/api/github/connection") {
-    return callSupervisor(() => supervisor.getGitHubConnection()).pipe(
+    ),
+  "POST /api/projects/connect": connectResponse,
+  "POST /api/projects/:projectId/disconnect": (_request, projectId, supervisor) =>
+    disconnectResponse(projectId, supervisor),
+  "GET /api/github/connection": (_request, supervisor) =>
+    callSupervisor(() => supervisor.getGitHubConnection()).pipe(
       Effect.map((record) => recordResponse(record)),
-    );
-  }
-
-  const disconnectedProjectId = projectIdFromPath(pathname, "/disconnect");
-
-  const mutation =
-    pathname === "/api/projects/connect" ||
-    pathname === "/api/github/connection/refresh" ||
-    pathname === "/api/github/authorization" ||
-    pathname === "/api/github/authorization/complete" ||
-    disconnectedProjectId !== undefined;
-
-  if (!isPost || !mutation) {
-    return undefined;
-  }
-
-  if (pathname === "/api/projects/connect") {
-    return connectResponse(request, supervisor);
-  }
-
-  if (pathname === "/api/github/connection/refresh") {
-    return refreshResponse(supervisor);
-  }
-
-  if (disconnectedProjectId !== undefined) {
-    return disconnectResponse(disconnectedProjectId, supervisor);
-  }
-
-  return authorizationResponse(() =>
-    pathname === "/api/github/authorization"
-      ? supervisor.startGitHubAuthorization()
-      : supervisor.completeGitHubAuthorization(),
-  );
-}
+    ),
+  "POST /api/github/connection/refresh": (_request, supervisor) => refreshResponse(supervisor),
+  "POST /api/github/authorization": (_request, supervisor) =>
+    authorizationResponse(() => supervisor.startGitHubAuthorization()),
+  "POST /api/github/authorization/complete": (_request, supervisor) =>
+    authorizationResponse(() => supervisor.completeGitHubAuthorization()),
+};

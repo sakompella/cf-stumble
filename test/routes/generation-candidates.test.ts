@@ -10,7 +10,7 @@ import {
   storeModuleMap,
 } from "../supervisor/helpers.js";
 import { readGeneration, readGenerations } from "../supervisor/generation-reads.js";
-import { ownerApiResponse } from "./helpers.js";
+import { apiResponse } from "./helpers.js";
 
 const commits = {
   passing: "5100000000000000000000000000000000000001",
@@ -29,7 +29,7 @@ function seedModuleMap(harnessCommit: string, versionMethod?: string): Promise<v
 }
 
 function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string): Promise<Response> {
-  return ownerApiResponse(
+  return apiResponse(
     new Request("https://cf-stumble.test/api/generations/submit", {
       method: "POST",
       headers: { "content-type": "application/json" },

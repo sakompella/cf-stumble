@@ -1,8 +1,9 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
-import { ownerApiResponse } from "./helpers.js";
+import type { ApiSupervisor } from "../../src/routes/api.js";
+import { routePattern } from "../../src/routes/route-pattern.js";
+import { apiResponse } from "./helpers.js";
 
 const ROUTES: readonly (readonly [method: string, path: string])[] = [
   ["GET", "/api/status"],
@@ -32,7 +33,7 @@ const ROUTES: readonly (readonly [method: string, path: string])[] = [
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
 
-function reachingSupervisor(onReach: () => void): OwnerApiSupervisor {
+function reachingSupervisor(onReach: () => void): ApiSupervisor {
   const reach = () => {
     onReach();
 
@@ -72,7 +73,7 @@ const strayEnding = gs.sampledFrom(["", "/x", "/", "/rename"]);
 
 const strayApiPath = gs.fromRegex("/api/[a-z]{2,8}-[a-z]{2,8}");
 
-test("a request answers not-found without reaching the Supervisor exactly when no owner API route has its method and path", async () => {
+test("a request answers not-found without reaching the Supervisor exactly when no API route has its method and path, and logs under its route's pattern", async () => {
   await hegel.testAsync(async (tc) => {
     const method = tc.draw(gs.sampledFrom(METHODS));
 
@@ -80,17 +81,22 @@ test("a request answers not-found without reaching the Supervisor exactly when n
 
     let known = false;
 
+    let pattern = "/api/unknown";
+
     if (tc.draw(gs.booleans())) {
       const [, template] = tc.draw(gs.sampledFrom(ROUTES));
       const ending = tc.draw(strayEnding);
 
       path = `${template.replace(":projectId", tc.draw(projectId))}${ending}`;
       known = ending === "" && ROUTES.some((route) => route[0] === method && route[1] === template);
+      pattern = ending === "" ? template : pattern;
     }
+
+    expect(routePattern(path)).toBe(pattern);
 
     let reached = false;
 
-    const response = await ownerApiResponse(
+    const response = await apiResponse(
       new Request(`https://cf-stumble.test${path}`, { method }),
       reachingSupervisor(() => {
         reached = true;

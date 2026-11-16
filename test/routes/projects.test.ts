@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
+import { apiResponse, apiSupervisor as supervisor } from "./helpers.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
 const ORIGIN = "https://cf-stumble.test";
@@ -16,7 +16,7 @@ function post(path: string, body: Readonly<Record<string, string>>): Request {
 test("connects the repository the body names, and nothing else it carries", async () => {
   const sent: unknown[] = [];
 
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     post("/api/projects/connect", {
       repositoryUrl: connectedProject.repositoryUrl,
       displayName: "Repo one",
@@ -52,7 +52,7 @@ test.each([
   ["tooling-missing", 503],
   ["provisioning-failed", 503],
 ] as const)("answers a %s connection with %i", async (code, status) => {
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     post("/api/projects/connect", { repositoryUrl: "https://github.com/sample/repo-1" }),
     supervisor({
       connectProject: () =>
@@ -70,7 +70,7 @@ test.each([
 });
 
 test("starts an authorization and answers its status", async () => {
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     post("/api/github/authorization", {}),
     supervisor({
       startGitHubAuthorization: () =>
@@ -107,7 +107,7 @@ test.each([
   ["provider-unavailable", 502],
   ["not-configured", 503],
 ] as const)("answers the %s authorization outcome with %i", async (problem, status) => {
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     post("/api/github/authorization/complete", {}),
     supervisor({ completeGitHubAuthorization: () => Promise.resolve({ ok: false, problem }) }),
   );
@@ -119,7 +119,7 @@ test.each([
 test("disconnects the project id in the path", async () => {
   let disconnected: unknown;
 
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     post(`/api/projects/${connectedProject.id}/disconnect`, {}),
     supervisor({
       disconnectProject: (projectId) => {
@@ -148,7 +148,7 @@ test.each([
   ["unknown-project-id", 404],
   ["run-active", 409],
 ] as const)("answers a %s disconnect refusal with %i", async (code, status) => {
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     post(`/api/projects/${connectedProject.id}/disconnect`, {}),
     supervisor({
       disconnectProject: () => Promise.resolve({ ok: false, problem: { code } }),

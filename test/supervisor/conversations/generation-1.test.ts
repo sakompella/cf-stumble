@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { SERVING_FACET_NAME } from "../../../src/supervisor/artifacts/index.js";
 import { sentMessage } from "../../../src/page/client/sent-message.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
-import { ownerApiResponse } from "../../routes/helpers.js";
+import { apiResponse } from "../../routes/helpers.js";
 import {
   answeredLines,
   hasRun,
@@ -52,7 +52,7 @@ test("the owner API answers a sent message with the number the page accepts", as
   scriptModel(says("an answer"));
   const control = await servingGeneration1("generation-1-send-answer", new ProjectWorkspace());
 
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     new Request(`https://cf-stumble.test/api/projects/${project}/messages`, {
       method: "POST",
       body: JSON.stringify({ content: "hello", requestId: "r1" }),

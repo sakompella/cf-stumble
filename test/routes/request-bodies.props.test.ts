@@ -1,8 +1,8 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
-import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
+import type { ApiSupervisor } from "../../src/routes/api.js";
+import { apiResponse, apiSupervisor as supervisor } from "./helpers.js";
 
 const ORIGIN = "https://cf-stumble.test";
 
@@ -14,10 +14,10 @@ type BodyRoute = Readonly<{
   badBodies: readonly string[];
   refusalCode: string;
   reachedStatus: number;
-  supervisorReached: (reached: () => void) => Partial<OwnerApiSupervisor>;
+  supervisorReached: (reached: () => void) => Partial<ApiSupervisor>;
 }>;
 
-const controlGeneration = (reached: () => void): Partial<OwnerApiSupervisor> => ({
+const controlGeneration = (reached: () => void): Partial<ApiSupervisor> => ({
   controlGeneration: () => {
     reached();
 
@@ -120,7 +120,7 @@ async function send(
 ): Promise<{ status: number; reached: boolean; json: unknown }> {
   let reached = false;
 
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     post(route.path, body),
     supervisor(
       route.supervisorReached(() => {
@@ -169,7 +169,7 @@ test("the message route hands the Supervisor its project id, content, request id
 
     const received: Array<string | number> = [];
 
-    await ownerApiResponse(
+    await apiResponse(
       post(
         `/api/projects/${encodeURIComponent(projectId)}/messages`,
         JSON.stringify({ content, requestId, budgetMinutes }),

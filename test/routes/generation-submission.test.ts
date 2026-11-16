@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generations.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label as generationLabel } from "../supervisor/generations/fixtures.js";
-import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
+import { controlRequest, apiResponse, apiSupervisor as supervisor } from "./helpers.js";
 
 const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -31,7 +31,7 @@ test("returns a failed build step's output tail to the owner", async () => {
     truncated: false,
   };
 
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     submitRequest(submissionBody()),
     supervisor({
       submitGeneration() {
@@ -59,7 +59,7 @@ test("returns a failed build step's output tail to the owner", async () => {
 });
 
 test("reports the recorded label with a preparation failure, without echoing the internal error", async () => {
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     submitRequest(submissionBody()),
     supervisor({
       submitGeneration() {

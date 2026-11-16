@@ -1,13 +1,10 @@
 import * as Effect from "effect/Effect";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
-import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
+import { routeApiRequest } from "../../src/routes/index.js";
+import type { ApiSupervisor } from "../../src/routes/api.js";
 import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
 
-export function ownerApiResponse(
-  request: Request,
-  supervisor: OwnerApiSupervisor,
-): Promise<Response> {
-  return Effect.runPromise(routeOwnerApiRequest(request, supervisor));
+export function apiResponse(request: Request, supervisor: ApiSupervisor): Promise<Response> {
+  return Effect.runPromise(routeApiRequest(request, supervisor));
 }
 
 export const disconnectedChatGPT: ChatGPTConnectionView = {
@@ -19,7 +16,7 @@ export const disconnectedChatGPT: ChatGPTConnectionView = {
 const notCalled = (what: string) => () => Promise.reject(new Error(`this test must not ${what}`));
 
 const chatgptSupervisor: Pick<
-  OwnerApiSupervisor,
+  ApiSupervisor,
   "getChatGPTConnection" | "startChatGPTLogin" | "completeChatGPTLogin" | "disconnectChatGPT"
 > = {
   getChatGPTConnection: () => Promise.resolve(disconnectedChatGPT),
@@ -28,9 +25,7 @@ const chatgptSupervisor: Pick<
   disconnectChatGPT: notCalled("disconnect ChatGPT"),
 };
 
-export function ownerApiSupervisor(
-  overrides: Partial<OwnerApiSupervisor> = {},
-): OwnerApiSupervisor {
+export function apiSupervisor(overrides: Partial<ApiSupervisor> = {}): ApiSupervisor {
   return {
     getStatus() {
       return Promise.resolve({ activeGeneration: { generation: null, epoch: 0 }, mainAhead: null });

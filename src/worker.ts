@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { ownerPageResponse, routeOrbRequest, routeOwnerApiRequest } from "./routes/index.js";
+import { ownerPageResponse, routeOrbRequest, routeApiRequest } from "./routes/index.js";
 import { runAtEntryPoint } from "./run-entry-point.js";
 import { ownerGateRefusal } from "./owner-gate.js";
 import { Supervisor } from "./supervisor/supervisor.js";
@@ -43,7 +43,7 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
     return Effect.succeed(page);
   }
 
-  return routeOwnerApiRequest(request, env.SUPERVISOR.getByName(SUPERVISOR_NAME)).pipe(
+  return routeApiRequest(request, env.SUPERVISOR.getByName(SUPERVISOR_NAME)).pipe(
     Effect.map((response) => noStore(response)),
   );
 }
