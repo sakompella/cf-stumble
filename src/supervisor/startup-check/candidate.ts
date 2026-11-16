@@ -168,7 +168,9 @@ function mountCandidateFacet(
         class: loadMainFacet(host.loader, artifact).facetClass,
       })),
     );
-  } catch {
+  } catch (cause) {
+    logRedactedCause("supervisor.startup-check: the candidate facet could not mount", cause);
+
     return Result.fail("candidate facet could not mount");
   }
 }

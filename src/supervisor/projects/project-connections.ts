@@ -14,7 +14,11 @@ import {
 } from "../../project-catalog.js";
 import { selectableCatalog, type SelectableCatalog } from "../../selectable-projects.js";
 import { checkRepositoryAccess, type WorkspaceHostNamespace } from "../../workspace/index.js";
-import { provisionOnUse, type ProvisionFence } from "../readiness/index.js";
+import {
+  logWorkspaceUnavailable,
+  provisionOnUse,
+  type ProvisionFence,
+} from "../readiness/index.js";
 import { removeProjectDirectories } from "./project-removal.js";
 
 export type DisconnectRepositoryResult =
@@ -227,13 +231,15 @@ export class ProjectConnections {
       if (settled.provision !== undefined && !settled.provision.ok) {
         const { problem } = settled.provision;
 
+        logWorkspaceUnavailable(problem);
+
         return this.refused(
           problem.code === "repository-too-large"
             ? {
                 code: "repository-too-large",
-                detail: `repository exceeds a workspace size limit: ${problem.verdict}`,
+                detail: `repository exceeds a workspace size limit: ${problem.detail}`,
               }
-            : { code: "provisioning-failed", detail: "" },
+            : { code: "provisioning-failed", detail: problem.detail },
           github,
         );
       }

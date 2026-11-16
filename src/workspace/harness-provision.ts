@@ -10,11 +10,9 @@ import { attemptWorkspace, type CommandOutput, type WorkspaceFault } from "./ope
 
 const HARNESS_CLONE_DEPTH = 50;
 
-type Git = Pick<Workspace["git"], "clone" | "configSet" | "configGet" | "show">;
-
 type HarnessWorkspace = Readonly<{
   fs: Pick<Workspace["fs"], "readFile" | "readdir" | "stat" | "rm" | "mkdir" | "rename">;
-  git: Git;
+  git: Pick<Workspace["git"], "clone" | "configSet">;
 }>;
 
 type Container = (source: string) => Effect.Effect<CommandOutput, WorkspaceFault>;
@@ -41,30 +39,21 @@ async function isRepository(workspace: HarnessWorkspace, gitDir: string): Promis
   }
 }
 
-async function hasCommit(git: Git, dir: string, commit: HarnessCommit): Promise<boolean> {
-  try {
-    await git.show({ dir, ref: commit });
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function fetchCommitSource(dir: string, commit: HarnessCommit): string {
-  return [
-    "set -eu",
-    ...durableGitHubConfigurationSource(),
-    `git -C ${shellQuote(dir)} fetch --quiet --depth=${HARNESS_CLONE_DEPTH} origin ${commit}`,
-    `git -C ${shellQuote(dir)} cat-file -e ${commit}^{commit}`,
-  ].join("\n");
-}
-
-function advanceSource(dir: string): string {
+function harnessSource(dir: string, remote: string, commit: HarnessCommit): string {
   return [
     "set -eu",
     ...durableGitHubConfigurationSource(),
     `cd ${shellQuote(dir)}`,
+    `if [ "$(git config --get-all remote.origin.url)" != ${shellQuote(remote)} ]; then`,
+    `  printf '%s has a different origin than %s\\n' ${shellQuote(dir)} ${shellQuote(remote)} >&2`,
+    "  exit 1",
+    "fi",
+    `if ! git cat-file -e ${commit}^{commit} 2>/dev/null; then`,
+    `  if ! reason="$(git fetch --quiet --depth=${HARNESS_CLONE_DEPTH} origin ${commit} 2>&1 && git cat-file -e ${commit}^{commit} 2>&1)"; then`,
+    `    printf 'harness commit %s is not in %s%s\\n' ${commit} ${shellQuote(remote)} "\${reason:+: $reason}" >&2`,
+    "    exit 1",
+    "  fi",
+    "fi",
     'head="$(git rev-parse --short=7 HEAD)"',
     "stuck() {",
     `  printf 'harness checkout not updated: cannot fast-forward from %s\\n' "$head" >&2`,
@@ -100,7 +89,6 @@ export function provisionHarness(
 ): Effect.Effect<CommandOutput, WorkspaceFault> {
   const dir = configuration.harnessRepositoryRoot;
   const remote = configuration.harnessGitRemote;
-  const { git } = workspace;
 
   return Effect.gen(function* () {
     if (!(yield* attemptWorkspace(() => isRepository(workspace, configuration.harnessGitDir)))) {
@@ -117,24 +105,8 @@ export function provisionHarness(
       });
     }
 
-    const origin = yield* attemptWorkspace(() =>
-      git.configGet({ dir, path: "remote.origin.url", all: true }),
-    );
+    const ran = yield* container(harnessSource(dir, remote, commit));
 
-    if (String(origin) !== remote) return failed(`${dir} has a different origin than ${remote}`);
-
-    if (!(yield* attemptWorkspace(() => hasCommit(git, dir, commit)))) {
-      const fetched = yield* container(fetchCommitSource(dir, commit));
-
-      if (fetched.exitCode !== 0) {
-        const reason = fetched.stderr.trim();
-
-        return failed(`harness commit ${commit} is not in ${remote}${reason && `: ${reason}`}`);
-      }
-    }
-
-    const advanced = yield* container(advanceSource(dir));
-
-    return { stdout: "", stderr: advanced.stderr, exitCode: 0 };
+    return { stdout: "", stderr: ran.stderr, exitCode: ran.exitCode };
   });
 }

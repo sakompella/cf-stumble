@@ -40,7 +40,7 @@ function harnessTurn(
     });
 
     return Effect.runPromise(
-      Effect.scoped(Effect.asVoid(readiness.obtain(HARNESS_PROJECT, 1_000))),
+      Effect.scoped(readiness.obtain(HARNESS_PROJECT, 1_000).pipe(Effect.ignore)),
     );
   });
 }

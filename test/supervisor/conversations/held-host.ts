@@ -10,7 +10,7 @@ import {
 
 export const CLONED: ProjectProvisionAnswer = { ok: true };
 
-const BUILT: CommandAnswer = { ok: true, output: { stdout: "", stderr: "", exitCode: 0 } };
+export const BUILT: CommandAnswer = { ok: true, output: { stdout: "", stderr: "", exitCode: 0 } };
 
 export class HeldHost implements WorkspaceHostRpc<
   "provision" | "ensureManagedInstructions" | "build" | "project"
@@ -19,11 +19,14 @@ export class HeldHost implements WorkspaceHostRpc<
   readonly turns = { ended: 0, disposed: 0 };
   clone: Promise<ProjectProvisionAnswer> = Promise.resolve(CLONED);
   answer: Promise<unknown> = Promise.resolve();
+  built: Promise<CommandAnswer> = Promise.resolve(BUILT);
+  cloneError: Error | undefined;
+  projectError: Error | undefined;
 
   provision(): Promise<ProjectProvisionAnswer> {
     this.steps.push("clone");
 
-    return this.clone;
+    return this.cloneError === undefined ? this.clone : Promise.reject(this.cloneError);
   }
 
   ensureManagedInstructions() {
@@ -31,12 +34,16 @@ export class HeldHost implements WorkspaceHostRpc<
   }
 
   build(): Promise<CommandAnswer> {
-    return Promise.resolve(BUILT);
+    this.steps.push("build");
+
+    return this.built;
   }
 
   async project(budget: Readonly<{ remainingMs: number }>): Promise<ProjectCapabilityStub> {
     this.steps.push("project");
     await this.answer;
+
+    if (this.projectError !== undefined) throw this.projectError;
 
     const target = new ProjectRpcTarget(
       new FakeProjectFilesystemProvider(),
