@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { GITHUB_CLI_CONFIG_DIRECTORY } from "../../workspace-layout.js";
 
 const GITHUB_HOST = "github.com";
 
@@ -8,7 +9,7 @@ const HOST_LINE = /^(\S+):\s*$/u;
 
 const TOKEN_LINE = /^\s+oauth_token:\s*(\S+)\s*$/u;
 
-export function githubTokenFromHosts(hosts: string): string | undefined {
+function githubTokenFromHosts(hosts: string): string | undefined {
   let host: string | undefined = undefined;
 
   for (const line of hosts.split("\n")) {
@@ -25,7 +26,22 @@ export function githubTokenFromHosts(hosts: string): string | undefined {
   return undefined;
 }
 
-export function isGitHubRemote(url: string): boolean {
+interface GitHubHostsFile {
+  readFile(path: string, encoding: "utf8"): Promise<string>;
+}
+
+export async function readGitHubToken(
+  fs: GitHubHostsFile,
+  fallbackToken?: string,
+): Promise<string | undefined> {
+  const hosts = await fs
+    .readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`, "utf8")
+    .catch(() => "");
+
+  return githubTokenFromHosts(hosts) ?? fallbackToken;
+}
+
+function isGitHubRemote(url: string): boolean {
   try {
     return new URL(url).origin === GITHUB_ORIGIN;
   } catch {
