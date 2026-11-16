@@ -15,6 +15,7 @@ export type RequestRecord = { method: string; path: string; body: JsonValue; sta
 export type ScenarioState = {
   readonly scenario: HarnessScenario;
   projects: ProjectEntry[];
+  isChatGPTConnected: boolean;
   requests: RequestRecord[];
   conversations: Conversations;
   readonly openEventStreams: Map<string, number>;
@@ -27,6 +28,7 @@ export function initialState(
   return {
     scenario,
     projects: [...BASELINE_PROJECTS],
+    isChatGPTConnected: scenario === "chatgpt-connected",
     requests: [],
     conversations,
     openEventStreams: new Map(),

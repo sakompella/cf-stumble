@@ -34,6 +34,57 @@ function buttonRow(
   );
 }
 
+function disconnectZone(model: Model, h: HtmlBuilder<Message>): Html {
+  return h.div(
+    [h.Class("danger-zone")],
+    model.isChatGPTDisconnectAsked
+      ? [
+          h.p(
+            [h.Class("note"), h.Role("alert")],
+            ["Sign out of ChatGPT? You would have to sign in again to use it."],
+          ),
+          h.div(
+            [h.Class("row")],
+            [
+              h.button(
+                [
+                  h.Id(ID.chatgptDisconnectConfirmButton),
+                  h.Type("button"),
+                  h.Class("danger"),
+                  h.OnClick(Message.ConfirmedChatGPTDisconnect()),
+                ],
+                ["Yes, sign out of ChatGPT"],
+              ),
+              h.button(
+                [
+                  h.Id(ID.chatgptKeepButton),
+                  h.Type("button"),
+                  h.OnClick(Message.ClickedKeepChatGPT()),
+                ],
+                ["Stay signed in"],
+              ),
+            ],
+          ),
+        ]
+      : [
+          h.div(
+            [h.Class("row")],
+            [
+              h.button(
+                [
+                  h.Id(ID.chatgptDisconnectButton),
+                  h.Type("button"),
+                  h.Class("danger"),
+                  h.OnClick(Message.ClickedChatGPTDisconnect()),
+                ],
+                ["Sign out of ChatGPT…"],
+              ),
+            ],
+          ),
+        ],
+  );
+}
+
 function loginRows(model: Model, h: HtmlBuilder<Message>): readonly Html[] {
   return Option.match(pendingLogin(model.chatgpt), {
     onNone: () => [],
@@ -77,14 +128,7 @@ export function chatGPTPanel(model: Model, h: HtmlBuilder<Message>): Html {
       h.h3([], ["ChatGPT"]),
       valueRow("connection", ID.chatgptConnection, chatGPTWording(model.chatgpt), h),
       ...(ChatGPT.guards.Connected(model.chatgpt)
-        ? [
-            buttonRow(
-              ID.chatgptDisconnectButton,
-              ["Disconnect"],
-              Message.ClickedChatGPTDisconnect(),
-              h,
-            ),
-          ]
+        ? [disconnectZone(model, h)]
         : [
             buttonRow(
               ID.chatgptConnectButton,

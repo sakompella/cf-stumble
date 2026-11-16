@@ -224,6 +224,8 @@ export function chatGPTHandlers(
   | "UpdatedChatGPTCallbackInput"
   | "ClickedChatGPTFinish"
   | "ClickedChatGPTDisconnect"
+  | "ConfirmedChatGPTDisconnect"
+  | "ClickedKeepChatGPT"
   | "SucceededChatGPT"
   | "RejectedChatGPT"
   | "FailedChatGPT"
@@ -234,9 +236,14 @@ export function chatGPTHandlers(
       model: { ...model, chatgpt: withAddress(model.chatgpt, value) },
     }),
     ClickedChatGPTFinish: () => finish(model),
-    ClickedChatGPTDisconnect: () => ({ model: asking(model), commands: [DisconnectChatGPT()] }),
+    ClickedChatGPTDisconnect: () => ({ model: { ...model, isChatGPTDisconnectAsked: true } }),
+    ClickedKeepChatGPT: () => ({ model: { ...model, isChatGPTDisconnectAsked: false } }),
+    ConfirmedChatGPTDisconnect: () => ({
+      model: { ...asking(model), isChatGPTDisconnectAsked: false },
+      commands: [DisconnectChatGPT()],
+    }),
     SucceededChatGPT: ({ chatgpt }) => ({
-      model: { ...model, chatgpt, chatgptResult: "" },
+      model: { ...model, chatgpt, chatgptResult: "", isChatGPTDisconnectAsked: false },
     }),
     RejectedChatGPT: ({ wording, maybeChatGPT }) => {
       const chatgpt = Option.match(maybeChatGPT, {

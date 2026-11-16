@@ -4,7 +4,7 @@ import {
   connectPayload,
   projectsPayload,
   refreshPayload,
-  CHATGPT_PAYLOAD,
+  chatgptPayload,
   STATUS_PAYLOAD,
 } from "./fixtures.mjs";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
@@ -38,7 +38,7 @@ function readString(body: JsonValue, key: string): string | undefined {
   return value !== undefined && isJsonString(value) ? value : undefined;
 }
 
-type JsonState = Pick<ScenarioState, "scenario" | "projects">;
+type JsonState = Pick<ScenarioState, "scenario" | "projects" | "isChatGPTConnected">;
 
 type Answer<E extends AnsweredEndpoint> = Readonly<{
   status: number;
@@ -77,6 +77,7 @@ type ServedRoutes = {
       | "GET /api/chatgpt/connection"
       | "GET /api/workspace/backend"
       | "POST /api/projects/connect"
+      | "POST /api/chatgpt/disconnect"
       | "GET /api/github/connection"
       | "POST /api/github/connection/refresh"
   ]: (state: JsonState, body: JsonValue) => Answer<E> | RouteAnswer;
@@ -85,7 +86,15 @@ type ServedRoutes = {
 export const JSON_ROUTES = {
   "GET /api/projects": (state) => ({ status: 200, payload: projectsPayload(state.projects) }),
   "GET /api/status": () => ({ status: 200, payload: STATUS_PAYLOAD }),
-  "GET /api/chatgpt/connection": () => ({ status: 200, payload: CHATGPT_PAYLOAD }),
+  "GET /api/chatgpt/connection": (state) => ({
+    status: 200,
+    payload: chatgptPayload(state.isChatGPTConnected),
+  }),
+  "POST /api/chatgpt/disconnect": (state) => {
+    state.isChatGPTConnected = false;
+
+    return { status: 200, payload: chatgptPayload(false) };
+  },
   "GET /api/workspace/backend": () => ({ status: 200, payload: { ok: true, backend: "provider" } }),
   "POST /api/projects/connect": connect,
   "GET /api/github/connection": (state) => ({

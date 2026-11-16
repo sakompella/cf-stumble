@@ -51,6 +51,10 @@ test("the page renders every stable element id, and none twice", () => {
     }),
     withChatGPT({ connection: { state: "connected", expiresAt: 1 }, login: null, model: "gpt" }),
     update(
+      withChatGPT({ connection: { state: "connected", expiresAt: 1 }, login: null, model: "gpt" }),
+      Message.ClickedChatGPTDisconnect(),
+    ).model,
+    update(
       init().model,
       Message.SucceededFetchStatus({
         reading: {

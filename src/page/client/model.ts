@@ -113,6 +113,7 @@ export const Model = Schema.Struct({
   connectStatus: Schema.String,
   chatgpt: ChatGPT,
   chatgptResult: Schema.String,
+  isChatGPTDisconnectAsked: Schema.Boolean,
   maybeBackend: Schema.Option(BackendSetting),
   backendResult: Schema.String,
 

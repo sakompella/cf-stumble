@@ -14,6 +14,7 @@ const SCENARIOS: readonly HarnessScenario[] = [
   "cut-off",
   "github-disconnected",
   "github-awaiting-authorization",
+  "chatgpt-connected",
 ];
 
 const ENDPOINTS = [
@@ -22,6 +23,7 @@ const ENDPOINTS = [
   "GET /api/chatgpt/connection",
   "GET /api/workspace/backend",
   "POST /api/projects/connect",
+  "POST /api/chatgpt/disconnect",
   "GET /api/github/connection",
   "POST /api/github/connection/refresh",
 ] as const satisfies readonly (keyof typeof JSON_ROUTES)[];
@@ -31,6 +33,7 @@ test("every answer the stub sends decodes with the API's answer schema for its e
     const state = {
       scenario: tc.draw(gs.sampledFrom(SCENARIOS)),
       projects: [...BASELINE_PROJECTS],
+      isChatGPTConnected: false,
     };
 
     const calls = tc.draw(gs.arrays(gs.sampledFrom(ENDPOINTS), { minSize: 1, maxSize: 6 }));

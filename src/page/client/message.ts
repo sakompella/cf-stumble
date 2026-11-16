@@ -23,6 +23,8 @@ export const Message = defineMessageUnion({
   UpdatedChatGPTCallbackInput: { value: Schema.String },
   ClickedChatGPTFinish: {},
   ClickedChatGPTDisconnect: {},
+  ConfirmedChatGPTDisconnect: {},
+  ClickedKeepChatGPT: {},
   ClickedBackend: { backend: BackendSetting },
 
   UpdatedPrompt: { value: Schema.String },

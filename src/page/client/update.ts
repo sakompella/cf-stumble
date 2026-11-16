@@ -36,6 +36,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     connectStatus: "",
     chatgpt: ChatGPT.Unknown(),
     chatgptResult: "",
+    isChatGPTDisconnectAsked: false,
     maybeBackend: Option.none(),
     backendResult: "",
     maybeProjectId: Option.none(),

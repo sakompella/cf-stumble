@@ -20,6 +20,8 @@ export const OWNER_PAGE_IDS = {
   chatgptCallbackInput: "chatgpt-callback-input",
   chatgptFinishButton: "chatgpt-finish-button",
   chatgptDisconnectButton: "chatgpt-disconnect-button",
+  chatgptDisconnectConfirmButton: "chatgpt-disconnect-confirm-button",
+  chatgptKeepButton: "chatgpt-keep-button",
   chatgptResult: "chatgpt-result",
   backendProviderButton: "backend-provider-button",
   backendCloudflareButton: "backend-cloudflare-button",

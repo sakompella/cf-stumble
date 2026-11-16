@@ -9,7 +9,8 @@ export type HarnessScenario =
   | "model-error"
   | "cut-off"
   | "github-disconnected"
-  | "github-awaiting-authorization";
+  | "github-awaiting-authorization"
+  | "chatgpt-connected";
 
 export const HARNESS_CREDENTIALS = { username: "aditya", password: "harness-password" } as const;
 
@@ -111,7 +112,15 @@ export const STATUS_PAYLOAD: Encoded<"GET /api/status"> = {
   mainAhead: 2,
 };
 
-export const CHATGPT_PAYLOAD: Encoded<"GET /api/chatgpt/connection"> = {
-  ok: true,
-  chatgpt: { connection: { state: "disconnected" }, login: null, model: "gpt-6.1-sol" },
-};
+export function chatgptPayload(isConnected: boolean): Encoded<"GET /api/chatgpt/connection"> {
+  return {
+    ok: true,
+    chatgpt: {
+      connection: isConnected
+        ? { state: "connected", expiresAt: 1_760_000_900_000 }
+        : { state: "disconnected" },
+      login: null,
+      model: "gpt-6.1-sol",
+    },
+  };
+}

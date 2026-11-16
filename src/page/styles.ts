@@ -21,6 +21,8 @@ export const OWNER_PAGE_STYLES = `
     width: 18rem;
   }
   #owner-layout.sidebar-collapsed #project-sidebar { display: none; }
+  .danger-zone { border-top: 1px dashed rgba(200, 60, 60, 0.6); margin-top: 1.2rem; padding-top: 0.4rem; }
+  button.danger { border-color: rgba(200, 60, 60, 0.9); color: rgba(200, 60, 60, 1); }
   .sidebar-panel { border-top: 1px solid rgba(128, 128, 128, 0.3); margin-top: 0.6rem; }
   #project-list { list-style: none; margin: 0.3rem 0; padding: 0; }
   #project-list li { margin: 0.2rem 0; }
