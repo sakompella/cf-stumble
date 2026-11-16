@@ -38,16 +38,14 @@ type StartedExec = { operationId: string; events: ReadableStream<Uint8Array> };
 
 type ProjectContainerState = Readonly<{ generation: number }>;
 
-type ProjectRpcTargetOptions = Readonly<{
-  remainingMs?: number;
-  containerState?: ProjectContainerState;
-  activity?: ProjectActivity;
-  endLease?: () => void;
+export type ProjectRpcTargetOptions = Readonly<{
+  remainingMs: number;
+  containerState: ProjectContainerState;
+  activity: ProjectActivity;
+  endLease: () => void;
 }>;
 
-function capAtBudget(requestedMs: number, remainingMs: number | undefined) {
-  if (remainingMs === undefined) return { timeoutMs: requestedMs, timeoutEndsTurn: false };
-
+function capAtBudget(requestedMs: number, remainingMs: number) {
   return {
     timeoutMs: Math.min(requestedMs, remainingMs),
     timeoutEndsTurn: requestedMs >= remainingMs,
@@ -72,11 +70,11 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   readonly #execBackend: ExecBackend;
   readonly #operations = new Map<string, ExecOperation>();
   readonly #nonce: string;
-  readonly #turnEndsAt: number | undefined;
-  readonly #containerState: ProjectContainerState | undefined;
-  readonly #activity: ProjectActivity | undefined;
-  readonly #endLease: (() => void) | undefined;
-  #containerGeneration: number | undefined;
+  readonly #turnEndsAt: number;
+  readonly #containerState: ProjectContainerState;
+  readonly #activity: ProjectActivity;
+  readonly #endLease: () => void;
+  #containerGeneration: number;
   #turnTimer: ReturnType<typeof setTimeout> | undefined;
   #ended = false;
   #endResult: { killed: number } | undefined;
@@ -86,7 +84,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     provider: ProjectFilesystemProvider,
     transactions: ProjectTransactions,
     execBackend: ExecBackend,
-    options: ProjectRpcTargetOptions = {},
+    options: ProjectRpcTargetOptions,
   ) {
     super();
     this.#provider = provider;
@@ -96,9 +94,8 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     this.#containerState = options.containerState;
     this.#activity = options.activity;
     this.#endLease = options.endLease;
-    this.#containerGeneration = options.containerState?.generation;
-    this.#turnEndsAt =
-      options.remainingMs === undefined ? undefined : Date.now() + options.remainingMs;
+    this.#containerGeneration = options.containerState.generation;
+    this.#turnEndsAt = Date.now() + options.remainingMs;
     this.#armTurnTimer();
   }
 
@@ -123,7 +120,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       return Promise.resolve(ended);
     }
 
-    this.#activity?.touch();
+    this.#activity.touch();
 
     return projectResult<StartedExec>(() => {
       const parsed = parseStartExecInput(input);
@@ -159,10 +156,9 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
         );
       }
 
-      const remainingMs =
-        this.#turnEndsAt === undefined ? undefined : Math.max(0, this.#turnEndsAt - Date.now());
+      const remainingMs = Math.max(0, this.#turnEndsAt - Date.now());
 
-      if (remainingMs !== undefined && remainingMs <= 0) {
+      if (remainingMs <= 0) {
         void this.endTurn();
 
         return yield* Result.fail(failureDetail("turn-ended"));
@@ -172,7 +168,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
       const operationId = `${this.#nonce}:${this.#nextOperationSequence++}`;
 
-      const endActivity = this.#activity?.begin();
+      const endActivity = this.#activity.begin();
 
       const operation = this.#startOperation(
         operationId,
@@ -195,7 +191,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     input: ParsedStartExecInput,
     timeoutMs: number,
     timeoutEndsTurn: boolean,
-    endActivity: (() => void) | undefined,
+    endActivity: () => void,
   ): ExecOperation {
     try {
       return startExecOperation(
@@ -205,12 +201,12 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
           this.#operations.delete(operationId);
 
           if (reportsRestart(terminal)) this.#acknowledgeRestart();
-          endActivity?.();
+          endActivity();
         },
         timeoutEndsTurn,
       );
     } catch (cause) {
-      endActivity?.();
+      endActivity();
 
       throw cause;
     }
@@ -251,13 +247,12 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     }
 
     this.#endResult = { killed };
-    this.#endLease?.();
+    this.#endLease();
 
     return ok(this.#endResult);
   }
 
   #armTurnTimer(): void {
-    if (this.#turnEndsAt === undefined) return;
     const remaining = this.#turnEndsAt - Date.now();
 
     if (remaining <= 0) {
@@ -274,20 +269,17 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   }
 
   #acknowledgeRestart(): void {
-    this.#containerGeneration = this.#containerState?.generation;
+    this.#containerGeneration = this.#containerState.generation;
   }
 
   #containerWasReplaced(): boolean {
-    return (
-      this.#containerState !== undefined &&
-      this.#containerState.generation !== this.#containerGeneration
-    );
+    return this.#containerState.generation !== this.#containerGeneration;
   }
 
   #turnEnded(): ProjectFailure | undefined {
     if (this.#ended) return { ok: false, error: { code: "turn-ended" } };
 
-    if (this.#turnEndsAt !== undefined && Date.now() >= this.#turnEndsAt) {
+    if (Date.now() >= this.#turnEndsAt) {
       this.#endTurn();
 
       return { ok: false, error: { code: "turn-ended" } };
@@ -301,7 +293,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
     if (ended !== undefined) return Promise.resolve(ended);
 
-    this.#activity?.touch();
+    this.#activity.touch();
 
     return projectResult(operation);
   }

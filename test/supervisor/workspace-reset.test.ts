@@ -8,8 +8,6 @@ import { connectSampleProjects, submitCandidate } from "./helpers.js";
 import { seedGitHubConnection } from "./github-seed.js";
 import { fakeWorkspace, heldWorkspace } from "./workspace-reset-fakes.js";
 
-const NOW = 1_700_000_000_000;
-
 afterEach(async () => {
   await reset();
 });
@@ -27,10 +25,9 @@ test("resets the named workspace while preserving the projects and generations",
   const fake = fakeWorkspace(resetResult);
   const getByName = replaceWorkspaceHost(env.WORKSPACE_HOST, fake.workspace);
 
-  await expect(control.refreshGitHubConnection(NOW)).resolves.toEqual({
+  await expect(control.refreshGitHubConnection()).resolves.toMatchObject({
     ok: true,
     github: { state: "connected", login: "reset-user", source: "configured-token" },
-    checkedAt: NOW,
   });
 
   await expect(control.resetWorkspace()).resolves.toEqual(resetResult);
@@ -77,7 +74,7 @@ test("while a reset runs, messages, connects, disconnects, and a second reset ar
       supervisor.submitProjectMessage("sample-project-one", "a message during the reset", "r1", 30),
     ).resolves.toEqual(busy);
     await expect(supervisor.resetWorkspace()).resolves.toEqual(busy);
-    await expect(supervisor.connectProject(sampleProjectTwo.repositoryUrl, "")).resolves.toEqual({
+    await expect(supervisor.connectProject(sampleProjectTwo.repositoryUrl)).resolves.toEqual({
       ok: false,
       problem: { code: "workspace-busy", detail: "" },
     });

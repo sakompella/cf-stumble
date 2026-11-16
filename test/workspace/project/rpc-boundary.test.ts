@@ -1,16 +1,12 @@
 import { expect, test } from "vitest";
-import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import type { ProjectLstatInfo, ProjectResult } from "../../../src/workspace/project/protocol.js";
-import {
-  FakeExecBackend,
-  FakeProjectFilesystemProvider,
-  FakeProjectTransactions,
-} from "./fakes.js";
+import { projectTarget } from "./target-helpers.js";
+import { FakeExecBackend, FakeProjectFilesystemProvider } from "./fakes.js";
 
 function makeTarget() {
   const provider = new FakeProjectFilesystemProvider();
   const execBackend = new FakeExecBackend();
-  const target = new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend);
+  const target = projectTarget(provider, execBackend);
 
   return { provider, execBackend, target };
 }

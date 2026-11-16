@@ -51,9 +51,7 @@ test.each([
     fallbackToken: FAKE_TOKEN,
   });
 
-  const refused = await subject.connections((connections) =>
-    connections.connect(REPOSITORY, undefined, NOW),
-  );
+  const refused = await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
 
   const listed = await subject.connections((connections) =>
     Effect.sync(() => connections.catalog()),

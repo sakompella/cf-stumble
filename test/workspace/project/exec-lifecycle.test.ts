@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import { withDecodedEvents } from "./decoded-events.js";
+import { targetOptions } from "./target-helpers.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -13,7 +14,7 @@ function makeTarget() {
   const execBackend = new FakeExecBackend();
 
   const target = withDecodedEvents(
-    new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend),
+    new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend, targetOptions()),
   );
 
   return { execBackend, target };

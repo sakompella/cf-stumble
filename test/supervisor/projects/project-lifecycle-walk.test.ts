@@ -35,7 +35,7 @@ test("the stored state follows the transition, and only connected projects are l
 
       for (const event of sequence) {
         if (event._tag === "connect") {
-          projects.connect({ repositoryUrl: "https://github.com/sample/repo-1" }, 0);
+          projects.connect("https://github.com/sample/repo-1", 0);
         } else {
           projects.apply(id, event);
         }

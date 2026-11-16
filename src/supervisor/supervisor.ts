@@ -154,12 +154,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.#parts.connections.catalog();
   }
 
-  getGitHubConnection(now: number = Date.now()) {
-    return this.#parts.github.lastKnown(now);
+  getGitHubConnection() {
+    return this.#parts.github.lastKnown(Date.now());
   }
 
-  refreshGitHubConnection(now: number = Date.now()) {
-    return runAtEntryPoint(this.#parts.github.refresh(now));
+  refreshGitHubConnection() {
+    return runAtEntryPoint(this.#parts.github.refresh(Date.now()));
   }
 
   resetWorkspace(): Promise<SupervisorWorkspaceReset> {
@@ -213,7 +213,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.env.WORKSPACE_HOST.getByName(this.#parts.workspaceName).setBackend(setting);
   }
 
-  connectProject(repositoryUrl: string, displayName: string | undefined, now: number = Date.now()) {
+  connectProject(repositoryUrl: string) {
     if (this.#resetInProgress) {
       return Promise.resolve({
         ok: false,
@@ -221,7 +221,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       } as const);
     }
 
-    return runAtEntryPoint(this.#parts.connections.connect(repositoryUrl, displayName, now));
+    return runAtEntryPoint(this.#parts.connections.connect(repositoryUrl, Date.now()));
   }
 
   disconnectProject(projectId: string) {
@@ -234,12 +234,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     );
   }
 
-  startGitHubAuthorization(now: number = Date.now()) {
-    return runAtEntryPoint(this.#parts.github.startAuthorization(now));
+  startGitHubAuthorization() {
+    return runAtEntryPoint(this.#parts.github.startAuthorization(Date.now()));
   }
 
-  completeGitHubAuthorization(now: number = Date.now()) {
-    return runAtEntryPoint(this.#parts.github.completeAuthorization(now));
+  completeGitHubAuthorization() {
+    return runAtEntryPoint(this.#parts.github.completeAuthorization(Date.now()));
   }
 
   getChatGPTConnection() {

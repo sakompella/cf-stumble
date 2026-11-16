@@ -5,6 +5,7 @@ import {
   FakeProjectFilesystemProvider,
   FakeProjectTransactions,
 } from "./fakes.js";
+import { targetOptions } from "./target-helpers.js";
 
 function makeTarget() {
   const execBackend = new FakeExecBackend();
@@ -13,6 +14,7 @@ function makeTarget() {
     new FakeProjectFilesystemProvider(),
     new FakeProjectTransactions(),
     execBackend,
+    targetOptions(),
   );
 
   return { execBackend, target };

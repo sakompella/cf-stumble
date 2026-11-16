@@ -19,10 +19,7 @@ import type {
 
 export type ProjectApiSupervisor = Readonly<{
   listProjects: () => Promise<SelectableCatalog>;
-  connectProject: (
-    repositoryUrl: string,
-    displayName: string | undefined,
-  ) => Promise<ConnectRepositoryResult>;
+  connectProject: (repositoryUrl: string) => Promise<ConnectRepositoryResult>;
   getGitHubConnection: () => Promise<GitHubConnectionRecord>;
   refreshGitHubConnection: () => Promise<GitHubRefreshOutcome>;
   startGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
@@ -94,10 +91,7 @@ function refreshResponse(
   );
 }
 
-const ConnectBody = Schema.Struct({
-  repositoryUrl: Schema.String,
-  displayName: Schema.optionalKey(Schema.String),
-});
+const ConnectBody = Schema.Struct({ repositoryUrl: Schema.String });
 
 const connectResponse = Effect.fnUntraced(function* (
   request: Request,
@@ -105,9 +99,7 @@ const connectResponse = Effect.fnUntraced(function* (
 ) {
   const body = yield* decodeRequestBody(request, ConnectBody);
 
-  const result = yield* callSupervisor(() =>
-    supervisor.connectProject(body.repositoryUrl, body.displayName),
-  );
+  const result = yield* callSupervisor(() => supervisor.connectProject(body.repositoryUrl));
 
   if (!result.ok) {
     return Response.json(

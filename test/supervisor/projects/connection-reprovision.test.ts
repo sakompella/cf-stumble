@@ -12,7 +12,7 @@ afterEach(async () => {
 
 test("refuses provisioning on use when the clone's sync does not complete", async () => {
   const subject = tenant("use-sync-incomplete", { fallbackToken: FAKE_TOKEN });
-  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
   subject.workspace.commandSync = "incomplete";
   subject.workspace.loseClone();
 
@@ -28,7 +28,7 @@ test("refuses provisioning on use when the clone's sync does not complete", asyn
 
 test("provisions again every time a project is used", async () => {
   const subject = tenant("provision-on-use", { fallbackToken: FAKE_TOKEN });
-  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
 
   const used = await subject.connections((connections) =>
     connections.ensureProvisioned(projectIdOf("sample-repo-1")),
@@ -49,7 +49,7 @@ test("provisions again every time a project is used", async () => {
 test("keeps a project whose reprovision the clone size check refuses", async () => {
   const workspace = new FakeTenantWorkspace();
   const subject = tenant("reprovision-too-large", { workspace, fallbackToken: FAKE_TOKEN });
-  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
 
   workspace.cloneSizeVerdict = "working-tree-too-large";
   workspace.loseClone();
@@ -73,7 +73,7 @@ test("a clone that fails after a reset succeeds once the configured credential i
   const workspace = new FakeTenantWorkspace();
   workspace.cloneNeedsCredential = true;
   const subject = tenant("credential-after-failed-clone", { workspace, fallbackToken: FAKE_TOKEN });
-  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
 
   await subject.github((github) =>
     Effect.sync(() => {
@@ -94,7 +94,7 @@ test("a clone that fails after a reset succeeds once the configured credential i
 test("a turn whose clone is in place runs no credential command", async () => {
   const workspace = new FakeTenantWorkspace();
   const subject = tenant("no-credential-check-per-turn", { workspace, fallbackToken: FAKE_TOKEN });
-  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
   const requestsBeforeUse = workspace.credentialRequests.length;
 
   const used = await subject.connections((connections) =>
@@ -113,7 +113,7 @@ test("still attempts the clone without a credential, so a public repository re-c
     fallbackToken: FAKE_TOKEN,
   });
 
-  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
 
   await subject.github((github) =>
     Effect.sync(() => {

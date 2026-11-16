@@ -122,9 +122,7 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
       const started = await Effect.runPromise(github.startAuthorization(NOW));
       const completed = await Effect.runPromise(github.completeAuthorization(NOW + 1_000));
 
-      const connected = await Effect.runPromise(
-        connections.connect(REPOSITORY, "Repo one", NOW + 2_000),
-      );
+      const connected = await Effect.runPromise(connections.connect(REPOSITORY, NOW + 2_000));
 
       const listed = connections.catalog();
       const status = await Effect.runPromise(github.status(NOW + 4_000));

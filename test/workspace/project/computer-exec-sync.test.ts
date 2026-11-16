@@ -2,14 +2,9 @@ import { Workspace, type WorkspaceBackend } from "@cloudflare/computer";
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
-import {
-  computerExecBackend,
-  computerFilesystemProvider,
-  durableObjectTransactions,
-} from "../../../src/workspace/project/computer-adapter.js";
 import { CONTAINER_BACKEND_ID } from "../../../src/workspace/project/exec-backend.js";
-import { ProjectRpcTarget } from "../../../src/workspace/project/target.js";
 import { computerStorage } from "../../../src/workspace/workspace-platform.js";
+import { computerTarget } from "./computer-target.js";
 
 type Connection = Awaited<ReturnType<WorkspaceBackend["connect"]>>;
 
@@ -159,11 +154,7 @@ test("a command whose post-command pull stays pending is not reported as a succe
 
       await workspace.fs.mkdir("/workspace", { recursive: true });
 
-      const target = new ProjectRpcTarget(
-        computerFilesystemProvider(workspace),
-        durableObjectTransactions(state.storage),
-        computerExecBackend(workspace, CONTAINER_BACKEND_ID, { generation: 0 }),
-      );
+      const target = computerTarget(workspace, state.storage);
 
       const started = await target.startExec({ command: "true" });
 
@@ -197,11 +188,7 @@ test("a file a command creates is readable once the command has exited", async (
 
     await workspace.fs.mkdir("/workspace", { recursive: true });
 
-    const target = new ProjectRpcTarget(
-      computerFilesystemProvider(workspace),
-      durableObjectTransactions(state.storage),
-      computerExecBackend(workspace, CONTAINER_BACKEND_ID, { generation: 0 }),
-    );
+    const target = computerTarget(workspace, state.storage);
 
     const started = await target.startExec({ command: "touch /workspace/generated.txt" });
 

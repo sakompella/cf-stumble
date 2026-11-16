@@ -6,6 +6,7 @@ import { MainFacet } from "../../../src/facet/generation-1/main-facet.js";
 import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
 import { capacityOnceModel } from "./scripted-route.js";
 import { eventually } from "../../eventually.js";
+import { unscriptedGenerations } from "./generation-control.js";
 import { entriesText, hostWith } from "./conversation-host.js";
 
 const noModelRun: ModelCapability = {
@@ -47,10 +48,12 @@ test("an attach after a failed open opens the session and arms the host", async 
       });
       const facet = new MainFacet(state, env);
 
-      await expect(facet.attach(host, noModelRun)).rejects.toThrow("the storage is unavailable");
+      await expect(facet.attach(host, noModelRun, unscriptedGenerations)).rejects.toThrow(
+        "the storage is unavailable",
+      );
       expect(armed).toBe(0);
 
-      await expect(facet.attach(host, noModelRun)).resolves.toBeUndefined();
+      await expect(facet.attach(host, noModelRun, unscriptedGenerations)).resolves.toBeUndefined();
       expect(armed).toBeGreaterThan(0);
     },
   );
@@ -66,7 +69,7 @@ test("an idle events stream beats every two seconds, and cancelling it leaves no
     async (_instance, state) => {
       const facet = new MainFacet(state, env);
 
-      await facet.attach(host, noModelRun);
+      await facet.attach(host, noModelRun, unscriptedGenerations);
 
       const id = await facet.createConversation("/workspace");
       const reader = (await facet.events(id)).getReader();
@@ -116,7 +119,7 @@ test("a session that failed on a storage error is reopened by the next attach an
       });
       const facet = new MainFacet(state, env);
 
-      await facet.attach(host, noModelRun);
+      await facet.attach(host, noModelRun, unscriptedGenerations);
       expect(opened).toBe(1);
 
       broken = true;
@@ -127,7 +130,7 @@ test("a session that failed on a storage error is reopened by the next attach an
       expect(faults[0]).toContain("storage reset");
 
       broken = false;
-      await facet.attach(host, noModelRun);
+      await facet.attach(host, noModelRun, unscriptedGenerations);
       expect(opened).toBe(2);
       await expect(facet.createConversation("/workspace")).resolves.toBeTypeOf("string");
     },
@@ -150,7 +153,7 @@ test("a turn whose model fails is reported to the host as failed with the reason
     async (_instance, state) => {
       const facet = new MainFacet(state, env);
 
-      await facet.attach(host, noModelRun);
+      await facet.attach(host, noModelRun, unscriptedGenerations);
 
       const id = await facet.createConversation("/workspace");
 
@@ -171,7 +174,9 @@ test("a host that refuses the first running report aborts the facet", async () =
       const aborted = vi.spyOn(state, "abort").mockImplementation(() => {});
       const facet = new MainFacet(state, env);
 
-      await expect(facet.attach(host, noModelRun)).rejects.toThrow("supervisor gone");
+      await expect(facet.attach(host, noModelRun, unscriptedGenerations)).rejects.toThrow(
+        "supervisor gone",
+      );
       expect(aborted).toHaveBeenCalledTimes(1);
     },
   );
@@ -210,7 +215,7 @@ test("a submit that fails leaves the host armed with the plain wake, not the act
     async (_instance, state) => {
       const facet = new MainFacet(state, env);
 
-      await facet.attach(host, noModelRun);
+      await facet.attach(host, noModelRun, unscriptedGenerations);
       const id = await facet.createConversation("/workspace");
 
       await expect(facet.submit(id, "hello", "r1")).rejects.toThrow("busy");
@@ -246,8 +251,8 @@ test("a Workers AI capacity error (3040) is retried by Pi and the turn answers (
       const facet = new MainFacet(state, env);
       const model = capacityOnceModel(calls);
 
-      alarm = () => void facet.attach(host, model);
-      await facet.attach(host, model);
+      alarm = () => void facet.attach(host, model, unscriptedGenerations);
+      await facet.attach(host, model, unscriptedGenerations);
       const id = await facet.createConversation("/workspace");
 
       await facet.submit(id, "hello", "r1");

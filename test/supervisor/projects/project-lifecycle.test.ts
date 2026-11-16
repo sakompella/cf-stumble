@@ -51,13 +51,13 @@ test("a reconnect waits until the earlier disconnect has removed the clone", asy
   const workspace = new FakeTenantWorkspace();
 
   await withConnections("reconnect-during-removal", workspace, async (connections) => {
-    await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    await Effect.runPromise(connections.connect(REPOSITORY, NOW));
     const removal = workspace.holdNext(REMOVAL);
     const disconnecting = Effect.runPromise(connections.disconnect(PROJECT_ID, noRunActive));
     await removal.reached;
     const clonesBeforeReconnect = indexOfLast(workspace.commands, CLONE);
 
-    const reconnecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 1));
+    const reconnecting = Effect.runPromise(connections.connect(REPOSITORY, NOW + 1));
     await letOtherWorkRun();
 
     expect(
@@ -85,10 +85,10 @@ test("a failed connection leaves the row that an overlapping connection provisio
 
   await withConnections("overlapping-connections", workspace, async (connections) => {
     const firstClone = workspace.holdNext(CLONE);
-    const first = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    const first = Effect.runPromise(connections.connect(REPOSITORY, NOW));
     await firstClone.reached;
 
-    const second = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 1));
+    const second = Effect.runPromise(connections.connect(REPOSITORY, NOW + 1));
     await letOtherWorkRun();
     firstClone.release(128);
 
@@ -108,7 +108,7 @@ test("a disconnect during a connection's clone removes the clone after it lands"
 
   await withConnections("disconnect-during-clone", workspace, async (connections) => {
     const clone = workspace.holdNext(CLONE);
-    const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    const connecting = Effect.runPromise(connections.connect(REPOSITORY, NOW));
     await clone.reached;
 
     const disconnecting = Effect.runPromise(connections.disconnect(PROJECT_ID, noRunActive));
@@ -135,7 +135,7 @@ test("a disconnect waits for the run check until an earlier connection has settl
 
   await withConnections("disconnect-thread-order", workspace, async (connections) => {
     const clone = workspace.holdNext(CLONE);
-    const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    const connecting = Effect.runPromise(connections.connect(REPOSITORY, NOW));
     await clone.reached;
     let runChecked = false;
 
@@ -167,7 +167,7 @@ test("provisioning on use waits for a failing connection and then finds no proje
 
   await withConnections("use-during-failed-connection", workspace, async (connections) => {
     const clone = workspace.holdNext(CLONE);
-    const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    const connecting = Effect.runPromise(connections.connect(REPOSITORY, NOW));
     await clone.reached;
 
     const clonesDuringConnection = workspace.commands.filter((command) =>
@@ -194,7 +194,7 @@ test("a clone that fails is removed from the workspace, not only from the catalo
 
   await withConnections("failed-clone-cleanup", workspace, async (connections) => {
     const clone = workspace.holdNext(CLONE);
-    const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    const connecting = Effect.runPromise(connections.connect(REPOSITORY, NOW));
     await clone.reached;
     clone.release(128);
 
@@ -210,7 +210,7 @@ test("a removal that failed is finished when another project connects", async ()
   const workspace = new FakeTenantWorkspace();
 
   await withConnections("failed-removal-retry", workspace, async (connections) => {
-    await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    await Effect.runPromise(connections.connect(REPOSITORY, NOW));
     workspace.commandSync = "incomplete";
 
     await expect(
@@ -219,9 +219,7 @@ test("a removal that failed is finished when another project connects", async ()
     expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBe("directory");
 
     workspace.commandSync = "complete";
-    await Effect.runPromise(
-      connections.connect("https://github.com/sample/repo-2", undefined, NOW),
-    );
+    await Effect.runPromise(connections.connect("https://github.com/sample/repo-2", NOW));
 
     expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBeUndefined();
     expect(isConnected(connections)).toBe(false);
@@ -232,7 +230,7 @@ test("a removal that failed is swept before the next connect of the same reposit
   const workspace = new FakeTenantWorkspace();
 
   await withConnections("failed-removal-same-project", workspace, async (connections) => {
-    await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    await Effect.runPromise(connections.connect(REPOSITORY, NOW));
     workspace.commandSync = "incomplete";
 
     await expect(
@@ -243,7 +241,7 @@ test("a removal that failed is swept before the next connect of the same reposit
     const removalsBefore = workspace.commands.filter((command) => command.includes(REMOVAL)).length;
 
     await expect(
-      Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 1)),
+      Effect.runPromise(connections.connect(REPOSITORY, NOW + 1)),
     ).resolves.toMatchObject({ ok: true, alreadyConnected: false });
 
     expect(workspace.commands.filter((command) => command.includes(REMOVAL))).toHaveLength(
@@ -260,13 +258,13 @@ test("a connect does not clone over a directory whose removal keeps failing", as
   const workspace = new FakeTenantWorkspace();
 
   await withConnections("failed-removal-stays", workspace, async (connections) => {
-    await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
+    await Effect.runPromise(connections.connect(REPOSITORY, NOW));
     workspace.commandSync = "incomplete";
     await Effect.runPromise(connections.disconnect(PROJECT_ID, noRunActive));
     const clonesBefore = workspace.commands.filter((command) => command.includes(CLONE)).length;
 
     await expect(
-      Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 1)),
+      Effect.runPromise(connections.connect(REPOSITORY, NOW + 1)),
     ).resolves.toMatchObject({ ok: false, problem: { code: "workspace-unavailable" } });
 
     expect(workspace.commands.filter((command) => command.includes(CLONE))).toHaveLength(
@@ -277,7 +275,7 @@ test("a connect does not clone over a directory whose removal keeps failing", as
     workspace.commandSync = "complete";
 
     await expect(
-      Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 2)),
+      Effect.runPromise(connections.connect(REPOSITORY, NOW + 2)),
     ).resolves.toMatchObject({ ok: true });
   });
 });

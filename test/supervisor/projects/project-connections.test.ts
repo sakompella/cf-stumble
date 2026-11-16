@@ -15,7 +15,7 @@ test("connects a repository once the workspace credential works, and provisions 
   const subject = tenant("connect-with-fallback", { fallbackToken: FAKE_TOKEN });
 
   const connected = await subject.connections((connections) =>
-    connections.connect(REPOSITORY, "Repo one", NOW),
+    connections.connect(REPOSITORY, NOW),
   );
 
   const listed = await subject.connections((connections) =>
@@ -25,7 +25,7 @@ test("connects a repository once the workspace credential works, and provisions 
   expect(connected).toMatchObject({
     ok: true,
     alreadyConnected: false,
-    project: { id: "sample-repo-1", displayName: "Repo one", repositoryUrl: REPOSITORY },
+    project: { id: "sample-repo-1", displayName: "sample/repo-1", repositoryUrl: REPOSITORY },
   });
   expect(listed.map((project) => project.id)).toEqual(["sample-repo-1", "harness"]);
   expect(
@@ -39,7 +39,7 @@ test("a third repository joins the same one workspace, not a workspace of its ow
 
   for (const [offset, suffix] of ["one", "two", "three"].entries()) {
     const connected = await subject.connections((connections) =>
-      connections.connect(`https://github.com/sample/repo-${suffix}`, undefined, NOW + offset),
+      connections.connect(`https://github.com/sample/repo-${suffix}`, NOW + offset),
     );
 
     expect(connected).toMatchObject({ ok: true });
@@ -66,9 +66,7 @@ test("keeps a repository the workspace cannot read out of the catalog", async ()
   workspace.repositoryAccess = "denied";
   const subject = tenant("connect-denied", { workspace, fallbackToken: FAKE_TOKEN });
 
-  const refused = await subject.connections((connections) =>
-    connections.connect(REPOSITORY, undefined, NOW),
-  );
+  const refused = await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
 
   const listed = await subject.connections((connections) =>
     Effect.sync(() => connections.catalog()),
@@ -88,7 +86,7 @@ test("refuses a repository URL that once reduced to the harness entry's id", asy
   const subject = tenant("harness-id-taken", { fallbackToken: FAKE_TOKEN });
 
   const refused = await subject.connections((connections) =>
-    connections.connect("https://github.com/-/harness", undefined, NOW),
+    connections.connect("https://github.com/-/harness", NOW),
   );
 
   const listed = await subject.connections((connections) =>
@@ -107,7 +105,7 @@ test("a mistyped repository URL is refused without any GitHub status to show", a
   const subject = tenant("connect-typo", { fallbackToken: FAKE_TOKEN });
 
   const refused = await subject.connections((connections) =>
-    connections.connect("https:/github.com/sample", undefined, NOW),
+    connections.connect("https:/github.com/sample", NOW),
   );
 
   expect(refused).toEqual({ ok: false, problem: { code: "invalid-repository-url", detail: "" } });
@@ -121,9 +119,7 @@ test("a connect that cannot reach the workspace is refused as unavailable and re
   const subject = tenant("connect-host-down", { workspace, fallbackToken: FAKE_TOKEN });
   workspace.unavailable = true;
 
-  const refused = await subject.connections((connections) =>
-    connections.connect(REPOSITORY, undefined, NOW),
-  );
+  const refused = await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
 
   expect(refused).toEqual({ ok: false, problem: { code: "workspace-unavailable", detail: "" } });
   await expect(
@@ -139,7 +135,7 @@ test("disconnecting a project removes its clone and leaves the harness checkout"
     harnessCommit: testHarnessCommit("1".repeat(40)),
     step: "provision",
   });
-  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
   expect(await workspace.lstat("/workspace/projects/sample-repo-1")).toBe("directory");
 
   const disconnected = await subject.connections((connections) =>
@@ -178,7 +174,7 @@ test.each([
     fallbackToken: FAKE_TOKEN,
   });
 
-  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  await subject.connections((connections) => connections.connect(REPOSITORY, NOW));
   row.arrange(subject.workspace);
 
   const disconnected = await subject.connections((connections) =>

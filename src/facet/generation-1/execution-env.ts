@@ -23,7 +23,7 @@ const COMPUTER_ENV_ID = "cf-stumble:computer-workspace";
 export interface ComputerEnvOptions {
   readonly cwd: string;
   readonly target: ProjectRpcTargetContract;
-  readonly generations?: GenerationControl | undefined;
+  readonly generations: GenerationControl;
   readonly log?: FacetLog | undefined;
 }
 
@@ -70,9 +70,9 @@ export function createComputerEnv(options: ComputerEnvOptions): ComputerEnv {
     createTempDir: unsupported("createTempDir"),
     createTempFile: unsupported("createTempFile"),
     exec: (command, execOptions, context) => {
-      const stumble = generations === undefined ? undefined : stumbleArguments(command);
+      const stumble = stumbleArguments(command);
 
-      return stumble === undefined || generations === undefined
+      return stumble === undefined
         ? execInWorkspace(workspace, running, command, execOptions, context)
         : runStumbleCommand(stumble, { generations }, execOptions, context);
     },

@@ -38,7 +38,7 @@ export interface ConversationFacet {
   attach(
     host: ConversationHost,
     model: ModelCapability,
-    generations?: GenerationControl,
+    generations: GenerationControl,
   ): Promise<void>;
   createConversation(cwd: string): Promise<string>;
   submit(

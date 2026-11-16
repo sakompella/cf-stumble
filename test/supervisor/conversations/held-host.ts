@@ -1,12 +1,8 @@
 import type { CommandAnswer } from "../../../src/workspace/commands/command-result.js";
 import type { ProjectProvisionAnswer } from "../../../src/workspace/commands/provision-project.js";
 import type { ProjectCapabilityStub, WorkspaceHostRpc } from "../../../src/workspace/host-rpc.js";
-import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
-import {
-  FakeExecBackend,
-  FakeProjectFilesystemProvider,
-  FakeProjectTransactions,
-} from "../../workspace/project/fakes.js";
+import { projectTarget } from "../../workspace/project/target-helpers.js";
+import { FakeExecBackend, FakeProjectFilesystemProvider } from "../../workspace/project/fakes.js";
 
 export const CLONED: ProjectProvisionAnswer = { ok: true };
 
@@ -45,9 +41,8 @@ export class HeldHost implements WorkspaceHostRpc<
 
     if (this.projectError !== undefined) throw this.projectError;
 
-    const target = new ProjectRpcTarget(
+    const target = projectTarget(
       new FakeProjectFilesystemProvider(),
-      new FakeProjectTransactions(),
       new FakeExecBackend(),
       budget,
     );

@@ -8,7 +8,7 @@ import {
   FakeProjectFilesystemProvider,
   FakeProjectTransactions,
 } from "./fakes.js";
-import { encode } from "./target-helpers.js";
+import { encode, targetOptions } from "./target-helpers.js";
 
 type Call = Readonly<{ method: string; command: string }>;
 
@@ -66,10 +66,12 @@ function liveTarget() {
     },
   };
 
-  const target = new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend, {
-    remainingMs: 1_000,
-    activity,
-  });
+  const target = new ProjectRpcTarget(
+    provider,
+    new FakeProjectTransactions(),
+    execBackend,
+    targetOptions({ remainingMs: 1_000, activity }),
+  );
 
   return { provider, execBackend, target, touches };
 }

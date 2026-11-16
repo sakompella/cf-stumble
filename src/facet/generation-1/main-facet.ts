@@ -48,13 +48,13 @@ export class MainFacet extends DurableObject implements ConversationFacet {
   async attach(
     host: Received<ConversationHost>,
     model: ModelCapability,
-    generations?: Received<GenerationControl>,
+    generations: Received<GenerationControl>,
   ): Promise<void> {
     const session = await this.#openedOr(() =>
       openSession({
         storage: this.ctx.storage,
         host: host.dup(),
-        generations: generations?.dup(),
+        generations: generations.dup(),
         model,
         abort: (reason) => {
           this.ctx.abort(reason);

@@ -2,16 +2,11 @@ import { Workspace, type WorkspaceBackend } from "@cloudflare/computer";
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
-import {
-  computerExecBackend,
-  computerFilesystemProvider,
-  durableObjectTransactions,
-} from "../../../src/workspace/project/computer-adapter.js";
 import { CONTAINER_BACKEND_ID } from "../../../src/workspace/project/exec-backend.js";
-import { ProjectRpcTarget } from "../../../src/workspace/project/target.js";
 import { computerStorage } from "../../../src/workspace/workspace-platform.js";
 import { WORKSPACE_OUTPUT_OPTIONS } from "../../../infra/worker-settings.js";
 import { withDecodedEvents, type ExecEvent } from "./decoded-events.js";
+import { computerTarget } from "./computer-target.js";
 
 type Connection = Awaited<ReturnType<WorkspaceBackend["connect"]>>;
 
@@ -112,11 +107,7 @@ function runEcho(stdout: readonly string[]): Promise<Run> {
 
       await workspace.fs.mkdir("/workspace", { recursive: true });
 
-      const target = new ProjectRpcTarget(
-        computerFilesystemProvider(workspace),
-        durableObjectTransactions(state.storage),
-        computerExecBackend(workspace, CONTAINER_BACKEND_ID, { generation: 0 }),
-      );
+      const target = computerTarget(workspace, state.storage);
 
       const started = await withDecodedEvents(target).startExec({ command: "echo" });
 

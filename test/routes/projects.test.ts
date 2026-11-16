@@ -13,17 +13,16 @@ function post(path: string, body: Readonly<Record<string, string>>): Request {
   });
 }
 
-test("connects the repository the body names, and nothing else it carries", async () => {
+test("connects the repository the body names", async () => {
   const sent: unknown[] = [];
 
   const response = await ownerApiResponse(
     post("/api/projects/connect", {
       repositoryUrl: connectedProject.repositoryUrl,
-      displayName: "Repo one",
     }),
     supervisor({
-      connectProject: (repositoryUrl, displayName) => {
-        sent.push(repositoryUrl, displayName);
+      connectProject: (repositoryUrl) => {
+        sent.push(repositoryUrl);
 
         return Promise.resolve({
           ok: true,
@@ -35,7 +34,7 @@ test("connects the repository the body names, and nothing else it carries", asyn
   );
 
   expect(response.status).toBe(200);
-  expect(sent).toEqual([connectedProject.repositoryUrl, "Repo one"]);
+  expect(sent).toEqual([connectedProject.repositoryUrl]);
   await expect(response.json()).resolves.toMatchObject({
     ok: true,
     alreadyConnected: false,
