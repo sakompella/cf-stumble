@@ -1,27 +1,20 @@
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
 import * as Schema from "effect/Schema";
-import {
-  ConnectAnswer,
-  GitHubAnswer,
-  OkAnswer,
-  RunControlAnswer,
-  SubmitAnswer,
-} from "./answers.js";
+import { ConnectAnswer, GitHubAnswer, OkAnswer } from "./answers.js";
+import { ANSWERS } from "../../api/answers.js";
 import {
   diagnosticsText,
   generationReading,
   gitHubReport,
   preparationText,
-  projectPath,
   projectsOf,
   ProjectsAnswer,
-  StatusAnswer,
   submitRejection,
 } from "./api.js";
 import { Message } from "./message.js";
-import { ControlKind } from "./model.js";
-import { ownerRequest, rejectedAs } from "./owner-request.js";
+import { AuthorizationEndpoint, ControlKind } from "./model.js";
+import { apiRequest, rejectedAs } from "./api-request.js";
 
 export { FetchChatGPT } from "./commands-chatgpt.js";
 
@@ -29,8 +22,12 @@ export { MintRequestId, SendMessage } from "./commands-send.js";
 
 export const FetchStatus = Command.define("FetchStatus", {
   messages: [Message.SucceededFetchStatus, Message.RejectedFetchStatus, Message.FailedFetchStatus],
-  execute: ownerRequest(
-    { method: "GET", path: "/api/status", maybeBody: Option.none(), answer: StatusAnswer },
+  execute: apiRequest(
+    {
+      target: { endpoint: "GET /api/status" },
+      maybeBody: Option.none(),
+      answer: ANSWERS["GET /api/status"],
+    },
     {
       answered: (answer) => Message.SucceededFetchStatus({ reading: generationReading(answer) }),
       ...rejectedAs((wording) => Message.RejectedFetchStatus({ wording })),
@@ -45,8 +42,12 @@ export const FetchProjects = Command.define("FetchProjects", {
     Message.RejectedFetchProjects,
     Message.FailedFetchProjects,
   ],
-  execute: ownerRequest(
-    { method: "GET", path: "/api/projects", maybeBody: Option.none(), answer: ProjectsAnswer },
+  execute: apiRequest(
+    {
+      target: { endpoint: "GET /api/projects" },
+      maybeBody: Option.none(),
+      answer: ProjectsAnswer,
+    },
     {
       answered: (answer) => Message.SucceededFetchProjects({ projects: projectsOf(answer) }),
       ...rejectedAs((wording) => Message.RejectedFetchProjects({ wording })),
@@ -59,10 +60,9 @@ export const ConnectRepository = Command.define("ConnectRepository", {
   args: { repositoryUrl: Schema.String },
   messages: [Message.SucceededConnect, Message.RejectedConnect, Message.FailedConnect],
   execute: ({ repositoryUrl }) =>
-    ownerRequest(
+    apiRequest(
       {
-        method: "POST",
-        path: "/api/projects/connect",
+        target: { endpoint: "POST /api/projects/connect" },
         maybeBody: Option.some({ repositoryUrl }),
         answer: ConnectAnswer,
       },
@@ -93,12 +93,16 @@ const GITHUB_MESSAGES = [
   Message.FailedGitHub,
 ] as const;
 
-function gitHubRequest(method: "GET" | "POST", path: string) {
-  return ownerRequest(
+type GitHubEndpoint =
+  | "GET /api/github/connection"
+  | "POST /api/github/connection/refresh"
+  | AuthorizationEndpoint;
+
+function gitHubRequest(endpoint: GitHubEndpoint) {
+  return apiRequest(
     {
-      method,
-      path,
-      maybeBody: method === "POST" ? Option.some({}) : Option.none(),
+      target: { endpoint },
+      maybeBody: endpoint.startsWith("POST ") ? Option.some({}) : Option.none(),
       answer: GitHubAnswer,
     },
     {
@@ -115,29 +119,28 @@ function gitHubRequest(method: "GET" | "POST", path: string) {
 }
 
 export const AuthorizeGitHub = Command.define("AuthorizeGitHub", {
-  args: { path: Schema.String },
+  args: { endpoint: AuthorizationEndpoint },
   messages: GITHUB_MESSAGES,
-  execute: ({ path }) => gitHubRequest("POST", path),
+  execute: ({ endpoint }) => gitHubRequest(endpoint),
 });
 
 export const FetchGitHub = Command.define("FetchGitHub", {
   messages: GITHUB_MESSAGES,
-  execute: gitHubRequest("GET", "/api/github/connection"),
+  execute: gitHubRequest("GET /api/github/connection"),
 });
 
 export const RefreshGitHub = Command.define("RefreshGitHub", {
   messages: GITHUB_MESSAGES,
-  execute: gitHubRequest("POST", "/api/github/connection/refresh"),
+  execute: gitHubRequest("POST /api/github/connection/refresh"),
 });
 
 export const AbortRun = Command.define("AbortRun", {
   args: { projectId: Schema.String },
   messages: [Message.SucceededAbort, Message.RejectedAbort, Message.FailedAbort],
   execute: ({ projectId }) =>
-    ownerRequest(
+    apiRequest(
       {
-        method: "POST",
-        path: projectPath(projectId, "/abort"),
+        target: { endpoint: "POST /api/projects/:projectId/abort", projectId },
         maybeBody: Option.none(),
         answer: OkAnswer,
       },
@@ -153,10 +156,9 @@ export const ReplaceThread = Command.define("ReplaceThread", {
   args: { projectId: Schema.String, streamId: Schema.Number },
   messages: [Message.SucceededFreshThread, Message.RejectedFreshThread, Message.FailedFreshThread],
   execute: ({ projectId, streamId }) =>
-    ownerRequest(
+    apiRequest(
       {
-        method: "POST",
-        path: projectPath(projectId, "/thread/fresh"),
+        target: { endpoint: "POST /api/projects/:projectId/thread/fresh", projectId },
         maybeBody: Option.none(),
         answer: OkAnswer,
       },
@@ -172,12 +174,11 @@ export const SubmitCandidate = Command.define("SubmitCandidate", {
   args: { harnessCommit: Schema.String },
   messages: [Message.SucceededSubmit, Message.RejectedSubmit, Message.FailedSubmit],
   execute: ({ harnessCommit }) =>
-    ownerRequest(
+    apiRequest(
       {
-        method: "POST",
-        path: "/api/generations/submit",
+        target: { endpoint: "POST /api/generations/submit" },
         maybeBody: Option.some({ harnessCommit }),
-        answer: SubmitAnswer,
+        answer: ANSWERS["POST /api/generations/submit"],
       },
       {
         answered: (answer) =>
@@ -199,26 +200,24 @@ export const RunControl = Command.define("RunControl", {
   args: { kind: ControlKind, observedEpoch: Schema.Number, label: Schema.Number },
   messages: [Message.SucceededControl, Message.RejectedControl, Message.FailedControl],
   execute: ({ kind, observedEpoch, label }) =>
-    ownerRequest(
+    apiRequest(
       {
-        method: "POST",
-        path: `/api/generations/${kind}`,
+        target: {
+          endpoint:
+            kind === "activate"
+              ? "POST /api/generations/activate"
+              : "POST /api/generations/rollback",
+        },
         maybeBody: Option.some({ observedEpoch, label }),
-        answer: RunControlAnswer,
+        answer: ANSWERS["POST /api/generations/activate"],
       },
       {
         answered: (answer) =>
-          answer.ok
-            ? Message.SucceededControl({
-                kind,
-                sentEpoch: observedEpoch,
-                effect: answer.outcome.effect,
-              })
-            : Message.RejectedControl({
-                kind,
-                sentEpoch: observedEpoch,
-                wording: `rejected: ${answer.problem.code}`,
-              }),
+          Message.SucceededControl({
+            kind,
+            sentEpoch: observedEpoch,
+            effect: answer.outcome.effect,
+          }),
         ...rejectedAs((wording) =>
           Message.RejectedControl({ kind, sentEpoch: observedEpoch, wording }),
         ),

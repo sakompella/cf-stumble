@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { BackendSetting } from "../../backend-setting.js";
-import { GitHubStatus, Preparation, SubmitRefusal } from "./api.js";
+import { GitHubStatus } from "./api.js";
 
 const RefusalProblem = Schema.Struct({ code: Schema.String });
 
@@ -38,26 +38,6 @@ export const ChatGPTAnswer = Schema.Union([
 ]);
 
 export const OkAnswer = Schema.Struct({ ok: Schema.Literal(true) });
-
-export const SubmitAnswer = Schema.Union([
-  Schema.Struct({
-    ok: Schema.Literal(true),
-    outcome: Schema.Struct({
-      generation: Schema.Struct({ label: Schema.Number }),
-      epoch: Schema.Number,
-    }),
-    preparation: Preparation,
-  }),
-  SubmitRefusal,
-]);
-
-export const RunControlAnswer = Schema.Union([
-  Schema.Struct({
-    ok: Schema.Literal(true),
-    outcome: Schema.Struct({ effect: Schema.String }),
-  }),
-  Schema.Struct({ ok: Schema.Literal(false), problem: RefusalProblem }),
-]);
 
 export const BackendAnswer = Schema.Union([
   Schema.Struct({ ok: Schema.Literal(true), backend: BackendSetting }),

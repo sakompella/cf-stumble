@@ -2,9 +2,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { Command } from "foldkit";
-import { projectPath, unreadableText } from "./api.js";
+import { unreadableText } from "./api.js";
 import { Message } from "./message.js";
-import { ownerRequest } from "./owner-request.js";
+import { apiRequest } from "./api-request.js";
 import { SentMessage } from "./sent-message.js";
 import { sendRefusal } from "./send-refusals.js";
 
@@ -26,10 +26,9 @@ export const SendMessage = Command.define("SendMessage", {
   },
   messages: [Message.SucceededSend, Message.RejectedSend, Message.HeldSend, Message.FailedSend],
   execute: ({ projectId, requestId, content, budgetMinutes }) =>
-    ownerRequest(
+    apiRequest(
       {
-        method: "POST",
-        path: projectPath(projectId, "/messages"),
+        target: { endpoint: "POST /api/projects/:projectId/messages", projectId },
         maybeBody: Option.some({ content, requestId, budgetMinutes }),
         answer: SentMessage,
       },

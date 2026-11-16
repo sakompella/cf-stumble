@@ -36,6 +36,10 @@ export type ProjectEndpoint = Extract<Endpoint, `${string}/:projectId/${string}`
 
 type FixedEndpoint = Exclude<Endpoint, ProjectEndpoint>;
 
+export type EndpointTarget =
+  | Readonly<{ endpoint: FixedEndpoint }>
+  | Readonly<{ endpoint: ProjectEndpoint; projectId: string }>;
+
 export type EndpointMatch =
   | Readonly<{ kind: "fixed"; endpoint: FixedEndpoint }>
   | Readonly<{ kind: "project"; endpoint: ProjectEndpoint; projectId: string }>;
@@ -115,4 +119,16 @@ export function routeClass(pattern: string): RouteClass {
   )
     ? "workspace"
     : "record-only";
+}
+
+export function methodOf(endpoint: Endpoint): Method {
+  return routeOf(endpoint).method;
+}
+
+export function targetPath(target: EndpointTarget): string {
+  const { pattern } = routeOf(target.endpoint);
+
+  return "projectId" in target
+    ? pattern.replace(PROJECT_ID, encodeURIComponent(target.projectId))
+    : pattern;
 }

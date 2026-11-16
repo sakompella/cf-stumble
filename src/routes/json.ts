@@ -2,6 +2,7 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { ANSWERS, type AnswerOf, type AnsweredEndpoint } from "../api/answers.js";
 import type { Endpoint, ProjectEndpoint } from "../api/endpoints.js";
 import { ERROR_STATUS, PROBLEM_STATUS, type ErrorCode, type ProblemCode } from "../api/problems.js";
 import { logRedactedCause } from "../diagnostics.js";
@@ -9,6 +10,14 @@ import { routePattern } from "./route-pattern.js";
 
 export function jsonError(code: ErrorCode): Response {
   return Response.json({ ok: false, error: { code } }, { status: ERROR_STATUS[code] });
+}
+
+export function answer<E extends AnsweredEndpoint>(
+  endpoint: E,
+  value: AnswerOf<E>,
+  status = 200,
+): Response {
+  return Response.json(Schema.encodeSync(ANSWERS[endpoint])(value), { status });
 }
 
 export function refusal(

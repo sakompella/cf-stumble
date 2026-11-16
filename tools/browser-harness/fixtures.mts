@@ -1,5 +1,8 @@
+import type { ANSWERS, AnsweredEndpoint } from "../../src/api/answers.js";
 import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 import type { JsonValue } from "../json.mjs";
+
+type Encoded<E extends AnsweredEndpoint> = (typeof ANSWERS)[E]["Encoded"];
 
 export type HarnessScenario =
   | "ready"
@@ -118,7 +121,7 @@ export function refreshPayload(scenario: HarnessScenario): JsonValue {
   return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }
 
-export const STATUS_PAYLOAD: JsonValue = {
+export const STATUS_PAYLOAD: Encoded<"GET /api/status"> = {
   activeGeneration: {
     generation: { label: 1, harnessCommit: "abc123", status: "ready" },
     epoch: 3,

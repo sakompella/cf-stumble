@@ -2,27 +2,10 @@ import { appendFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import * as Schema from "effect/Schema";
+import { ANSWERS, Submitted } from "../src/api/answers.ts";
 import { execute } from "./e2e/process.mts";
 import { GENERATION_1_MODULE_MAP, moduleMapSourceFiles } from "./module-map-build.mts";
 import { releaseGeneration, type ReleaseOwner } from "./release-generation/release.mts";
-
-const Status = Schema.Struct({
-  activeGeneration: Schema.Struct({
-    generation: Schema.NullOr(Schema.Struct({ harnessCommit: Schema.String })),
-    epoch: Schema.Number,
-  }),
-});
-
-const Submission = Schema.Struct({
-  outcome: Schema.Struct({ generation: Schema.Struct({ label: Schema.Number }) }),
-  preparation: Schema.Union([
-    Schema.Struct({
-      ok: Schema.Literal(true),
-      report: Schema.Struct({ stage: Schema.String, reason: Schema.String }),
-    }),
-    Schema.Struct({ ok: Schema.Literal(false), problem: Schema.Struct({ code: Schema.String }) }),
-  ]),
-});
 
 const Refusal = Schema.Struct({ problem: Schema.optional(Schema.Struct({ code: Schema.String })) });
 
@@ -73,14 +56,14 @@ async function decoded<S extends Schema.ConstraintDecoder<unknown>>(
 ) {
   const { status, text } = await answer;
 
-  if (status !== 200) throw new Error(`the owner API answered ${status}: ${text}`);
+  if (status !== 200) throw new Error(`the API answered ${status}: ${text}`);
 
   return Schema.decodeSync(Schema.fromJsonString(schema))(text);
 }
 
 const owner: ReleaseOwner = {
   async active() {
-    const { activeGeneration } = await decoded(get("/api/status"), Status);
+    const { activeGeneration } = await decoded(get("/api/status"), ANSWERS["GET /api/status"]);
 
     return {
       harnessCommit: activeGeneration.generation?.harnessCommit,
@@ -90,7 +73,7 @@ const owner: ReleaseOwner = {
   async submit(harnessCommit) {
     const { outcome, preparation } = await decoded(
       post("/api/generations/submit", { harnessCommit }),
-      Submission,
+      Submitted,
     );
 
     return {

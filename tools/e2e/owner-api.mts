@@ -1,19 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import * as Schema from "effect/Schema";
-
-const Generation = Schema.Struct({ label: Schema.Number, harnessCommit: Schema.String });
-
-const Status = Schema.Struct({
-  activeGeneration: Schema.Struct({ generation: Schema.NullOr(Generation), epoch: Schema.Number }),
-});
-
-const Submitted = Schema.Struct({
-  outcome: Schema.Struct({ generation: Generation }),
-  preparation: Schema.Union([
-    Schema.Struct({ ok: Schema.Literal(true) }),
-    Schema.Struct({ ok: Schema.Literal(false), problem: Schema.Struct({ code: Schema.String }) }),
-  ]),
-});
+import { ANSWERS, Submitted, type AnswerOf } from "../../src/api/answers.ts";
 
 const ChatGPTConnection = Schema.Struct({
   chatgpt: Schema.Struct({ connection: Schema.Struct({ state: Schema.String }) }),
@@ -55,7 +42,7 @@ const ToolResult = Schema.Struct({
 
 const Entries = Schema.Struct({ items: Schema.Array(Entry) });
 
-export type ActiveGeneration = typeof Status.Type.activeGeneration;
+export type ActiveGeneration = AnswerOf<"GET /api/status">["activeGeneration"];
 
 export type Settled = Readonly<{ failure: string | undefined }>;
 
@@ -131,7 +118,7 @@ export class Owner {
   }
 
   async status(): Promise<ActiveGeneration> {
-    return (await this.#json(this.get("/api/status"), Status)).activeGeneration;
+    return (await this.#json(this.get("/api/status"), ANSWERS["GET /api/status"])).activeGeneration;
   }
 
   async submit(harnessCommit: string): Promise<number> {

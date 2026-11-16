@@ -3,7 +3,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Subscription } from "foldkit";
-import { answerOf, fetchEffect, problemText, projectPath, transportDetail } from "./api.js";
+import { answerOf, fetchEffect, problemText, targetPath, transportDetail } from "./api.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
 import {
@@ -20,7 +20,7 @@ const STALL_TIMEOUT = "10 seconds";
 const REFUSED_PAUSE = "15 seconds";
 
 function resumePath(projectId: string, from: number | undefined): string {
-  return `${projectPath(projectId, "/events")}${from === undefined ? "" : `?from=${from}`}`;
+  return `${targetPath({ endpoint: "GET /api/projects/:projectId/events", projectId })}${from === undefined ? "" : `?from=${from}`}`;
 }
 
 function connection({

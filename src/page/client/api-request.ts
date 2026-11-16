@@ -2,6 +2,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { methodOf, targetPath, type EndpointTarget } from "../../api/endpoints.js";
 import {
   answerOf,
   decodeRefusal,
@@ -12,9 +13,8 @@ import {
   type Refusal,
 } from "./api.js";
 
-export type OwnerRequest<S extends Schema.ConstraintDecoder<unknown>> = Readonly<{
-  method: "GET" | "POST";
-  path: string;
+export type ApiRequest<S extends Schema.ConstraintDecoder<unknown>> = Readonly<{
+  target: EndpointTarget;
   maybeBody: Option.Option<JsonBody>;
   answer: S;
 }>;
@@ -26,18 +26,18 @@ export type Outcomes<A, Answered, Refused, Unreadable, Failed> = Readonly<{
   failed: (detail: string) => Failed;
 }>;
 
-export function ownerRequest<
+export function apiRequest<
   S extends Schema.ConstraintDecoder<unknown>,
   Answered,
   Refused,
   Unreadable,
   Failed,
 >(
-  request: OwnerRequest<S>,
+  request: ApiRequest<S>,
   outcomes: Outcomes<S["Type"], Answered, Refused, Unreadable, Failed>,
 ): Effect.Effect<Answered | Refused | Unreadable | Failed> {
-  return fetchEffect(request.path, {
-    method: request.method,
+  return fetchEffect(targetPath(request.target), {
+    method: methodOf(request.target.endpoint),
     accept: "application/json",
     maybeBody: request.maybeBody,
   }).pipe(

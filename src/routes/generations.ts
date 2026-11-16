@@ -16,6 +16,7 @@ import {
 } from "../supervisor/generations.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
 import {
+  answer,
   callSupervisor,
   decodeRequestBody,
   invalidRequestBody,
@@ -33,7 +34,7 @@ function statusResponse(
   supervisor: GenerationStatusSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.getStatus()).pipe(
-    Effect.map((status) => Response.json(status)),
+    Effect.map((status) => answer("GET /api/status", status)),
   );
 }
 
@@ -54,12 +55,6 @@ export type GenerationSubmissionSupervisor = {
   readonly prepareGeneration: (label: GenerationLabel) => Promise<StartupCheckResult>;
 };
 
-export type GenerationSubmissionResult = Readonly<{
-  ok: true;
-  outcome: Submission;
-  preparation: StartupCheckResult;
-}>;
-
 type ControlCommandKind = "activate" | "rollback";
 
 const handleGenerationControl = Effect.fnUntraced(
@@ -73,7 +68,12 @@ const handleGenerationControl = Effect.fnUntraced(
       ),
     );
 
-    return result.ok ? Response.json(result) : refusal(result);
+    return result.ok
+      ? answer(
+          kind === "activate" ? "POST /api/generations/activate" : "POST /api/generations/rollback",
+          result,
+        )
+      : refusal(result);
   },
   (handled, _request, _supervisor, kind) =>
     handled.pipe(
@@ -105,7 +105,8 @@ const handleGenerationSubmission = Effect.fnUntraced(function* (
       preparation.failure.cause,
     );
 
-    return Response.json(
+    return answer(
+      "POST /api/generations/submit",
       {
         ok: false,
         error: { code: "preparation-failed" },
@@ -114,17 +115,15 @@ const handleGenerationSubmission = Effect.fnUntraced(function* (
           harnessCommit: submitted.generation.harnessCommit,
         },
       },
-      { status: 500 },
+      500,
     );
   }
 
-  const result: GenerationSubmissionResult = {
+  return answer("POST /api/generations/submit", {
     ok: true,
     outcome: submitted,
     preparation: preparation.success,
-  };
-
-  return Response.json(result);
+  });
 }, invalidRequestBody("invalid-submission-request"));
 
 export const GENERATION_HANDLERS: Handlers<

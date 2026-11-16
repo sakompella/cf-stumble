@@ -1,7 +1,7 @@
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
-import type { GenerationSubmissionResult } from "../../src/routes/generations.js";
+import type { Submitted } from "../../src/api/answers.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   activeSupervisor,
@@ -11,6 +11,8 @@ import {
 } from "../supervisor/helpers.js";
 import { readGeneration, readGenerations } from "../supervisor/generation-reads.js";
 import { apiResponse } from "./helpers.js";
+
+type GenerationSubmissionResult = typeof Submitted.Encoded;
 
 const commits = {
   passing: "5100000000000000000000000000000000000001",
