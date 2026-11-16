@@ -227,7 +227,7 @@ export class WorkspaceIdleController implements ProjectActivity {
   #pullOnce(): Effect.Effect<boolean> {
     return attempt(() => this.#ports.pullContainer()).pipe(
       Effect.timeout(FINAL_PULL_TIMEOUT_MS),
-      Effect.map(() => true),
+      Effect.as(true),
       Effect.catch((cause) =>
         Effect.sync(() => {
           logRedactedCause("workspace.idle-stop: final pull failed", cause);

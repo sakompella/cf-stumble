@@ -44,7 +44,7 @@ export function ownerRequest<
     Effect.flatMap(answerOf),
     Effect.flatMap(({ status, payload }) =>
       Effect.map(Clock.currentTimeMillis, (now) =>
-        Option.match(Schema.decodeUnknownOption(request.answer)(payload), {
+        Option.match(Schema.decodeOption(request.answer)(payload), {
           onSome: (answer) => outcomes.answered(answer, now),
           onNone: () =>
             Option.match(decodeRefusal(payload), {

@@ -9,7 +9,7 @@ import {
   ProjectState,
 } from "../../../src/supervisor/projects/project-lifecycle-machine.js";
 
-type State = typeof ProjectState.Type | undefined;
+type State = ProjectState | undefined;
 
 type Tag = LifecycleEvent["_tag"];
 

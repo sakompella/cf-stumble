@@ -77,10 +77,9 @@ export class HarnessArtifacts {
     if (cached !== undefined) return Effect.succeed(this.remembered(cached));
 
     return this.read(harnessCommit).pipe(
-      Effect.flatMap((artifact) =>
-        artifact === undefined
-          ? Effect.fail({ code: "stored-module-map-absent", harnessCommit } as const)
-          : Effect.succeed(artifact),
+      Effect.filterOrFail(
+        (artifact) => artifact !== undefined,
+        () => ({ code: "stored-module-map-absent", harnessCommit }) as const,
       ),
     );
   }

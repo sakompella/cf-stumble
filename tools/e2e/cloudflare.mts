@@ -53,7 +53,7 @@ async function get<S extends Schema.ConstraintDecoder<unknown>>(
 ) {
   const body = await send(account.token, `${API}/accounts/${account.id}${path}`);
 
-  return Schema.decodeUnknownSync(schema)(body);
+  return Schema.decodeSync(schema)(body);
 }
 
 export async function stageUrl(account: Account, stage: string): Promise<string> {
@@ -136,7 +136,7 @@ async function stageImages(stage: string, env: NodeJS.ProcessEnv) {
     env,
   });
 
-  return Schema.decodeUnknownSync(Images)(listed).filter((image) =>
+  return Schema.decodeSync(Images)(listed).filter((image) =>
     image.name.startsWith(stageImagePrefix(stage)),
   );
 }

@@ -91,13 +91,9 @@ export async function githubTokenForIsolateEgress(
   fs: GitHubHostsFile,
   fallbackToken?: string,
 ): Promise<string | undefined> {
-  let hosts = "";
-
-  try {
-    hosts = await fs.readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`, "utf8");
-  } catch {
-    hosts = "";
-  }
+  const hosts = await fs
+    .readFile(`${GITHUB_CLI_CONFIG_DIRECTORY}/hosts.yml`, "utf8")
+    .catch(() => "");
 
   return githubTokenFromHosts(hosts) ?? fallbackToken;
 }
