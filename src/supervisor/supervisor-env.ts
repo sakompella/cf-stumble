@@ -1,11 +1,11 @@
+import type { ResetProblemCode } from "../api/problems.js";
 import type { BackendSetting, WorkspaceBackendChange } from "../backend-setting.js";
 import type { WorkspaceHostNamespace, WorkspaceResetResult } from "../workspace/index.js";
 import { tenantWorkspaceName } from "../workspace-names.js";
 
 export type SupervisorWorkspaceReset =
-  | WorkspaceResetResult
-  | Readonly<{ ok: false; problem: Readonly<{ code: "run-active" }> }>
-  | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-unavailable" }> }>;
+  | Extract<WorkspaceResetResult, { ok: true }>
+  | Readonly<{ ok: false; problem: Readonly<{ code: ResetProblemCode }> }>;
 
 export type { BackendSetting, WorkspaceBackendChange };
 

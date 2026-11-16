@@ -2,8 +2,12 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import type { AnswerOf, Preparation, PreparationFailed } from "../../api/answers.js";
+
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
 import { GitHubReport, type GenerationReading, type Project } from "./model.js";
+
+export { endpointPath } from "../../api/endpoints.js";
 
 export function transportDetail(cause: unknown): string {
   return Predicate.isError(cause) ? cause.message : String(cause);
@@ -87,25 +91,7 @@ export function problemText(answer: Readonly<{ status: number; payload: Schema.J
   });
 }
 
-const GenerationView = Schema.Struct({
-  label: Schema.Number,
-  harnessCommit: Schema.String,
-  status: Schema.String,
-});
-
-export const StatusAnswer = Schema.Struct({
-  activeGeneration: Schema.Struct({
-    generation: Schema.NullOr(GenerationView),
-    epoch: Schema.Number,
-  }),
-  mainAhead: Schema.NullOr(Schema.Number),
-});
-
-export type StatusAnswer = typeof StatusAnswer.Type;
-
-export const decodeStatusAnswer = Schema.decodeUnknownOption(StatusAnswer);
-
-export function generationReading(answer: StatusAnswer): GenerationReading {
+export function generationReading(answer: AnswerOf<"GET /api/status">): GenerationReading {
   const { generation, epoch } = answer.activeGeneration;
 
   return {
@@ -115,26 +101,7 @@ export function generationReading(answer: StatusAnswer): GenerationReading {
   };
 }
 
-export const GitHubStatus = Schema.NullOr(
-  Schema.Union([
-    Schema.Struct({ state: Schema.Literal("disconnected") }),
-    Schema.Struct({ state: Schema.Literal("tooling-missing") }),
-    Schema.Struct({
-      state: Schema.Literal("connected"),
-      login: Schema.String,
-      source: Schema.String,
-    }),
-    Schema.Struct({ state: Schema.Literal("reconnect-required"), reason: Schema.String }),
-    Schema.Struct({
-      state: Schema.Literal("awaiting-authorization"),
-      verificationUri: Schema.String,
-      userCode: Schema.String,
-      expiresAt: Schema.Number,
-    }),
-  ]),
-);
-
-export type GitHubStatusView = typeof GitHubStatus.Type;
+export type GitHubStatusView = AnswerOf<"GET /api/github/connection">["github"];
 
 function connectionDetail(status: Exclude<GitHubStatusView, null>): string {
   if (status.state === "connected") {
@@ -190,92 +157,35 @@ export function gitHubReport(
   });
 }
 
-const ProjectEntry = Schema.Struct({
-  kind: Schema.Literals(["harness", "repository"]),
-  id: Schema.String,
-  displayName: Schema.String,
-  repositoryUrl: Schema.optional(Schema.String),
-});
-
-export const ProjectsAnswer = Schema.Struct({
-  ok: Schema.Literal(true),
-  projects: Schema.Array(ProjectEntry),
-});
-
-export function projectsOf(answer: typeof ProjectsAnswer.Type): readonly Project[] {
+export function projectsOf(answer: AnswerOf<"GET /api/projects">): readonly Project[] {
   return answer.projects.map((entry) => ({
     id: entry.id,
     displayName: entry.displayName,
     isHarness: entry.kind === "harness",
-    location: entry.kind === "harness" ? HARNESS_DIRECTORY : (entry.repositoryUrl ?? ""),
+    location: entry.kind === "harness" ? HARNESS_DIRECTORY : entry.repositoryUrl,
   }));
 }
 
-const PreparationDiagnostics = Schema.Struct({
-  stderrTail: Schema.optional(Schema.String),
-  stdoutTail: Schema.optional(Schema.String),
-  truncated: Schema.optional(Schema.Boolean),
-});
-
-const PreparationProblem = Schema.Struct({
-  code: Schema.String,
-  diagnostics: Schema.optional(PreparationDiagnostics),
-});
-
-export const Preparation = Schema.Union([
-  Schema.Struct({
-    ok: Schema.Literal(true),
-    report: Schema.Struct({ stage: Schema.String, reason: Schema.optional(Schema.String) }),
-  }),
-  Schema.Struct({ ok: Schema.Literal(false), problem: PreparationProblem }),
-]);
-
-export type Preparation = typeof Preparation.Type;
-
-export function preparationText(preparation: Preparation): string {
+export function preparationText(preparation: typeof Preparation.Type): string {
   return preparation.ok
-    ? `${preparation.report.stage}: ${preparation.report.reason ?? ""}`
+    ? `${preparation.report.stage}: ${preparation.report.reason}`
     : `rejected: ${preparation.problem.code}`;
 }
 
-export function diagnosticsText(preparation: Preparation): Option.Option<string> {
-  if (preparation.ok) return Option.none();
+export function diagnosticsText(preparation: typeof Preparation.Type): Option.Option<string> {
+  if (preparation.ok || !("diagnostics" in preparation.problem)) return Option.none();
 
-  const diagnostics = preparation.problem.diagnostics;
-
-  if (diagnostics === undefined) return Option.none();
+  const { stderrTail, stdoutTail, truncated } = preparation.problem.diagnostics;
 
   const parts = [
-    ...(diagnostics.stderrTail !== undefined && diagnostics.stderrTail !== ""
-      ? [`stderr:\n${diagnostics.stderrTail}`]
-      : []),
-    ...(diagnostics.stdoutTail !== undefined && diagnostics.stdoutTail !== ""
-      ? [`stdout:\n${diagnostics.stdoutTail}`]
-      : []),
-    ...(diagnostics.truncated === true
-      ? ["(output truncated to the last part of each stream)"]
-      : []),
+    ...(stderrTail === "" ? [] : [`stderr:\n${stderrTail}`]),
+    ...(stdoutTail === "" ? [] : [`stdout:\n${stdoutTail}`]),
+    ...(truncated ? ["(output truncated to the last part of each stream)"] : []),
   ];
 
   return Option.some(parts.join("\n\n"));
 }
 
-export const SubmitRefusal = Schema.Struct({
-  ok: Schema.Literal(false),
-  error: Schema.Struct({ code: Schema.String }),
-  recorded: Schema.optional(Schema.Struct({ label: Schema.Number, harnessCommit: Schema.String })),
-});
-
-export type SubmitRefusal = typeof SubmitRefusal.Type;
-
-export function submitRejection(refusal: SubmitRefusal): string {
-  const recorded = refusal.recorded;
-
-  return recorded === undefined
-    ? `error: ${refusal.error.code}`
-    : `label ${recorded.label} recorded (commit ${recorded.harnessCommit}), preparation failed: error: ${refusal.error.code}`;
-}
-
-export function projectPath(projectId: string, suffix: string): string {
-  return `/api/projects/${encodeURIComponent(projectId)}${suffix}`;
+export function submitRejection({ recorded, error }: PreparationFailed): string {
+  return `label ${recorded.label} recorded (commit ${recorded.harnessCommit}), preparation failed: error: ${error.code}`;
 }

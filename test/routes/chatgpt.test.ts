@@ -1,11 +1,6 @@
 import { expect, test } from "vitest";
 import type { ChatGPTConnectionView, ChatGPTLoginOutcome } from "../../src/chatgpt/index.js";
-import {
-  controlRequest,
-  disconnectedChatGPT,
-  ownerApiResponse,
-  ownerApiSupervisor,
-} from "./helpers.js";
+import { controlRequest, disconnectedChatGPT, apiResponse, apiSupervisor } from "./helpers.js";
 
 const signingIn: ChatGPTConnectionView = {
   ...disconnectedChatGPT,
@@ -17,19 +12,19 @@ const signingIn: ChatGPTConnectionView = {
 };
 
 test("the connection, a started sign-in and a disconnect each answer the view", async () => {
-  const supervisor = ownerApiSupervisor({
+  const supervisor = apiSupervisor({
     startChatGPTLogin: () => Promise.resolve(signingIn),
     disconnectChatGPT: () => Promise.resolve(disconnectedChatGPT),
   });
 
-  const read = await ownerApiResponse(
+  const read = await apiResponse(
     new Request("https://cf-stumble.test/api/chatgpt/connection"),
     supervisor,
   );
 
-  const started = await ownerApiResponse(controlRequest("/api/chatgpt/login", "{}"), supervisor);
+  const started = await apiResponse(controlRequest("/api/chatgpt/login", "{}"), supervisor);
 
-  const disconnected = await ownerApiResponse(
+  const disconnected = await apiResponse(
     controlRequest("/api/chatgpt/disconnect", "{}"),
     supervisor,
   );
@@ -47,7 +42,7 @@ const COMPLETION_BODY = {
 test("finishing a sign-in hands the supervisor the attempt and the address from the body", async () => {
   const received: string[][] = [];
 
-  const supervisor = ownerApiSupervisor({
+  const supervisor = apiSupervisor({
     completeChatGPTLogin: (attemptId, callbackUrl) => {
       received.push([attemptId, callbackUrl]);
 
@@ -55,7 +50,7 @@ test("finishing a sign-in hands the supervisor the attempt and the address from 
     },
   });
 
-  await ownerApiResponse(
+  await apiResponse(
     controlRequest("/api/chatgpt/login/complete", JSON.stringify(COMPLETION_BODY)),
     supervisor,
   );
@@ -75,9 +70,9 @@ test.each([
       chatgpt: refusal.chatgpt,
     };
 
-    const response = await ownerApiResponse(
+    const response = await apiResponse(
       controlRequest("/api/chatgpt/login/complete", JSON.stringify(COMPLETION_BODY)),
-      ownerApiSupervisor({ completeChatGPTLogin: () => Promise.resolve(outcome) }),
+      apiSupervisor({ completeChatGPTLogin: () => Promise.resolve(outcome) }),
     );
 
     expect(response.status).toBe(refusal.status);
@@ -88,12 +83,12 @@ test.each([
 test("a sign-in body with a field beyond the attempt and the address never reaches the supervisor", async () => {
   let reached = false;
 
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     controlRequest(
       "/api/chatgpt/login/complete",
       JSON.stringify({ ...COMPLETION_BODY, clientId: "c" }),
     ),
-    ownerApiSupervisor({
+    apiSupervisor({
       completeChatGPTLogin: () => {
         reached = true;
 

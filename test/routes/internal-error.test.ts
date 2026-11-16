@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
+import type { ApiSupervisor } from "../../src/routes/api.js";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
-import { controlRequest, ownerApiResponse, ownerApiSupervisor } from "./helpers.js";
+import { controlRequest, apiResponse, apiSupervisor } from "./helpers.js";
 
 const ORIGIN = "https://cf-stumble.test";
 
@@ -14,7 +14,7 @@ function thrown(): Promise<never> {
   return Promise.reject(new Error(`storage failed with ${SECRET} in /root/.git-credentials`));
 }
 
-const throwingRoutes: readonly (readonly [string, Request, Partial<OwnerApiSupervisor>])[] = [
+const throwingRoutes: readonly (readonly [string, Request, Partial<ApiSupervisor>])[] = [
   ["GET /api/status", new Request(`${ORIGIN}/api/status`), { getStatus: thrown }],
   ["GET /api/projects", new Request(`${ORIGIN}/api/projects`), { listProjects: thrown }],
   [
@@ -100,7 +100,7 @@ test.each(throwingRoutes)(
   async (_route, request, overrides) => {
     capturedEvents();
 
-    const response = await ownerApiResponse(request, ownerApiSupervisor(overrides));
+    const response = await apiResponse(request, apiSupervisor(overrides));
 
     expect(response.status).toBe(500);
     const body = await response.text();

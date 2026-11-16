@@ -2,6 +2,8 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { ANSWERS, type AnswerOf, type AnsweredEndpoint } from "../../api/answers.js";
+import { endpointPath, methodOf, type Location } from "../../api/endpoints.js";
 import {
   answerOf,
   decodeRefusal,
@@ -12,12 +14,8 @@ import {
   type Refusal,
 } from "./api.js";
 
-export type OwnerRequest<S extends Schema.ConstraintDecoder<unknown>> = Readonly<{
-  method: "GET" | "POST";
-  path: string;
-  maybeBody: Option.Option<JsonBody>;
-  answer: S;
-}>;
+export type ApiRequest<E extends AnsweredEndpoint> = Location<E> &
+  Readonly<{ endpoint: E; maybeBody: Option.Option<JsonBody> }>;
 
 export type Outcomes<A, Answered, Refused, Unreadable, Failed> = Readonly<{
   answered: (answer: A, now: number) => Answered;
@@ -26,25 +24,21 @@ export type Outcomes<A, Answered, Refused, Unreadable, Failed> = Readonly<{
   failed: (detail: string) => Failed;
 }>;
 
-export function ownerRequest<
-  S extends Schema.ConstraintDecoder<unknown>,
-  Answered,
-  Refused,
-  Unreadable,
-  Failed,
->(
-  request: OwnerRequest<S>,
-  outcomes: Outcomes<S["Type"], Answered, Refused, Unreadable, Failed>,
+export function apiRequest<E extends AnsweredEndpoint, Answered, Refused, Unreadable, Failed>(
+  request: ApiRequest<E>,
+  outcomes: Outcomes<AnswerOf<E>, Answered, Refused, Unreadable, Failed>,
 ): Effect.Effect<Answered | Refused | Unreadable | Failed> {
-  return fetchEffect(request.path, {
-    method: request.method,
+  const decodeAnswer = Schema.decodeUnknownOption(ANSWERS[request.endpoint]);
+
+  return fetchEffect(endpointPath(request.endpoint, request.projectId), {
+    method: methodOf(request.endpoint),
     accept: "application/json",
     maybeBody: request.maybeBody,
   }).pipe(
     Effect.flatMap(answerOf),
     Effect.flatMap(({ status, payload }) =>
       Effect.map(Clock.currentTimeMillis, (now) =>
-        Option.match(Schema.decodeOption(request.answer)(payload), {
+        Option.match(decodeAnswer(payload), {
           onSome: (answer) => outcomes.answered(answer, now),
           onNone: () =>
             Option.match(decodeRefusal(payload), {

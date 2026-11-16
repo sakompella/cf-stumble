@@ -1,7 +1,7 @@
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
-import type { GenerationSubmissionResult } from "../../src/routes/generations.js";
+import type { Submitted } from "../../src/api/answers.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   activeSupervisor,
@@ -10,7 +10,9 @@ import {
   storeModuleMap,
 } from "../supervisor/helpers.js";
 import { readGeneration, readGenerations } from "../supervisor/generation-reads.js";
-import { ownerApiResponse } from "./helpers.js";
+import { apiResponse } from "./helpers.js";
+
+type GenerationSubmissionResult = typeof Submitted.Encoded;
 
 const commits = {
   passing: "5100000000000000000000000000000000000001",
@@ -29,7 +31,7 @@ function seedModuleMap(harnessCommit: string, versionMethod?: string): Promise<v
 }
 
 function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string): Promise<Response> {
-  return ownerApiResponse(
+  return apiResponse(
     new Request("https://cf-stumble.test/api/generations/submit", {
       method: "POST",
       headers: { "content-type": "application/json" },

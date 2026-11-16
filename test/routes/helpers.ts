@@ -1,13 +1,13 @@
 import * as Effect from "effect/Effect";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
-import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { ANSWERS, type AnswerOf, type AnsweredEndpoint } from "../../src/api/answers.js";
+import { routeApiRequest } from "../../src/routes/index.js";
+import type { ApiSupervisor } from "../../src/routes/api.js";
 import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
 
-export function ownerApiResponse(
-  request: Request,
-  supervisor: OwnerApiSupervisor,
-): Promise<Response> {
-  return Effect.runPromise(routeOwnerApiRequest(request, supervisor));
+export function apiResponse(request: Request, supervisor: ApiSupervisor): Promise<Response> {
+  return Effect.runPromise(routeApiRequest(request, supervisor));
 }
 
 export const disconnectedChatGPT: ChatGPTConnectionView = {
@@ -19,7 +19,7 @@ export const disconnectedChatGPT: ChatGPTConnectionView = {
 const notCalled = (what: string) => () => Promise.reject(new Error(`this test must not ${what}`));
 
 const chatgptSupervisor: Pick<
-  OwnerApiSupervisor,
+  ApiSupervisor,
   "getChatGPTConnection" | "startChatGPTLogin" | "completeChatGPTLogin" | "disconnectChatGPT"
 > = {
   getChatGPTConnection: () => Promise.resolve(disconnectedChatGPT),
@@ -28,9 +28,7 @@ const chatgptSupervisor: Pick<
   disconnectChatGPT: notCalled("disconnect ChatGPT"),
 };
 
-export function ownerApiSupervisor(
-  overrides: Partial<OwnerApiSupervisor> = {},
-): OwnerApiSupervisor {
+export function apiSupervisor(overrides: Partial<ApiSupervisor> = {}): ApiSupervisor {
   return {
     getStatus() {
       return Promise.resolve({ activeGeneration: { generation: null, epoch: 0 }, mainAhead: null });
@@ -82,4 +80,13 @@ export function controlRequest(path: string, body: string): Request {
     headers: { "content-type": "application/json" },
     body,
   });
+}
+
+export async function decodedAnswer<E extends AnsweredEndpoint>(
+  endpoint: E,
+  response: Response,
+): Promise<AnswerOf<E> | undefined> {
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(ANSWERS[endpoint])(await response.json()),
+  );
 }

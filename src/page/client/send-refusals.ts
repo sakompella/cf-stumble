@@ -1,4 +1,4 @@
-import type { ConversationProblem } from "../../supervisor/conversations/conversation-result.js";
+import type { ConversationProblemCode } from "../../api/problems.js";
 import { refusalText, type Refusal } from "./api.js";
 
 const SEND_REFUSALS = {
@@ -16,13 +16,13 @@ const SEND_REFUSALS = {
   "mount-failed": { wording: "rejected: mount-failed", keepsMessage: true },
   "generation-failed": { wording: "rejected: generation-failed", keepsMessage: true },
 } as const satisfies Record<
-  ConversationProblem["code"],
+  ConversationProblemCode,
   Readonly<{ wording: string; keepsMessage: boolean }>
 >;
 
 export type SendRefusal = Readonly<{ wording: string; keepsMessage: boolean }>;
 
-function isSendProblem(code: string): code is ConversationProblem["code"] {
+function isSendProblem(code: string): code is ConversationProblemCode {
   return Object.hasOwn(SEND_REFUSALS, code);
 }
 

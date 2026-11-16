@@ -8,6 +8,8 @@ import {
   STATUS_PAYLOAD,
 } from "./fixtures.mjs";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
+import type { ANSWERS, AnsweredEndpoint } from "../../src/api/answers.js";
+import { matchEndpoint } from "../../src/api/endpoints.js";
 import type { ScenarioState } from "./server-state.mjs";
 
 export type RouteAnswer = Readonly<{ status: number; payload: JsonValue }>;
@@ -36,12 +38,22 @@ function readString(body: JsonValue, key: string): string | undefined {
   return value !== undefined && isJsonString(value) ? value : undefined;
 }
 
+type JsonState = Pick<ScenarioState, "scenario" | "projects">;
+
+type Answer<E extends AnsweredEndpoint> = Readonly<{
+  status: number;
+  payload: (typeof ANSWERS)[E]["Encoded"];
+}>;
+
 const INVALID_REQUEST: RouteAnswer = {
   status: 400,
-  payload: { ok: false, problem: { code: "invalid-request" } },
+  payload: { ok: false, error: { code: "invalid-connect-request" } },
 };
 
-function connect(state: ScenarioState, body: JsonValue): RouteAnswer {
+function connect(
+  state: JsonState,
+  body: JsonValue,
+): Answer<"POST /api/projects/connect"> | RouteAnswer {
   const repositoryUrl = readString(body, "repositoryUrl");
 
   if (repositoryUrl === undefined || repositoryUrl === "") {
@@ -57,43 +69,38 @@ function connect(state: ScenarioState, body: JsonValue): RouteAnswer {
   return { status: 200, payload: connectPayload(already) };
 }
 
-const JSON_ROUTES: readonly Readonly<{
-  method: string;
-  path: string;
-  answer: (state: ScenarioState, body: JsonValue) => RouteAnswer;
-}>[] = [
-  {
-    method: "GET",
-    path: "/api/projects",
-    answer: (state) => ({ status: 200, payload: projectsPayload(state.projects) }),
-  },
-  {
-    method: "GET",
-    path: "/api/status",
-    answer: () => ({ status: 200, payload: STATUS_PAYLOAD }),
-  },
-  {
-    method: "GET",
-    path: "/api/chatgpt/connection",
-    answer: () => ({ status: 200, payload: CHATGPT_PAYLOAD }),
-  },
-  {
-    method: "GET",
-    path: "/api/workspace/backend",
-    answer: () => ({ status: 200, payload: { ok: true, backend: "provider" } }),
-  },
-  { method: "POST", path: "/api/projects/connect", answer: connect },
-  {
-    method: "GET",
-    path: "/api/github/connection",
-    answer: (state) => ({ status: 200, payload: refreshPayload(state.scenario) }),
-  },
-  {
-    method: "POST",
-    path: "/api/github/connection/refresh",
-    answer: (state) => ({ status: 200, payload: refreshPayload(state.scenario) }),
-  },
-];
+type ServedRoutes = {
+  readonly [
+    E in
+      | "GET /api/projects"
+      | "GET /api/status"
+      | "GET /api/chatgpt/connection"
+      | "GET /api/workspace/backend"
+      | "POST /api/projects/connect"
+      | "GET /api/github/connection"
+      | "POST /api/github/connection/refresh"
+  ]: (state: JsonState, body: JsonValue) => Answer<E> | RouteAnswer;
+};
+
+export const JSON_ROUTES = {
+  "GET /api/projects": (state) => ({ status: 200, payload: projectsPayload(state.projects) }),
+  "GET /api/status": () => ({ status: 200, payload: STATUS_PAYLOAD }),
+  "GET /api/chatgpt/connection": () => ({ status: 200, payload: CHATGPT_PAYLOAD }),
+  "GET /api/workspace/backend": () => ({ status: 200, payload: { ok: true, backend: "provider" } }),
+  "POST /api/projects/connect": connect,
+  "GET /api/github/connection": (state) => ({
+    status: 200,
+    payload: refreshPayload(state.scenario),
+  }),
+  "POST /api/github/connection/refresh": (state) => ({
+    status: 200,
+    payload: refreshPayload(state.scenario),
+  }),
+} satisfies ServedRoutes;
+
+function isServed(endpoint: string): endpoint is keyof typeof JSON_ROUTES {
+  return Object.hasOwn(JSON_ROUTES, endpoint);
+}
 
 export function serveJsonRoute(
   req: IncomingMessage,
@@ -101,9 +108,9 @@ export function serveJsonRoute(
   state: ScenarioState,
   body: JsonValue,
 ): RouteAnswer | undefined {
-  const route = JSON_ROUTES.find(
-    (candidate) => candidate.method === req.method && candidate.path === path,
-  );
+  const endpoint = matchEndpoint(req.method ?? "", path)?.endpoint;
 
-  return route === undefined ? undefined : route.answer(state, body);
+  return endpoint !== undefined && isServed(endpoint)
+    ? JSON_ROUTES[endpoint](state, body)
+    : undefined;
 }

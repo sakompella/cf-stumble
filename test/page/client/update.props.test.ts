@@ -81,7 +81,7 @@ const ANSWERS: readonly Step[] = [
   () => Message.FailedGitHub({ detail: "x" }),
   () => Message.SucceededChatGPT({ chatgpt: CONNECTED_CHATGPT }),
   () => Message.SucceededFetchProjects({ projects: PROJECTS }),
-  () => Message.ClickedAuthorize({ path: "/api/github/authorization" }),
+  () => Message.ClickedAuthorize({ endpoint: "POST /api/github/authorization" }),
 ];
 
 const CONNECTED_CHATGPT = chatGPTConnection({

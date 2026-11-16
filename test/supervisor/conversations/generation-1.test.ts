@@ -2,9 +2,8 @@ import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { SERVING_FACET_NAME } from "../../../src/supervisor/artifacts/index.js";
-import { sentMessage } from "../../../src/page/client/sent-message.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
-import { ownerApiResponse } from "../../routes/helpers.js";
+import { apiResponse, decodedAnswer } from "../../routes/helpers.js";
 import {
   answeredLines,
   hasRun,
@@ -48,11 +47,11 @@ test("a run cut off by a Supervisor reset resumes from the Supervisor's alarm an
   ]);
 });
 
-test("the owner API answers a sent message with the number the page accepts", async () => {
+test("the API answers a sent message with the answer the page decodes", async () => {
   scriptModel(says("an answer"));
   const control = await servingGeneration1("generation-1-send-answer", new ProjectWorkspace());
 
-  const response = await ownerApiResponse(
+  const response = await apiResponse(
     new Request(`https://cf-stumble.test/api/projects/${project}/messages`, {
       method: "POST",
       body: JSON.stringify({ content: "hello", requestId: "r1" }),
@@ -61,7 +60,9 @@ test("the owner API answers a sent message with the number the page accepts", as
   );
 
   expect(response.status).toBe(202);
-  expect(sentMessage(await response.json())._tag).toBe("Some");
+  await expect(
+    decodedAnswer("POST /api/projects/:projectId/messages", response),
+  ).resolves.toBeDefined();
 });
 
 test("a message sent while a run is busy is answered after the first", async () => {

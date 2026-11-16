@@ -1,7 +1,12 @@
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
-import { chatGPTConnection } from "../../../src/page/client/chatgpt.js";
-import { ChatGPT, chatGPTWording, pendingLogin } from "../../../src/page/client/chatgpt.js";
+import type { ChatGPTView } from "../../../src/api/answers.js";
+import {
+  ChatGPT,
+  chatGPTConnection,
+  chatGPTWording,
+  pendingLogin,
+} from "../../../src/page/client/chatgpt.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
@@ -9,26 +14,31 @@ import { received, running, viewing } from "./views.js";
 
 const LOGIN = { attemptId: "attempt-1", authorizeUrl: "https://auth.example/authorize?state=s" };
 
-const DISCONNECTED = { state: "disconnected" };
+const DISCONNECTED = { state: "disconnected" } as const;
 
-type Fields = Readonly<Record<string, string | number>>;
-
-function viewOf(connection: Fields | null, login: Fields | null = null) {
-  return { connection, login, model: "gpt-6.1-sol" };
+function viewOf(
+  connection: ChatGPTView["connection"],
+  login: Omit<NonNullable<ChatGPTView["login"]>, "expiresAt"> | null = null,
+): ChatGPTView {
+  return {
+    connection,
+    login: login === null ? null : { ...login, expiresAt: 1 },
+    model: "gpt-6.1-sol",
+  };
 }
 
 function after(start: Model, messages: readonly Message[]): Model {
   return messages.reduce((model, message) => update(model, message).model, start);
 }
 
-function succeeded(chatgpt: ReturnType<typeof viewOf>): Message {
+function succeeded(chatgpt: ChatGPTView): Message {
   return Message.SucceededChatGPT({ chatgpt: chatGPTConnection(chatgpt) });
 }
 
 const SIGNING_IN = after(init().model, [succeeded(viewOf(DISCONNECTED, LOGIN))]);
 
 test("only a connected state counts as connected, so only it offers disconnecting", () => {
-  const cases: readonly (readonly [Fields, boolean])[] = [
+  const cases: readonly (readonly [ChatGPTView["connection"], boolean])[] = [
     [DISCONNECTED, false],
     [{ state: "connected", expiresAt: 1 }, true],
     [{ state: "needs-reconnect", reason: "refresh-refused" }, false],
@@ -39,19 +49,13 @@ test("only a connected state counts as connected, so only it offers disconnectin
   }
 });
 
-test("a view the page cannot word reads as unknown", () => {
-  for (const unreadable of [null, "text", {}, viewOf({ state: "paused" }, LOGIN), viewOf(null)]) {
-    expect(chatGPTConnection(unreadable)).toEqual(ChatGPT.Unknown());
-  }
-});
-
 test("a login needs both its attempt and its link", () => {
   expect(pendingLogin(chatGPTConnection(viewOf(DISCONNECTED, LOGIN)))).toEqual(
     Option.some({ ...LOGIN, address: "" }),
   );
-  expect(pendingLogin(chatGPTConnection(viewOf(DISCONNECTED, { attemptId: "a" })))).toEqual(
-    Option.none(),
-  );
+  expect(
+    pendingLogin(chatGPTConnection(viewOf(DISCONNECTED, { attemptId: "a", authorizeUrl: "" }))),
+  ).toEqual(Option.none());
 });
 
 test("finishing sends the login's attempt and the trimmed address", () => {
@@ -136,12 +140,8 @@ test("an unreachable Worker is reported in the banner and the result", () => {
   expect(failed.pageError).toContain("offline");
 });
 
-function limited(limitedUntil: number | null) {
-  return {
-    connection: { state: "connected", expiresAt: 1, usageLimit: { reachedAt: 1, limitedUntil } },
-    login: null,
-    model: "gpt-6.1-sol",
-  };
+function limited(limitedUntil: number | null): ChatGPTView {
+  return viewOf({ state: "connected", expiresAt: 1, usageLimit: { reachedAt: 1, limitedUntil } });
 }
 
 test("a usage limit is worded with its end when OpenAI named one, and the connection stays", () => {

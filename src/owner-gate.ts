@@ -103,7 +103,7 @@ async function gateRefusal(
     });
   }
 
-  return isCrossOriginMutation(request) ? jsonError(403, "cross-origin-request") : undefined;
+  return isCrossOriginMutation(request) ? jsonError("cross-origin-request") : undefined;
 }
 
 export function ownerGateRefusal(

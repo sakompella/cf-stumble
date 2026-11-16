@@ -1,4 +1,4 @@
-import { routeClass } from "../../src/routes/route-pattern.ts";
+import { routeClass } from "../../src/api/endpoints.ts";
 import { PROJECT_RUN_DEADLINE_MS } from "../../src/turn-budget.ts";
 
 export const MINUTE_MS = 60_000;

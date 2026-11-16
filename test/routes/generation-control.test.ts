@@ -7,7 +7,7 @@ import {
   prepareGeneration,
   submitCandidate,
 } from "../supervisor/helpers.js";
-import { ownerApiResponse } from "./helpers.js";
+import { apiResponse } from "./helpers.js";
 
 const commits = {
   second: "0123456789abcdef0123456789abcdef01234567",
@@ -29,7 +29,7 @@ function control(
   command: "activate" | "rollback",
   body: ControlBody,
 ): Promise<Response> {
-  return ownerApiResponse(
+  return apiResponse(
     new Request(`https://cf-stumble.test/api/generations/${command}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -40,7 +40,7 @@ function control(
 }
 
 async function statusEpoch(stub: DurableObjectStub<Supervisor>): Promise<number> {
-  const response = await ownerApiResponse(new Request("https://cf-stumble.test/api/status"), stub);
+  const response = await apiResponse(new Request("https://cf-stumble.test/api/status"), stub);
 
   const body = await response.json<{ readonly activeGeneration: { readonly epoch: number } }>();
 

@@ -4,7 +4,8 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { encodeEntriesRequest } from "../../entries-request.js";
-import { answerOf, fetchEffect, projectPath } from "./api.js";
+import { endpointPath } from "../../api/endpoints.js";
+import { answerOf, fetchEffect } from "./api.js";
 
 function isEntryRecord(value: unknown): value is EntryRecord {
   return (
@@ -37,7 +38,7 @@ function entriesPath(projectId: string, query: Parameters<EntryLoader>[0], limit
     maxEntryId: query.maxEntryId,
   });
 
-  return `${projectPath(projectId, "/entries")}?${params.toString()}`;
+  return `${endpointPath("GET /api/projects/:projectId/entries", projectId)}?${params.toString()}`;
 }
 
 export function loaderFor(projectId: string): EntryLoader {
