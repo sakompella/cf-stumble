@@ -43,9 +43,10 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
     return Effect.succeed(page);
   }
 
-  return routeApiRequest(request, env.SUPERVISOR.getByName(SUPERVISOR_NAME)).pipe(
-    Effect.map((response) => noStore(response)),
-  );
+  return routeApiRequest(request, {
+    stub: () => env.SUPERVISOR.getByName(SUPERVISOR_NAME),
+    version: env.CF_VERSION_METADATA?.id ?? null,
+  }).pipe(Effect.map((response) => noStore(response)));
 }
 
 function gatedRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Response> {

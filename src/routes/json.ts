@@ -62,10 +62,12 @@ export function callSupervisor<A>(call: () => Promise<A>): Effect.Effect<A, Supe
 
 type Routed = Effect.Effect<Response, SupervisorCallFailed>;
 
+export type Deployment<S> = Readonly<{ stub: () => S; version: string | null }>;
+
 export type Handlers<S, K extends Endpoint> = {
   readonly [E in K]: E extends ProjectEndpoint
     ? (request: Request, projectId: string, supervisor: S) => Routed
-    : (request: Request, supervisor: S) => Routed;
+    : (request: Request, supervisor: S, deployment: Deployment<S>) => Routed;
 };
 
 export function answeringInternalErrors(

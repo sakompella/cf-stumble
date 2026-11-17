@@ -6,8 +6,26 @@ import { routeApiRequest } from "../../src/routes/index.js";
 import type { ApiSupervisor } from "../../src/routes/api.js";
 import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
 
-export function apiResponse(request: Request, supervisor: ApiSupervisor): Promise<Response> {
-  return Effect.runPromise(routeApiRequest(request, supervisor));
+export const WORKER_VERSION = "version-of-the-request";
+
+export function apiResponse(
+  request: Request,
+  ...stubs: readonly ApiSupervisor[]
+): Promise<Response> {
+  const remaining = [...stubs];
+
+  return Effect.runPromise(
+    routeApiRequest(request, {
+      version: WORKER_VERSION,
+      stub: () => {
+        const stub = remaining.length > 1 ? remaining.shift() : remaining[0];
+
+        if (stub === undefined) throw new Error("a route test needs a Supervisor stub");
+
+        return stub;
+      },
+    }),
+  );
 }
 
 export const disconnectedChatGPT: ChatGPTConnectionView = {
@@ -30,6 +48,7 @@ const chatgptSupervisor: Pick<
 
 export function apiSupervisor(overrides: Partial<ApiSupervisor> = {}): ApiSupervisor {
   return {
+    scriptVersion: () => Promise.resolve(WORKER_VERSION),
     getStatus() {
       return Promise.resolve({ activeGeneration: { generation: null, epoch: 0 }, mainAhead: null });
     },

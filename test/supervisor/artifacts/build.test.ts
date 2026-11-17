@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import * as Result from "effect/Result";
 import { resultOf } from "../../effect-result.js";
+import type { HarnessBuildStepName } from "../../../src/harness-build.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../../src/workspace-command-timeout.js";
 import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
@@ -61,6 +62,71 @@ test("a build survives a Workspace Host restart that kills the stub of an earlie
   const result = await resultOf(buildModuleMap(oneCallStub, BUILD_COMMIT));
 
   expect(Result.isSuccess(result) ? "built" : result.failure.code).toBe("built");
+});
+
+const CODE_UPDATE_RESET = "Durable Object reset because its code was updated.";
+
+function resetAt(step: HarnessBuildStepName, times: number): FakeBuildHost {
+  const host = new FakeBuildHost();
+  const build = host.build.bind(host);
+  let resets = 0;
+
+  host.build = (request) => {
+    if (request.step !== step || resets >= times) return build(request);
+
+    resets += 1;
+    host.requests.push(request.step);
+
+    return Promise.reject(new Error(CODE_UPDATE_RESET));
+  };
+
+  return host;
+}
+
+test("a build starts again once when a deploy resets the Workspace Host under it (3b5a74a5, deploy 43934982845)", async () => {
+  for (const step of ["provision", "install"] as const) {
+    const host = resetAt(step, 1);
+
+    const result = await built(host);
+
+    expect(Result.isSuccess(result) ? "built" : result.failure.code, step).toBe("built");
+    expect(
+      host.steps().filter((request) => request === "provision"),
+      step,
+    ).toHaveLength(2);
+    expect(
+      host.steps().filter((request) => request === "build-discard"),
+      step,
+    ).toHaveLength(2);
+  }
+});
+
+test("a build that the deploy resets twice is unavailable, not retried again", async () => {
+  const host = resetAt("provision", 2);
+
+  const result = await built(host);
+
+  expect(Result.isFailure(result) ? result.failure : "built").toEqual({
+    code: "build-workspace-unavailable",
+    harnessCommit: BUILD_COMMIT,
+  });
+  expect(host.steps().filter((request) => request === "provision")).toHaveLength(2);
+});
+
+test("a Workspace Host error that is not a code update is not retried", async () => {
+  const host = new FakeBuildHost();
+  host.build = (request) => {
+    host.requests.push(request.step);
+
+    return Promise.reject(new Error("the container is not running"));
+  };
+
+  const result = await built(host);
+
+  expect(Result.isFailure(result) ? result.failure.code : "built").toBe(
+    "build-workspace-unavailable",
+  );
+  expect(host.steps().filter((request) => request === "provision")).toHaveLength(1);
 });
 
 test("gives the built module map the commit the Supervisor asked to build", async () => {

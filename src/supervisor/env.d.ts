@@ -19,6 +19,7 @@ declare global {
       readonly GH_TOKEN?: string;
       readonly OWNER_PASSWORD?: string;
       readonly CHATGPT_MODEL: string;
+      readonly CF_VERSION_METADATA?: Readonly<{ id: string }>;
     }
   }
 }
