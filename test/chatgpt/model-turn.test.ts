@@ -217,6 +217,26 @@ test("a second 401 marks the refreshed token refused and says reconnect is requi
   expect(everythingLogged()).not.toMatch(/chatgpt-access-FAKE/u);
 });
 
+test("a second 401 whose refusal cannot be recorded still says reconnect is required and logs the lost update", async () => {
+  const credential = {
+    ...fakeCredential([ready(ACCESS_ONE), ready(ACCESS_TWO)]),
+    markRefused: () =>
+      Promise.reject(new Error(`the supervisor restarted while holding ${ACCESS_TWO}`)),
+  };
+
+  const logged = capturedEvents();
+
+  const { events } = await run(credential, () =>
+    Promise.resolve(new Response("expired", { status: 401 })),
+  );
+
+  expect(events).toEqual([{ type: "error", error: { code: "chatgpt-reconnect-required" } }]);
+  expect(named(logged(), "chatgpt.account-update-failed")).toEqual([
+    expect.objectContaining({ level: "error", update: "refused" }),
+  ]);
+  expect(everythingLogged()).not.toContain(ACCESS_TWO);
+});
+
 test("an error object without a type, then [DONE], keeps the text already streamed, logs the code, and errors the call", async () => {
   const logged = capturedEvents();
   const errorObject = { error: { code: "server_error", message: "Read a.txt" } };

@@ -4,6 +4,7 @@ import type { ChatGPTAccess } from "../src/chatgpt/index.js";
 import type { WorkersAiBinding } from "../src/model-route-wire/events.js";
 import { ModelRoute } from "../src/model-route.js";
 import type { ModelRouteRequest } from "../src/model-route-wire/request.js";
+import { capturedEvents, named } from "./log-capture.js";
 import {
   collectEvents,
   DONE_LINE,
@@ -27,7 +28,7 @@ function workersAi(text: string) {
   return { ai: binding, calls };
 }
 
-function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess) {
+function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess, recordingFails = false) {
   const limited: (readonly [string, number | null])[] = [];
   const context = createExecutionContext();
   Object.defineProperty(context, "props", { value: { supervisor: "owner", instance: 0 } });
@@ -40,6 +41,8 @@ function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess) {
         chatgptAccess: () => Promise.resolve(access),
         markChatGPTRefused: () => Promise.resolve(),
         markChatGPTUsageLimited: (accessToken, limitedUntil) => {
+          if (recordingFails) return Promise.reject(new Error("the supervisor restarted"));
+
           limited.push([accessToken, limitedUntil]);
 
           return Promise.resolve();
@@ -96,6 +99,22 @@ test("a usage limit before any output is answered by Workers AI after one fallba
   ]);
   expect(events.slice(2)).toMatchObject([
     { type: "done", message: { content: "from Workers AI" } },
+  ]);
+});
+
+test("a usage limit the Supervisor cannot record is still answered by Workers AI", async () => {
+  responsesAnswer([{ type: "response.created", response: {} }, USAGE_LIMIT_FAILED]);
+  const logged = capturedEvents();
+  const binding = workersAi("from Workers AI");
+
+  const events = await supervisedRoute(binding.ai, READY, true).events();
+
+  expect(events.slice(0, 2)).toEqual([
+    { type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil: null },
+    { type: "text-delta", delta: "from Workers AI" },
+  ]);
+  expect(named(logged(), "chatgpt.account-update-failed")).toEqual([
+    expect.objectContaining({ level: "error", update: "usage-limited" }),
   ]);
 });
 
