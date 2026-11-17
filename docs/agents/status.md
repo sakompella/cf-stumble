@@ -23,7 +23,7 @@ Several limits are part of this contract and are not unfinished work:
 - **Rollback.** A rollback loads stored code. It does not restore project files, conversation history or the Supervisor's database, and it refuses a generation whose facet compatibility differs from the current one.
 - **Reset.** A workspace reset or a project disconnect destroys uncommitted work on purpose. Commit and push first. An ordinary stop or restart must not lose acknowledged writes.
 - **Cost.** The idle stop and run budgets bound one run chain, not a day's spend. Nothing caps the account's bill. The owner checks `pnpm ops:check`, billing alerts and the container's state.
-- **Cold starts and sign-in.** A cold container delays the first command that needs Linux, and the ChatGPT login expires and needs a reconnect now and then. A hang with no end, lost accepted work or an unreadable error is unfinished work.
+- **Cold starts and sign-in.** A cold container delays the first command that needs Linux. In the harness project it also delays the start of every run (ADR-0052, amendment of 2026-11-17). The ChatGPT login expires and needs a reconnect now and then. A hang with no end, lost accepted work or an unreadable error is unfinished work.
 
 ## What is deployed
 
@@ -67,4 +67,36 @@ Each item that this file used to list as open is now classified: **resolved** (w
 
 **Reproduced**
 
-None.
+The page failures that the 2026-11-16 QA run saw are open: the first events connection, F4, F12, F13 and F15. See "Open items" below.
+
+## Open items
+
+These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plans/`, kept out of Git; `rc-summary.md` ranks them). F14 (a reload shows fewer entries) is closed: the code is by design, and the `overview.md` sentence that invited the report is fixed. Each line points at its plan.
+
+**Seen in a run**
+
+- **The first events connection fails on every page load.** The stream starts before the transcript is held. `rc-events-first-connect.md`.
+- **Panels go stale in a second tab (F13).** The page reads server state only at load and after its own actions. `rc-f13-project-list-tabs.md`.
+- **A cold start shows only `running` (F4).** The page folds Pi Durable's run phase into one boolean. `rc-f4-cold-start.md`.
+- **The GitHub panel keeps four strings, not the Worker's state (F12).** Its controls do not follow the state. `rc-f12-github-panel.md`.
+- **The workspace backend switch says nothing about its effect (F15).** `POST /api/workspace/backend` echoes the setting and drops what the Host knows. `rc-f15-workspace-panel.md`.
+
+**Proved in code or by a scratch test, not seen in production**
+
+- **An idle stop can hang the Host.** If `setAlarm` fails at the end of a stop, every Host RPC and exec waits forever. `rc-review-25.md`.
+- **The turn deadline is enforced in five places (#19).** A lease ends only through a timer. `rc-review-19.md`.
+- **Two ChatGPT account writes fail without a log line (#17).** `rc-review-17.md`.
+- **The route reports its own failures as `invalid-request` (#18).** Pi retries only when the text matches its list. `rc-review-18.md`.
+- **Shell scripts take values by interpolation (#20).** Four shell tests fail under a hostile root path. `rc-review-20.md`.
+- **A long command's output is saved twice (#23).** Pi's spill file and Computer's saved file hold the same bytes. `rc-review-23.md`.
+- **The e2e step limits do not stop the work, and the bundle budget measures another bundle (#26).** `rc-review-26.md`.
+- **Dead config, members and prose (#28).** The oxlint Effect-free override exempts nothing, and 12 more small items remain. `rc-review-28.md`.
+
+**Structure with no live failure**
+
+- **The GitHub connection has dead fields, and the repository URL is parsed three times (#15).** `rc-review-15.md`.
+- **The facet replacement is inferred from replies (#16).** `rc-review-16.md`.
+- **The Supervisor imports page code, and the CLI copies a label parser (#21).** `rc-review-21.md`.
+- **Generation history is shaped like the old Git repository (#22).** `rc-review-22.md`.
+
+Decisions waiting for the owner: hide **Authorize GitHub** while connected (F12), delete the oxlint Effect-free override (#28), and add a SQLite column for #16.

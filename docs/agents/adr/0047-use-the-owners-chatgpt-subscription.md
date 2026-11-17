@@ -76,6 +76,11 @@ yet reached, so a second call that meets the same limit in the stream keeps the 
 refusals, such as `subscription_sharing_user_not_eligible` or
 `subscription_sharing_usage_unavailable`, still fail the call.
 
+**Amendment (2026-11-17).** The Supervisor's write of a limit or of a refused token is best effort.
+`src/chatgpt/model-turn.ts` swallows a write that rejects and logs nothing, and the call's result
+stands: a Workers AI fallback does not fail because bookkeeping failed. The next call meets the same
+limit or refusal and records it again.
+
 **The model is fixed per deployment.** `CHATGPT_MODEL` in `infra/worker-settings.ts` names it
 (`gpt-6.1-sol`, the model OpenAI's token sharing documentation uses in its examples). The request
 uses medium reasoning effort, `store: false` and streaming, and passes system messages as

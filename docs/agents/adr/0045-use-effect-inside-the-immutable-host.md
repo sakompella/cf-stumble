@@ -66,6 +66,12 @@ of a `Data.TaggedEnum` union in place of several booleans, with no events or com
 generation machine (`src/supervisor/generation-machine.ts`) and the conversation run machine
 (`src/supervisor/conversations/run-machine.ts`) follow this shape.
 
+**Amendment (2026-11-17).** The generation machine has two commands, `Changed` and `ProbationFailed`.
+It has no command for a facet replacement. `Generations.activate` and `Generations.settled` return a
+reply, and `Supervisor` and `ServingConversations` call `replaceFacet` when the reply says an
+activation or rollback happened, so the machine does not emit the command that this paragraph lists. `ServingConversations` keeps the serving instance number in the KV key
+`serving-instance`, outside the generation tables.
+
 **Imports and tests.** Code imports Effect by module path, such as `effect/Effect`, and oxlint
 forbids the `effect` index. The index re-exports every module and keeps some unused ones in the
 Worker bundle. The Vitest workers pool loads each module again in every test file's isolate, so
@@ -80,6 +86,12 @@ such as the `src/orb-protocol.ts` frame and job constructors, and branches on it
 `Predicate.isTagged`. The rules are off for `src/facet/generation-1/**` and for the host files that
 the generation-1 module map bundles, because those files stay free of Effect. The fifth rule,
 `no-service-constructor-imports`, stays off: the host has no services, `Context`, or `Layer`.
+
+**Amendment (2026-11-17).** The override for those files exempts nothing. Two of its paths
+(`src/facet-compatibility.ts`, `src/model-route-events.ts`) name files that moved to
+`src/facet/runtime-contract.ts` and `src/model-route-wire/events.ts`, and the list no longer matches
+the files the module map bundles. Linting `src` without the override gives 0 errors, because the
+four rules look for a `_tag` comparison or construction and those files branch on `kind`.
 
 **Alternatives.** Keeping better-result for results and adding Effect only for concurrency would
 leave two systems for composing failures. Publishing Effect RPC or schema envelopes across Workers
