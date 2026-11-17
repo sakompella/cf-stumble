@@ -17,7 +17,7 @@ type Terminal = Extract<ExecEvent, { kind: "terminal" }>;
 
 type Output = Extract<ExecEvent, { kind: "stdout" | "stderr" }>;
 
-export type RunningCommands = Set<string>;
+export type RunningCommands = Set<Promise<string | null>>;
 
 function failure(code: ExecutionError["code"], message: string): ExecResult {
   return { ok: false, error: new ExecutionError(code, message) };
@@ -187,8 +187,6 @@ export async function execInWorkspace(
   options: ShellExecOptions | undefined,
   context: Context,
 ): Promise<ExecResult> {
-  const signal = context.abortSignal;
-
   if (isAborted(context)) return failure("aborted", "aborted");
 
   if (isArgv(command) && command.length === 0) return failure("spawn_error", "Empty argv");
@@ -210,13 +208,37 @@ export async function execInWorkspace(
     backend: workspace.backend,
   };
 
-  const started = await workspace.target.startExec(input).catch(() => {});
+  const starting = workspace.target.startExec(input);
+
+  const operation = starting.then(
+    (result) => (result.ok ? result.value.operationId : null),
+    () => null,
+  );
+
+  running.add(operation);
+
+  try {
+    return await runStarted(workspace, starting, command, options, context);
+  } finally {
+    running.delete(operation);
+  }
+}
+
+async function runStarted(
+  workspace: ComputerWorkspace,
+  starting: ReturnType<ComputerWorkspace["target"]["startExec"]>,
+  command: string | readonly string[],
+  options: ShellExecOptions | undefined,
+  context: Context,
+): Promise<ExecResult> {
+  const started = await starting.catch(() => {});
 
   if (started === undefined) return failure("unknown", "startExec rejected");
 
   if (!started.ok) return failure("spawn_error", `startExec refused: ${started.error.code}`);
 
   const { operationId, events } = started.value;
+  const signal = context.abortSignal;
 
   const kill = (): void => {
     void workspace.target.kill(operationId).catch(() => {});
@@ -224,12 +246,11 @@ export async function execInWorkspace(
 
   const frames = new NdjsonFrameReader(events.getReader());
 
-  running.add(operationId);
   signal?.addEventListener("abort", kill);
 
-  if (isAborted(context)) kill();
-
   try {
+    if (isAborted(context)) kill();
+
     return await settle({
       workspace,
       operationId,
@@ -240,12 +261,15 @@ export async function execInWorkspace(
     });
   } finally {
     signal?.removeEventListener("abort", kill);
-    running.delete(operationId);
   }
 }
 
 export async function killAll(workspace: ComputerWorkspace, running: RunningCommands) {
-  const kills = [...running].map((operationId) => workspace.target.kill(operationId));
+  const operationIds = await Promise.all(running);
+
+  const kills = operationIds.flatMap((operationId) =>
+    operationId === null ? [] : [workspace.target.kill(operationId)],
+  );
 
   await Promise.allSettled(kills);
 }
