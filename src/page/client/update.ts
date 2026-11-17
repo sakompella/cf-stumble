@@ -1,6 +1,5 @@
 import * as Option from "effect/Option";
 import type { Runtime } from "foldkit";
-import { FetchGitHub, FetchProjects, FetchStatus } from "./commands.js";
 import { ChatGPT } from "./chatgpt.js";
 import { Message } from "./message.js";
 import {
@@ -17,13 +16,12 @@ import {
   chatGPTHandlers,
   connectHandlers,
   disconnectHandlers,
-  FetchBackend,
-  FetchChatGPT,
   gitHubHandlers,
   projectHandlers,
 } from "./update-projects.js";
-import type { UpdateReturn } from "./update-shared.js";
-import { conversationHandlers, INITIAL_CONVERSATION } from "./update-conversation.js";
+import { readServerState } from "./read-server-state.js";
+import { INITIAL_CONVERSATION, type UpdateReturn } from "./update-shared.js";
+import { conversationHandlers } from "./update-conversation.js";
 
 const EMPTY_PANEL = { labelInput: "", request: ControlRequest.Idle() };
 
@@ -60,7 +58,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     activate: EMPTY_PANEL,
     rollback: EMPTY_PANEL,
   },
-  commands: [FetchStatus(), FetchProjects(), FetchGitHub(), FetchChatGPT(), FetchBackend()],
+  commands: readServerState(),
 });
 
 export function update(model: Model, message: Message): UpdateReturn {
@@ -75,6 +73,7 @@ export function update(model: Model, message: Message): UpdateReturn {
     ...statusHandlers(model),
     ...submitHandlers(model),
     ...controlHandlers(model),
+    ReturnedToPage: () => ({ model, commands: readServerState() }),
     ChoseRunBudget: ({ minutes }) => ({ model: { ...model, runBudget: minutes } }),
     CompletedFollowTranscript: () => ({ model }),
   });

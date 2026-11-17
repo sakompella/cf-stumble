@@ -28,8 +28,25 @@ const connectivity = Stream.merge(
   }),
 );
 
+const returned = Stream.merge(
+  Dom.streamFromEventFilterMap({
+    target: () => document,
+    type: "visibilitychange",
+    filterMapEvent: () =>
+      document.visibilityState === "visible"
+        ? Option.some(Message.ReturnedToPage())
+        : Option.none(),
+  }),
+  Dom.streamFromEvent({
+    target: () => window,
+    type: "focus",
+    mapEvent: () => Message.ReturnedToPage(),
+  }),
+);
+
 export const subscriptions = Subscription.make<Model, Message, TranscriptService>()((entry) => ({
   connectivity: Subscription.persistentEntry(connectivity),
+  returned: Subscription.persistentEntry(returned),
   freshThreadExpiry: entry(
     { isArmed: Schema.Boolean },
     {

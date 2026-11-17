@@ -1,31 +1,16 @@
 import * as Option from "effect/Option";
-import * as Record from "effect/Record";
 import { DisconnectRepository } from "./commands-disconnect.js";
 import { FetchProjects } from "./commands.js";
 import { disconnectedWording } from "./disconnect-refusals.js";
 import { Disconnect, type Model } from "./model.js";
 import { selectedRepository } from "./selected-repository.js";
-import { INITIAL_CONVERSATION } from "./update-conversation.js";
-import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
-
-function withoutProject(model: Model, projectId: string): Model {
-  const kept = {
-    ...model,
-    drafts: Record.remove(model.drafts, projectId),
-    outgoing: model.outgoing.filter((item) => item.projectId !== projectId),
-  };
-
-  return Option.contains(model.maybeProjectId, projectId)
-    ? {
-        ...kept,
-        ...INITIAL_CONVERSATION,
-        outgoing: kept.outgoing,
-        maybeProjectId: Option.none(),
-        conversationProject: "No project selected",
-        prompt: "",
-      }
-    : kept;
-}
+import {
+  clearError,
+  withError,
+  withoutProject,
+  type Handlers,
+  type UpdateReturn,
+} from "./update-shared.js";
 
 function disconnected(
   model: Model,

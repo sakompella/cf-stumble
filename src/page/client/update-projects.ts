@@ -10,14 +10,18 @@ import {
 } from "./commands.js";
 import { DisconnectChatGPT, FinishChatGPTLogin, StartChatGPTLogin } from "./commands-chatgpt.js";
 import type { GitHubReport, Model, Project } from "./model.js";
-import { keepingAddress, pendingLogin, withAddress } from "./chatgpt.js";
+import { ChatGPT, keepingAddress, pendingLogin, withAddress } from "./chatgpt.js";
 import { StreamPhase } from "./stream-phase.js";
 import { withOpenedStream } from "./update-fresh-thread.js";
-import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
+import {
+  clearError,
+  withError,
+  withoutProject,
+  type Handlers,
+  type UpdateReturn,
+} from "./update-shared.js";
 
-export { backendHandlers, FetchBackend } from "./update-backend.js";
-
-export { FetchChatGPT } from "./commands-chatgpt.js";
+export { backendHandlers } from "./update-backend.js";
 
 export { disconnectHandlers } from "./update-disconnect.js";
 
@@ -71,8 +75,12 @@ function requestProjects(model: Model): UpdateReturn {
 function listedProjects(model: Model, projects: readonly Project[]): UpdateReturn {
   const connected = projects.filter((project) => !project.isHarness).length;
 
+  const remaining = model.projects
+    .filter((known) => !projects.some((project) => project.id === known.id))
+    .reduce((kept, gone) => withoutProject(kept, gone.id), model);
+
   const listed: Model = {
-    ...model,
+    ...remaining,
     projects,
     projectListStatus: connected === 0 ? "no repository connected yet" : `${connected} connected`,
   };
@@ -80,7 +88,7 @@ function listedProjects(model: Model, projects: readonly Project[]): UpdateRetur
   return Option.match(Array.head(projects), {
     onNone: () => ({ model: { ...listed, streamPhase: StreamPhase.NoProjects() } }),
     onSome: (first) =>
-      Option.isNone(model.maybeProjectId) ? selectProject(listed, first) : { model: listed },
+      Option.isNone(listed.maybeProjectId) ? selectProject(listed, first) : { model: listed },
   });
 }
 
@@ -245,7 +253,13 @@ export function chatGPTHandlers(
       commands: [DisconnectChatGPT()],
     }),
     SucceededChatGPT: ({ chatgpt }) => ({
-      model: { ...model, chatgpt, chatgptResult: "", isChatGPTDisconnectAsked: false },
+      model: {
+        ...model,
+        chatgpt: keepingAddress(model.chatgpt, chatgpt),
+        chatgptResult: "",
+        isChatGPTDisconnectAsked:
+          model.isChatGPTDisconnectAsked && ChatGPT.guards.Connected(chatgpt),
+      },
     }),
     RejectedChatGPT: ({ wording, maybeChatGPT }) => {
       const chatgpt = Option.match(maybeChatGPT, {

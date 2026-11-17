@@ -1,9 +1,7 @@
 import * as Option from "effect/Option";
-import { ChangeBackend, FetchBackend } from "./commands-backend.js";
+import { ChangeBackend } from "./commands-backend.js";
 import { clearError, withError, type Handlers } from "./update-shared.js";
 import type { Model } from "./model.js";
-
-export { FetchBackend };
 
 export function backendHandlers(
   model: Model,

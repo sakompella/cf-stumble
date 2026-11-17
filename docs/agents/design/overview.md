@@ -22,7 +22,7 @@ The supervisor has a narrower aim: keep a usable main harness available. It need
 
 ## Projects and files
 
-A project is a GitHub repository that the user connects to cf-stumble. Each project has one current Pi Durable conversation, its thread. One Computer workspace holds the harness repository and every connected project repository in separate directories. The page lists projects in a collapsible left sidebar.
+A project is a GitHub repository that the user connects to cf-stumble. Each project has one current Pi Durable conversation, its thread. One Computer workspace holds the harness repository and every connected project repository in separate directories. The page lists projects in a collapsible left sidebar. It reads the Supervisor's record-only views (generation status, projects, GitHub, ChatGPT and the workspace backend) when it loads and whenever the owner returns to the tab, never on a timer, so a repository connected in another tab appears when the owner comes back. A project that the new list no longer holds is dropped from the page, and the first listed project is selected in its place.
 
 Starting a fresh thread points the project at a new conversation, so the old conversation and its compacted context stop being used, but the project files stay. Changing the generation keeps both. The Git histories stay separate, but the directories share one workspace and are not security boundaries.
 
