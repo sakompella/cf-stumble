@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.ts";
+import { currentSignal } from "./process.mts";
 
 export const HARNESS_REMOTE = HARNESS_BUILD_CONFIGURATION.harnessGitRemote;
 
@@ -34,6 +35,7 @@ export class GitHub {
         accept: "application/vnd.github+json",
         "user-agent": "cf-stumble-e2e",
       },
+      signal: currentSignal(),
     });
   }
 

@@ -1,39 +1,56 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import { gzipSync } from "node:zlib";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { buildWorkerBundle } from "../infra/worker-bundle.ts";
 import { testWorker } from "../infra/test-worker.ts";
 
 const OWNER_AUTHORIZATION = `Basic ${btoa(`aditya:${testWorker.miniflare.bindings.OWNER_PASSWORD}`)}`;
 
-function workerModules(files: Awaited<ReturnType<typeof buildWorkerBundle>>) {
-  return files
-    .filter((file) => !file.path.endsWith(".map"))
-    .map((file) => {
-      assert.ok(
-        file.path.endsWith(".js"),
-        `the deploy bundle has a module of unknown type: ${file.path}`,
-      );
+const KIB = 1024;
 
-      return { type: "ESModule" as const, path: `/${file.path}`, contents: file.content };
-    });
+const WORKER_UPLOAD_GZIP_LIMIT = 700 * KIB;
+
+type Files = Awaited<ReturnType<typeof buildWorkerBundle>>;
+
+function uploaded(files: Files): Files[number][] {
+  return files.filter((file) => !file.path.endsWith(".map"));
+}
+
+function workerModules(files: Files) {
+  return uploaded(files).map((file) => {
+    assert.ok(
+      file.path.endsWith(".js"),
+      `the deploy bundle has a module of unknown type: ${file.path}`,
+    );
+
+    return { type: "ESModule" as const, path: `/${file.path}`, contents: file.content };
+  });
 }
 
 describe("the deploy bundle of the Worker", () => {
   let worker: Miniflare;
+  let files: Files;
 
   before(async () => {
+    files = await buildWorkerBundle();
     worker = new Miniflare(
       convertV4MiniflareOptions({
         ...testWorker.miniflare,
         modulesRoot: "/",
-        modules: workerModules(await buildWorkerBundle()),
+        modules: workerModules(files),
       }),
     );
     await worker.ready;
   });
 
   after(() => worker.dispose());
+
+  it(`uploads at most ${WORKER_UPLOAD_GZIP_LIMIT / KIB} KiB gzip`, () => {
+    const size = uploaded(files).reduce((total, file) => total + gzipSync(file.content).length, 0);
+
+    assert.ok(size <= WORKER_UPLOAD_GZIP_LIMIT, `the Worker upload is ${size} bytes gzip`);
+  });
 
   it("starts and answers a request", async () => {
     const response = await worker.dispatchFetch("http://localhost/health");
