@@ -1,6 +1,6 @@
 import { createModels } from "@earendil-works/pi-ai";
 import type { Context } from "@earendil-works/pi-ai";
-import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
+import type { FacetLog, ModelCapability } from "../../../src/facet/conversation-protocol.js";
 import { workersAiTurn } from "../../../src/model-route-stream.js";
 import { modelEventStream } from "../../../src/model-route-turn.js";
 import { providerStreamOfLines, sseLine, DONE_LINE } from "../../model-route-provider-stream.js";
@@ -14,6 +14,8 @@ import type { ModelStreamEvent } from "../../../src/model-route-wire/events.js";
 const encoder = new TextEncoder();
 
 export const NO_USAGE = { inputTokens: 0, outputTokens: 0, estimated: false };
+
+export const NO_LOG: FacetLog = () => {};
 
 export const GO: Context = { messages: [{ role: "user", content: "go", timestamp: 0 }] };
 
@@ -63,9 +65,10 @@ export function streamThroughProvider(
   capability: ModelCapability,
   context: Context,
   signal?: AbortSignal,
+  log: FacetLog = NO_LOG,
 ) {
   const models = createModels();
-  models.setProvider(routeProvider(capability));
+  models.setProvider(routeProvider(capability, log));
 
   return models.stream(ROUTE_MODEL, context, signal === undefined ? {} : { signal });
 }
