@@ -16,7 +16,7 @@ import {
   streamShown,
   whoShown,
 } from "./shown.js";
-import { entryItem, received, running, viewing, type Conversation } from "./views.js";
+import { acquired, entryItem, received, running, viewing, type Conversation } from "./views.js";
 
 const PROJECTS = [
   { id: "repo", displayName: "hello-world", isHarness: false, location: "https://github.com/o/r" },
@@ -39,7 +39,10 @@ function commandNames(model: Model, message: Message): readonly string[] {
 }
 
 function readyPage(): Model {
-  const listed = after(init().model, [Message.SucceededFetchProjects({ projects: PROJECTS })]);
+  const listed = after(init().model, [
+    Message.SucceededFetchProjects({ projects: PROJECTS }),
+    acquired,
+  ]);
 
   return after(listed, [received(listed, viewing())]);
 }
@@ -59,6 +62,7 @@ const userEntry = (id: number, content: string) => entryItem(id, { role: "user",
 
 test("listing the projects selects the first one and starts reading its conversation", () => {
   const listed = update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS }));
+  const held = update(listed.model, acquired(listed.model)).model;
   const events = subscriptions["events"];
 
   expect(shownText(listed.model, ID.projectListStatus)).toBe("1 connected");
@@ -66,7 +70,7 @@ test("listing the projects selects the first one and starts reading its conversa
   expect(streamShown(listed.model)).toBe("reading");
   expect(
     Option.map(
-      events?.modelToDependencies(listed.model).maybeStream ?? Option.none(),
+      events?.modelToDependencies(held).maybeStream ?? Option.none(),
       (stream) => stream.projectId,
     ),
   ).toEqual(Option.some("repo"));

@@ -20,14 +20,14 @@ export function redactedExcerpt(text: string, knownToken?: string): string {
   return redactLogText(text, knownToken).slice(0, CAUSE_TEXT_LIMIT);
 }
 
-function causeText(cause: unknown, knownToken: string | undefined): string {
+export function redactedCause(cause: unknown, knownToken?: string): string {
   const message = cause instanceof Error ? cause.message : String(cause);
 
   return redactedExcerpt(message, knownToken);
 }
 
 export function logRedactedCause(context: string, cause: unknown, knownToken?: string): void {
-  console.error(`${context}: ${causeText(cause, knownToken)}`);
+  console.error(`${context}: ${redactedCause(cause, knownToken)}`);
 }
 
 type LogValue = string | number | boolean | null;

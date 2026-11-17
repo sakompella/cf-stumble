@@ -67,7 +67,7 @@ Each item that this file used to list as open is now classified: **resolved** (w
 
 **Reproduced**
 
-The page failures that the 2026-11-16 QA run saw are open: the first events connection, F4, F12, F13 and F15. See "Open items" below.
+The page failures that the 2026-11-16 QA run saw are open: F4, F12, F13 and F15. See "Open items" below.
 
 ## Open items
 
@@ -75,7 +75,6 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 
 **Seen in a run**
 
-- **The first events connection fails on every page load.** The stream starts before the transcript is held. `rc-events-first-connect.md`.
 - **Panels go stale in a second tab (F13).** The page reads server state only at load and after its own actions. `rc-f13-project-list-tabs.md`.
 - **A cold start shows only `running` (F4).** The page folds Pi Durable's run phase into one boolean. `rc-f4-cold-start.md`.
 - **The GitHub panel keeps four strings, not the Worker's state (F12).** Its controls do not follow the state. `rc-f12-github-panel.md`.
@@ -83,7 +82,6 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 
 **Proved in code or by a scratch test, not seen in production**
 
-- **Two ChatGPT account writes fail without a log line (#17).** `rc-review-17.md`.
 - **The route reports its own failures as `invalid-request` (#18).** Pi retries only when the text matches its list. `rc-review-18.md`.
 - **Shell scripts take values by interpolation (#20).** Four shell tests fail under a hostile root path. `rc-review-20.md`.
 - **A long command's output is saved twice (#23).** Pi's spill file and Computer's saved file hold the same bytes. `rc-review-23.md`.

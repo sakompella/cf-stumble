@@ -6,6 +6,7 @@ import { ChatGPT } from "./chatgpt.js";
 import { FreshThread } from "./fresh-thread.js";
 import { StreamPhase } from "./stream-phase.js";
 import { Outgoing } from "./outgoing.js";
+import { TranscriptKey } from "./view-reader.js";
 import { RUN_BUDGET_MINUTES } from "../../turn-budget.js";
 
 export { DEFAULT_RUN_BUDGET_MINUTES } from "../../turn-budget.js";
@@ -129,6 +130,7 @@ export const Model = Schema.Struct({
   backendResult: Schema.String,
 
   maybeProjectId: Schema.Option(Schema.String),
+  maybeHeldTranscript: Schema.Option(TranscriptKey),
   conversationProject: Schema.String,
   streamPhase: StreamPhase,
   eventsStreamId: Schema.Number,
