@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { BackendSetting } from "../backend-setting.js";
+import { BackendSetting, ContainerOutcome } from "../backend-setting.js";
 import { RUN_BUDGET_MINUTES } from "../turn-budget.js";
 import type { Endpoint } from "./endpoints.js";
 
@@ -213,6 +213,13 @@ const LoginRefusal = Schema.Struct({
 
 const BackendAnswer = Schema.Struct({ ok: Schema.Literal(true), backend: BackendSetting });
 
+const BackendChanged = Schema.Struct({
+  ok: Schema.Literal(true),
+  backend: BackendSetting,
+  container: ContainerOutcome,
+  startsOn: BackendSetting,
+});
+
 export const LoginCompletion = Schema.Struct({
   attemptId: Schema.String,
   callbackUrl: Schema.String,
@@ -250,7 +257,7 @@ export const ANSWERS = {
     reset: Schema.Literal("workspace"),
   }),
   "GET /api/workspace/backend": BackendAnswer,
-  "POST /api/workspace/backend": BackendAnswer,
+  "POST /api/workspace/backend": BackendChanged,
 } as const satisfies Readonly<
   Record<
     Exclude<

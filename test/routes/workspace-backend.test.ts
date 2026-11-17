@@ -9,7 +9,12 @@ test("the setting is read and changed through the supervisor", async () => {
     setWorkspaceBackend: (backend) => {
       set.push(backend);
 
-      return Promise.resolve({ ok: true, backend });
+      return Promise.resolve({
+        ok: true,
+        backend,
+        container: "stopped",
+        startsOn: "cloudflare",
+      } as const);
     },
   });
 
@@ -24,7 +29,12 @@ test("the setting is read and changed through the supervisor", async () => {
   );
 
   expect(await read.json()).toEqual({ ok: true, backend: "cloudflare" });
-  expect(await changed.json()).toEqual({ ok: true, backend: "provider" });
+  expect(await changed.json()).toEqual({
+    ok: true,
+    backend: "provider",
+    container: "stopped",
+    startsOn: "cloudflare",
+  });
   expect(set).toEqual(["provider"]);
 });
 

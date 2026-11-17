@@ -9,8 +9,10 @@ import {
   chatgptPayload,
   statusPayload,
 } from "./fixtures.mjs";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
-import type { ANSWERS, AnsweredEndpoint } from "../../src/api/answers.js";
+import { BackendChange, type ANSWERS, type AnsweredEndpoint } from "../../src/api/answers.js";
 import { PROBLEM_STATUS, type ProblemCode } from "../../src/api/problems.js";
 import { matchEndpoint } from "../../src/api/endpoints.js";
 import type { ScenarioState } from "./server-state.mjs";
@@ -43,7 +45,12 @@ function readString(body: JsonValue, key: string): string | undefined {
 
 type JsonState = Pick<
   ScenarioState,
-  "scenario" | "projects" | "isChatGPTConnected" | "generationLabel"
+  | "scenario"
+  | "projects"
+  | "isChatGPTConnected"
+  | "generationLabel"
+  | "backend"
+  | "isContainerRunning"
 >;
 
 type Answer<E extends AnsweredEndpoint> = Readonly<{
@@ -105,6 +112,32 @@ function disconnect(
   return { status: 200, payload: { ok: true, projectId, workspace: "removed" } };
 }
 
+const decodeBackendChange = Schema.decodeUnknownOption(BackendChange);
+
+function changeBackend(
+  state: JsonState,
+  body: JsonValue,
+): Answer<"POST /api/workspace/backend"> | RouteAnswer {
+  const change = decodeBackendChange(body);
+
+  if (Option.isNone(change)) {
+    return {
+      status: 400,
+      payload: { ok: false, error: { code: "invalid-backend-request" } },
+    };
+  }
+
+  const { backend } = change.value;
+
+  const container =
+    backend === state.backend ? "kept" : state.isContainerRunning ? "stopped" : "not-running";
+
+  state.backend = backend;
+  state.isContainerRunning = state.isContainerRunning && container !== "stopped";
+
+  return { status: 200, payload: { ok: true, backend, container, startsOn: "cloudflare" } };
+}
+
 type ServedRoutes = {
   readonly [
     E in
@@ -112,6 +145,7 @@ type ServedRoutes = {
       | "GET /api/status"
       | "GET /api/chatgpt/connection"
       | "GET /api/workspace/backend"
+      | "POST /api/workspace/backend"
       | "POST /api/projects/connect"
       | "POST /api/chatgpt/disconnect"
       | "POST /api/github/authorization/complete"
@@ -139,7 +173,11 @@ export const JSON_ROUTES = {
 
     return { status: 200, payload: chatgptPayload(false) };
   },
-  "GET /api/workspace/backend": () => ({ status: 200, payload: { ok: true, backend: "provider" } }),
+  "GET /api/workspace/backend": (state) => ({
+    status: 200,
+    payload: { ok: true, backend: state.backend },
+  }),
+  "POST /api/workspace/backend": changeBackend,
   "POST /api/projects/connect": connect,
   "GET /api/github/connection": (state) => ({
     status: 200,

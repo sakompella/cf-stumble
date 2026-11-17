@@ -17,11 +17,14 @@ const SCENARIOS: readonly HarnessScenario[] = [
   "chatgpt-connected",
 ];
 
+const BACKENDS = ["provider", "cloudflare"] as const;
+
 const ENDPOINTS = [
   "GET /api/projects",
   "GET /api/status",
   "GET /api/chatgpt/connection",
   "GET /api/workspace/backend",
+  "POST /api/workspace/backend",
   "POST /api/projects/connect",
   "POST /api/chatgpt/disconnect",
   "GET /api/github/connection",
@@ -35,6 +38,8 @@ test("every answer the stub sends decodes with the API's answer schema for its e
       projects: [...BASELINE_PROJECTS],
       isChatGPTConnected: false,
       generationLabel: 1,
+      backend: tc.draw(gs.sampledFrom(BACKENDS)),
+      isContainerRunning: tc.draw(gs.booleans()),
     };
 
     const calls = tc.draw(gs.arrays(gs.sampledFrom(ENDPOINTS), { minSize: 1, maxSize: 6 }));
@@ -42,6 +47,7 @@ test("every answer the stub sends decodes with the API's answer schema for its e
     for (const endpoint of calls) {
       const { status, payload } = JSON_ROUTES[endpoint](state, {
         repositoryUrl: "https://github.com/octocat/new-repo",
+        backend: tc.draw(gs.sampledFrom(BACKENDS)),
       });
 
       assert.equal(status, 200);
