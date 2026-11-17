@@ -23,7 +23,7 @@ Several limits are part of this contract and are not unfinished work:
 - **Rollback.** A rollback loads stored code. It does not restore project files, conversation history or the Supervisor's database, and it refuses a generation whose facet compatibility differs from the current one.
 - **Reset.** A workspace reset or a project disconnect destroys uncommitted work on purpose. Commit and push first. An ordinary stop or restart must not lose acknowledged writes.
 - **Cost.** The idle stop and run budgets bound one run chain, not a day's spend. Nothing caps the account's bill. The owner checks `pnpm ops:check`, billing alerts and the container's state.
-- **Cold starts and sign-in.** A cold container delays the first command that needs Linux. In the harness project it also delays the start of every run (ADR-0052, amendment of 2026-11-17). The ChatGPT login expires and needs a reconnect now and then. A hang with no end, lost accepted work or an unreadable error is unfinished work.
+- **Cold starts and sign-in.** A cold container delays the first command that needs Linux. In the harness project it also delays the start of every run (ADR-0052, amendment of 2026-11-17). The page says what a run waits for before the model is asked ("preparing the workspace", a cold container start among the causes), so a start is not silent. The ChatGPT login expires and needs a reconnect now and then. A hang with no end, lost accepted work or an unreadable error is unfinished work.
 
 ## What is deployed
 
@@ -67,7 +67,7 @@ Each item that this file used to list as open is now classified: **resolved** (w
 
 **Reproduced**
 
-The page failures that the 2026-11-16 QA run saw are open: F4, F12 and F15. See "Open items" below.
+The page failures that the 2026-11-16 QA run saw are open: F12 and F15. See "Open items" below.
 
 ## Open items
 
@@ -75,7 +75,6 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 
 **Seen in a run**
 
-- **A cold start shows only `running` (F4).** The page folds Pi Durable's run phase into one boolean. `rc-f4-cold-start.md`.
 - **The GitHub panel keeps four strings, not the Worker's state (F12).** Its controls do not follow the state. `rc-f12-github-panel.md`.
 - **The workspace backend switch says nothing about its effect (F15).** `POST /api/workspace/backend` echoes the setting and drops what the Host knows. `rc-f15-workspace-panel.md`.
 

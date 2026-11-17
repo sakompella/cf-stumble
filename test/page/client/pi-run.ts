@@ -25,7 +25,7 @@ export type PiRun = Readonly<{
   close: () => Promise<void>;
 }>;
 
-async function openConversation(faux: ReturnType<typeof fauxProvider>) {
+async function openConversation(faux: ReturnType<typeof fauxProvider>, prepared: Promise<void>) {
   const models = createModels();
   models.setProvider(faux.provider);
   const model = faux.getModel();
@@ -45,7 +45,18 @@ async function openConversation(faux: ReturnType<typeof fauxProvider>) {
 
   const registry = createRegistry();
   registry.install(defineExtension({ name: "test", tools: [bash] }));
-  const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
+
+  const harness = await Harness.open(
+    new MemoryStorage(),
+    {
+      models,
+      registry,
+      env: async () => {
+        await prepared;
+      },
+    },
+    context,
+  );
 
   const conversation = await harness.createConversation(
     {
@@ -62,9 +73,12 @@ async function openConversation(faux: ReturnType<typeof fauxProvider>) {
   return { harness, conversation };
 }
 
-export async function openPiRun(answers: readonly string[]): Promise<PiRun> {
+export async function openPiRun(
+  answers: readonly string[],
+  prepared: Promise<void> = Promise.resolve(),
+): Promise<PiRun> {
   const faux = fauxProvider({ tokensPerSecond: 60 });
-  const { harness, conversation } = await openConversation(faux);
+  const { harness, conversation } = await openConversation(faux, prepared);
 
   faux.setResponses([
     fauxAssistantMessage(

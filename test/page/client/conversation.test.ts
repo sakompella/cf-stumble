@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import { afterEach, expect, test } from "vitest";
-import { type Conversation } from "../../../src/page/client/conversation.js";
+import { isRunning, type Conversation } from "../../../src/page/client/conversation.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
 import { eventuallyTruthy } from "../../eventually.js";
 import { folded, lastFolded } from "./folded.js";
@@ -114,6 +114,6 @@ test("an aborted run reads as cancelled, live and after a reconnect", async () =
   const live = lastFolded(run.lines);
 
   expect(live).toEqual(await joined(run));
-  expect(live.isRunning).toBe(false);
+  expect(isRunning(live)).toBe(false);
   expect(texts(live).at(-1)).toBe("cancelled");
 });

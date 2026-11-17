@@ -10,6 +10,7 @@ import {
   type GenerationReading,
   type Model,
 } from "./model.js";
+import { isRunning } from "./conversation.js";
 import { controlRow, valueRow } from "./view-parts.js";
 
 const NO_SUBMISSION = {
@@ -178,7 +179,7 @@ function detailsView(model: Model, h: HtmlBuilder<Message>): Html {
       valueRow("epoch", ID.generationEpoch, reading.epoch, h),
       valueRow("harness commit", ID.activeGenerationCommit, reading.commit, h),
       valueRow("last read", ID.statusStatus, statusReadWording(model.statusRead), h),
-      valueRow("run active", ID.threadRunActive, model.conversation.isRunning ? "yes" : "no", h),
+      valueRow("run active", ID.threadRunActive, isRunning(model.conversation) ? "yes" : "no", h),
       valueRow("queued", ID.threadQueued, String(model.conversation.inbox.length), h),
       valueRow(
         "entries",

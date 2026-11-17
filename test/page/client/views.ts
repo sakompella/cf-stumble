@@ -20,7 +20,7 @@ export function viewing(change: Partial<Conversation> = {}): Conversation {
 }
 
 export function running(change: Partial<Conversation> = {}): Conversation {
-  return viewing({ isRunning: true, ...change });
+  return viewing({ run: "Working", ...change });
 }
 
 export function streaming(text: string): Option.Option<AssistantMessage> {

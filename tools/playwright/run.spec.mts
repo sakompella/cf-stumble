@@ -24,6 +24,28 @@ const FOLLOW_UP = "Then run the tests again";
 
 const ABORT_PATH = `/api/projects/${HARNESS_PROJECT_ID}/abort`;
 
+test.describe("a run that waits for its workspace", () => {
+  test.use({ scenario: "preparing-paused" });
+
+  test("says what it waits for before the model is asked, and the live status keeps saying running", async ({
+    owner,
+    server,
+  }) => {
+    await sendMessage(owner, PROMPT);
+    await server.waitForBarrier();
+
+    await expect(owner.locator(`#${ID.runPhase}`)).toHaveText("preparing the workspace");
+    await expect(turnState(owner)).toHaveText("running");
+    await expect(toolCalls(owner)).toHaveCount(0);
+
+    server.release();
+
+    await expect(turnState(owner)).toHaveText("answered");
+    await expect(owner.locator(`#${ID.runPhase}`)).toHaveText("");
+    await expect(transcriptTexts(owner, "assistant").last()).toHaveText(ANSWER_TEXT);
+  });
+});
+
 test.describe("a run that is still going", () => {
   test.use({ scenario: "ready-paused" });
 
