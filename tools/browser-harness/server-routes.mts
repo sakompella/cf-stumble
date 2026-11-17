@@ -131,8 +131,8 @@ export const JSON_ROUTES = {
     payload: chatgptPayload(state.isChatGPTConnected),
   }),
   "POST /api/github/authorization/complete": () => ({
-    status: PROBLEM_STATUS["not-configured"],
-    payload: { ok: false, problem: { code: "not-configured" } },
+    status: PROBLEM_STATUS["authorization-expired"],
+    payload: { ok: false, problem: { code: "authorization-expired" } },
   }),
   "POST /api/chatgpt/disconnect": (state) => {
     state.isChatGPTConnected = false;

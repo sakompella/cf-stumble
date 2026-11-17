@@ -17,6 +17,7 @@ import {
   connectHandlers,
   disconnectHandlers,
   gitHubHandlers,
+  INITIAL_GITHUB,
   projectHandlers,
 } from "./update-projects.js";
 import { readServerState } from "./read-server-state.js";
@@ -32,7 +33,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     isSidebarExpanded: true,
     projectListStatus: "reading",
     projects: [],
-    github: { state: "", detail: "", verificationUri: "", checked: "" },
+    github: INITIAL_GITHUB,
     connectRepositoryInput: "",
     connectStatus: "",
     disconnect: Disconnect.Idle(),

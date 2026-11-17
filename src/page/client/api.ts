@@ -6,7 +6,7 @@ import type { AnswerOf, Preparation, PreparationFailed } from "../../api/answers
 
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
 import { errorWording, problemWording } from "./problem-wording.js";
-import { GitHubReport, type GenerationReading, type Project } from "./model.js";
+import type { GenerationReading, Project } from "./model.js";
 
 export { endpointPath } from "../../api/endpoints.js";
 
@@ -105,28 +105,6 @@ export function generationReading(answer: AnswerOf<"GET /api/status">): Generati
   };
 }
 
-export type GitHubStatusView = AnswerOf<"GET /api/github/connection">["github"];
-
-function connectionDetail(status: Exclude<GitHubStatusView, null>): string {
-  if (status.state === "connected") {
-    return `${status.login} (${status.source})`;
-  }
-
-  if (status.state === "awaiting-authorization") {
-    return `enter code ${status.userCode} at GitHub`;
-  }
-
-  if (status.state === "reconnect-required") {
-    return status.reason;
-  }
-
-  if (status.state === "tooling-missing") {
-    return "the workspace has no gh command";
-  }
-
-  return "";
-}
-
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
 export function checkedWording(checkedAt: number | null, now: number): string {
@@ -140,25 +118,6 @@ export function checkedWording(checkedAt: number | null, now: number): string {
   return then.toDateString() === new Date(now).toDateString()
     ? clock
     : `${then.getFullYear()}-${pad2(then.getMonth() + 1)}-${pad2(then.getDate())} ${clock}`;
-}
-
-export function gitHubReport(
-  status: GitHubStatusView,
-  checkedAt: number | null,
-  now: number,
-): GitHubReport {
-  if (status === null) return GitHubReport.Unknown();
-
-  const isPending = status.state === "awaiting-authorization";
-
-  return GitHubReport.Known({
-    connection: {
-      state: status.state,
-      detail: connectionDetail(status),
-      verificationUri: isPending ? status.verificationUri : "",
-      checked: isPending ? "" : checkedWording(checkedAt, now),
-    },
-  });
 }
 
 export function projectsOf(answer: AnswerOf<"GET /api/projects">): readonly Project[] {

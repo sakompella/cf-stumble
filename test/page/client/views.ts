@@ -2,6 +2,7 @@ import * as Option from "effect/Option";
 import { Scene } from "foldkit/test";
 import { chatGPTConnection } from "../../../src/page/client/chatgpt.js";
 import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
+import { GitHubConnection } from "../../../src/page/client/github.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
@@ -64,4 +65,10 @@ export function pageShowing(conversation: Conversation): Model {
 
 export function withChatGPT(view: Parameters<typeof chatGPTConnection>[0]): Model {
   return update(init().model, Message.SucceededChatGPT({ chatgpt: chatGPTConnection(view) })).model;
+}
+
+export function gitHubWithoutRecord(): Message {
+  return Message.SucceededGitHub({
+    reading: { connection: GitHubConnection.Unknown(), checked: "" },
+  });
 }
