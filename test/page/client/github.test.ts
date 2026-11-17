@@ -72,6 +72,24 @@ test("the last-known check time stays with its state until a request replaces th
   );
 });
 
+test("a refused GitHub request leaves the stored state and puts the sentence in the detail, not 'asking GitHub'", () => {
+  const connected = after(init().model, [
+    Message.SucceededGitHub({ github: gitHubReport(CONNECTED_GITHUB, LATE_MORNING, LATE_MORNING) }),
+    Message.ClickedAuthorize({ endpoint: "POST /api/github/authorization/complete" }),
+  ]);
+
+  expect(shownText(connected, ID.githubDetail)).toBe("asking GitHub");
+
+  const refused = after(connected, [Message.RejectedGitHub({ wording: "Nothing to authorize." })]);
+
+  expect(shownText(refused, ID.githubState)).toBe("connected");
+  expect(shownText(refused, ID.githubDetail)).toBe("Nothing to authorize.");
+
+  const failed = after(connected, [Message.FailedGitHub({ detail: "offline" })]);
+
+  expect(shownText(failed, ID.githubDetail)).toBe("");
+});
+
 test.each([
   {
     refusal: "a mistyped repository URL",

@@ -186,12 +186,12 @@ export function gitHubHandlers(
     ClickedRefreshGitHub: () => ({ model: askingGitHub(model), commands: [RefreshGitHub()] }),
     SucceededGitHub: ({ github }) => ({ model: withGitHub(model, github) }),
     RejectedGitHub: ({ wording }) => ({
-      model: { ...model, github: { ...model.github, state: wording, checked: "" } },
+      model: { ...model, github: { ...model.github, detail: wording, checked: "" } },
     }),
     FailedGitHub: ({ detail }) => ({
       model: {
         ...withError(model, "the GitHub request", detail),
-        github: { ...model.github, state: "request failed", checked: "" },
+        github: { ...model.github, state: "request failed", detail: "", checked: "" },
       },
     }),
   };

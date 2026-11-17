@@ -114,6 +114,7 @@ type ServedRoutes = {
       | "GET /api/workspace/backend"
       | "POST /api/projects/connect"
       | "POST /api/chatgpt/disconnect"
+      | "POST /api/github/authorization/complete"
       | "GET /api/github/connection"
       | "POST /api/github/connection/refresh"
   ]: (state: JsonState, body: JsonValue) => Answer<E> | RouteAnswer;
@@ -128,6 +129,10 @@ export const JSON_ROUTES = {
   "GET /api/chatgpt/connection": (state) => ({
     status: 200,
     payload: chatgptPayload(state.isChatGPTConnected),
+  }),
+  "POST /api/github/authorization/complete": () => ({
+    status: PROBLEM_STATUS["not-configured"],
+    payload: { ok: false, problem: { code: "not-configured" } },
   }),
   "POST /api/chatgpt/disconnect": (state) => {
     state.isChatGPTConnected = false;

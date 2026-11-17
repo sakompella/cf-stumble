@@ -10,7 +10,7 @@ async function connectTo(owner: Page, url: string): Promise<void> {
 }
 
 test.describe("a refused connect", () => {
-  test.use({ refusedStatuses: [403, 413] });
+  test.use({ refusedStatuses: [403, 413, 503] });
 
   test("a mistyped repository is refused with a sentence about the name, not a code", async ({
     owner,
@@ -30,6 +30,15 @@ test.describe("a refused connect", () => {
 
     await expect(status).toContainText(MAX_REPOSITORY_BLOB_COUNT.toLocaleString("en-US"));
     await expect(status).not.toContainText("repository-too-large");
+  });
+
+  test("I authorized it, with nothing to authorize, keeps the connection and says why", async ({
+    owner,
+  }) => {
+    await owner.locator(`#${ID.completeAuthorizationButton}`).click();
+
+    await expect(owner.locator(`#${ID.githubDetail}`)).toContainText("nothing to authorize");
+    await expect(owner.locator(`#${ID.githubState}`)).toHaveText("connected");
   });
 });
 
