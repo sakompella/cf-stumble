@@ -10,6 +10,12 @@ export function isTimeoutFailure(cause: unknown): boolean {
   return cause.name === "TimeoutError" || TIMEOUT_MESSAGE_PATTERN.test(cause.message);
 }
 
+const CODE_UPDATE_RESET_PATTERN = /Durable Object reset because its code was updated/u;
+
+export function isCodeUpdateReset(cause: unknown): boolean {
+  return cause instanceof Error && CODE_UPDATE_RESET_PATTERN.test(cause.message);
+}
+
 const JWT_PATTERN = /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]*/gu;
 
 export function redactLogText(text: string, knownToken?: string): string {

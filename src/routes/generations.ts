@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { logRedactedCause } from "../diagnostics.js";
+import * as Option from "effect/Option";
+import { logEvent, logRedactedCause } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import * as Schema from "effect/Schema";
 import {
@@ -19,6 +20,7 @@ import {
   answer,
   callSupervisor,
   decodeRequestBody,
+  type Deployment,
   invalidRequestBody,
   jsonError,
   refusal,
@@ -53,6 +55,7 @@ const OwnerControlTarget = Schema.Struct({
 export type GenerationSubmissionSupervisor = {
   readonly submitGeneration: (harnessCommit: HarnessCommit) => Promise<Submission>;
   readonly prepareGeneration: (label: GenerationLabel) => Promise<StartupCheckResult>;
+  readonly scriptVersion: () => Promise<string | null>;
 };
 
 type ControlCommandKind = "activate" | "rollback";
@@ -87,17 +90,49 @@ const handleGenerationControl = Effect.fnUntraced(
     ),
 );
 
+function isReady(preparation: Result.Result<StartupCheckResult, unknown>): boolean {
+  return (
+    Result.isSuccess(preparation) &&
+    preparation.success.ok &&
+    preparation.success.report.stage === "ready"
+  );
+}
+
+type Prepared = Result.Result<StartupCheckResult, SupervisorCallFailed>;
+
+const prepareAfterDeploy = Effect.fnUntraced(function* (
+  failed: Prepared,
+  deployment: Deployment<GenerationSubmissionSupervisor>,
+  prepare: (stub: GenerationSubmissionSupervisor) => Effect.Effect<Prepared>,
+) {
+  const stub = deployment.stub();
+
+  const version = yield* callSupervisor(() => stub.scriptVersion()).pipe(Effect.option);
+
+  if (Option.isNone(version) || version.value === deployment.version) return failed;
+
+  logEvent("warn", "api.preparation-after-deploy", { from: deployment.version, to: version.value });
+
+  return yield* prepare(stub);
+});
+
 const handleGenerationSubmission = Effect.fnUntraced(function* (
   request: Request,
   supervisor: GenerationSubmissionSupervisor,
+  deployment: Deployment<GenerationSubmissionSupervisor>,
 ) {
   const { harnessCommit } = yield* decodeRequestBody(request, GenerationSubmissionRequest);
 
   const submitted = yield* callSupervisor(() => supervisor.submitGeneration(harnessCommit));
 
-  const preparation = yield* callSupervisor(() =>
-    supervisor.prepareGeneration(submitted.generation.label),
-  ).pipe(Effect.result);
+  const prepare = (stub: GenerationSubmissionSupervisor) =>
+    callSupervisor(() => stub.prepareGeneration(submitted.generation.label)).pipe(Effect.result);
+
+  const first = yield* prepare(supervisor);
+
+  const preparation = isReady(first)
+    ? first
+    : yield* prepareAfterDeploy(first, deployment, prepare);
 
   if (Result.isFailure(preparation)) {
     logRedactedCause(

@@ -10,7 +10,6 @@ type Fake = Readonly<{
   deps: ReleaseDeps;
   submitted: string[];
   activations: number[];
-  activatedLabels: number[];
   activatedAtMs: number[];
   forced: boolean[];
 }>;
@@ -22,7 +21,6 @@ function fake(
 ): Fake {
   const submitted: string[] = [];
   const activations: number[] = [];
-  const activatedLabels: number[] = [];
   const activatedAtMs: number[] = [];
   const forced: boolean[] = [];
   let clock = 0;
@@ -31,7 +29,6 @@ function fake(
   return {
     submitted,
     activations,
-    activatedLabels,
     activatedAtMs,
     forced,
     deps: {
@@ -46,12 +43,10 @@ function fake(
             label: 6 + submitted.length,
             ready: code === undefined,
             reason: code ?? "ready",
-            code,
           });
         },
-        activate: (label, observedEpoch, force) => {
+        activate: (_label, observedEpoch, force) => {
           activations.push(observedEpoch);
-          activatedLabels.push(label);
           activatedAtMs.push(clock);
           forced.push(force);
           epoch += 1;
@@ -144,26 +139,6 @@ describe("activation answers other than success", () => {
     const { deps, activations } = fake([], true, ["conversation-failed"]);
 
     await assert.rejects(releaseGeneration(MAIN, deps), /not ready: conversation-failed/u);
-    assert.deepEqual(activations, []);
-  });
-
-  it("prepares main's commit again when the platform restarted the workspace mid-build (deploy 43934982845)", async () => {
-    const { deps, submitted, activatedLabels } = fake([], true, ["build-workspace-unavailable"]);
-
-    assert.match(await releaseGeneration(MAIN, deps), /Activated generation 8/u);
-    assert.deepEqual(submitted, [MAIN, MAIN]);
-    assert.deepEqual(activatedLabels, [8]);
-  });
-
-  it("fails when the workspace is unavailable again on the second preparation", async () => {
-    const unavailable = "build-workspace-unavailable";
-    const { deps, submitted, activations } = fake([], true, [unavailable, unavailable]);
-
-    await assert.rejects(
-      releaseGeneration(MAIN, deps),
-      /generation 8 .* not ready: build-workspace/u,
-    );
-    assert.equal(submitted.length, 2);
     assert.deepEqual(activations, []);
   });
 });

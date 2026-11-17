@@ -2,7 +2,12 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { isTimeoutFailure, logRedactedCause, redactLogText } from "../../diagnostics.js";
+import {
+  isCodeUpdateReset,
+  isTimeoutFailure,
+  logRedactedCause,
+  redactLogText,
+} from "../../diagnostics.js";
 import { ModuleMapSchema, parseMainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifact, MainHarnessArtifactProblem } from "../../facet/index.js";
 import { HARNESS_BUILD_STEP_NAMES } from "../../harness-build.js";
@@ -37,6 +42,10 @@ export type HarnessBuildProblem =
 
 const decodeBuiltModuleMap = Schema.decodeUnknownResult(Schema.fromJsonString(ModuleMapSchema));
 
+class WorkspaceRestarted extends Data.TaggedError("WorkspaceRestarted")<{
+  readonly harnessCommit: HarnessCommit;
+}> {}
+
 export function buildModuleMap(
   workspace: () => BuildWorkspace,
   harnessCommit: HarnessCommit,
@@ -50,6 +59,12 @@ export function buildModuleMap(
   return steps.pipe(
     Effect.andThen(readModuleMap(workspace, harnessCommit)),
     Effect.ensuring(discardScratch(workspace, harnessCommit)),
+    Effect.retry({ times: 1, while: (failure) => failure instanceof WorkspaceRestarted }),
+    Effect.mapError((failure): HarnessBuildProblem =>
+      failure instanceof WorkspaceRestarted
+        ? { code: "build-workspace-unavailable", harnessCommit }
+        : failure,
+    ),
   );
 }
 
@@ -113,9 +128,15 @@ function runStep(
   workspace: () => BuildWorkspace,
   harnessCommit: HarnessCommit,
   step: HarnessBuildStepName,
-): Effect.Effect<void, HarnessBuildProblem> {
+): Effect.Effect<void, HarnessBuildProblem | WorkspaceRestarted> {
   const ran = command(() => workspace().build({ harnessCommit, step }), `the ${step} step`).pipe(
-    Effect.mapError((error): HarnessBuildProblem => {
+    Effect.mapError((error): HarnessBuildProblem | WorkspaceRestarted => {
+      if (isCodeUpdateReset(error)) {
+        logRedactedCause(`harness-build.${step}: workspace-restarted`, error);
+
+        return new WorkspaceRestarted({ harnessCommit });
+      }
+
       const reason = isTimeoutFailure(error) ? "timeout" : "build-workspace-unavailable";
       logRedactedCause(`harness-build.${step}: ${reason}`, error);
 
@@ -141,9 +162,15 @@ function runStep(
 function readModuleMap(
   workspace: () => BuildWorkspace,
   harnessCommit: HarnessCommit,
-): Effect.Effect<MainHarnessArtifact, HarnessBuildProblem> {
+): Effect.Effect<MainHarnessArtifact, HarnessBuildProblem | WorkspaceRestarted> {
   const text = moduleMapText(workspace, harnessCommit).pipe(
-    Effect.mapError((error): HarnessBuildProblem => {
+    Effect.mapError((error): HarnessBuildProblem | WorkspaceRestarted => {
+      if (isCodeUpdateReset(error)) {
+        logRedactedCause(`harness-build.output ${harnessCommit}: workspace-restarted`, error);
+
+        return new WorkspaceRestarted({ harnessCommit });
+      }
+
       logRedactedCause(`harness-build.output ${harnessCommit}: build-output-missing`, error);
 
       return { code: "build-output-missing", harnessCommit };
