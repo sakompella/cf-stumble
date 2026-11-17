@@ -78,8 +78,4 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 - **The e2e step limits do not stop the work, and the bundle budget measures another bundle (#26).** `rc-review-26.md`.
 - **Dead config, members and prose (#28).** The oxlint Effect-free override exempts nothing, and 12 more small items remain. `rc-review-28.md`.
 
-**Structure with no live failure**
-
-- **Generation history is shaped like the old Git repository (#22).** `rc-review-22.md`.
-
 Decisions waiting for the owner: delete the oxlint Effect-free override (#28).

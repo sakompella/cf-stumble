@@ -10,6 +10,7 @@ import {
   type ActivationCommand,
   type Generation,
   type GenerationActor,
+  type GenerationChange,
   type GenerationControlResult,
   type GenerationLabel,
   type LabeledGeneration,
@@ -17,7 +18,6 @@ import {
   type Selection,
   type Submission,
 } from "./generation-state.js";
-import type { GenerationChange } from "./history/commits.js";
 
 export type GenerationCommand = Data.TaggedEnum<{
   Changed: {
