@@ -251,7 +251,8 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   async project({ remainingMs }: Readonly<{ remainingMs: number }>): Promise<ProjectRpcTarget> {
     if (this.#resetting) throw new Error("workspace-busy: the workspace is resetting");
 
-    const endLease = this.#idle.lease(Date.now() + remainingMs);
+    const endsAtMs = Date.now() + remainingMs;
+    const endLease = this.#idle.lease(endsAtMs);
     const { workspace, lifecycle } = this.#platform;
 
     await pruneWorkspaceSpills(workspace).catch(() => {});
@@ -260,7 +261,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       computerFilesystemProvider(workspace),
       durableObjectTransactions(this.ctx.storage),
       afterIdleStop(this.#idle, chosenExecBackend(workspace, lifecycle)),
-      { remainingMs, containerState: lifecycle, activity: this.#idle, endLease },
+      { endsAtMs, containerState: lifecycle, activity: this.#idle, endLease },
     );
   }
 

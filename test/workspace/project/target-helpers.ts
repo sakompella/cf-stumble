@@ -14,7 +14,7 @@ const FAR_DEADLINE_MS = 2_000_000_000;
 
 export function targetOptions(overrides: Partial<ProjectRpcTargetOptions> = {}) {
   return {
-    remainingMs: FAR_DEADLINE_MS,
+    endsAtMs: Date.now() + FAR_DEADLINE_MS,
     containerState: { generation: 0 },
     activity: { begin: () => () => {}, touch: () => {} },
     endLease: () => {},

@@ -75,7 +75,7 @@ test("a restart detected during an exec is reported once, by that exec", async (
 });
 
 test("endTurn kills every live exec, is idempotent, and refuses later starts", async () => {
-  const { execBackend, target } = makeTarget({ remainingMs: 1_000 });
+  const { execBackend, target } = makeTarget({ endsAtMs: Date.now() + 1_000 });
   const first = await target.startExec({ command: "one" });
   const second = await target.startExec({ command: "two" });
 
@@ -90,9 +90,9 @@ test("endTurn kills every live exec, is idempotent, and refuses later starts", a
   });
 });
 
-test("the turn timer ends the capability and kills its exec", async () => {
+test("a command running at the deadline is killed and the capability then refuses", async () => {
   vi.useFakeTimers();
-  const { execBackend, target } = makeTarget({ remainingMs: 50 });
+  const { execBackend, target } = makeTarget({ endsAtMs: Date.now() + 50 });
   const started = await target.startExec({ command: "sleep 1" });
 
   if (!started.ok) throw new Error("expected exec to start");
@@ -110,32 +110,26 @@ test("the turn timer ends the capability and kills its exec", async () => {
 });
 
 test.each([
-  { name: "the cap lands on the deadline", requestedMs: 50, dateAheadMs: 0 },
-  { name: "the request is past the budget", requestedMs: 500, dateAheadMs: 0 },
-  { name: "the exec timer fires before the turn timer", requestedMs: 500, dateAheadMs: 10 },
-])(
-  "a timeout at the turn deadline is the turn ending: $name",
-  async ({ requestedMs, dateAheadMs }) => {
-    vi.useFakeTimers();
-    const { execBackend, target } = makeTarget({ remainingMs: 50 });
-    const clockNow = Date.now.bind(Date);
-    vi.spyOn(Date, "now").mockImplementation(() => clockNow() + dateAheadMs);
-    const started = await target.startExec({ command: "sleep 1", timeoutMs: requestedMs });
+  { name: "the cap lands on the deadline", requestedMs: 50 },
+  { name: "the request is past the budget", requestedMs: 500 },
+])("a timeout at the turn deadline is the turn ending: $name", async ({ requestedMs }) => {
+  vi.useFakeTimers();
+  const { execBackend, target } = makeTarget({ endsAtMs: Date.now() + 50 });
+  const started = await target.startExec({ command: "sleep 1", timeoutMs: requestedMs });
 
-    if (!started.ok) throw new Error("expected exec to start");
+  if (!started.ok) throw new Error("expected exec to start");
 
-    const reader = started.value.events.getReader();
-    await vi.advanceTimersByTimeAsync(50);
-    await expect(reader.read()).resolves.toMatchObject({
-      value: { kind: "terminal", outcome: "killed" },
-    });
-    expect(execBackend.handles[0]?.killCalls).toBe(1);
-  },
-);
+  const reader = started.value.events.getReader();
+  await vi.advanceTimersByTimeAsync(50);
+  await expect(reader.read()).resolves.toMatchObject({
+    value: { kind: "terminal", outcome: "killed" },
+  });
+  expect(execBackend.handles[0]?.killCalls).toBe(1);
+});
 
 test("a timeout before the turn deadline is still a timeout", async () => {
   vi.useFakeTimers();
-  const { target } = makeTarget({ remainingMs: 50 });
+  const { target } = makeTarget({ endsAtMs: Date.now() + 50 });
   const started = await target.startExec({ command: "sleep 1", timeoutMs: 20 });
 
   if (!started.ok) throw new Error("expected exec to start");

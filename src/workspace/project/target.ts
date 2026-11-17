@@ -39,7 +39,7 @@ type StartedExec = { operationId: string; events: ReadableStream<Uint8Array> };
 type ProjectContainerState = Readonly<{ generation: number }>;
 
 export type ProjectRpcTargetOptions = Readonly<{
-  remainingMs: number;
+  endsAtMs: number;
   containerState: ProjectContainerState;
   activity: ProjectActivity;
   endLease: () => void;
@@ -75,7 +75,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   readonly #activity: ProjectActivity;
   readonly #endLease: () => void;
   #containerGeneration: number;
-  #turnTimer: ReturnType<typeof setTimeout> | undefined;
   #ended = false;
   #endResult: { killed: number } | undefined;
   #nextOperationSequence = 0;
@@ -95,8 +94,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     this.#activity = options.activity;
     this.#endLease = options.endLease;
     this.#containerGeneration = options.containerState.generation;
-    this.#turnEndsAt = Date.now() + options.remainingMs;
-    this.#armTurnTimer();
+    this.#turnEndsAt = options.endsAtMs;
   }
 
   lstat(path: string): Promise<ProjectResult<ProjectLstatInfo>> {
@@ -156,15 +154,10 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
         );
       }
 
-      const remainingMs = Math.max(0, this.#turnEndsAt - Date.now());
-
-      if (remainingMs <= 0) {
-        void this.endTurn();
-
-        return yield* Result.fail(failureDetail("turn-ended"));
-      }
-
-      const { timeoutMs, timeoutEndsTurn } = capAtBudget(input.timeoutMs, remainingMs);
+      const { timeoutMs, timeoutEndsTurn } = capAtBudget(
+        input.timeoutMs,
+        this.#turnEndsAt - Date.now(),
+      );
 
       const operationId = `${this.#nonce}:${this.#nextOperationSequence++}`;
 
@@ -234,11 +227,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     if (this.#endResult !== undefined) return ok(this.#endResult);
     this.#ended = true;
 
-    if (this.#turnTimer !== undefined) {
-      clearTimeout(this.#turnTimer);
-      this.#turnTimer = undefined;
-    }
-
     let killed = 0;
 
     for (const operation of this.#operations.values()) {
@@ -250,22 +238,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     this.#endLease();
 
     return ok(this.#endResult);
-  }
-
-  #armTurnTimer(): void {
-    const remaining = this.#turnEndsAt - Date.now();
-
-    if (remaining <= 0) {
-      this.#endTurn();
-
-      return;
-    }
-
-    const delay = Math.min(remaining, 2_147_483_647);
-    this.#turnTimer = setTimeout(() => {
-      this.#turnTimer = undefined;
-      this.#armTurnTimer();
-    }, delay);
   }
 
   #acknowledgeRestart(): void {

@@ -82,7 +82,7 @@ export class ProjectWorkspace extends FakeTenantWorkspace {
           this.files,
           new FakeProjectTransactions(),
           this.execs,
-          targetOptions({ remainingMs, endLease }),
+          targetOptions({ endsAtMs: Date.now() + remainingMs, endLease }),
         ),
       ),
     );

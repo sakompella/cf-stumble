@@ -83,7 +83,6 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 
 **Proved in code or by a scratch test, not seen in production**
 
-- **The turn deadline is enforced in five places (#19).** A lease ends only through a timer. `rc-review-19.md`.
 - **Two ChatGPT account writes fail without a log line (#17).** `rc-review-17.md`.
 - **The route reports its own failures as `invalid-request` (#18).** Pi retries only when the text matches its list. `rc-review-18.md`.
 - **Shell scripts take values by interpolation (#20).** Four shell tests fail under a hostile root path. `rc-review-20.md`.
