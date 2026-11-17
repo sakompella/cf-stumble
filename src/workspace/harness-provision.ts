@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import type { HarnessBuildConfiguration } from "../harness-build.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import { shellQuote } from "../shell-quote.js";
+import { HARNESS_DIRECTORY, HARNESS_GIT_DIRECTORY } from "../workspace-layout.js";
 import { cloneRepositorySource } from "./clone-script.js";
 import type { CommandOutput, WorkspaceFault } from "./operations.js";
 
@@ -12,20 +13,21 @@ const HARNESS_PROVISION_LOCK_PATH = "/tmp/cf-stumble-harness.provision.lock";
 type Container = (source: string) => Effect.Effect<CommandOutput, WorkspaceFault>;
 
 function harnessSource(configuration: HarnessBuildConfiguration, commit: HarnessCommit): string {
-  const dir = configuration.harnessRepositoryRoot;
+  const dir = HARNESS_DIRECTORY;
   const remote = configuration.harnessGitRemote;
 
   return [
     cloneRepositorySource({
       remote,
       root: dir,
-      gitDir: configuration.harnessGitDir,
+      gitDir: HARNESS_GIT_DIRECTORY,
       lock: HARNESS_PROVISION_LOCK_PATH,
     }),
     `cd ${shellQuote(dir)}`,
-    `if ! git cat-file -e ${commit}^{commit} 2>/dev/null; then`,
-    `  if ! reason="$(git fetch --quiet --depth=${HARNESS_FETCH_DEPTH} origin ${commit} 2>&1 && git cat-file -e ${commit}^{commit} 2>&1)"; then`,
-    `    printf 'harness commit %s is not in %s%s\\n' ${commit} ${shellQuote(remote)} "\${reason:+: $reason}" >&2`,
+    `commit=${shellQuote(commit)}`,
+    'if ! git cat-file -e "$commit^{commit}" 2>/dev/null; then',
+    `  if ! reason="$(git fetch --quiet --depth=${HARNESS_FETCH_DEPTH} origin "$commit" 2>&1 && git cat-file -e "$commit^{commit}" 2>&1)"; then`,
+    `    printf 'harness commit %s is not in %s%s\\n' "$commit" ${shellQuote(remote)} "\${reason:+: $reason}" >&2`,
     "    exit 1",
     "  fi",
     "fi",

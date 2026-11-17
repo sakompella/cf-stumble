@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
+import { shellQuote } from "../shell-quote.js";
 import { WORKSPACE_ROOT } from "../workspace-layout.js";
 
 const SNAPSHOT_KEY = "workspace-container-snapshot";
@@ -24,7 +25,7 @@ const SNAPSHOT_TIMEOUT_MS = 60_000;
 const RESTORE_ENTRYPOINT = [
   "/bin/sh",
   "-c",
-  `rm -rf ${WORKSPACE_ROOT} && exec /usr/local/bin/computerd`,
+  `rm -rf -- ${shellQuote(WORKSPACE_ROOT)} && exec /usr/local/bin/computerd`,
 ];
 
 const SavedSnapshot = Schema.Struct({

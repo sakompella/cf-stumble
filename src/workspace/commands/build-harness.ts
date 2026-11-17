@@ -11,7 +11,9 @@ import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js"
 import { invariant } from "../../invariant.js";
 import { shellQuote } from "../../shell-quote.js";
 import {
+  BUILD_SCRATCH_ROOT,
   HARNESS_BUILD_OUTPUT_DIRECTORY,
+  HARNESS_GIT_DIRECTORY,
   harnessBuildOutputPath,
   WORKSPACE_ROOT,
 } from "../../workspace-layout.js";
@@ -50,17 +52,27 @@ type HarnessBuildPlan = Readonly<{
   outputPath: string;
 }>;
 
-function checkoutSource(
-  configuration: HarnessBuildConfiguration,
-  directory: string,
-  harnessCommit: HarnessCommit,
-): string {
+function isolateSource(directory: string): string {
   return [
     "set -eu",
-    `archive=${directory}/.harness-archive.tar`,
-    `git --git-dir=${configuration.harnessGitDir} archive --format=tar -o "$archive" ${harnessCommit}`,
-    `tar -x -m --no-same-owner --no-same-permissions -C ${directory} -f "$archive"`,
-    'rm -f "$archive"',
+    `build_root=${shellQuote(BUILD_SCRATCH_ROOT)}`,
+    `directory=${shellQuote(directory)}`,
+    'mkdir -p -- "$build_root"',
+    'rm -rf -- "$directory"',
+    'mkdir -p -- "$directory"',
+  ].join("\n");
+}
+
+function checkoutSource(directory: string, harnessCommit: HarnessCommit): string {
+  return [
+    "set -eu",
+    `directory=${shellQuote(directory)}`,
+    `git_dir=${shellQuote(HARNESS_GIT_DIRECTORY)}`,
+    `commit=${shellQuote(harnessCommit)}`,
+    'archive="$directory/.harness-archive.tar"',
+    'git --git-dir="$git_dir" archive --format=tar -o "$archive" "$commit"',
+    'tar -x -m --no-same-owner --no-same-permissions -C "$directory" -f "$archive"',
+    'rm -f -- "$archive"',
   ].join("\n");
 }
 
@@ -76,23 +88,19 @@ export function planHarnessBuild(
   configuration: HarnessBuildConfiguration,
   harnessCommit: HarnessCommit,
 ): HarnessBuildPlan {
-  const directory = `${configuration.buildRoot}/${harnessCommit}`;
-  invariant(
-    !`${configuration.harnessRepositoryRoot}/`.startsWith(`${directory}/`),
-    "build scratch must never contain the harness checkout",
-  );
+  const directory = `${BUILD_SCRATCH_ROOT}/${harnessCommit}`;
 
   return {
     directory,
     steps: [
       {
         name: "isolate",
-        source: `mkdir -p ${configuration.buildRoot} && rm -rf ${directory} && mkdir -p ${directory}`,
+        source: isolateSource(directory),
         cwd: WORKSPACE_ROOT,
       },
       {
         name: "checkout",
-        source: checkoutSource(configuration, directory, harnessCommit),
+        source: checkoutSource(directory, harnessCommit),
         cwd: WORKSPACE_ROOT,
       },
       ...configuration.buildPhases.map((phase) => phaseStep(directory, phase)),

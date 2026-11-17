@@ -100,7 +100,7 @@ test("an idle stop snapshots the container and the next launch restores it with 
 
     const restored = await launch();
     expect(restored).toMatchObject({ containerSnapshot: { id: "snapshot-1" } });
-    expect(restored?.entrypoint?.at(-1)).toMatch(/^rm -rf \/workspace && exec /u);
+    expect(restored?.entrypoint?.at(-1)).toMatch(/^rm -rf -- '\/workspace' && exec /u);
     expect(restored).not.toHaveProperty("image");
     expect(fake.snapshots).toBe(1);
   });

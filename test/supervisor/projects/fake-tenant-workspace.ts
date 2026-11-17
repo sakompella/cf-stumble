@@ -1,39 +1,33 @@
 import * as Effect from "effect/Effect";
+import type { GitHubCredentialStatus } from "../../../src/github/index.js";
+import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
 import {
+  checkGitHubRepositoryAccess,
+  type CloneSizeVerdict,
+  type CommandAnswer,
+  type CredentialInstallResult,
+  type CredentialStatusResult,
+  ensureManagedInstructions,
   executeHarnessBuildDiscard,
   executeHarnessBuildOutput,
   executeHarnessBuildStep,
-  readHarnessLineage,
+  executeProjectProvisionRequest,
+  executeProjectRemovalRequest,
+  type HarnessBuildStepRequest,
   type HarnessLineage,
   type HarnessLineageRequest,
-} from "../../../src/workspace/commands/index.js";
-import { executeProjectProvisionRequest } from "../../../src/workspace/commands/provision-project.js";
-import { executeProjectRemovalRequest } from "../../../src/workspace/commands/remove-project.js";
-import {
-  checkGitHubRepositoryAccess,
   installGitHubCredential,
+  type InstructionsWriteResult,
+  type ModuleMapAnswer,
+  type ProjectProvisionAnswer,
+  type ProjectProvisionRequest,
+  type ProjectRemovalRequest,
   readGitHubCredentialStatus,
-  type CredentialInstallResult,
-  type CredentialStatusResult,
+  readHarnessLineage,
   type RepositoryAccessResult,
-} from "../../../src/workspace/github-credential.js";
-import type { GitHubCredentialStatus } from "../../../src/github/index.js";
-import {
-  HARNESS_BUILD_CONFIGURATION,
-  type HarnessBuildStepRequest,
-} from "../../../src/harness-build.js";
-import type {
-  CloneSizeVerdict,
-  ProjectProvisionAnswer,
-  ProjectProvisionRequest,
-} from "../../../src/workspace/commands/provision-project.js";
-import type { ProjectRemovalRequest } from "../../../src/workspace/commands/remove-project.js";
-import { ensureManagedInstructions } from "../../../src/workspace/managed-instructions.js";
-import type {
-  CommandAnswer,
-  InstructionsWriteResult,
-  ModuleMapAnswer,
-} from "../../../src/workspace/commands/command-result.js";
+} from "../../../src/workspace/commands/index.js";
+import { HARNESS_DIRECTORY } from "../../../src/workspace-layout.js";
+
 import {
   workspaceEffects,
   WorkspaceSyncIncomplete,
@@ -229,7 +223,7 @@ export class FakeTenantWorkspace implements PromiseOperations {
   }
 
   provisionHarness(): Promise<CommandOutput> {
-    this.durablePaths.set(HARNESS_BUILD_CONFIGURATION.harnessRepositoryRoot, "directory");
+    this.durablePaths.set(HARNESS_DIRECTORY, "directory");
 
     return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
   }

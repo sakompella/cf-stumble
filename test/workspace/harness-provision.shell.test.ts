@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
+import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 import { provisionHarness } from "../../src/workspace/harness-provision.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import {
@@ -162,7 +163,7 @@ test("fails and leaves the checkout alone when its origin is another repository"
   await expect(provision()).resolves.toEqual({
     stdout: "",
     stderr: rooted(
-      `${HARNESS_BUILD_CONFIGURATION.harnessRepositoryRoot} has a different origin than ${HARNESS_BUILD_CONFIGURATION.harnessGitRemote}\n`,
+      `${HARNESS_DIRECTORY} has a different origin than ${HARNESS_BUILD_CONFIGURATION.harnessGitRemote}\n`,
       layout,
     ),
     exitCode: 1,
