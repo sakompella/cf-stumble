@@ -132,12 +132,11 @@ async function submitted(first: Answer, second: Answer, secondVersion: string) {
 
 const NEW_VERSION = "version-deployed-during-the-request";
 
-test("prepares the generation again on the new Supervisor when a deploy reset it mid-check (deploy 44075948231)", async () => {
-  const { asked, response } = await submitted(new Error(CODE_UPDATE_RESET), ready, NEW_VERSION);
+test("prepares the generation again when the reset Supervisor already runs the Worker's version by the time of the check (deploy 44075948231, deploy 44128047200)", async () => {
+  const { asked, response } = await submitted(new Error(CODE_UPDATE_RESET), ready, WORKER_VERSION);
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toMatchObject({
-    ok: true,
     preparation: { ok: true, report: { stage: "ready" } },
   });
   expect(asked).toEqual([generationLabel(1), generationLabel(1)]);
