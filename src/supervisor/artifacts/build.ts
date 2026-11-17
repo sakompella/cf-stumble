@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import {
-  isCodeUpdateReset,
+  isRetryableFailure,
   isTimeoutFailure,
   logRedactedCause,
   redactLogText,
@@ -16,6 +16,7 @@ import type { HarnessCommit } from "../../harness-commit.js";
 import {
   boundedRpc,
   WORKSPACE_RPC_TIMEOUT_MS,
+  WorkspaceRpcRejected,
   type WorkspaceRpcFailure,
 } from "../../workspace-command-timeout.js";
 import type { CommandAnswer, CommandOutput, WorkspaceHostRpc } from "../../workspace/index.js";
@@ -98,7 +99,9 @@ class BuildWorkspaceRefused extends Data.TaggedError("BuildWorkspaceRefused")<{
 }> {}
 
 function rejectedCall(error: WorkspaceRpcFailure): WorkspaceRpcFailure | WorkspaceRestarted {
-  return isCodeUpdateReset(error) ? new WorkspaceRestarted({ message: error.message }) : error;
+  return error instanceof WorkspaceRpcRejected && isRetryableFailure(error.cause)
+    ? new WorkspaceRestarted({ message: error.message })
+    : error;
 }
 
 function refusal(code: string, refused: string): BuildWorkspaceRefused | WorkspaceRestarted {

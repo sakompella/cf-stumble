@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
+import { CODE_UPDATE_RESET } from "../platform-reset.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 import {
@@ -135,7 +136,7 @@ test("a build step that cannot run is one workspace-unavailable failure", async 
 
 test("a build step that the platform reset is a workspace-restarted answer, not an outage", async () => {
   const operations = new FakeBuildOperations();
-  operations.commandFailure = new Error("Durable Object reset because its code was updated.");
+  operations.commandFailure = CODE_UPDATE_RESET;
 
   await expect(buildStep(operations, "install")).resolves.toEqual({
     ok: false,

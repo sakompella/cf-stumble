@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { isCodeUpdateReset, isTimeoutFailure, logRedactedCause } from "../../diagnostics.js";
+import { isRetryableFailure, isTimeoutFailure, logRedactedCause } from "../../diagnostics.js";
 import {
   answerFailures,
   WorkspaceSyncIncomplete,
@@ -101,7 +101,7 @@ export function answerDurableFailures(
 
 export function answerUnavailable(context: string): AnswerFailures {
   return answerWith((cause) => {
-    if (isCodeUpdateReset(cause)) {
+    if (isRetryableFailure(cause)) {
       logRedactedCause(`${context}: workspace-restarted`, cause);
 
       return restarted();

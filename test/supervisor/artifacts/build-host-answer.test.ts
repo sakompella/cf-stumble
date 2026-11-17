@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { resultOf } from "../../effect-result.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
-import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
 import {
   executeHarnessBuildDiscard,
   executeHarnessBuildOutput,
@@ -12,9 +10,8 @@ import {
 import type { BuildWorkspace } from "../../../src/supervisor/artifacts/build.js";
 import { harnessBuildOutputPath } from "../../../src/workspace-layout.js";
 import { workspaceEffects, type PromiseOperations } from "../../workspace/promise-operations.js";
-import { BUILD_COMMIT, entryModule, moduleMapFile } from "./scripted-build-host.js";
-
-const CODE_UPDATE_RESET = "Durable Object reset because its code was updated.";
+import { CODE_UPDATE_RESET } from "../../platform-reset.js";
+import { BUILD_COMMIT, built, entryModule, moduleMapFile } from "./scripted-build-host.js";
 
 class ResettableOperations implements PromiseOperations {
   provisions = 0;
@@ -72,18 +69,18 @@ function afterFailing(failure: Error, times: number): ResettableOperations {
 }
 
 test("a build starts again once when the platform resets what the Workspace Host called and the Host answers it (deploy 44114195991)", async () => {
-  const operations = afterFailing(new Error(CODE_UPDATE_RESET), 1);
+  const operations = afterFailing(CODE_UPDATE_RESET, 1);
 
-  const result = await resultOf(buildModuleMap(() => hostOver(operations), BUILD_COMMIT));
+  const result = await built(hostOver(operations));
 
   expect(Result.isSuccess(result) ? "built" : result.failure.code).toBe("built");
   expect(operations.provisions).toBe(2);
 });
 
 test("a build that is reset under the Host twice is unavailable after two tries", async () => {
-  const operations = afterFailing(new Error(CODE_UPDATE_RESET), 2);
+  const operations = afterFailing(CODE_UPDATE_RESET, 2);
 
-  const result = await resultOf(buildModuleMap(() => hostOver(operations), BUILD_COMMIT));
+  const result = await built(hostOver(operations));
 
   expect(Result.isFailure(result) ? result.failure.code : "built").toBe(
     "build-workspace-unavailable",
@@ -94,7 +91,7 @@ test("a build that is reset under the Host twice is unavailable after two tries"
 test("a build whose workspace is really unavailable fails after one try", async () => {
   const operations = afterFailing(new Error("container exited before the command could run"), 2);
 
-  const result = await resultOf(buildModuleMap(() => hostOver(operations), BUILD_COMMIT));
+  const result = await built(hostOver(operations));
 
   expect(Result.isFailure(result) ? result.failure.code : "built").toBe(
     "build-workspace-unavailable",
