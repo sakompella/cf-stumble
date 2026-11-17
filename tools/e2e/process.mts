@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 export type Finished = Readonly<{ code: number; output: string }>;
 
@@ -8,10 +9,28 @@ type RunOptions = Readonly<{
   echo?: boolean;
 }>;
 
-const running = new Set<ChildProcess>();
+const KILL_GRACE_MS = 10_000;
 
-export function stopChildren(): void {
-  for (const child of running) child.kill("SIGTERM");
+const stepSignal = new AsyncLocalStorage<AbortSignal>();
+
+export function withSignal<T>(signal: AbortSignal, work: () => Promise<T>): Promise<T> {
+  return stepSignal.run(signal, work);
+}
+
+const outsideSteps = new AbortController().signal;
+
+export function currentSignal(): AbortSignal {
+  return stepSignal.getStore() ?? outsideSteps;
+}
+
+function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid === undefined) return;
+
+  try {
+    process.kill(-child.pid, signal);
+  } catch (cause) {
+    if (!(cause instanceof Error && "code" in cause && cause.code === "ESRCH")) throw cause;
+  }
 }
 
 export function execute(
@@ -19,10 +38,15 @@ export function execute(
   args: readonly string[],
   options: RunOptions = {},
 ): Promise<Finished> {
+  const signal = currentSignal();
+
+  signal.throwIfAborted();
+
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       env: options.env ?? process.env,
       stdio: ["pipe", "pipe", "pipe"],
+      detached: true,
     });
 
     const chunks: string[] = [];
@@ -33,14 +57,33 @@ export function execute(
       if (options.echo === true) process.stderr.write(chunk);
     };
 
-    running.add(child);
+    let force: NodeJS.Timeout | undefined;
+
+    const stop = () => {
+      signalGroup(child, "SIGTERM");
+      force = setTimeout(() => {
+        signalGroup(child, "SIGKILL");
+      }, KILL_GRACE_MS);
+    };
+
+    const release = () => {
+      clearTimeout(force);
+      signal.removeEventListener("abort", stop);
+    };
+
+    signal.addEventListener("abort", stop, { once: true });
     child.stdout.on("data", collect);
     child.stderr.on("data", collect);
-    child.on("error", reject);
+    child.on("error", (cause) => {
+      release();
+      reject(cause);
+    });
     child.stdin.on("error", () => {});
     child.on("close", (code) => {
-      running.delete(child);
-      resolve({ code: code ?? 1, output: chunks.join("") });
+      release();
+
+      if (signal.aborted) reject(new Error(`stopped: ${String(signal.reason)}`));
+      else resolve({ code: code ?? 1, output: chunks.join("") });
     });
     child.stdin.end(options.input ?? "");
   });

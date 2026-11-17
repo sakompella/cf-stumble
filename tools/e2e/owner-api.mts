@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import * as Schema from "effect/Schema";
 import { ANSWERS, Submitted, type AnswerOf } from "../../src/api/answers.ts";
+import { currentSignal } from "./process.mts";
 
 const Live = Schema.Struct({
   run: Schema.optional(Schema.Unknown),
@@ -60,12 +61,13 @@ export class Owner {
   }
 
   #fetch(path: string, init: RequestInit): Promise<Response> {
-    const request = () => fetch(`${this.url}${path}`, { ...init, headers: this.#headers() });
+    const request = () =>
+      fetch(`${this.url}${path}`, { ...init, headers: this.#headers(), signal: currentSignal() });
 
     return request().catch(async (cause: unknown) => {
       if (!(cause instanceof TypeError)) throw cause;
 
-      await sleep(5_000);
+      await sleep(5_000, undefined, { signal: currentSignal() });
 
       return request();
     });
@@ -103,7 +105,7 @@ export class Owner {
 
       if (status === 200) return;
 
-      await sleep(5_000);
+      await sleep(5_000, undefined, { signal: currentSignal() });
     }
 
     throw new Error(`${this.url} did not answer /api/status within ${limitMs / 1000} s`);

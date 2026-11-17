@@ -1,4 +1,4 @@
-import { stopChildren } from "./process.mts";
+import { withSignal } from "./process.mts";
 
 export const MINUTE_MS = 60_000;
 
@@ -39,6 +39,28 @@ function wording(result: Result): string {
   return result.status === "passed" ? "passed" : `${result.status}: ${note(result)}`;
 }
 
+async function attempt(
+  signal: AbortSignal,
+  work: (signal: AbortSignal) => Promise<void>,
+): Promise<Result> {
+  if (signal.aborted) {
+    return { status: "failed", detail: `not started: ${String(signal.reason)}` };
+  }
+
+  try {
+    await withSignal(signal, () => work(signal));
+
+    return { status: "passed" };
+  } catch (cause) {
+    if (cause instanceof Skip) return { status: "skipped", reason: describe(cause) };
+
+    return {
+      status: "failed",
+      detail: signal.aborted ? `stopped: ${String(signal.reason)}` : describe(cause),
+    };
+  }
+}
+
 export class Steps {
   readonly #outcomes: Outcome[] = [];
   readonly #interrupted = new AbortController();
@@ -52,6 +74,9 @@ export class Steps {
     process.on("SIGTERM", (signal) => {
       this.#onSignal(signal);
     });
+    process.on("SIGHUP", (signal) => {
+      this.#onSignal(signal);
+    });
   }
 
   #onSignal(signal: NodeJS.Signals): void {
@@ -62,7 +87,6 @@ export class Steps {
     if (this.#cleaning) return;
 
     this.#interrupted.abort(new Error(signal));
-    stopChildren();
   }
 
   startCleanup(): void {
@@ -82,24 +106,9 @@ export class Steps {
     const limit = AbortSignal.timeout(limitMs);
     const signal = this.#cleaning ? limit : AbortSignal.any([this.#interrupted.signal, limit]);
 
-    const aborted = new Promise<never>((_resolve, reject) => {
-      signal.addEventListener("abort", () => {
-        reject(new Error(`stopped: ${String(signal.reason)}`));
-      });
-    });
-
-    let result: Result = { status: "passed" };
-
     console.error(`e2e: ${name} (limit ${limitMs / MINUTE_MS} min)`);
 
-    try {
-      await Promise.race([work(signal), aborted]);
-    } catch (cause) {
-      result =
-        cause instanceof Skip
-          ? { status: "skipped", reason: describe(cause) }
-          : { status: "failed", detail: describe(cause) };
-    }
+    const result = await attempt(signal, work);
 
     const seconds = Math.round((Date.now() - began) / 1000);
 
