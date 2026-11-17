@@ -1,15 +1,8 @@
 import * as Array from "effect/Array";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import {
-  AuthorizeGitHub,
-  ConnectRepository,
-  FetchGitHub,
-  FetchProjects,
-  RefreshGitHub,
-} from "./commands.js";
+import { ConnectRepository, FetchGitHub, FetchProjects } from "./commands.js";
 import { DisconnectChatGPT, FinishChatGPTLogin, StartChatGPTLogin } from "./commands-chatgpt.js";
-import type { GitHubReport, Model, Project } from "./model.js";
+import type { Model, Project } from "./model.js";
 import { ChatGPT, keepingAddress, pendingLogin, withAddress } from "./chatgpt.js";
 import { StreamPhase } from "./stream-phase.js";
 import { withOpenedStream } from "./update-fresh-thread.js";
@@ -25,18 +18,7 @@ export { backendHandlers } from "./update-backend.js";
 
 export { disconnectHandlers } from "./update-disconnect.js";
 
-function withGitHub(model: Model, report: GitHubReport): Model {
-  const github = Predicate.isTagged(report, "Known")
-    ? report.connection
-    : {
-        state: "unknown",
-        detail: "",
-        verificationUri: model.github.verificationUri,
-        checked: "",
-      };
-
-  return { ...model, github };
-}
+export { gitHubHandlers, INITIAL_GITHUB } from "./update-github.js";
 
 function withPromptSwitched(model: Model, projectId: string): Model {
   const { [projectId]: incoming = "", ...others } = model.drafts;
@@ -168,38 +150,6 @@ export function connectHandlers(
       model: {
         ...withError(model, "the connect request", detail),
         connectStatus: "request failed",
-      },
-    }),
-  };
-}
-
-function askingGitHub(model: Model): Model {
-  return { ...clearError(model), github: { ...model.github, detail: "asking GitHub" } };
-}
-
-export function gitHubHandlers(
-  model: Model,
-): Handlers<
-  | "ClickedAuthorize"
-  | "ClickedRefreshGitHub"
-  | "SucceededGitHub"
-  | "RejectedGitHub"
-  | "FailedGitHub"
-> {
-  return {
-    ClickedAuthorize: ({ endpoint }) => ({
-      model: askingGitHub(model),
-      commands: [AuthorizeGitHub({ endpoint })],
-    }),
-    ClickedRefreshGitHub: () => ({ model: askingGitHub(model), commands: [RefreshGitHub()] }),
-    SucceededGitHub: ({ github }) => ({ model: withGitHub(model, github) }),
-    RejectedGitHub: ({ wording }) => ({
-      model: { ...model, github: { ...model.github, detail: wording, checked: "" } },
-    }),
-    FailedGitHub: ({ detail }) => ({
-      model: {
-        ...withError(model, "the GitHub request", detail),
-        github: { ...model.github, state: "request failed", detail: "", checked: "" },
       },
     }),
   };

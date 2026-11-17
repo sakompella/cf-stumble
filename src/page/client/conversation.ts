@@ -3,7 +3,14 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import type { TranscriptView } from "@earendil-works/pi-durable";
 import { AssistantMessage, Block, blocksText, Entry, ToolSlot } from "./pi-message.js";
+import { RUN_BUDGET_MINUTES } from "../../turn-budget.js";
 import { RunPhase, runPhaseOf } from "./run-phase.js";
+
+export { DEFAULT_RUN_BUDGET_MINUTES } from "../../turn-budget.js";
+
+export const RunBudget = Schema.Literals(RUN_BUDGET_MINUTES);
+
+export type RunBudget = typeof RunBudget.Type;
 
 const ViewItem = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("entry"), entry: Entry }),

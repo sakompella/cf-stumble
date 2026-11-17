@@ -1,20 +1,12 @@
-import { refusalText } from "../../../src/page/client/api.js";
 import { expect, test } from "vitest";
-import { checkedWording, gitHubReport } from "../../../src/page/client/api.js";
+import { checkedWording, refusalText } from "../../../src/page/client/api.js";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { AWAITING, CONNECTED, LATE_MORNING, readingGitHub } from "./github-answers.js";
 import { settled } from "./requests.js";
 import { shownText } from "./shown.js";
-
-const CONNECTED_GITHUB = {
-  state: "connected",
-  login: "octocat",
-  source: "device-authorization",
-} as const;
-
-const LATE_MORNING = new Date(2026, 9, 16, 11, 5).getTime();
 
 const checkedShown = (model: Model): string => shownText(model, ID.githubChecked);
 
@@ -24,7 +16,7 @@ function after(start: Model, messages: readonly Message[]): Model {
 
 test("asking to refresh GitHub posts the refresh request and renders the Worker's answer", async () => {
   const done = await settled(update(init().model, Message.ClickedRefreshGitHub()), () =>
-    Promise.resolve(Response.json({ ok: true, github: CONNECTED_GITHUB, checkedAt: LATE_MORNING })),
+    Promise.resolve(Response.json({ ok: true, github: CONNECTED, checkedAt: LATE_MORNING })),
   );
 
   expect(done.sent).toEqual([{ method: "POST", path: "/api/github/connection/refresh", body: {} }]);
@@ -40,54 +32,44 @@ test("the page words when the Worker last checked GitHub, with the date once it 
   expect(checkedWording(null, now)).toBe("");
 });
 
-test("a pending authorization is the Worker's live state, so it shows no check time", () => {
-  const awaiting = {
-    state: "awaiting-authorization",
-    userCode: "WDJB-MJHT",
-    verificationUri: "https://github.com/login/device",
-    expiresAt: 1,
-  } as const;
-
-  const shown = after(init().model, [
-    Message.SucceededGitHub({ github: gitHubReport(awaiting, LATE_MORNING, LATE_MORNING) }),
-  ]);
+test("a pending authorization is the Worker's live state, so it shows no check time", async () => {
+  const shown = await readingGitHub(AWAITING);
 
   expect(shownText(shown, ID.githubDetail)).toBe("enter code WDJB-MJHT at GitHub");
   expect(shownText(shown, ID.githubVerificationLink)).toBe("https://github.com/login/device");
   expect(checkedShown(shown)).toBe("");
 });
 
-test("the last-known check time stays with its state until a request replaces the state", () => {
-  const checked = after(init().model, [
-    Message.SucceededGitHub({
-      github: gitHubReport(CONNECTED_GITHUB, LATE_MORNING, LATE_MORNING),
-    }),
-  ]);
+test("a refused or failed GitHub request keeps the stored state, login and check time, and says why in the result", async () => {
+  const connected = await readingGitHub(CONNECTED);
+  const checked = checkedShown(connected);
 
-  expect(checkedShown(checked)).toBe("11:05");
-  expect(checkedShown(after(checked, [Message.ClickedRefreshGitHub()]))).toBe("11:05");
-  expect(checkedShown(after(checked, [Message.FailedGitHub({ detail: "offline" })]))).toBe("");
-  expect(checkedShown(after(checked, [Message.RejectedGitHub({ wording: "error: 503" })]))).toBe(
-    "",
-  );
-});
+  expect(checked).not.toBe("");
 
-test("a refused GitHub request leaves the stored state and puts the sentence in the detail, not 'asking GitHub'", () => {
-  const connected = after(init().model, [
-    Message.SucceededGitHub({ github: gitHubReport(CONNECTED_GITHUB, LATE_MORNING, LATE_MORNING) }),
+  const asking = after(connected, [
     Message.ClickedAuthorize({ endpoint: "POST /api/github/authorization/complete" }),
   ]);
 
-  expect(shownText(connected, ID.githubDetail)).toBe("asking GitHub");
+  expect(shownText(asking, ID.githubResult)).toBe("asking GitHub");
+  expect(shownText(asking, ID.githubDetail)).toBe("octocat (device-authorization)");
 
-  const refused = after(connected, [Message.RejectedGitHub({ wording: "Nothing to authorize." })]);
+  const refused = after(asking, [Message.RejectedGitHub({ wording: "Nothing to authorize." })]);
 
   expect(shownText(refused, ID.githubState)).toBe("connected");
-  expect(shownText(refused, ID.githubDetail)).toBe("Nothing to authorize.");
+  expect(shownText(refused, ID.githubDetail)).toBe("octocat (device-authorization)");
+  expect(checkedShown(refused)).toBe(checked);
+  expect(shownText(refused, ID.githubResult)).toBe("Nothing to authorize.");
 
-  const failed = after(connected, [Message.FailedGitHub({ detail: "offline" })]);
+  const failed = after(asking, [Message.FailedGitHub({ detail: "offline" })]);
 
-  expect(shownText(failed, ID.githubDetail)).toBe("");
+  expect(shownText(failed, ID.githubState)).toBe("connected");
+  expect(shownText(failed, ID.githubDetail)).toBe("octocat (device-authorization)");
+  expect(checkedShown(failed)).toBe(checked);
+  expect(shownText(failed, ID.githubResult)).toBe("request failed");
+
+  const answered = await readingGitHub(CONNECTED, LATE_MORNING, refused);
+
+  expect(shownText(answered, ID.githubResult)).toBe("");
 });
 
 test.each([
@@ -98,18 +80,17 @@ test.each([
   },
   { refusal: "a connect during a workspace reset", code: "workspace-busy", status: 409 },
 ])("$refusal leaves the GitHub panel showing the stored status", async ({ code, status }) => {
-  const connected = after(init().model, [
-    Message.SucceededGitHub({
-      github: gitHubReport(CONNECTED_GITHUB, LATE_MORNING, LATE_MORNING),
-    }),
+  const typing = after(init().model, [
     Message.UpdatedConnectRepositoryInput({ value: "https:/github.com/octocat" }),
   ]);
+
+  const connected = await readingGitHub(CONNECTED, LATE_MORNING, typing);
 
   const done = await settled(update(connected, Message.ClickedConnect()), ({ method }) =>
     Promise.resolve(
       method === "POST"
         ? Response.json({ ok: false, problem: { code, detail: "" } }, { status })
-        : Response.json({ ok: true, github: CONNECTED_GITHUB, checkedAt: LATE_MORNING }),
+        : Response.json({ ok: true, github: CONNECTED, checkedAt: LATE_MORNING }),
     ),
   );
 

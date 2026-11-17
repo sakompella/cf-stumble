@@ -31,14 +31,23 @@ test.describe("a refused connect", () => {
     await expect(status).toContainText(MAX_REPOSITORY_BLOB_COUNT.toLocaleString("en-US"));
     await expect(status).not.toContainText("repository-too-large");
   });
+});
 
-  test("I authorized it, with nothing to authorize, keeps the connection and says why", async ({
+test.describe("a refused GitHub authorization", () => {
+  test.use({ scenario: "github-awaiting-authorization", refusedStatuses: [410] });
+
+  test("I authorized it, after the code expired, keeps the code and the state and says why", async ({
     owner,
   }) => {
     await owner.locator(`#${ID.completeAuthorizationButton}`).click();
 
-    await expect(owner.locator(`#${ID.githubDetail}`)).toContainText("nothing to authorize");
-    await expect(owner.locator(`#${ID.githubState}`)).toHaveText("connected");
+    await expect(owner.locator(`#${ID.githubResult}`)).toContainText("code expired");
+    await expect(owner.locator(`#${ID.githubState}`)).toHaveText("awaiting-authorization");
+    await expect(owner.locator(`#${ID.githubDetail}`)).toContainText("WDJB-MJHT");
+    await expect(owner.locator(`#${ID.githubVerificationLink}`)).toHaveAttribute(
+      "href",
+      "https://github.com/login/device",
+    );
   });
 });
 

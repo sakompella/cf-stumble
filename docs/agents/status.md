@@ -67,7 +67,7 @@ Each item that this file used to list as open is now classified: **resolved** (w
 
 **Reproduced**
 
-The page failures that the 2026-11-16 QA run saw are open: F12 and F15. See "Open items" below.
+The page failure that the 2026-11-16 QA run saw is open: F15. See "Open items" below.
 
 ## Open items
 
@@ -75,7 +75,6 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 
 **Seen in a run**
 
-- **The GitHub panel keeps four strings, not the Worker's state (F12).** Its controls do not follow the state. `rc-f12-github-panel.md`.
 - **The workspace backend switch says nothing about its effect (F15).** `POST /api/workspace/backend` echoes the setting and drops what the Host knows. `rc-f15-workspace-panel.md`.
 
 **Proved in code or by a scratch test, not seen in production**
@@ -88,4 +87,4 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 - **The Supervisor imports page code, and the CLI copies a label parser (#21).** `rc-review-21.md`.
 - **Generation history is shaped like the old Git repository (#22).** `rc-review-22.md`.
 
-Decisions waiting for the owner: hide **Authorize GitHub** while connected (F12), and delete the oxlint Effect-free override (#28).
+Decisions waiting for the owner: delete the oxlint Effect-free override (#28).
