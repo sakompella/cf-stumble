@@ -18,8 +18,10 @@ Idle containers also burn CPU, because computerd's disk poll walks `/workspace` 
 **Rules.** Work counts as in flight from the start of a Host RPC (`build`, `provision`,
 `removeProject`, `ensureManagedInstructions`, `credential`, `reset`) and of each project `exec`
 until it settles, even past the turn deadline. `project()` leases the workspace until the turn
-deadline, and the lease ends early when the capability's turn ends (`endTurn`), as when the
-Supervisor ends a run's capability at settle or abort. The WebSocket and the heartbeat are not work. The alarm closes the Workspace, checks
+deadline, and a lease ends when the capability's turn ends (`endTurn`), as when the Supervisor
+ends a run's capability at settle or abort, or at its end time, whichever comes first. The
+lease set (`src/workspace/idle-leases.ts`) drops a lease whose end time has passed, so a Host
+that nobody told about the end of the turn answers a backend change after the deadline. The WebSocket and the heartbeat are not work. The alarm closes the Workspace, checks
 again that nothing began meanwhile, and only then destroys the container. Work that begins during
 the close keeps the container, and the check repeats one limit later. A close that fails does not
 stop the destroy, because destroying the container ends the socket from the other side. The Host

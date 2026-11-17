@@ -6,6 +6,7 @@ import { runAtEntryPoint } from "../run-entry-point.js";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
 import { ContainerStopFailed } from "./container-lifecycle.js";
 import type { ExecBackend } from "./project/index.js";
+import { IdleLeases } from "./idle-leases.js";
 import { decideIdleStop, type IdleStopDecision, type WorkspaceActivity } from "./idle-stop.js";
 
 export { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
@@ -46,7 +47,7 @@ export class WorkspaceIdleController implements ProjectActivity {
   readonly #stopping = Semaphore.makeUnsafe(1);
   #inFlight = 0;
   #lastActiveAtMs: number;
-  readonly #leases = new Set<Readonly<{ endsAtMs: number }>>();
+  readonly #leases = new IdleLeases();
   #alarmAtMs: number | null = null;
 
   constructor(ports: IdleControllerPorts) {
@@ -73,22 +74,25 @@ export class WorkspaceIdleController implements ProjectActivity {
   }
 
   lease(endsAtMs: number): () => void {
-    const lease = { endsAtMs };
-    this.#leases.add(lease);
+    const release = this.#leases.add(endsAtMs);
     this.#armForQuietPeriod();
 
     return () => {
-      if (this.#leases.delete(lease)) this.touch();
+      if (release()) this.touch();
     };
   }
 
   snapshot(): WorkspaceActivity {
-    const leaseEnds = [...this.#leases].map((lease) => lease.endsAtMs);
+    const expiredEndMs = this.#leases.expire(this.#ports.nowMs());
+
+    if (expiredEndMs !== null) {
+      this.#lastActiveAtMs = Math.max(this.#lastActiveAtMs, expiredEndMs);
+    }
 
     return {
       inFlight: this.#inFlight,
       lastActiveAtMs: this.#lastActiveAtMs,
-      leaseEndsAtMs: leaseEnds.length === 0 ? null : Math.max(...leaseEnds),
+      leaseEndsAtMs: this.#leases.latestEndMs(),
     };
   }
 
