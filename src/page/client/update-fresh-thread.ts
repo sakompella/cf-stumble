@@ -43,7 +43,11 @@ function replacedThread(model: Model): UpdateReturn {
 export function freshThreadHandlers(
   model: Model,
 ): Handlers<
-  "ClickedFreshThread" | "SucceededFreshThread" | "RejectedFreshThread" | "FailedFreshThread"
+  | "ClickedFreshThread"
+  | "ExpiredFreshThread"
+  | "SucceededFreshThread"
+  | "RejectedFreshThread"
+  | "FailedFreshThread"
 > {
   const forStream = (streamId: number, next: () => UpdateReturn): UpdateReturn =>
     streamId === model.eventsStreamId ? next() : { model };
@@ -51,6 +55,7 @@ export function freshThreadHandlers(
   return {
     ClickedFreshThread: () =>
       withFreshThread(clearError(model), FreshThreadEvent.Clicked({ ground: groundOf(model) })),
+    ExpiredFreshThread: () => withFreshThread(model, FreshThreadEvent.Expired()),
     SucceededFreshThread: ({ streamId }) => forStream(streamId, () => replacedThread(model)),
     RejectedFreshThread: ({ streamId, wording }) =>
       forStream(streamId, () => withFreshThread(model, FreshThreadEvent.Refused({ wording }))),

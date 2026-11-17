@@ -1,7 +1,7 @@
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
 import * as Schema from "effect/Schema";
-import { type JsonBody } from "./api.js";
+import { refusalText, type JsonBody } from "./api.js";
 import { chatGPTConnection } from "./chatgpt.js";
 import { Message } from "./message.js";
 import { apiRequest, rejectedAs } from "./api-request.js";
@@ -26,7 +26,7 @@ function chatGPTRequest(endpoint: ChatGPTEndpoint, maybeBody: Option.Option<Json
         answer.ok
           ? Message.SucceededChatGPT({ chatgpt: chatGPTConnection(answer.chatgpt) })
           : Message.RejectedChatGPT({
-              wording: `rejected: ${answer.problem.code}`,
+              wording: refusalText({ kind: "problem", code: answer.problem.code }),
               maybeChatGPT: Option.some(chatGPTConnection(answer.chatgpt)),
             }),
       ...rejectedAs((wording) => Message.RejectedChatGPT({ wording, maybeChatGPT: Option.none() })),

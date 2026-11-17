@@ -129,6 +129,7 @@ export const Model = Schema.Struct({
   prompt: Schema.String,
   runBudget: RunBudget,
   runNote: Schema.String,
+  queuedAtCancel: Schema.Number,
   freshThread: FreshThread,
 
   maybeReading: Schema.Option(GenerationReading),

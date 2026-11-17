@@ -48,6 +48,10 @@ export const BASELINE_PROJECTS: readonly ProjectEntry[] = [
   { kind: "harness", id: HARNESS_SELF_PROJECT_ID, displayName: "harness" },
 ];
 
+export const MISTYPED_REPOSITORY_URL = "https://github.com/octocat/Hello-Wrld";
+
+export const TOO_LARGE_REPOSITORY_URL = "https://github.com/torvalds/linux";
+
 export const NEW_PROJECT: ProjectEntry = {
   kind: "repository",
   id: CONNECTED_PROJECT_ID,

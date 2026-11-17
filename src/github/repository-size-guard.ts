@@ -1,11 +1,10 @@
 import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { shellQuote } from "../shell-quote.js";
-
-export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
-
-export const MAX_REPOSITORY_BLOB_BYTES = 150_000_000;
-
-export const MAX_REPOSITORY_SIZE_KB = 5_000_000;
+import {
+  MAX_REPOSITORY_BLOB_BYTES,
+  MAX_REPOSITORY_BLOB_COUNT,
+  MAX_REPOSITORY_SIZE_KB,
+} from "../repository-limits.js";
 
 export const REPOSITORY_SIZE_VERDICT_FUNCTION = "repository_size_verdict";
 

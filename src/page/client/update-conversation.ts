@@ -43,7 +43,11 @@ export function composerHandlers(
       Option.match(model.maybeProjectId, {
         onNone: () => ({ model }),
         onSome: (projectId) => ({
-          model: { ...clearError(model), runNote: "cancelling" },
+          model: {
+            ...clearError(model),
+            runNote: "cancelling",
+            queuedAtCancel: model.conversation.inbox.length,
+          },
           commands: [AbortRun({ projectId })],
         }),
       }),

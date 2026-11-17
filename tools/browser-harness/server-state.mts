@@ -23,7 +23,7 @@ export type ScenarioState = {
   projects: ProjectEntry[];
   isChatGPTConnected: boolean;
   generationLabel: number;
-  readonly eventStreams: Set<ServerResponse>;
+  readonly eventStreams: Map<ServerResponse, string>;
   requests: RequestRecord[];
   conversations: Conversations;
   readonly openEventStreams: Map<string, number>;
@@ -38,7 +38,7 @@ export function initialState(
     projects: [...BASELINE_PROJECTS],
     isChatGPTConnected: scenario === "chatgpt-connected",
     generationLabel: INITIAL_GENERATION_LABEL,
-    eventStreams: new Set(),
+    eventStreams: new Map(),
     requests: [],
     conversations,
     openEventStreams: new Map(),

@@ -9,14 +9,26 @@ import { retriedUnconfirmed } from "./update-send.js";
 import type { Handlers, UpdateReturn } from "./update-shared.js";
 import { transcriptHandlers } from "./update-transcript.js";
 
-function runEndNote(previous: Conversation, next: Conversation): Option.Option<string> {
+function withdrawnWording(count: number, next: Conversation): string {
+  return count === 0 || next.inbox.length > 0
+    ? ""
+    : ` · ${count} queued message${count === 1 ? "" : "s"} withdrawn`;
+}
+
+function runEndNote(
+  previous: Conversation,
+  next: Conversation,
+  withdrawn: number,
+): Option.Option<string> {
   if (next.isRunning) return Option.none();
 
   if (Option.isSome(next.maybeRunFailure)) {
     const reason = next.maybeRunFailure.value;
 
     return previous.isRunning || !Option.contains(previous.maybeRunFailure, reason)
-      ? Option.some(`stopped: ${reason}`)
+      ? Option.some(
+          `stopped: ${reason}${reason === "aborted" ? withdrawnWording(withdrawn, next) : ""}`,
+        )
       : Option.none();
   }
 
@@ -35,11 +47,11 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
         ...held,
         conversation: EMPTY_CONVERSATION,
         outgoing: withoutQueued(held.outgoing),
-        runNote: "",
+        runNote: "this conversation was replaced by a fresh thread",
       }
     : held;
 
-  const note = runEndNote(model.conversation, conversation);
+  const note = runEndNote(model.conversation, conversation, model.queuedAtCancel);
   const ended = model.conversation.isRunning && !conversation.isRunning;
   const started = !model.conversation.isRunning && conversation.isRunning;
 
@@ -53,6 +65,7 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
         onSome: (projectId) => settledOutgoing(conversation, model.outgoing, projectId),
       }),
       runNote: started ? "" : Option.getOrElse(note, () => model.runNote),
+      queuedAtCancel: started || Option.isSome(note) ? 0 : model.queuedAtCancel,
     },
     commands: ended && ChatGPT.guards.Connected(model.chatgpt) ? [FetchChatGPT()] : [],
   };

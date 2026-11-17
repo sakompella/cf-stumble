@@ -1,3 +1,4 @@
+import { refusalText } from "../../../src/page/client/api.js";
 import { expect, test } from "vitest";
 import { checkedWording, gitHubReport } from "../../../src/page/client/api.js";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
@@ -100,5 +101,5 @@ test.each([
   ]);
   expect(shownText(done.model, ID.githubState)).toBe("connected");
   expect(shownText(done.model, ID.githubDetail)).toBe("octocat (device-authorization)");
-  expect(shownText(done.model, ID.connectStatus)).toBe(`rejected: ${code}`);
+  expect(shownText(done.model, ID.connectStatus)).toBe(refusalText({ kind: "problem", code }));
 });

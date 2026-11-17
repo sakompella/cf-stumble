@@ -64,7 +64,11 @@ function turnButtons(model: Model, h: HtmlBuilder<Message>): Html {
           h.Disabled(FreshThread.guards.Starting(model.freshThread)),
           h.OnClick(Message.ClickedFreshThread()),
         ],
-        ["Start fresh thread"],
+        [
+          FreshThread.guards.Armed(model.freshThread)
+            ? "Confirm fresh thread"
+            : "Start fresh thread",
+        ],
       ),
       statusText(ID.turnState, runState(model), h),
     ],

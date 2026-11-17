@@ -5,6 +5,7 @@ import * as Schema from "effect/Schema";
 import type { AnswerOf, Preparation, PreparationFailed } from "../../api/answers.js";
 
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
+import { errorWording, problemWording } from "./problem-wording.js";
 import { GitHubReport, type GenerationReading, type Project } from "./model.js";
 
 export { endpointPath } from "../../api/endpoints.js";
@@ -75,7 +76,10 @@ export function decodeRefusal(payload: Schema.Json): Option.Option<Refusal> {
 }
 
 export function refusalText(refusal: Refusal): string {
-  return refusal.kind === "problem" ? `rejected: ${refusal.code}` : `error: ${refusal.code}`;
+  const known =
+    refusal.kind === "problem" ? problemWording(refusal.code) : errorWording(refusal.code);
+
+  return known ?? `${refusal.kind === "problem" ? "rejected" : "error"}: ${refusal.code}`;
 }
 
 export function unreadableText(status: number): string {

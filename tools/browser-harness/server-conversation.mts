@@ -65,7 +65,7 @@ async function streamEvents(
   const counts = state.openEventStreams;
   counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
 
-  state.eventStreams.add(res);
+  state.eventStreams.set(res, projectId);
   res.on("close", () => {
     state.eventStreams.delete(res);
     counts.set(projectId, (counts.get(projectId) ?? 1) - 1);
@@ -163,6 +163,11 @@ export async function serveConversation(
 
   if (action === "thread/fresh") {
     const conversationId = await state.conversations.fresh(projectId);
+
+    for (const [stream, owner] of state.eventStreams) {
+      if (owner === projectId) stream.end();
+    }
+
     answer(res, record, 200, {
       ok: true,
       conversationId: String(conversationId),

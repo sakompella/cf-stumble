@@ -137,7 +137,7 @@ test("a send the Worker refuses because no generation is active stays retryable 
   const refused = await settled(sentFromPrompt("do it"), problem("no-active-generation", 503));
 
   expect(whoShown(refused.model)).toEqual(["you · not confirmed"]);
-  expect(shownText(refused.model, ID.pageError)).toContain("no active generation");
+  expect(shownText(refused.model, ID.pageError)).toContain("No generation is active");
   expect(shownText(refused.model, ID.pageError)).not.toContain("could not reach");
 });
 

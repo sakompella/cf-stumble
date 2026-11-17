@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
+  MISTYPED_REPOSITORY_URL,
   NEW_PROJECT,
+  TOO_LARGE_REPOSITORY_URL,
   connectPayload,
   projectsPayload,
   refreshPayload,
@@ -9,6 +11,7 @@ import {
 } from "./fixtures.mjs";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import type { ANSWERS, AnsweredEndpoint } from "../../src/api/answers.js";
+import { PROBLEM_STATUS, type ProblemCode } from "../../src/api/problems.js";
 import { matchEndpoint } from "../../src/api/endpoints.js";
 import type { ScenarioState } from "./server-state.mjs";
 
@@ -53,6 +56,11 @@ const INVALID_REQUEST: RouteAnswer = {
   payload: { ok: false, error: { code: "invalid-connect-request" } },
 };
 
+const REFUSED_REPOSITORIES: ReadonlyMap<string, ProblemCode> = new Map([
+  [MISTYPED_REPOSITORY_URL, "repository-not-accessible"],
+  [TOO_LARGE_REPOSITORY_URL, "repository-too-large"],
+]);
+
 function connect(
   state: JsonState,
   body: JsonValue,
@@ -61,6 +69,12 @@ function connect(
 
   if (repositoryUrl === undefined || repositoryUrl === "") {
     return INVALID_REQUEST;
+  }
+
+  const refused = REFUSED_REPOSITORIES.get(repositoryUrl);
+
+  if (refused !== undefined) {
+    return { status: PROBLEM_STATUS[refused], payload: { ok: false, problem: { code: refused } } };
   }
 
   const already = state.projects.some((project) => project.id === NEW_PROJECT.id);

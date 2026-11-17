@@ -123,7 +123,7 @@ function controls(state: ScenarioState, url: string, close: () => Promise<void>)
     activateGeneration: (label) => {
       state.generationLabel = label;
 
-      for (const stream of state.eventStreams) stream.end();
+      for (const stream of state.eventStreams.keys()) stream.end();
     },
     openEventStreams: (projectId) => state.openEventStreams.get(projectId) ?? 0,
     entries: (projectId) => state.conversations.entries(projectId),

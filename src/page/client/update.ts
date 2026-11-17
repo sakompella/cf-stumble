@@ -47,6 +47,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     drafts: {},
     prompt: "",
     runBudget: DEFAULT_RUN_BUDGET_MINUTES,
+    queuedAtCancel: 0,
     maybeReading: Option.none(),
     statusRead: StatusRead.Running(),
     candidateCommitInput: "",

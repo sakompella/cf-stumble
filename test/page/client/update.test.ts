@@ -1,7 +1,7 @@
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
-import { subscriptions } from "../../../src/page/client/events-stream.js";
+import { subscriptions } from "../../../src/page/client/subscriptions.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
@@ -251,5 +251,5 @@ test("a page showing a replaced conversation drops the old one's queued messages
   ]);
 
   expect(rowsShown(replaced)).toEqual([{ who: "you · queued", text: "other" }]);
-  expect(runShown(replaced)).toBe("");
+  expect(runShown(replaced)).toBe("this conversation was replaced by a fresh thread");
 });

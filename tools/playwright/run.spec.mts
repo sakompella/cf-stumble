@@ -133,7 +133,7 @@ test.describe("a follow-up queued before a cancel", () => {
     await expect(turnState(owner)).toHaveText("running · 1 queued");
     await owner.locator(`#${ID.cancelTurnButton}`).click();
 
-    await expect(turnState(owner)).toHaveText("stopped: aborted");
+    await expect(turnState(owner)).toHaveText("stopped: aborted · 1 queued message withdrawn");
     await expect(transcriptTexts(owner, "user")).toHaveText([/^Read the README/u, PROMPT]);
     server.release();
     await owner.reload();

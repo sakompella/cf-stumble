@@ -2,15 +2,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Dom, Subscription } from "foldkit";
 import { answerOf, fetchEffect, problemText, endpointPath, transportDetail } from "./api.js";
 import { Message } from "./message.js";
-import type { Model } from "./model.js";
-import {
-  MaybeTranscriptKey,
-  TranscriptResource,
-  type TranscriptService,
-} from "./transcript-store.js";
+import { TranscriptResource, type TranscriptService } from "./transcript-store.js";
 import { viewReader } from "./view-reader.js";
 
 const RECONNECT_PAUSE = "1 second";
@@ -80,36 +74,9 @@ function connection({
   );
 }
 
-const connectivity = Stream.merge(
-  Dom.streamFromEvent({
-    target: () => window,
-    type: "online",
-    mapEvent: () => Message.ChangedConnectivity({ isOnline: true }),
-  }),
-  Dom.streamFromEvent({
-    target: () => window,
-    type: "offline",
-    mapEvent: () => Message.ChangedConnectivity({ isOnline: false }),
-  }),
-);
-
-export const subscriptions = Subscription.make<Model, Message, TranscriptService>()((entry) => ({
-  connectivity: Subscription.persistentEntry(connectivity),
-  events: entry(
-    { maybeStream: MaybeTranscriptKey },
-    {
-      modelToDependencies: (model) => ({
-        maybeStream: Option.map(model.maybeProjectId, (projectId) => ({
-          streamId: model.eventsStreamId,
-          projectId,
-        })),
-      }),
-      dependenciesToStream: ({ maybeStream }) =>
-        Option.match(maybeStream, {
-          onNone: () => Stream.empty,
-          onSome: (stream) =>
-            connection(stream).pipe(Stream.repeat(Schedule.spaced(RECONNECT_PAUSE))),
-        }),
-    },
-  ),
-}));
+export function eventsOf(stream: {
+  readonly streamId: number;
+  readonly projectId: string;
+}): Stream.Stream<Message, never, TranscriptService> {
+  return connection(stream).pipe(Stream.repeat(Schedule.spaced(RECONNECT_PAUSE)));
+}
