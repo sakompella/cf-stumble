@@ -19,6 +19,8 @@ export { backendHandlers, FetchBackend } from "./update-backend.js";
 
 export { FetchChatGPT } from "./commands-chatgpt.js";
 
+export { disconnectHandlers } from "./update-disconnect.js";
+
 function withGitHub(model: Model, report: GitHubReport): Model {
   const github = Predicate.isTagged(report, "Known")
     ? report.connection

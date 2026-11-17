@@ -28,8 +28,12 @@ test.describe("a connected ChatGPT login", () => {
     expect(requestsTo(server, "POST", DISCONNECT_PATH)).toHaveLength(1);
   });
 
-  test("has no button that a search for Connect would also find", async ({ owner }) => {
-    await expect(owner.getByRole("button", { name: "Connect" })).toHaveCount(1);
-    await expect(owner.locator(`#${ID.connectButton}`)).toHaveText("Connect");
+  test("is not behind a button whose name contains Connect", async ({ owner }) => {
+    await expect(owner.locator(`#${ID.chatgptDisconnectButton}`)).not.toHaveText(/connect/iu);
+    await owner.locator(`#${ID.chatgptDisconnectButton}`).click();
+    await expect(owner.locator(`#${ID.chatgptDisconnectConfirmButton}`)).not.toHaveText(
+      /connect/iu,
+    );
+    await expect(owner.locator(`#${ID.chatgptKeepButton}`)).not.toHaveText(/connect/iu);
   });
 });

@@ -6,6 +6,7 @@ import { Message } from "./message.js";
 import {
   ControlRequest,
   DEFAULT_RUN_BUDGET_MINUTES,
+  Disconnect,
   StatusRead,
   SubmitRequest,
   type Model,
@@ -15,6 +16,7 @@ import {
   backendHandlers,
   chatGPTHandlers,
   connectHandlers,
+  disconnectHandlers,
   FetchBackend,
   FetchChatGPT,
   gitHubHandlers,
@@ -35,6 +37,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     github: { state: "", detail: "", verificationUri: "", checked: "" },
     connectRepositoryInput: "",
     connectStatus: "",
+    disconnect: Disconnect.Idle(),
     chatgpt: ChatGPT.Unknown(),
     chatgptResult: "",
     isChatGPTDisconnectAsked: false,
@@ -63,6 +66,7 @@ export function update(model: Model, message: Message): UpdateReturn {
   return Message.match<UpdateReturn>(message, {
     ...projectHandlers(model),
     ...connectHandlers(model),
+    ...disconnectHandlers(model),
     ...gitHubHandlers(model),
     ...chatGPTHandlers(model),
     ...backendHandlers(model),

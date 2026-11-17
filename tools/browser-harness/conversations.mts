@@ -95,15 +95,19 @@ function answer(scenario: HarnessScenario, messages: readonly Message[]): Assist
 
 export type Barrier = {
   reached: boolean;
+  held: boolean;
   release: () => void;
   released: Promise<void>;
 };
 
 function freshBarrier(): Barrier {
-  const barrier = { reached: false, release: (): void => undefined };
+  const barrier = { reached: false, held: false, release: (): void => undefined };
 
   const released = new Promise<void>((resolve) => {
-    barrier.release = resolve;
+    barrier.release = () => {
+      barrier.held = false;
+      resolve();
+    };
   });
 
   return { ...barrier, released };
@@ -120,6 +124,7 @@ function stubTools(scenario: HarnessScenario, barrier: Barrier): Extension {
 
       if (scenario === "ready-paused") {
         barrier.reached = true;
+        barrier.held = true;
         await awaitWithContext(barrier.released, toolContext);
       }
 

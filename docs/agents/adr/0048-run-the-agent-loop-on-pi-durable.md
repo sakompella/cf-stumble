@@ -55,8 +55,8 @@ every capability when the run settles, and aborts a run that passes `PROJECT_RUN
 (`src/supervisor/conversations/`). Each run row stores which serving instance started it and, once
 the owner cancels it or the deadline aborts it, how it is ending, so a restart does not forget a
 cancel. A replaced instance's `running` and `arm` calls are refused before they reach the Supervisor.
-A reset, a disconnect, or an owner activation or rollback refuses with `run-active` while a run is
-active.
+A reset, or an owner activation or rollback, refuses with `run-active` while a run is active. A
+disconnect refuses with `run-active` only while a run is active in that project.
 
 **The generation reaches nothing else.** Its model provider calls only the model capability that `attach` passes, and its
 `ExecutionEnv` runs file and command operations only through the project capability. The Worker

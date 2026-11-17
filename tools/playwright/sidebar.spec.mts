@@ -5,7 +5,9 @@ import {
   CONNECTED_PROJECT_URL,
   HARNESS_PROJECT_ID,
 } from "../browser-harness/fixtures.mjs";
-import { expect, projectButton, requestsTo, test } from "./fixtures.mjs";
+import { expect, projectButton, requestsTo, sendMessage, test } from "./fixtures.mjs";
+
+const PROJECT_PATH = "/api/projects/octocat-hello-world";
 
 test("selecting the harness project reads its own conversation and stops reading the other", async ({
   owner,
@@ -37,6 +39,42 @@ test("connecting a repository adds it and keeps the current project", async ({ o
     { repositoryUrl: CONNECTED_PROJECT_URL },
   ]);
   await expect(projectButton(owner, "octocat-hello-world")).toHaveAttribute("aria-current", "true");
+});
+
+test("the owner disconnects a repository from the sidebar", async ({ owner, server }) => {
+  await expect(projectButton(owner, "octocat-hello-world")).toHaveAttribute("aria-current", "true");
+  await owner.locator(`#${ID.disconnectButton}`).click();
+
+  await expect(owner.locator(`#${ID.disconnectPrompt}`)).toContainText("hello-world");
+  expect(requestsTo(server, "POST", `${PROJECT_PATH}/disconnect`)).toEqual([]);
+
+  await owner.locator(`#${ID.disconnectConfirmButton}`).click();
+
+  await expect(owner.locator(`#${ID.disconnectStatus}`)).toHaveText("disconnected hello-world");
+  await expect(projectButton(owner, "octocat-hello-world")).toHaveCount(0);
+  await expect(owner.locator(`#${ID.projectListStatus}`)).toHaveText("no repository connected yet");
+  await expect(projectButton(owner, "harness")).toHaveAttribute("aria-current", "true");
+  await expect(owner.locator(`#${ID.conversationProject}`)).toHaveText("harness");
+  await expect(owner.locator(`#${ID.disconnectButton}`)).toHaveCount(0);
+  expect(requestsTo(server, "POST", `${PROJECT_PATH}/disconnect`)).toHaveLength(1);
+});
+
+test.describe("a run that is still going", () => {
+  test.use({ scenario: "ready-paused", refusedStatuses: [409] });
+
+  test("blocks disconnecting its own project and says why", async ({ owner, server }) => {
+    await sendMessage(owner, "Keep working");
+    await server.waitForBarrier();
+
+    await owner.locator(`#${ID.disconnectButton}`).click();
+    await owner.locator(`#${ID.disconnectConfirmButton}`).click();
+
+    await expect(owner.locator(`#${ID.disconnectStatus}`)).toHaveText(
+      "not disconnected: A run is active. Cancel it or wait until it ends.",
+    );
+    await expect(projectButton(owner, "octocat-hello-world")).toBeVisible();
+    server.release();
+  });
 });
 
 test.describe("GitHub connection", () => {

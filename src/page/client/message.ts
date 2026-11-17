@@ -27,6 +27,9 @@ export const Message = defineMessageUnion({
   ConfirmedChatGPTDisconnect: {},
   ClickedKeepChatGPT: {},
   ClickedBackend: { backend: BackendSetting },
+  ClickedDisconnect: {},
+  ConfirmedDisconnect: {},
+  CancelledDisconnect: {},
 
   UpdatedPrompt: { value: Schema.String },
   ChoseRunBudget: { minutes: RunBudget },
@@ -54,6 +57,13 @@ export const Message = defineMessageUnion({
   SucceededConnect: { isAlreadyConnected: Schema.Boolean },
   RejectedConnect: { wording: Schema.String },
   FailedConnect: { detail: Schema.String },
+
+  SucceededDisconnect: {
+    projectId: Schema.String,
+    workspace: Schema.Literals(["removed", "failed"]),
+  },
+  RejectedDisconnect: { wording: Schema.String },
+  FailedDisconnect: { detail: Schema.String },
 
   SucceededGitHub: { github: GitHubReport },
   RejectedGitHub: { wording: Schema.String },

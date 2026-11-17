@@ -126,6 +126,10 @@ export class ConversationRuns {
     return [...this.#runs().values()].some((run) => run.deadline > now);
   }
 
+  isRunning(conversationId: string, now: number): boolean {
+    return this.remainingMs(conversationId, now) !== undefined;
+  }
+
   remainingMs(conversationId: string, now: number): number | undefined {
     const run = this.#runs().get(conversationId);
 

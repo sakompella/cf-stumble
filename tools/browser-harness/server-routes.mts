@@ -86,6 +86,25 @@ function connect(
   return { status: 200, payload: connectPayload(already) };
 }
 
+function disconnect(
+  state: JsonState & Pick<ScenarioState, "conversations">,
+  projectId: string,
+): Answer<"POST /api/projects/:projectId/disconnect"> | RouteAnswer {
+  const project = state.projects.find((entry) => entry.id === projectId);
+
+  if (project === undefined || project.kind === "harness") {
+    return { status: 404, payload: { ok: false, problem: { code: "unknown-project-id" } } };
+  }
+
+  if (state.conversations.barrier.held) {
+    return { status: 409, payload: { ok: false, problem: { code: "run-active" } } };
+  }
+
+  state.projects = state.projects.filter((entry) => entry.id !== projectId);
+
+  return { status: 200, payload: { ok: true, projectId, workspace: "removed" } };
+}
+
 type ServedRoutes = {
   readonly [
     E in
@@ -137,9 +156,13 @@ export function serveJsonRoute(
   state: ScenarioState,
   body: JsonValue,
 ): RouteAnswer | undefined {
-  const endpoint = matchEndpoint(req.method ?? "", path)?.endpoint;
+  const match = matchEndpoint(req.method ?? "", path);
 
-  return endpoint !== undefined && isServed(endpoint)
-    ? JSON_ROUTES[endpoint](state, body)
+  if (match?.kind === "project" && match.endpoint === "POST /api/projects/:projectId/disconnect") {
+    return disconnect(state, match.projectId);
+  }
+
+  return match?.kind === "fixed" && isServed(match.endpoint)
+    ? JSON_ROUTES[match.endpoint](state, body)
     : undefined;
 }

@@ -10,7 +10,7 @@ async function connectTo(owner: Page, url: string): Promise<void> {
 }
 
 test.describe("a refused connect", () => {
-  test.use({ allowedConsoleErrors: [/status of (403|413)/u] });
+  test.use({ refusedStatuses: [403, 413] });
 
   test("a mistyped repository is refused with a sentence about the name, not a code", async ({
     owner,
