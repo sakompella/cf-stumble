@@ -2,7 +2,13 @@ import { expect, test } from "vitest";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generation-state.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label as generationLabel } from "../supervisor/generations/fixtures.js";
-import { controlRequest, apiResponse, apiSupervisor as supervisor } from "./helpers.js";
+import {
+  controlRequest,
+  apiResponse,
+  apiSupervisor as supervisor,
+  WORKER_VERSION,
+} from "./helpers.js";
+import type { StartupCheckResult } from "../../src/supervisor/startup-check/index.js";
 
 const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -81,7 +87,7 @@ test("reports the recorded label with a preparation failure, without echoing the
 
 const CODE_UPDATE_RESET = "Durable Object reset because its code was updated.";
 
-const ready = {
+const ready: StartupCheckResult = {
   ok: true,
   report: {
     stage: "ready",
@@ -89,31 +95,45 @@ const ready = {
     generation: candidate("ready"),
     effect: "recorded",
   },
-} as const;
+};
 
-function preparing(answers: readonly (Error | typeof ready)[]) {
-  const asked: number[] = [];
+const unavailable: StartupCheckResult = {
+  ok: false,
+  problem: { code: "build-workspace-unavailable", harnessCommit },
+};
 
-  const stub = (index: number) =>
-    supervisor({
-      submitGeneration() {
-        return Promise.resolve(labeled);
-      },
-      prepareGeneration(label) {
-        asked.push(label);
-        const answer = answers[index];
+type Answer = Error | StartupCheckResult;
 
-        return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer ?? ready);
-      },
-    });
+function stub(answer: Answer, version: string, asked: number[]) {
+  return supervisor({
+    submitGeneration() {
+      return Promise.resolve(labeled);
+    },
+    prepareGeneration(label) {
+      asked.push(label);
 
-  return { asked, stubs: answers.map((_answer, index) => stub(index)) };
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+    },
+    scriptVersion: () => Promise.resolve(version),
+  });
 }
 
-test("prepares the generation again on a new Supervisor stub when a deploy reset the Supervisor mid-check (deploy 44075948231)", async () => {
-  const { asked, stubs } = preparing([new Error(CODE_UPDATE_RESET), ready]);
+async function submitted(first: Answer, second: Answer, secondVersion: string) {
+  const asked: number[] = [];
 
-  const response = await apiResponse(submitRequest(submissionBody()), ...stubs);
+  const response = await apiResponse(
+    submitRequest(submissionBody()),
+    stub(first, WORKER_VERSION, asked),
+    stub(second, secondVersion, asked),
+  );
+
+  return { asked, response };
+}
+
+const NEW_VERSION = "version-deployed-during-the-request";
+
+test("prepares the generation again on the new Supervisor when a deploy reset it mid-check (deploy 44075948231)", async () => {
+  const { asked, response } = await submitted(new Error(CODE_UPDATE_RESET), ready, NEW_VERSION);
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toMatchObject({
@@ -123,21 +143,41 @@ test("prepares the generation again on a new Supervisor stub when a deploy reset
   expect(asked).toEqual([generationLabel(1), generationLabel(1)]);
 });
 
-test("answers preparation-failed when the Supervisor is reset again on the second preparation", async () => {
-  const { asked, stubs } = preparing([new Error(CODE_UPDATE_RESET), new Error(CODE_UPDATE_RESET)]);
+test("prepares again when the Supervisor that a deploy was resetting answered with a workspace problem (forced race on a throwaway stage)", async () => {
+  const { asked, response } = await submitted(
+    { ok: true, report: { ...ready.report, stage: "mount-failed" } },
+    ready,
+    NEW_VERSION,
+  );
 
-  const response = await apiResponse(submitRequest(submissionBody()), ...stubs);
+  await expect(response.json()).resolves.toMatchObject({ preparation: { ok: true } });
+  expect(asked).toHaveLength(2);
 
-  expect(response.status).toBe(500);
-  await expect(response.json()).resolves.toMatchObject({ error: { code: "preparation-failed" } });
+  const second = await submitted(unavailable, ready, NEW_VERSION);
+
+  await expect(second.response.json()).resolves.toMatchObject({
+    preparation: { ok: true, report: { stage: "ready" } },
+  });
+});
+
+test("answers with the second preparation when a deploy reset the Supervisor and the check still fails", async () => {
+  const { asked, response } = await submitted(
+    new Error(CODE_UPDATE_RESET),
+    unavailable,
+    NEW_VERSION,
+  );
+
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toMatchObject({
+    preparation: { ok: false, problem: { code: "build-workspace-unavailable" } },
+  });
   expect(asked).toHaveLength(2);
 });
 
-test("does not prepare again after a failure that is not a code update", async () => {
-  const { asked, stubs } = preparing([new Error("storage rejected a row"), ready]);
+test("does not prepare again when the Supervisor runs the version that served the request", async () => {
+  for (const failing of [new Error("storage rejected a row"), unavailable]) {
+    const { asked } = await submitted(failing, ready, WORKER_VERSION);
 
-  const response = await apiResponse(submitRequest(submissionBody()), ...stubs);
-
-  expect(response.status).toBe(500);
-  expect(asked).toHaveLength(1);
+    expect(asked).toHaveLength(1);
+  }
 });
