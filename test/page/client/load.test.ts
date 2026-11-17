@@ -55,3 +55,32 @@ test("loading the page asks only for routes the Supervisor answers without the w
   expect(patterns).not.toContain("/api/unknown");
   expect(patterns.map((pattern) => routeClass(pattern))).toEqual(patterns.map(() => "record-only"));
 });
+
+type Commands = NonNullable<ReturnType<typeof update>["commands"]>;
+
+async function patternsAsked(commands: Commands): Promise<readonly string[]> {
+  const asked: string[] = [];
+
+  vi.stubGlobal("fetch", (path: string) => {
+    asked.push(path);
+
+    return Promise.resolve(Response.json({ ok: true, projects: [] }));
+  });
+
+  for (const command of commands) {
+    await Effect.runPromise(openedTranscript().provide(command.effect));
+  }
+
+  return asked.map((path) => routePattern(path)).toSorted();
+}
+
+test("returning to the page asks what loading asked, and only routes the Supervisor answers without the workspace container", async () => {
+  const loaded = init();
+  const returned = update(loaded.model, Message.ReturnedToPage());
+
+  const patterns = await patternsAsked(returned.commands ?? []);
+
+  expect(patterns, "the page asked something on return").not.toEqual([]);
+  expect(patterns).toEqual(await patternsAsked(loaded.commands ?? []));
+  expect(patterns.map((pattern) => routeClass(pattern))).toEqual(patterns.map(() => "record-only"));
+});

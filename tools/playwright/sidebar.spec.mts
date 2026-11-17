@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { OWNER_PAGE_IDS as ID } from "../../src/page/element-ids.js";
 import { HARNESS_THREAD_MARKER } from "../browser-harness/conversations.mjs";
 import {
@@ -57,6 +58,71 @@ test("the owner disconnects a repository from the sidebar", async ({ owner, serv
   await expect(owner.locator(`#${ID.conversationProject}`)).toHaveText("harness");
   await expect(owner.locator(`#${ID.disconnectButton}`)).toHaveCount(0);
   expect(requestsTo(server, "POST", `${PROJECT_PATH}/disconnect`)).toHaveLength(1);
+});
+
+async function anotherTab(owner: Page, url: string): Promise<Page> {
+  const tab = await owner.context().newPage();
+  await tab.goto(`${url}/`);
+  await expect(tab.locator(`#${ID.conversationState}`)).toHaveText("live");
+
+  return tab;
+}
+
+test("a repository connected in another tab appears when the owner returns", async ({
+  owner,
+  server,
+}) => {
+  const other = await anotherTab(owner, server.url);
+  await other.getByLabel("repository url").fill(CONNECTED_PROJECT_URL);
+  await other.locator(`#${ID.connectButton}`).click();
+  await expect(other.locator(`#${ID.projectListStatus}`)).toHaveText("2 connected");
+
+  await owner.bringToFront();
+  await expect(owner.locator(`#${ID.projectListStatus}`)).toHaveText("1 connected");
+  await owner.evaluate('window.dispatchEvent(new Event("focus"))');
+
+  await expect(owner.locator(`#${ID.projectListStatus}`)).toHaveText("2 connected");
+  await expect(projectButton(owner, "octocat-new-repo")).toBeVisible();
+  await expect(projectButton(owner, "octocat-hello-world")).toHaveAttribute("aria-current", "true");
+});
+
+test("a repository disconnected in another tab leaves the owner on the harness conversation when the owner returns", async ({
+  owner,
+  server,
+}) => {
+  const other = await anotherTab(owner, server.url);
+  await other.locator(`#${ID.disconnectButton}`).click();
+  await other.locator(`#${ID.disconnectConfirmButton}`).click();
+  await expect(other.locator(`#${ID.disconnectStatus}`)).toHaveText("disconnected hello-world");
+
+  await owner.bringToFront();
+  await expect(projectButton(owner, "octocat-hello-world")).toHaveAttribute("aria-current", "true");
+  await owner.evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+
+  await expect(projectButton(owner, "octocat-hello-world")).toHaveCount(0);
+  await expect(projectButton(owner, "harness")).toHaveAttribute("aria-current", "true");
+  await expect(owner.locator(`#${ID.conversationProject}`)).toHaveText("harness");
+  await expect(owner.locator(`#${ID.messageList}`)).toContainText(HARNESS_THREAD_MARKER);
+  await expect(owner.locator(`#${ID.conversationState}`)).toHaveText("live");
+  await expect.poll(() => server.openEventStreams(HARNESS_PROJECT_ID)).toBe(0);
+});
+
+const LEAVE_AND_RETURN = `
+  const setVisibility = (value) => {
+    Object.defineProperty(document, "visibilityState", { value, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+  setVisibility("hidden");
+  setVisibility("visible");
+`;
+
+test("leaving the tab reads nothing, and coming back reads once", async ({ owner, server }) => {
+  const projectReads = () => requestsTo(server, "GET", "/api/projects").length;
+  const before = projectReads();
+
+  await owner.evaluate(LEAVE_AND_RETURN);
+
+  await expect.poll(projectReads).toBe(before + 1);
 });
 
 test.describe("a run that is still going", () => {
