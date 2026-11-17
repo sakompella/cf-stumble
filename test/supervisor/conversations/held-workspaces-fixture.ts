@@ -1,15 +1,13 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 import { HeldWorkspaces } from "../../../src/supervisor/conversations/held-workspaces.js";
-import { Generations } from "../../../src/supervisor/generations.js";
+import { generationsOf, served } from "../generations/generation-ports.js";
 import { GitHubConnection, GitHubConnectionStore } from "../../../src/supervisor/projects/index.js";
 import {
   provisionOnUse,
   ProvisionFence,
   WorkspaceReadiness,
 } from "../../../src/supervisor/readiness/index.js";
-import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
 import type { HeldHost } from "./held-host.js";
 
@@ -22,9 +20,9 @@ export function withHeldWorkspaces(
   const namespace = { getByName: () => host };
 
   return runInDurableObject(env.SUPERVISOR.getByName(name), async (_instance, state) => {
-    const generations = new Generations(state.storage, FACET_COMPATIBILITY);
+    const generations = generationsOf(state.storage);
 
-    if (options.activeGeneration === true) activate(generations);
+    if (options.activeGeneration === true) served(generations, "c");
 
     const fence = new ProvisionFence();
 
@@ -58,18 +56,4 @@ export function withHeldWorkspaces(
       new HeldWorkspaces((selected, remainingMs) => readiness.obtain(selected, remainingMs)),
     );
   });
-}
-
-function activate(generations: Generations): void {
-  const { label } = generations.submit(testHarnessCommit("c".repeat(40)), "owner").generation;
-
-  generations.recordPreparation(
-    label,
-    { status: "ready", compatibility: FACET_COMPATIBILITY },
-    "owner",
-  );
-  generations.activate(
-    { kind: "activate", label, observedEpoch: generations.active().epoch },
-    "owner",
-  );
 }

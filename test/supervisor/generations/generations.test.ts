@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
-import { Generations } from "../../../src/supervisor/generations.js";
+import { generationsOf } from "./generation-ports.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { prepareGeneration, submitCandidate, testHarnessCommit } from "../helpers.js";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
@@ -47,7 +47,7 @@ test("a later preparation outcome replaces the recorded status, and a repeated o
   const outcome = await runInDurableObject(
     supervisor("records-latest-preparation-outcome"),
     (_instance, state) => {
-      const generations = new Generations(state.storage, FACET_COMPATIBILITY);
+      const generations = generationsOf(state.storage);
       const submitted = generations.submit(testHarnessCommit(secondHarnessCommit), "owner");
       const { label } = submitted.generation;
       const ready = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;

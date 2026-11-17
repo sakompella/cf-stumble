@@ -21,11 +21,12 @@ export type SelectionRow = {
   readonly active_label: GenerationLabel | null;
   readonly proven_label: GenerationLabel | null;
   readonly epoch: number;
+  readonly serving_instance: number;
 };
 
 export const GENERATION_COLUMNS = "label, harness_commit, status, was_active, facet_compatibility";
 
-export const SELECTION_COLUMNS = "active_label, proven_label, epoch";
+export const SELECTION_COLUMNS = "active_label, proven_label, epoch, serving_instance";
 
 function stateFromRow(row: GenerationRow): GenerationState {
   const compatibility = row.facet_compatibility;
@@ -58,14 +59,15 @@ export function rowFromGeneration(entry: LabeledGeneration): GenerationRow {
 }
 
 export function selectionFromRow(row: SelectionRow): Selection {
-  const { active_label: active, proven_label: proven, epoch } = row;
+  const { active_label: active, proven_label: proven, epoch, serving_instance: instance } = row;
 
   if (active === null || proven === null) {
-    return { epoch, serving: Serving.cases.Unproven.make({ active }) };
+    return { epoch, instance, serving: Serving.cases.Unproven.make({ active }) };
   }
 
   return {
     epoch,
+    instance,
     serving:
       active === proven
         ? Serving.cases.Proven.make({ active })
@@ -73,10 +75,16 @@ export function selectionFromRow(row: SelectionRow): Selection {
   };
 }
 
-export function rowFromSelection({ epoch, serving }: Selection): SelectionRow {
+export function rowFromSelection({ epoch, instance, serving }: Selection): SelectionRow {
+  const row = { epoch, serving_instance: instance };
+
   return Serving.match(serving, {
-    Unproven: ({ active }) => ({ active_label: active, proven_label: null, epoch }),
-    Proven: ({ active }) => ({ active_label: active, proven_label: active, epoch }),
-    Probation: ({ active, fallback }) => ({ active_label: active, proven_label: fallback, epoch }),
+    Unproven: ({ active }) => ({ ...row, active_label: active, proven_label: null }),
+    Proven: ({ active }) => ({ ...row, active_label: active, proven_label: active }),
+    Probation: ({ active, fallback }) => ({
+      ...row,
+      active_label: active,
+      proven_label: fallback,
+    }),
   });
 }

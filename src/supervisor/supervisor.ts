@@ -147,13 +147,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   ): GenerationControlResult {
     if (running()) return RUN_ACTIVE;
 
-    const result = this.#parts.generations.activate(command, actor);
-
-    if (result.ok && result.outcome.effect === "activated") {
-      this.#parts.serving.replaceFacet(command, result.outcome.epoch);
-    }
-
-    return result;
+    return this.#parts.generations.activate(command, actor);
   }
 
   listProjects() {

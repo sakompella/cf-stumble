@@ -1,25 +1,12 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
-import { Generations } from "../../../src/supervisor/generations.js";
-import { testHarnessCommit } from "../../harness-commit-fixtures.js";
+import { generationsOf, served } from "./generation-ports.js";
 import { refuseGenerationStateWrites } from "../refused-storage.js";
 
 afterEach(async () => {
   await reset();
 });
-
-const READY = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;
-
-function served(generations: Generations, digit: string) {
-  const { label } = generations.submit(testHarnessCommit(digit.repeat(40)), "owner").generation;
-  generations.recordPreparation(label, READY, "owner");
-  const observedEpoch = generations.active().epoch;
-  generations.activate({ kind: "activate", label, observedEpoch }, "owner");
-
-  return label;
-}
 
 function run(outcome: "completed" | "failed" | "unanswered") {
   return { conversationId: "conversation", outcome, errorCode: null };
@@ -33,7 +20,7 @@ function inSupervisor<T>(name: string, body: (storage: DurableObjectStorage) => 
 
 test("a probation failure whose rollback cannot be written keeps the generation on probation", async () => {
   const outcome = await inSupervisor("probation-rollback-atomic", (storage) => {
-    const generations = new Generations(storage, FACET_COMPATIBILITY);
+    const generations = generationsOf(storage);
     const proven = served(generations, "a");
     generations.settled(run("completed"));
     served(generations, "b");
@@ -51,8 +38,9 @@ test("a probation failure whose rollback cannot be written keeps the generation 
     })();
 
     refused();
+    generations.settled(run("failed"));
 
-    return { raised, proven, retried: generations.settled(run("failed"))?.command.label };
+    return { raised, proven, retried: generations.active().generation?.label };
   });
 
   expect(outcome).toEqual({ raised: true, proven: 0, retried: 0 });
@@ -60,7 +48,7 @@ test("a probation failure whose rollback cannot be written keeps the generation 
 
 test("a failed re-check of the serving generation keeps it serving and a rollback target", async () => {
   const outcome = await inSupervisor("recheck-keeps-served", (storage) => {
-    const generations = new Generations(storage, FACET_COMPATIBILITY);
+    const generations = generationsOf(storage);
     const first = served(generations, "a");
     served(generations, "b");
     generations.recordPreparation(first, { status: "failed" }, "owner");

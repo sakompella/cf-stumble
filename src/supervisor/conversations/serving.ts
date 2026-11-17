@@ -17,16 +17,11 @@ import {
   type SelectableCatalog,
   type SelectableProject,
 } from "./project-selection.js";
-import {
-  ConversationRuns,
-  DeadlineAborts,
-  type FacetReplacement,
-  type Settlement,
-} from "./runs.js";
+import { ConversationRuns, DeadlineAborts, type Settlement } from "./runs.js";
 
 type ServingPorts = Readonly<{
   ctx: DurableObjectState;
-  mount: (instance: number) => Effect.Effect<MountedFacet, MainFacetMountProblem>;
+  mount: () => Effect.Effect<MountedFacet, MainFacetMountProblem>;
   model: (instance: number) => MainFacetModel;
   catalog: () => SelectableCatalog;
   resetting: () => boolean;
@@ -34,18 +29,19 @@ type ServingPorts = Readonly<{
   generations: Parameters<typeof servingHosts>[1];
   selection: Readonly<{
     active: () => Readonly<{ generation: Readonly<{ label: number }> | undefined }>;
-    settled: (settlement: Settlement) => FacetReplacement | undefined;
+    settled: (settlement: Settlement) => void;
+    servingInstance: () => number;
   }>;
 }>;
 
 type MountedOnInstance = Readonly<{ facet: MountedFacet; instance: number }>;
 
-const INSTANCE_KEY = "serving-instance";
+type InstanceHosts = HostTargets & Readonly<{ instance: number; model: MainFacetModel }>;
 
 export class ServingConversations {
   readonly #ports: ServingPorts;
   readonly #projects: ProjectThreads;
-  readonly #hosts = new Map<number, HostTargets & Readonly<{ model: MainFacetModel }>>();
+  #hosts: InstanceHosts | undefined;
   readonly #workspaces: HeldWorkspaces;
   readonly #runs: ConversationRuns;
   readonly #deadlines = new DeadlineAborts();
@@ -76,17 +72,7 @@ export class ServingConversations {
     logEvent("info", "do.started", { class: "Supervisor", version });
   }
 
-  replaceFacet(command: FacetReplacement["command"], epoch: number): void {
-    logEvent(
-      "info",
-      command.kind === "activate" ? "generation.activated" : "generation.rolled-back",
-      {
-        label: command.label,
-        epoch,
-      },
-    );
-    this.#ports.ctx.storage.kv.put(INSTANCE_KEY, this.#instance() + 1);
-    this.#hosts.clear();
+  replaceFacet(): void {
     this.#workspaces.retire(() => {
       this.#ports.ctx.facets.abort(SERVING_FACET_NAME, "another generation serves");
     });
@@ -231,7 +217,7 @@ export class ServingConversations {
   }
 
   #instance(): number {
-    return this.#ports.ctx.storage.kv.get<number>(INSTANCE_KEY) ?? 0;
+    return this.#ports.selection.servingInstance();
   }
 
   #project(projectId: string): Effect.Effect<SelectableProject, ConversationProblem> {
@@ -286,7 +272,7 @@ export class ServingConversations {
     return Effect.suspend(() => {
       this.#workspaces.flushRetirement();
 
-      return this.#ports.mount(this.#instance());
+      return this.#ports.mount();
     }).pipe(
       Effect.mapError((problem): ConversationProblem => ({
         code: problem.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
@@ -297,7 +283,7 @@ export class ServingConversations {
 
   #attach(mounted: MountedFacet): Promise<void> {
     const instance = this.#instance();
-    const existing = this.#hosts.get(instance);
+    const existing = this.#hosts?.instance === instance ? this.#hosts : undefined;
 
     if (existing !== undefined) {
       return mounted.attach(existing.host, existing.model, existing.generations);
@@ -322,7 +308,7 @@ export class ServingConversations {
 
     const model = this.#ports.model(instance);
 
-    this.#hosts.set(instance, { ...targets, model });
+    this.#hosts = { ...targets, instance, model };
 
     return mounted.attach(targets.host, model, targets.generations);
   }
@@ -334,11 +320,7 @@ export class ServingConversations {
   }
 
   async #settled(settlements: readonly Settlement[]): Promise<void> {
-    for (const settlement of settlements) {
-      const rollback = this.#ports.selection.settled(settlement);
-
-      if (rollback !== undefined) this.replaceFacet(rollback.command, rollback.epoch);
-    }
+    for (const settlement of settlements) this.#ports.selection.settled(settlement);
 
     await runAtEntryPoint(this.#runs.setAlarm(Date.now()));
   }

@@ -87,13 +87,14 @@ function prepared(tc: hegel.TestCase, world: World): PreparationOutcome {
 }
 
 function agrees(world: World): void {
-  const { epoch, active, proven } = world.model;
+  const { epoch, instance, active, proven } = world.model;
+  const { selection } = world;
 
-  expect({ epoch: world.selection.epoch, ...servingView(world.selection.serving) }).toEqual({
-    epoch,
-    active,
-    proven,
-  });
+  expect({
+    epoch: selection.epoch,
+    instance: selection.instance,
+    ...servingView(selection.serving),
+  }).toEqual({ epoch, instance, active, proven });
 
   expect(world.store.size).toBe(world.model.generations.size);
 
@@ -230,7 +231,7 @@ const machine: hegel.stateful.StateMachine<World> = {
 test("the generation machine agrees with a model of submission, preparation, activation and probation over any sequence of events", () => {
   hegel.test((tc) => {
     const world: World = {
-      selection: { epoch: 0, serving: Serving.cases.Unproven.make({ active: null }) },
+      selection: { epoch: 0, instance: 0, serving: Serving.cases.Unproven.make({ active: null }) },
       store: new Map(),
       model: fresh(),
       host: HOSTS[0] ?? "",

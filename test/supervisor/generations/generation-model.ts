@@ -3,7 +3,6 @@ import type { RunOutcome } from "../../../src/supervisor/conversations/index.js"
 import type {
   GenerationCommand,
   PreparationReply,
-  RollbackReply,
 } from "../../../src/supervisor/generation-machine.js";
 import type {
   Generation,
@@ -22,6 +21,7 @@ export type ModelGeneration = { commit: HarnessCommit; kind: Kind; compat: strin
 
 export type Model = {
   epoch: number;
+  instance: number;
   active: number | null;
   proven: number | null;
   generations: Map<number, ModelGeneration>;
@@ -36,7 +36,7 @@ export type Command = Readonly<{
 export type Result<Reply> = { reply: Reply; commands: GenerationCommand[] };
 
 export function fresh(): Model {
-  return { epoch: 0, active: null, proven: null, generations: new Map() };
+  return { epoch: 0, instance: 0, active: null, proven: null, generations: new Map() };
 }
 
 function wire(model: Model, label: number): Generation {
@@ -61,6 +61,14 @@ function changed(
   const target = generationLabel(label);
 
   return { _tag: "Changed", kind, actor, epoch, label: target, outcome, errorCode: null };
+}
+
+function replaced(
+  kind: "activated" | "rolled-back",
+  epoch: number,
+  label: number,
+): GenerationCommand {
+  return { _tag: "ReplaceFacet", kind, epoch, label: generationLabel(label) };
 }
 
 export function submit(model: Model, label: number, commit: HarnessCommit): Result<Submission> {
@@ -150,6 +158,7 @@ export function activate(
     target.kind = "served";
     target.compat = compat;
     model.epoch += 1;
+    model.instance += 1;
     model.active = command.label;
   }
 
@@ -160,7 +169,12 @@ export function activate(
     effect: noOp ? "no-op" : "activated",
   } as const;
 
-  const commands = noOp ? [] : [changed(kind, actor, model.epoch, command.label)];
+  const commands = noOp
+    ? []
+    : [
+        changed(kind, actor, model.epoch, command.label),
+        replaced(kind, model.epoch, command.label),
+      ];
 
   return { reply: { ok: true, outcome }, commands };
 }
@@ -170,7 +184,7 @@ export function settle(
   outcome: RunOutcome,
   errorCode: string | null,
   compat: string,
-): Result<RollbackReply> {
+): Result<undefined> {
   const none = { reply: undefined, commands: [] };
 
   if (outcome === "completed") {
@@ -223,7 +237,7 @@ export function settle(
   }
 
   return {
-    reply: { command, epoch: rollback.reply.outcome.epoch },
+    reply: undefined,
     commands: [failed, ...rollback.commands, done(null)],
   };
 }

@@ -66,12 +66,6 @@ of a `Data.TaggedEnum` union in place of several booleans, with no events or com
 generation machine (`src/supervisor/generation-machine.ts`) and the conversation run machine
 (`src/supervisor/conversations/run-machine.ts`) follow this shape.
 
-**Amendment (2026-11-17).** The generation machine has two commands, `Changed` and `ProbationFailed`.
-It has no command for a facet replacement. `Generations.activate` and `Generations.settled` return a
-reply, and `Supervisor` and `ServingConversations` call `replaceFacet` when the reply says an
-activation or rollback happened, so the machine does not emit the command that this paragraph lists. `ServingConversations` keeps the serving instance number in the KV key
-`serving-instance`, outside the generation tables.
-
 **Imports and tests.** Code imports Effect by module path, such as `effect/Effect`, and oxlint
 forbids the `effect` index. The index re-exports every module and keeps some unused ones in the
 Worker bundle. The Vitest workers pool loads each module again in every test file's isolate, so

@@ -30,11 +30,6 @@ type RunRow = Readonly<{
   continues: number;
 }>;
 
-export type FacetReplacement = Readonly<{
-  command: Readonly<{ kind: "activate" | "rollback"; label: number }>;
-  epoch: number;
-}>;
-
 export type Settlement = Readonly<{
   conversationId: string;
   outcome: RunOutcome;

@@ -6,7 +6,7 @@ import {
 } from "./projects/index.js";
 import { Generations } from "./generations.js";
 import { generationHistory } from "./history/wiring.js";
-import { FACET_COMPATIBILITY, type MainFacetModel } from "../facet/index.js";
+import { FACET_COMPATIBILITY } from "../facet/index.js";
 import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, MainLineage } from "./artifacts/index.js";
@@ -57,6 +57,15 @@ function projectParts(
   return { github, connections, readiness };
 }
 
+function chatgptConnection(storage: DurableObjectStorage, env: SupervisorEnv): ChatGPTConnection {
+  return new ChatGPTConnection({
+    store: new ChatGPTCredentialStore(storage),
+    fetcher: (url, init) => fetch(url, init),
+    model: env.CHATGPT_MODEL,
+    clock: () => Date.now(),
+  });
+}
+
 export function supervisorParts(
   ctx: DurableObjectState,
   env: SupervisorEnv,
@@ -65,8 +74,13 @@ export function supervisorParts(
 ) {
   const history = generationHistory(ctx, env.MODULE_MAPS);
 
-  const generations = new Generations(ctx.storage, FACET_COMPATIBILITY, (change) => {
-    history.record(change);
+  const generations = new Generations(ctx.storage, FACET_COMPATIBILITY, {
+    changed: (change) => {
+      history.record(change);
+    },
+    facetReplaced: () => {
+      serving.replaceFacet();
+    },
   });
 
   const { name, workspaceName } = supervisorNames(ctx);
@@ -75,10 +89,18 @@ export function supervisorParts(
     env.WORKSPACE_HOST.getByName(workspaceName),
   );
 
-  const model = (instance: number): MainFacetModel =>
-    ctx.exports.ModelRoute({ props: { supervisor: name, instance } });
-
   const projects = projectParts(ctx.storage, env, workspaceName, generations);
+
+  const serving = new ServingConversations({
+    ctx,
+    mount: () => artifacts.mount(generations.active(), env.LOADER, ctx.facets),
+    model: (instance) => ctx.exports.ModelRoute({ props: { supervisor: name, instance } }),
+    catalog: () => projects.connections.catalog(),
+    resetting,
+    obtainWorkspace: (project, remainingMs) => projects.readiness.obtain(project, remainingMs),
+    generations: generationOperations,
+    selection: generations,
+  });
 
   return {
     workspaceName,
@@ -93,21 +115,7 @@ export function supervisorParts(
       workspace: (remainingMs: number) => projects.readiness.obtain(null, remainingMs),
     },
     ...projects,
-    serving: new ServingConversations({
-      ctx,
-      mount: () => artifacts.mount(generations.active(), env.LOADER, ctx.facets),
-      model,
-      catalog: () => projects.connections.catalog(),
-      resetting,
-      obtainWorkspace: (project, remainingMs) => projects.readiness.obtain(project, remainingMs),
-      generations: generationOperations,
-      selection: generations,
-    }),
-    chatgpt: new ChatGPTConnection({
-      store: new ChatGPTCredentialStore(ctx.storage),
-      fetcher: (url, init) => fetch(url, init),
-      model: env.CHATGPT_MODEL,
-      clock: () => Date.now(),
-    }),
+    serving,
+    chatgpt: chatgptConnection(ctx.storage, env),
   };
 }

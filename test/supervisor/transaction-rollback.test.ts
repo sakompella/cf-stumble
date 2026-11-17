@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { FACET_COMPATIBILITY } from "../../src/facet/runtime-contract.js";
 import { afterEach, expect, test } from "vitest";
-import { Generations } from "../../src/supervisor/generations.js";
+import { generationsOf } from "./generations/generation-ports.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label } from "./generations/fixtures.js";
@@ -30,7 +30,7 @@ afterEach(async () => {
 
 test("a submission whose epoch write fails raises and labels nothing", async () => {
   const outcome = await runInDurableObject(supervisor("submit-rolls-back"), (_instance, state) => {
-    const generations = new Generations(state.storage, FACET_COMPATIBILITY);
+    const generations = generationsOf(state.storage);
     const allowWrites = refuseGenerationStateWrites(state.storage);
 
     const raised = raises(() => {
@@ -47,7 +47,7 @@ test("a submission whose epoch write fails raises and labels nothing", async () 
 
 test("a preparation check whose selection write fails raises and changes nothing", async () => {
   const outcome = await runInDurableObject(supervisor("check-rolls-back"), (_instance, state) => {
-    const generations = new Generations(state.storage, FACET_COMPATIBILITY);
+    const generations = generationsOf(state.storage);
     const { label: submitted } = generations.submit(testHarnessCommit(commit), "owner").generation;
     const allowWrites = refuseGenerationStateWrites(state.storage);
 
