@@ -6,6 +6,7 @@ import {
   readBackendSetting,
   writeBackendSetting,
   type BackendSetting,
+  type ContainerOutcome,
   type WorkspaceBackendChange,
 } from "../backend-setting.js";
 import {
@@ -212,12 +213,18 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
     if (this.#resetting || inFlight > 0 || leaseEndsAtMs !== null) return WORKSPACE_BUSY;
 
-    if (setting === readBackendSetting(this.ctx.storage.kv)) return { ok: true, backend: setting };
+    if (setting === readBackendSetting(this.ctx.storage.kv))
+      return this.#backendChanged(setting, "kept");
 
+    const wasRunning = this.#platform.containerRunning();
     writeBackendSetting(this.ctx.storage.kv, setting);
     await this.#idle.stopForBackendChange();
 
-    return { ok: true, backend: setting };
+    return this.#backendChanged(setting, wasRunning ? "stopped" : "not-running");
+  }
+
+  #backendChanged(backend: BackendSetting, container: ContainerOutcome): WorkspaceBackendChange {
+    return { ok: true, backend, container, startsOn: this.#platform.nextContainer() };
   }
 
   reset(): Promise<WorkspaceResetResult> {

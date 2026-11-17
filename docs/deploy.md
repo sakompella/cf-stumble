@@ -333,7 +333,7 @@ provider by hand while you develop, and stop it when you finish. It is not a ser
 The page's "Workspace container" control (`GET`/`POST /api/workspace/backend`) picks the backend.
 Production stays on `cloudflare`, which always uses the Cloudflare container. `provider` uses a
 connected provider, else Cloudflare. A change stops a running container, so the next command starts on the
-chosen backend. It is refused while a run is active. Switch to `provider` after you start the
+chosen backend. The answer says what the change did (`container`: `stopped`, `not-running` or `kept`) and where the next container starts (`startsOn`), and the page shows that in the control's result row. It is refused while a run is active. Switch to `provider` after you start the
 provider, and back to `cloudflare` when you stop it.
 
 1. Make a random token and keep it in a gitignored file inside the checkout, for example
@@ -499,7 +499,7 @@ When you finish work:
 
 1. Let every run settle, or press **Cancel turn**. A run keeps the container until it settles or its 8-minute deadline passes, and a 30- or 60-minute budget continues it in new 8-minute runs.
 2. Close the page or any script that sends messages or refreshes the GitHub connection. The page itself keeps only an event stream open, which does not keep the container running.
-3. Wait for the idle stop, or stop the container at once. The Workspace Host stops it ten minutes after the last workspace work and logs `workspace.container.idle-stop` with `outcome: "stopped"`. To stop it at once, switch the page's **Workspace container** control to **Provider** and back to **Cloudflare**, or send `POST /api/workspace/backend` with `{"backend":"provider"}` and then `{"backend":"cloudflare"}`. Each change copies the container's files into the store and destroys the container, and the next command starts a new one. The Host refuses the change while a run is active.
+3. Wait for the idle stop, or stop the container at once. The Workspace Host stops it ten minutes after the last workspace work and logs `workspace.container.idle-stop` with `outcome: "stopped"`. To stop it at once, switch the page's **Workspace container** control to **Provider** and back to **Cloudflare**, or send `POST /api/workspace/backend` with `{"backend":"provider"}` and then `{"backend":"cloudflare"}`. Each change copies the container's files into the store and destroys the container, and the next command starts a new one. The result row says "stopped the container" when it did. The Host refuses the change while a run is active.
 4. Check that it stopped. `GET /accounts/<account-id>/containers/applications/<container-app-id>/instances` lists the instance with `status.state` `running` while it runs. `pnpm ops:check --since 2h` reports a container that ran past the idle stop (`ran-past-idle`).
 
 Do not use `POST /api/workspace/reset` to stop the container: it also deletes the workspace. To stop all cost of an instance, destroy it as described in "Cost and cleanup".

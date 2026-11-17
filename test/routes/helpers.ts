@@ -87,7 +87,8 @@ export function apiSupervisor(overrides: Partial<ApiSupervisor> = {}): ApiSuperv
       return Promise.resolve({ ok: true, reset: "workspace" });
     },
     getWorkspaceBackend: () => Promise.resolve("provider"),
-    setWorkspaceBackend: (backend) => Promise.resolve({ ok: true, backend }),
+    setWorkspaceBackend: (backend) =>
+      Promise.resolve({ ok: true, backend, container: "not-running", startsOn: backend }),
     ...chatgptSupervisor,
     ...overrides,
   };

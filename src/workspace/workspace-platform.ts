@@ -102,6 +102,14 @@ export class WorkspacePlatform {
     this.#workspace = this.#newWorkspace();
   }
 
+  nextContainer(): "provider" | "cloudflare" {
+    return this.#providerEgressPort() === undefined ? "cloudflare" : "provider";
+  }
+
+  #providerEgressPort(): number | undefined {
+    return this.#usesProvider() ? this.provider.egressPort() : undefined;
+  }
+
   containerRunning(): boolean {
     return (this.#platformContainer?.running ?? false) || this.#providerContainer.running();
   }
@@ -191,7 +199,7 @@ export class WorkspacePlatform {
       type: this.#containerBackend.type,
       description: this.#containerBackend.description,
       connect: () => {
-        const egressPort = this.#usesProvider() ? this.provider.egressPort() : undefined;
+        const egressPort = this.#providerEgressPort();
 
         logEvent("info", "workspace.backend.chosen", {
           container: egressPort === undefined ? "cloudflare" : "provider",

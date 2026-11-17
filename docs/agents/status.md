@@ -67,15 +67,11 @@ Each item that this file used to list as open is now classified: **resolved** (w
 
 **Reproduced**
 
-The page failure that the 2026-11-16 QA run saw is open: F15. See "Open items" below.
+No page failure from the 2026-11-16 QA run is open.
 
 ## Open items
 
 These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plans/`, kept out of Git; `rc-summary.md` ranks them). F14 (a reload shows fewer entries) is closed: the code is by design, and the `overview.md` sentence that invited the report is fixed. Each line points at its plan.
-
-**Seen in a run**
-
-- **The workspace backend switch says nothing about its effect (F15).** `POST /api/workspace/backend` echoes the setting and drops what the Host knows. `rc-f15-workspace-panel.md`.
 
 **Proved in code or by a scratch test, not seen in production**
 
