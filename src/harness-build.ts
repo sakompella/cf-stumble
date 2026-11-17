@@ -1,18 +1,10 @@
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "./workspace-command-timeout.js";
-import {
-  BUILD_SCRATCH_ROOT,
-  HARNESS_DIRECTORY,
-  HARNESS_GIT_DIRECTORY,
-} from "./workspace-layout.js";
 
 type HarnessBuildPhaseName = "install" | "build-module-map";
 
 export type HarnessBuildPhase = Readonly<{ name: HarnessBuildPhaseName; command: string }>;
 
 export type HarnessBuildConfiguration = Readonly<{
-  buildRoot: string;
-  harnessRepositoryRoot: string;
-  harnessGitDir: string;
   harnessGitRemote: string;
   buildPhases: readonly [HarnessBuildPhase, ...HarnessBuildPhase[]];
   moduleMapPath: string;
@@ -20,9 +12,6 @@ export type HarnessBuildConfiguration = Readonly<{
 }>;
 
 export const HARNESS_BUILD_CONFIGURATION = {
-  buildRoot: BUILD_SCRATCH_ROOT,
-  harnessRepositoryRoot: HARNESS_DIRECTORY,
-  harnessGitDir: HARNESS_GIT_DIRECTORY,
   harnessGitRemote: "https://github.com/sakompella/cf-stumble.git",
   buildPhases: [
     {

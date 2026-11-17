@@ -78,10 +78,6 @@ export const MESSAGES = [
 
 export const LINES = ["alpha", "beta", "gamma", "delta", "l1", "l2", "same", "x y z"];
 
-export function quote(text: string): string {
-  return `'${text.replaceAll("'", "'\\''")}'`;
-}
-
 export function path(name: string): string {
   return name.startsWith("-") ? `./${name}` : name;
 }
