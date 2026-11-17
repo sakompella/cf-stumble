@@ -118,19 +118,6 @@ test("converges on one project when the same repository is written in another ca
   });
 });
 
-test.each(["http://github.com/sample/repo", ""])(
-  "refuses %j as a repository to connect",
-  async (repositoryUrl) => {
-    await withProjects(`catalog-refuses-${repositoryUrl.length}`, (projects) => {
-      expect(seedConnected(projects, repositoryUrl, NOW)).toEqual({
-        ok: false,
-        problem: { code: "invalid-repository-url" },
-      });
-      expect(projects.catalog()).toEqual([]);
-    });
-  },
-);
-
 test("names a project after its repository", async () => {
   await withProjects("catalog-default-name", (projects) => {
     seedConnected(projects, "https://github.com/sample/repo-1", NOW);

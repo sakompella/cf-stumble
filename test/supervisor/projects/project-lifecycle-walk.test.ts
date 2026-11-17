@@ -7,7 +7,7 @@ import {
   LifecycleEvent,
   type ProjectState,
 } from "../../../src/supervisor/projects/project-lifecycle-machine.js";
-import { projectIdOf } from "../../project-fixtures.js";
+import { projectIdOf, projectOf } from "../../project-fixtures.js";
 
 afterEach(async () => {
   await reset();
@@ -35,7 +35,7 @@ test("the stored state follows the transition, and only connected projects are l
 
       for (const event of sequence) {
         if (event._tag === "connect") {
-          projects.connect("https://github.com/sample/repo-1", 0);
+          projects.connect(projectOf("https://github.com/sample/repo-1"), 0);
         } else {
           projects.apply(id, event);
         }

@@ -87,13 +87,7 @@ function separatorCode(separator: string): string {
     .replaceAll("_", "u");
 }
 
-export function projectIdForRepository(repositoryUrl: string): ProjectId | undefined {
-  const canonical = canonicalRepositoryUrl(repositoryUrl);
-
-  if (canonical === undefined) {
-    return undefined;
-  }
-
+function idOfCanonical(canonical: PublicRepositoryUrl): ProjectId | undefined {
   const url = new URL(canonical);
   const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
   const [owner, repository] = segments.map((segment) => segment.toLowerCase());
@@ -128,10 +122,25 @@ export function projectIdForRepository(repositoryUrl: string): ProjectId | undef
   return parseProjectId(key.length === 0 ? slug : `${slug}--${key}`);
 }
 
+export function projectIdForRepository(repositoryUrl: string): ProjectId | undefined {
+  const canonical = canonicalRepositoryUrl(repositoryUrl);
+
+  return canonical === undefined ? undefined : idOfCanonical(canonical);
+}
+
 export function defaultProjectDisplayName(repositoryUrl: PublicRepositoryUrl): string {
   const segments = new URL(repositoryUrl).pathname.split("/").filter((part) => part.length > 0);
 
   return segments.slice(-2).join("/");
+}
+
+export function parseProject(text: string): Project | undefined {
+  const repositoryUrl = canonicalRepositoryUrl(text);
+  const id = repositoryUrl === undefined ? undefined : idOfCanonical(repositoryUrl);
+
+  return repositoryUrl === undefined || id === undefined
+    ? undefined
+    : { id, displayName: defaultProjectDisplayName(repositoryUrl), repositoryUrl };
 }
 
 type ProjectResolution =

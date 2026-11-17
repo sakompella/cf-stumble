@@ -1,12 +1,5 @@
 import * as Schema from "effect/Schema";
-import {
-  canonicalRepositoryUrl,
-  defaultProjectDisplayName,
-  projectIdForRepository,
-  type Project,
-  type ProjectCatalog,
-  type ProjectId,
-} from "../../project-catalog.js";
+import { type Project, type ProjectCatalog, type ProjectId } from "../../project-catalog.js";
 import {
   lifecycleStep,
   LifecycleEvent,
@@ -19,18 +12,12 @@ const PROJECT_COLUMNS =
 
 type ProjectRow = Project & { readonly state: string };
 
-type ConnectProjectProblem = Readonly<{ code: "invalid-repository-url" }>;
-
 export type ProjectTransition = Readonly<{
   project: Project;
   before: ProjectState | undefined;
   after: ProjectState | undefined;
   commands: readonly LifecycleCommand[];
 }>;
-
-export type ConnectProjectResult =
-  | (Readonly<{ ok: true }> & ProjectTransition)
-  | Readonly<{ ok: false; problem: ConnectProjectProblem }>;
 
 const decodeState = Schema.decodeUnknownSync(ProjectState);
 
@@ -77,29 +64,12 @@ export class ConnectedProjects {
     return row === undefined ? undefined : decodeState(row.state);
   }
 
-  connect(repositoryUrl: string, now: number): ConnectProjectResult {
-    const canonical = canonicalRepositoryUrl(repositoryUrl);
-    const id = canonical === undefined ? undefined : projectIdForRepository(canonical);
-
-    if (canonical === undefined || id === undefined) {
-      return { ok: false, problem: { code: "invalid-repository-url" } };
-    }
-
-    const created = {
-      id,
-      displayName: defaultProjectDisplayName(canonical),
-      repositoryUrl: canonical,
-    };
-
+  connect(created: Project, now: number): ProjectTransition {
     return this.storage.transactionSync(() => {
-      const row = this.row(id);
-      const project = row ?? created;
+      const row = this.row(created.id);
       const before = row === undefined ? undefined : decodeState(row.state);
 
-      return {
-        ok: true,
-        ...this.commit(project, before, LifecycleEvent.cases.connect.make({}), now),
-      };
+      return this.commit(row ?? created, before, LifecycleEvent.cases.connect.make({}), now);
     });
   }
 
