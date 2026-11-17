@@ -20,6 +20,20 @@ export function parseGitHubToken(value: string | undefined): GitHubToken | undef
   return value !== undefined && isGitHubToken(value) ? value : undefined;
 }
 
+declare const gitHubClientIdBrand: unique symbol;
+
+export type GitHubClientId = string & {
+  readonly [gitHubClientIdBrand]: "GitHubClientId";
+};
+
+function isGitHubClientId(value: string): value is GitHubClientId {
+  return value.trim().length > 0;
+}
+
+export function parseGitHubClientId(value: string | undefined): GitHubClientId | undefined {
+  return value !== undefined && isGitHubClientId(value) ? value : undefined;
+}
+
 const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
@@ -35,19 +49,15 @@ type DeviceAuthorization = Readonly<{
   userCode: string;
   verificationUri: string;
   expiresInSeconds: number;
-  intervalSeconds: number;
 }>;
-
-type DeviceFlowProblem = "not-configured" | "provider-unavailable" | "provider-refused";
 
 export class DeviceAuthorizationNotStarted extends Data.TaggedError(
   "DeviceAuthorizationNotStarted",
-)<{ readonly problem: DeviceFlowProblem }> {}
+) {}
 
 export type DeviceRedemption =
   | Readonly<{ kind: "authorized"; token: GitHubToken }>
   | Readonly<{ kind: "pending" }>
-  | Readonly<{ kind: "slow-down"; intervalSeconds: number }>
   | Readonly<{ kind: "expired" }>
   | Readonly<{ kind: "denied" }>
   | Readonly<{ kind: "unavailable" }>;
@@ -67,13 +77,11 @@ const DeviceAuthorizationReply = Schema.Struct({
   user_code: Schema.NonEmptyString,
   verification_uri: Schema.String.check(Schema.makeFilter(isGitHubVerificationUri)),
   expires_in: lenient(PositiveSeconds),
-  interval: lenient(PositiveSeconds),
 });
 
 const DeviceRedemptionReply = Schema.Struct({
   access_token: lenient(Schema.String),
   error: lenient(Schema.String),
-  interval: lenient(PositiveSeconds),
 });
 
 function authorizationOf(reply: typeof DeviceAuthorizationReply.Type): DeviceAuthorization {
@@ -82,7 +90,6 @@ function authorizationOf(reply: typeof DeviceAuthorizationReply.Type): DeviceAut
     userCode: reply.user_code,
     verificationUri: reply.verification_uri,
     expiresInSeconds: reply.expires_in ?? 900,
-    intervalSeconds: reply.interval ?? 5,
   };
 }
 
@@ -95,9 +102,8 @@ function redemptionOf(reply: typeof DeviceRedemptionReply.Type): DeviceRedemptio
 
   switch (reply.error ?? "") {
     case "authorization_pending":
-      return { kind: "pending" };
     case "slow_down":
-      return { kind: "slow-down", intervalSeconds: reply.interval ?? 10 };
+      return { kind: "pending" };
     case "expired_token":
       return { kind: "expired" };
     case "access_denied":
@@ -147,32 +153,26 @@ function postForm<S extends Schema.ConstraintDecoder<unknown>>(
 }
 
 export function requestDeviceAuthorization(
-  clientId: string,
+  clientId: GitHubClientId,
   fetcher: GitHubFetch,
 ): Effect.Effect<DeviceAuthorization, DeviceAuthorizationNotStarted> {
-  if (clientId.trim().length === 0) {
-    return Effect.fail(new DeviceAuthorizationNotStarted({ problem: "not-configured" }));
-  }
-
   return postForm(
     GITHUB_DEVICE_CODE_URL,
     { client_id: clientId, scope: GITHUB_DEVICE_SCOPE },
     fetcher,
     DeviceAuthorizationReply,
   ).pipe(
-    Effect.catchTag("DeviceEndpointUnavailable", () =>
-      Effect.fail(new DeviceAuthorizationNotStarted({ problem: "provider-unavailable" })),
-    ),
+    Effect.mapError(() => new DeviceAuthorizationNotStarted()),
     Effect.flatMap((reply) =>
       reply === undefined
-        ? Effect.fail(new DeviceAuthorizationNotStarted({ problem: "provider-refused" }))
+        ? Effect.fail(new DeviceAuthorizationNotStarted())
         : Effect.succeed(authorizationOf(reply)),
     ),
   );
 }
 
 export function redeemDeviceAuthorization(
-  input: Readonly<{ clientId: string; deviceCode: string }>,
+  input: Readonly<{ clientId: GitHubClientId; deviceCode: string }>,
   fetcher: GitHubFetch,
 ): Effect.Effect<DeviceRedemption> {
   return postForm(

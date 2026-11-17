@@ -3,10 +3,12 @@ import * as gs from "@hegeldev/hegel/generators";
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import {
+  parseGitHubClientId,
   parseGitHubToken,
   redeemDeviceAuthorization,
   type GitHubFetch,
 } from "../../src/github/index.js";
+import { clientIdOf } from "./client-id-fixture.js";
 
 const validToken = gs.fromRegex("[!-~]{8,255}");
 
@@ -56,6 +58,20 @@ test("an unset configured token is no token, not the word undefined", () => {
   expect(parseGitHubToken(configured.get("GH_TOKEN"))).toBeUndefined();
 });
 
+test("a client id is accepted unchanged unless it is unset or only whitespace", () => {
+  hegel.test((tc) => {
+    const text = tc.draw(gs.text({ maxSize: 20 }));
+
+    expect(parseGitHubClientId(text)).toBe(text.trim().length === 0 ? undefined : text);
+  });
+});
+
+test("an unset client id is no client id", () => {
+  const configured = new Map<string, string>();
+
+  expect(parseGitHubClientId(configured.get("GITHUB_OAUTH_CLIENT_ID"))).toBeUndefined();
+});
+
 type Sent = string | number | boolean | readonly string[] | null | undefined;
 
 type Field<T> = Readonly<{ sent: Sent; usable: T | undefined }>;
@@ -87,24 +103,15 @@ const errorField = gs.oneOf(
   gs.sampledFrom([7, null, true, ["slow_down"]]).map(ignored),
 );
 
-const intervalField = gs.oneOf(
-  gs.just(unsent),
-  gs.integers({ minValue: 1, maxValue: 3600 }).map(used),
-  gs.sampledFrom([0, -1, 0.5, 2.5, "7", null]).map(ignored),
-);
-
 const answers = new Map([
   ["authorization_pending", { kind: "pending" }],
+  ["slow_down", { kind: "pending" }],
   ["expired_token", { kind: "expired" }],
   ["access_denied", { kind: "denied" }],
 ]);
 
-function expectedRedemption(token: Field<string>, error: Field<string>, interval: Field<number>) {
+function expectedRedemption(token: Field<string>, error: Field<string>) {
   if (token.usable !== undefined) return { kind: "authorized", token: token.usable };
-
-  if (error.usable === "slow_down") {
-    return { kind: "slow-down", intervalSeconds: interval.usable ?? 10 };
-  }
 
   return answers.get(error.usable ?? "") ?? { kind: "unavailable" };
 }
@@ -113,7 +120,10 @@ function redeemReply(response: Response) {
   const fetcher: GitHubFetch = () => Promise.resolve(response);
 
   return Effect.runPromise(
-    redeemDeviceAuthorization({ clientId: "client", deviceCode: "device-code" }, fetcher),
+    redeemDeviceAuthorization(
+      { clientId: clientIdOf("client"), deviceCode: "device-code" },
+      fetcher,
+    ),
   );
 }
 
@@ -121,16 +131,11 @@ test("a redemption reply means what the OAuth device flow says it means", () =>
   hegel.testAsync(async (tc) => {
     const token = tc.draw(tokenField);
     const error = tc.draw(errorField);
-    const interval = tc.draw(intervalField);
 
-    const reply = {
-      access_token: token.sent,
-      error: error.sent,
-      interval: interval.sent,
-    };
+    const reply = { access_token: token.sent, error: error.sent };
 
     await expect(redeemReply(Response.json(reply))).resolves.toEqual(
-      expectedRedemption(token, error, interval),
+      expectedRedemption(token, error),
     );
   }));
 

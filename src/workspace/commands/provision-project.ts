@@ -1,11 +1,5 @@
 import * as Effect from "effect/Effect";
-import {
-  canonicalRepositoryUrl,
-  parseProjectId,
-  projectIdForRepository,
-  type Project,
-  type ProjectId,
-} from "../../project-catalog.js";
+import { parseProject, type Project, type ProjectId } from "../../project-catalog.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import { projectDirectory, projectGitDirectory } from "../../workspace-layout.js";
 import type { CommandOutput, WorkspaceEffects, WorkspaceFault } from "../operations.js";
@@ -64,18 +58,9 @@ export type ProjectProvisionRequest = Readonly<{
 export function parseProjectProvisionRequest(
   request: ProjectProvisionRequest,
 ): Project | WorkspaceFailure {
-  const projectId = parseProjectId(request.projectId);
-  const repositoryUrl = canonicalRepositoryUrl(request.repositoryUrl);
+  const project = parseProject(request.repositoryUrl);
 
-  if (
-    projectId === undefined ||
-    repositoryUrl === undefined ||
-    projectIdForRepository(repositoryUrl) !== projectId
-  ) {
-    return invalidRequest();
-  }
-
-  return { id: projectId, displayName: projectId, repositoryUrl };
+  return project === undefined || project.id !== request.projectId ? invalidRequest() : project;
 }
 
 function planProjectProvisionRequest(project: Project): WorkspacePlan {

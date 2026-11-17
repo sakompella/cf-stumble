@@ -8,6 +8,7 @@ import {
   requestDeviceAuthorization,
   type GitHubFetch,
 } from "../../src/github/index.js";
+import { clientIdOf } from "./client-id-fixture.js";
 
 function exchange(url: string, init: RequestInit) {
   return { url, method: init.method, headers: init.headers, body: init.body };
@@ -42,11 +43,14 @@ const formHeaders = {
 
 test("a redemption posts the client id and device code, whatever they contain, to the token endpoint", () =>
   hegel.testAsync(async (tc) => {
-    const clientId = tc.draw(gs.text({ maxSize: 30 }));
+    const clientId = tc.draw(gs.text({ minSize: 1, maxSize: 30 }));
+    tc.assume(clientId.trim().length > 0);
     const deviceCode = tc.draw(gs.text({ maxSize: 30 }));
     const { calls, fetcher } = recorder(() => Response.json({}));
 
-    await Effect.runPromise(redeemDeviceAuthorization({ clientId, deviceCode }, fetcher));
+    await Effect.runPromise(
+      redeemDeviceAuthorization({ clientId: clientIdOf(clientId), deviceCode }, fetcher),
+    );
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
@@ -63,31 +67,24 @@ test("a redemption posts the client id and device code, whatever they contain, t
 
 function startAuthorization(clientId: string, fetcher: GitHubFetch) {
   return Effect.runPromise(
-    requestDeviceAuthorization(clientId, fetcher).pipe(
+    requestDeviceAuthorization(clientIdOf(clientId), fetcher).pipe(
       Effect.match({
         onSuccess: (authorization) => ({ ok: true, authorization }),
-        onFailure: ({ problem }) => ({ ok: false, problem }),
+        onFailure: () => ({ ok: false }),
       }),
     ),
   );
 }
 
-test("a blank client id never reaches the provider, any other is sent with the scopes gh needs", () =>
+test("a client id is sent with the scopes gh needs", () =>
   hegel.testAsync(async (tc) => {
-    const blank = tc.draw(gs.text({ alphabet: " \t\n", maxSize: 5 }));
     const clientId = tc.draw(gs.text({ minSize: 1, maxSize: 20 }));
     tc.assume(clientId.trim().length > 0);
 
-    const unconfigured = recorder(() => Response.json({}));
     const configured = recorder(() => Response.json({}));
 
-    await expect(startAuthorization(blank, unconfigured.fetcher)).resolves.toEqual({
-      ok: false,
-      problem: "not-configured",
-    });
     await startAuthorization(clientId, configured.fetcher);
 
-    expect(unconfigured.calls).toEqual([]);
     expect(configured.calls[0]).toMatchObject({
       url: "https://github.com/login/device/code",
       method: "POST",
@@ -113,13 +110,12 @@ const codeText = gs.text({ minSize: 1, maxSize: 20 });
 
 const page = gs.fromRegex("https://github\\.com/[a-z]{1,10}");
 
-test("a device authorization carries the codes and page it was given, with defaults for timing", () =>
+test("a device authorization carries the codes and page it was given, with a default expiry", () =>
   hegel.testAsync(async (tc) => {
     const deviceCode = tc.draw(codeText);
     const userCode = tc.draw(codeText);
     const verificationUri = tc.draw(page);
     const expires = tc.draw(timing);
-    const interval = tc.draw(timing);
 
     const { fetcher } = recorder(() =>
       Response.json({
@@ -127,7 +123,6 @@ test("a device authorization carries the codes and page it was given, with defau
         user_code: userCode,
         verification_uri: verificationUri,
         expires_in: expires.sent,
-        interval: interval.sent,
       }),
     );
 
@@ -138,7 +133,6 @@ test("a device authorization carries the codes and page it was given, with defau
         userCode,
         verificationUri,
         expiresInSeconds: expires.usable ?? 900,
-        intervalSeconds: interval.usable ?? 5,
       },
     });
   }));
@@ -156,31 +150,22 @@ const spoiledAuthorization = gs.sampledFrom([
 const unusableStart = gs.oneOf(
   spoiledAuthorization.map((reply) => ({
     answer: () => Promise.resolve(Response.json(reply)),
-    problem: "provider-refused",
   })),
   gs.sampledFrom([[], "text", 7, null, true]).map((body) => ({
     answer: () => Promise.resolve(Response.json(body)),
-    problem: "provider-refused",
   })),
-  gs.just({
-    answer: () => Promise.resolve(new Response("{not json")),
-    problem: "provider-unavailable",
-  }),
-  gs.just({
-    answer: () => Promise.reject(new TypeError("network connection lost")),
-    problem: "provider-unavailable",
-  }),
+  gs.just({ answer: () => Promise.resolve(new Response("{not json")) }),
+  gs.just({ answer: () => Promise.reject(new TypeError("network connection lost")) }),
   gs.sampledFrom([400, 404, 500, 502]).map((status) => ({
     answer: () => Promise.resolve(new Response("{}", { status })),
-    problem: "provider-unavailable",
   })),
 );
 
-test("a start reply that cannot begin an authorization says whether the provider failed or refused", () =>
+test("a start reply that cannot begin an authorization starts none", () =>
   hegel.testAsync(async (tc) => {
-    const { answer, problem } = tc.draw(unusableStart);
+    const { answer } = tc.draw(unusableStart);
 
-    await expect(startAuthorization("client", answer)).resolves.toEqual({ ok: false, problem });
+    await expect(startAuthorization("client", answer)).resolves.toEqual({ ok: false });
   }));
 
 const verificationPage = gs.record({
@@ -224,7 +209,7 @@ test("only a page on https://github.com with no credentials in its address can s
       return;
     }
 
-    expect(started, verificationUri).toEqual({ ok: false, problem: "provider-refused" });
+    expect(started, verificationUri).toEqual({ ok: false });
   }));
 
 test("regression: the unsafe verification pages GitHub documents are all refused", async () => {
@@ -244,9 +229,6 @@ test("regression: the unsafe verification pages GitHub documents are all refused
       }),
     );
 
-    await expect(startAuthorization("client", fetcher)).resolves.toEqual({
-      ok: false,
-      problem: "provider-refused",
-    });
+    await expect(startAuthorization("client", fetcher)).resolves.toEqual({ ok: false });
   }
 });

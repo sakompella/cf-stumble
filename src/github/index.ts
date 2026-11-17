@@ -11,10 +11,12 @@ export {
 } from "./credential-commands.js";
 
 export {
+  parseGitHubClientId,
   parseGitHubToken,
   redeemDeviceAuthorization,
   requestDeviceAuthorization,
   type DeviceRedemption,
+  type GitHubClientId,
   type GitHubFetch,
   type GitHubToken,
 } from "./device-flow.js";
