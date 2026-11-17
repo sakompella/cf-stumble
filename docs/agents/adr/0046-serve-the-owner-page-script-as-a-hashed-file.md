@@ -49,18 +49,13 @@ policy. `pnpm run deploy` runs it before Alchemy bundles the Worker. On a fresh 
 run `pnpm build:page` before `pnpm typecheck` or `pnpm test` alone. The page is immutable host
 code, not part of a generation's module map.
 
-**Budgets.** `tools/bundle-budgets.test.ts`, in `pnpm test:tools`, measures the Worker bundle that
-esbuild bundles from `src/worker.ts` (the `workerd`, `worker` and `browser` conditions, `cloudflare:` and `node:` imports external), and the page script, both gzipped, and fails above its limits. Alchemy
-bundles the deployed Worker with Rolldown, so the measured bundle stands in for the upload. The limits sit about 10 percent above the measured sizes. The real constraint on
-the Worker is startup time, which only a staged deploy measures.
-
-**Amendment (2026-11-17).** The measured bundle is not the upload, and the limit is not 10 percent
-above it. On 2026-11-17 the esbuild bundle that the test measures was 501,349 bytes gzip. The files
-that Alchemy uploads (`buildWorkerBundle()` in `infra/worker-bundle.ts`, source maps left out)
-were 443,251 bytes, so the test overstated the upload by 13 percent. The Worker limit is 700 KiB,
-43 percent above the esbuild bundle and 62 percent above the upload. The page script was 246,755
-bytes against its 256 KiB limit. The Worker limit guards against a sudden jump in size and does not
-track the upload.
+**Budgets.** `tools/worker-startup.test.ts` builds the Worker as Alchemy uploads it (`buildWorkerBundle()` in
+`infra/worker-bundle.ts`, Rolldown, source maps left out), gzips each file and fails above 700 KiB.
+`tools/bundle-budgets.test.ts` does the same for the page script, with a limit of 256 KiB. Both run in
+`pnpm test:tools`. On 2026-11-17 the upload was 443,251 bytes gzip and the page script 246,755 bytes.
+The Worker limit sits 62 percent above the upload and guards against a sudden jump in size. The real
+constraint on the Worker is startup time, which only a staged deploy measures. An earlier version of
+the test measured an esbuild bundle of `src/worker.ts`, which was 13 percent larger than the upload.
 
 **Alternatives.** An inline bundle under the page's nonce needs no new route, but repeats a large
 download on every load. Cloudflare static assets would need routing configuration
