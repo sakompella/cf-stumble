@@ -418,7 +418,7 @@ limit:
    answer, checks that `instructionsHash` and `toolsHash` are the same on every call, and prints the
    share of cached prompt tokens.
 
-Cleanup always runs, also after a failure or Ctrl-C. It runs `ops:check` for the stage, deletes the
+Cleanup runs after a failure. Ctrl-C starts it too, but the terminal also sends the interrupt to the cleanup's own child processes, so they stop before they finish; finish the cleanup with `pnpm e2e --run-id <id> --cleanup`. It runs `ops:check` for the stage, deletes the
 run's `e2e/` branches and any `self-modify/` branch that holds the run's marker, destroys the stage,
 deletes its container images, and checks that no Worker, container application, Durable Object
 namespace, bucket or image of the stage is left. The script prints a pass or fail line per step and

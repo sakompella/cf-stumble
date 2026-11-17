@@ -54,6 +54,14 @@ esbuild bundles from `src/worker.ts` (the `workerd`, `worker` and `browser` cond
 bundles the deployed Worker with Rolldown, so the measured bundle stands in for the upload. The limits sit about 10 percent above the measured sizes. The real constraint on
 the Worker is startup time, which only a staged deploy measures.
 
+**Amendment (2026-11-17).** The measured bundle is not the upload, and the limit is not 10 percent
+above it. On 2026-11-17 the esbuild bundle that the test measures was 501,349 bytes gzip. The files
+that Alchemy uploads (`buildWorkerBundle()` in `infra/worker-bundle.ts`, source maps left out)
+were 443,251 bytes, so the test overstated the upload by 13 percent. The Worker limit is 700 KiB,
+43 percent above the esbuild bundle and 62 percent above the upload. The page script was 246,755
+bytes against its 256 KiB limit. The Worker limit guards against a sudden jump in size and does not
+track the upload.
+
 **Alternatives.** An inline bundle under the page's nonce needs no new route, but repeats a large
 download on every load. Cloudflare static assets would need routing configuration
 in the Worker configuration. Typed DOM modules without a framework need
