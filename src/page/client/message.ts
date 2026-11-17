@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
-import { BackendSetting } from "../../backend-setting.js";
+import { BackendSetting, ContainerOutcome } from "../../backend-setting.js";
 import { ChatGPT } from "./chatgpt.js";
 import { Conversation, RunBudget } from "../../conversation-view/conversation.js";
 import { GitHubReading } from "./github.js";
@@ -69,6 +69,11 @@ export const Message = defineMessageUnion({
   FailedChatGPT: { detail: Schema.String },
 
   SucceededBackend: { backend: BackendSetting },
+  ChangedBackend: {
+    backend: BackendSetting,
+    container: ContainerOutcome,
+    startsOn: BackendSetting,
+  },
   RejectedBackend: { wording: Schema.String },
   FailedBackend: { detail: Schema.String },
 

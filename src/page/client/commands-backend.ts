@@ -1,37 +1,46 @@
 import * as Option from "effect/Option";
 import { Command } from "foldkit";
-import { type JsonBody } from "./api.js";
 import { BackendSetting } from "../../backend-setting.js";
 import { Message } from "./message.js";
 import { apiRequest, rejectedAs } from "./api-request.js";
 
 const BACKEND_MESSAGES = [
   Message.SucceededBackend,
+  Message.ChangedBackend,
   Message.RejectedBackend,
   Message.FailedBackend,
 ] as const;
 
-function backendRequest(
-  endpoint: "GET /api/workspace/backend" | "POST /api/workspace/backend",
-  maybeBody: Option.Option<JsonBody>,
-) {
-  return apiRequest(
-    { endpoint, maybeBody },
-    {
-      answered: (answer) => Message.SucceededBackend({ backend: answer.backend }),
-      ...rejectedAs((wording) => Message.RejectedBackend({ wording })),
-      failed: (detail) => Message.FailedBackend({ detail }),
-    },
-  );
-}
+const failures = {
+  ...rejectedAs((wording) => Message.RejectedBackend({ wording })),
+  failed: (detail: string) => Message.FailedBackend({ detail }),
+};
 
 export const FetchBackend = Command.define("FetchBackend", {
   messages: BACKEND_MESSAGES,
-  execute: backendRequest("GET /api/workspace/backend", Option.none()),
+  execute: apiRequest(
+    { endpoint: "GET /api/workspace/backend", maybeBody: Option.none() },
+    {
+      answered: (answer) => Message.SucceededBackend({ backend: answer.backend }),
+      ...failures,
+    },
+  ),
 });
 
 export const ChangeBackend = Command.define("ChangeBackend", {
   args: { backend: BackendSetting },
   messages: BACKEND_MESSAGES,
-  execute: ({ backend }) => backendRequest("POST /api/workspace/backend", Option.some({ backend })),
+  execute: ({ backend }) =>
+    apiRequest(
+      { endpoint: "POST /api/workspace/backend", maybeBody: Option.some({ backend }) },
+      {
+        answered: (answer) =>
+          Message.ChangedBackend({
+            backend: answer.backend,
+            container: answer.container,
+            startsOn: answer.startsOn,
+          }),
+        ...failures,
+      },
+    ),
 });

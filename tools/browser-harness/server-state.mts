@@ -6,6 +6,7 @@ import {
   type HarnessScenario,
   type ProjectEntry,
 } from "./fixtures.mjs";
+import type { BackendSetting } from "../../src/backend-setting.js";
 import type { Conversations } from "./conversations.mjs";
 import type { JsonValue } from "../json.mjs";
 
@@ -23,6 +24,8 @@ export type ScenarioState = {
   projects: ProjectEntry[];
   isChatGPTConnected: boolean;
   generationLabel: number;
+  backend: BackendSetting;
+  isContainerRunning: boolean;
   readonly eventStreams: Map<ServerResponse, string>;
   requests: RequestRecord[];
   conversations: Conversations;
@@ -38,6 +41,8 @@ export function initialState(
     projects: [...BASELINE_PROJECTS],
     isChatGPTConnected: scenario === "chatgpt-connected",
     generationLabel: INITIAL_GENERATION_LABEL,
+    backend: "provider",
+    isContainerRunning: true,
     eventStreams: new Map(),
     requests: [],
     conversations,

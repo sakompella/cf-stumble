@@ -71,7 +71,9 @@ resource for each machine.
 with `GET`/`POST /api/workspace/backend` and a control in the page sidebar. `provider` uses a
 connected provider and falls back to Cloudflare, as above. `cloudflare` always uses the Cloudflare
 container. The choice is made at connect time (`WorkspacePlatform`), so a change affects the next
-container start. A change while a container runs closes the workspace and stops the container
+container start. The `POST` answer reports what the change did (`container`: `stopped`,
+`not-running` or `kept`) and where the next container starts (`startsOn`, from
+`WorkspacePlatform.nextContainer`, the rule that connect uses), and the page shows both. A change while a container runs closes the workspace and stops the container
 through the idle controller, so a command that arrives meanwhile waits and then starts on the chosen
 backend. It is refused while a run holds the workspace or a workspace command runs. A workspace
 reset keeps the setting.
