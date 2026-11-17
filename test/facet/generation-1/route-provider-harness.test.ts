@@ -12,7 +12,7 @@ import {
 import { expect, test } from "vitest";
 import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
-import { NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
+import { NO_LOG, NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
 
 const echo = defineTool({
   name: "echo",
@@ -47,7 +47,7 @@ const answers = replies([
 
 function openHarness(capability: ModelCapability) {
   const models = createModels();
-  models.setProvider(routeProvider(capability));
+  models.setProvider(routeProvider(capability, NO_LOG));
   const registry = createRegistry();
   registry.install(defineExtension({ name: "echo", tools: [echo] }));
 

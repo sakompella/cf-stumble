@@ -13,6 +13,14 @@ const noModelRun: ModelCapability = {
   runStream: () => Promise.reject(new Error("no run asks the model")),
 };
 
+const refusingModel: ModelCapability = {
+  runStream: () =>
+    Promise.resolve({
+      ok: false,
+      error: { code: "invalid-request", reason: "messages must be a non-empty array" },
+    }),
+};
+
 afterEach(async () => {
   vi.useRealTimers();
   await reset();
@@ -153,7 +161,7 @@ test("a turn whose model fails is reported to the host as failed with the reason
     async (_instance, state) => {
       const facet = new MainFacet(state, env);
 
-      await facet.attach(host, noModelRun, unscriptedGenerations);
+      await facet.attach(host, refusingModel, unscriptedGenerations);
 
       const id = await facet.createConversation("/workspace");
 

@@ -12,7 +12,7 @@ import { expect, test } from "vitest";
 import { RepeatedCallNote } from "../../../src/facet/generation-1/repeated-call-note.js";
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
 import type { RouteMessage } from "../../../src/model-route-wire/request.js";
-import { NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
+import { NO_LOG, NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
 
 const echo = defineTool({
   name: "echo",
@@ -62,7 +62,7 @@ test("a call repeated with the same arguments and result gets a note from its th
   );
 
   const models = createModels();
-  models.setProvider(routeProvider(capability));
+  models.setProvider(routeProvider(capability, NO_LOG));
   const registry = createRegistry();
   registry.install(defineExtension({ name: "echo", tools: [echo] }));
   registry.install(RepeatedCallNote);

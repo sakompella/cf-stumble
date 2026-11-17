@@ -50,7 +50,7 @@ export async function openSession(input: SessionInput): Promise<Session> {
   const { host, generations } = input;
   const log = hostLog(host);
   const models = createModels();
-  models.setProvider(routeProvider(input.model));
+  models.setProvider(routeProvider(input.model, log));
 
   const harness = await Harness.open(
     await openDurableObjectSqliteStorage(input.storage),

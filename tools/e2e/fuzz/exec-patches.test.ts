@@ -9,5 +9,5 @@ it("the exec fuzzer's patches apply to the facet sources checked in today and wi
   ).join("\n");
 
   assert.match(patched, /registry\.install\(FuzzTools\)/u);
-  assert.match(patched, /routeProvider\(fuzzModel\(input\.model\)\)/u);
+  assert.match(patched, /routeProvider\(fuzzModel\(input\.model\), log\)/u);
 });

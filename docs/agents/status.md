@@ -82,7 +82,6 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 **Proved in code or by a scratch test, not seen in production**
 
 - **The turn deadline is enforced in five places (#19).** A lease ends only through a timer. `rc-review-19.md`.
-- **The route reports its own failures as `invalid-request` (#18).** Pi retries only when the text matches its list. `rc-review-18.md`.
 - **Shell scripts take values by interpolation (#20).** Four shell tests fail under a hostile root path. `rc-review-20.md`.
 - **A long command's output is saved twice (#23).** Pi's spill file and Computer's saved file hold the same bytes. `rc-review-23.md`.
 - **The e2e step limits do not stop the work, and the bundle budget measures another bundle (#26).** `rc-review-26.md`.
