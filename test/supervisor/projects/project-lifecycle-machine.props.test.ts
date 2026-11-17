@@ -27,20 +27,19 @@ const tagged = (tag: Tag): LifecycleEvent => LifecycleEvent.cases[tag].make({});
 
 const unchanged = (state: State): Expected => ({ state, commands: [] });
 
-const removal = (cause: "disconnect" | "failed-provision"): Expected => ({
+const removal = (): Expected => ({
   state: "removing",
-  commands: [LifecycleCommand.RemoveDirectories({ cause })],
+  commands: [LifecycleCommand.RemoveDirectories()],
 });
 
 const TABLE: Readonly<Record<Tag, (state: State) => Expected>> = {
   connect: (state) =>
     state === "connected" || state === "removing"
       ? unchanged(state)
-      : { state: "provisioning", commands: [LifecycleCommand.Provision({ attempt: "connect" })] },
+      : { state: "provisioning", commands: [LifecycleCommand.Provision()] },
   provisioned: (state) => unchanged(state === "provisioning" ? "connected" : state),
-  provisionFailed: (state) =>
-    state === "provisioning" ? removal("failed-provision") : unchanged(state),
-  disconnect: (state) => (state === undefined ? unchanged(state) : removal("disconnect")),
+  provisionFailed: (state) => (state === "provisioning" ? removal() : unchanged(state)),
+  disconnect: (state) => (state === undefined ? unchanged(state) : removal()),
   removed: (state) => unchanged(state === "removing" ? undefined : state),
   removalFailed: unchanged,
 };
@@ -87,7 +86,7 @@ test("a failed removal keeps the project in removing until a removal succeeds, a
       expect(step.state).toBe("removing");
 
       step = lifecycleStep(step.state, tagged("disconnect"));
-      expect(step).toEqual(removal("disconnect"));
+      expect(step).toEqual(removal());
     }
 
     expect(lifecycleStep(step.state, tagged("removed")).state).toBeUndefined();

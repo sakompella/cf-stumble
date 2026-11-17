@@ -27,6 +27,8 @@ export interface ExecBackendInput {
 
 export const ISOLATE_BACKEND_ID = "worker-shell";
 
+export const ISOLATE_REFUSED_EXIT_CODE = 129;
+
 export const CONTAINER_BACKEND_ID = "container-shell";
 
 export interface ContainerLifecycleState {

@@ -24,7 +24,7 @@ export class WorkspaceRpcRejected extends Data.TaggedError("WorkspaceRpcRejected
 
 export type WorkspaceRpcFailure = Cause.TimeoutError | WorkspaceRpcRejected;
 
-export function isRpcTimeout(failure: WorkspaceRpcFailure): boolean {
+export function isRpcTimeout(failure: Error): boolean {
   return Cause.isTimeoutError(failure);
 }
 

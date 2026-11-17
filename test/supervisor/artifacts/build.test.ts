@@ -12,12 +12,14 @@ import {
   built,
   type BuildWorkspaceFake,
   entryModule,
+  failureLines,
   FakeBuildHost,
   helperModule,
 } from "./scripted-build-host.js";
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 test("a build returns the module map the workspace wrote, under the requested commit, and sends no command line", async () => {
@@ -147,6 +149,7 @@ test("gives the built module map the commit the Supervisor asked to build", asyn
 
 test("a step the workspace never answers fails as unavailable at the RPC deadline and still discards the scratch tree", async () => {
   vi.useFakeTimers();
+  const logged = failureLines();
   const host = new FakeBuildHost();
   const build = host.build.bind(host);
 
@@ -162,4 +165,23 @@ test("a step the workspace never answers fails as unavailable at the RPC deadlin
     harnessCommit: BUILD_COMMIT,
   });
   expect(host.steps().slice(-2)).toEqual(["install", "build-discard"]);
+  expect(logged()).toEqual(["harness-build.install: timeout"]);
+});
+
+test("a step the workspace rejects with a message that says it timed out logs unavailable, not timeout", async () => {
+  const logged = failureLines();
+  const host = new FakeBuildHost();
+
+  host.build = (request) => {
+    host.requests.push(request.step);
+
+    return Promise.reject(new Error("git clone timed out"));
+  };
+
+  const result = await built(host);
+
+  expect(Result.isFailure(result) ? result.failure.code : "built").toBe(
+    "build-workspace-unavailable",
+  );
+  expect(logged()).toEqual(["harness-build.provision: build-workspace-unavailable"]);
 });

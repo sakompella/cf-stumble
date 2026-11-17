@@ -2,12 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import {
-  isRetryableFailure,
-  isTimeoutFailure,
-  logRedactedCause,
-  redactLogText,
-} from "../../diagnostics.js";
+import { isRetryableFailure, logRedactedCause, redactLogText } from "../../diagnostics.js";
 import { ModuleMapSchema, parseMainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifact, MainHarnessArtifactProblem } from "../../facet/index.js";
 import { HARNESS_BUILD_STEP_NAMES } from "../../harness-build.js";
@@ -15,6 +10,7 @@ import type { HarnessBuildStepName } from "../../harness-build.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import {
   boundedRpc,
+  isRpcTimeout,
   WORKSPACE_RPC_TIMEOUT_MS,
   WorkspaceRpcRejected,
   type WorkspaceRpcFailure,
@@ -149,7 +145,7 @@ function runStep(
         return error;
       }
 
-      const reason = isTimeoutFailure(error) ? "timeout" : "build-workspace-unavailable";
+      const reason = isRpcTimeout(error) ? "timeout" : "build-workspace-unavailable";
       logRedactedCause(`harness-build.${step}: ${reason}`, error);
 
       return { code: "build-workspace-unavailable", harnessCommit };

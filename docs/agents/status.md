@@ -71,10 +71,4 @@ No page failure from the 2026-11-16 QA run is open.
 
 ## Open items
 
-These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plans/`, kept out of Git; `rc-summary.md` ranks them). F14 (a reload shows fewer entries) is closed: the code is by design, and the `overview.md` sentence that invited the report is fixed. Each line points at its plan.
-
-**Proved in code or by a scratch test, not seen in production**
-
-- **Dead config, members and prose (#28).** The oxlint Effect-free override exempts nothing, and 12 more small items remain. `rc-review-28.md`.
-
-Decisions waiting for the owner: delete the oxlint Effect-free override (#28).
+None. The open items came from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plans/`, kept out of Git); the last one, #28, is done. F14 (a reload shows fewer entries) is closed: the code is by design, and the `overview.md` sentence that invited the report is fixed.

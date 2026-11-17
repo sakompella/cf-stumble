@@ -30,11 +30,7 @@ export class ProjectThreads {
     return this.#endings.relayed(projectId, events);
   }
 
-  point(projectId: string, conversationId: string): void {
-    this.#pointers.point(projectId, conversationId);
-  }
-
-  exclusive<A>(
+  #exclusive<A>(
     project: SelectableProject,
     use: (current: SelectableProject) => Effect.Effect<A, ConversationProblem>,
   ): Effect.Effect<A, ConversationProblem> {
@@ -46,7 +42,7 @@ export class ProjectThreads {
     create: (current: SelectableProject) => Effect.Effect<string, ConversationProblem>,
     use: (conversationId: string) => Effect.Effect<A, ConversationProblem>,
   ): Effect.Effect<A, ConversationProblem> {
-    return this.exclusive(project, (current) =>
+    return this.#exclusive(project, (current) =>
       Effect.suspend(() => {
         const existing = this.#pointers.conversationOf(current.id);
 
@@ -69,7 +65,7 @@ export class ProjectThreads {
     retire: (previous: string) => Effect.Effect<void, ConversationProblem>,
     create: Effect.Effect<string, ConversationProblem>,
   ): Effect.Effect<string, ConversationProblem> {
-    return this.exclusive(project, (current) =>
+    return this.#exclusive(project, (current) =>
       Effect.gen({ self: this }, function* () {
         const previous = this.#pointers.conversationOf(current.id);
 

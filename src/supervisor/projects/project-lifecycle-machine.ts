@@ -17,8 +17,8 @@ export const LifecycleEvent = Schema.TaggedUnion({
 export type LifecycleEvent = typeof LifecycleEvent.Type;
 
 export type LifecycleCommand = Data.TaggedEnum<{
-  Provision: { readonly attempt: "connect" };
-  RemoveDirectories: { readonly cause: "disconnect" | "failed-provision" };
+  Provision: object;
+  RemoveDirectories: object;
 }>;
 
 export const LifecycleCommand = Data.taggedEnum<LifecycleCommand>();
@@ -32,8 +32,8 @@ function stay(state: ProjectState | undefined): LifecycleStep {
   return { state, commands: [] };
 }
 
-function removing(cause: "disconnect" | "failed-provision"): LifecycleStep {
-  return { state: "removing", commands: [LifecycleCommand.RemoveDirectories({ cause })] };
+function removing(): LifecycleStep {
+  return { state: "removing", commands: [LifecycleCommand.RemoveDirectories()] };
 }
 
 export function lifecycleStep(
@@ -46,12 +46,11 @@ export function lifecycleStep(
         ? stay(current)
         : {
             state: "provisioning" as const,
-            commands: [LifecycleCommand.Provision({ attempt: "connect" })],
+            commands: [LifecycleCommand.Provision()],
           },
     provisioned: () => (current === "provisioning" ? stay("connected") : stay(current)),
-    provisionFailed: () =>
-      current === "provisioning" ? removing("failed-provision") : stay(current),
-    disconnect: () => (current === undefined ? stay(current) : removing("disconnect")),
+    provisionFailed: () => (current === "provisioning" ? removing() : stay(current)),
+    disconnect: () => (current === undefined ? stay(current) : removing()),
     removed: () => (current === "removing" ? { state: undefined, commands: [] } : stay(current)),
     removalFailed: () => stay(current),
   });

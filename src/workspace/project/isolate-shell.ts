@@ -133,7 +133,7 @@ export function isolateShellBackend(
     id: ISOLATE_BACKEND_ID,
     type: "worker-shell",
     description:
-      "A just-bash shell in a Dynamic Worker with no container, Git over the workspace, and curl through an egress gateway that reaches any host with any method.",
+      "A just-bash shell in a Dynamic Worker with no container, and curl through an egress gateway that reaches any host with any method.",
     connect: () =>
       Promise.resolve({
         rpc: { sync: NO_SYNC, shell: shellRpc(runtime, () => host.workspace()) },

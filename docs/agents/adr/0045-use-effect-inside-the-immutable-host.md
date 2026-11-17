@@ -77,15 +77,10 @@ suite's time; the prebundled module path costs about 23 ms per isolate.
 `src/**`: `no-manual-effect-error-tag`, `no-manual-tag-comparison`, `no-manual-tagged-construction`,
 and `prefer-effect-match`. Code builds a tagged value with its Schema or `Data.TaggedError` constructor,
 such as the `src/orb-protocol.ts` frame and job constructors, and branches on it with `Match.tag` or
-`Predicate.isTagged`. The rules are off for `src/facet/generation-1/**` and for the host files that
-the generation-1 module map bundles, because those files stay free of Effect. The fifth rule,
+`Predicate.isTagged`. The rules apply to all of `src/**`, including `src/facet/generation-1/**` and
+the host files that the generation-1 module map bundles. Those files stay free of Effect and branch
+on `kind`, so the four rules find nothing in them, and no exemption is needed. The fifth rule,
 `no-service-constructor-imports`, stays off: the host has no services, `Context`, or `Layer`.
-
-**Amendment (2026-11-17).** The override for those files exempts nothing. Two of its paths
-(`src/facet-compatibility.ts`, `src/model-route-events.ts`) name files that moved to
-`src/facet/runtime-contract.ts` and `src/model-route-wire/events.ts`, and the list no longer matches
-the files the module map bundles. Linting `src` without the override gives 0 errors, because the
-four rules look for a `_tag` comparison or construction and those files branch on `kind`.
 
 **Alternatives.** Keeping better-result for results and adding Effect only for concurrency would
 leave two systems for composing failures. Publishing Effect RPC or schema envelopes across Workers
