@@ -8,6 +8,7 @@ import {
   apiSupervisor as supervisor,
   WORKER_VERSION,
 } from "./helpers.js";
+import { CODE_UPDATE_RESET, STORAGE_RESET } from "../platform-reset.js";
 import type { StartupCheckResult } from "../../src/supervisor/startup-check/index.js";
 
 const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -85,8 +86,6 @@ test("reports the recorded label with a preparation failure, without echoing the
   });
 });
 
-const CODE_UPDATE_RESET = "Durable Object reset because its code was updated.";
-
 const ready: StartupCheckResult = {
   ok: true,
   report: {
@@ -132,12 +131,27 @@ async function submitted(first: Answer, second: Answer, secondVersion: string) {
 
 const NEW_VERSION = "version-deployed-during-the-request";
 
-test("prepares the generation again on the new Supervisor when a deploy reset it mid-check (deploy 44075948231)", async () => {
-  const { asked, response } = await submitted(new Error(CODE_UPDATE_RESET), ready, NEW_VERSION);
+test("prepares the generation again when a storage reset rejected the call (stage race, internal error in Durable Object storage)", async () => {
+  const { asked } = await submitted(STORAGE_RESET, ready, WORKER_VERSION);
+
+  expect(asked).toHaveLength(2);
+});
+
+test("does not prepare again when an Error without the platform's retryable mark is thrown in the same version", async () => {
+  const { asked } = await submitted(
+    new Error("Durable Object reset because its code was updated."),
+    ready,
+    WORKER_VERSION,
+  );
+
+  expect(asked).toHaveLength(1);
+});
+
+test("prepares the generation again when the reset Supervisor already runs the Worker's version by the time of the check (deploy 44075948231, deploy 44128047200)", async () => {
+  const { asked, response } = await submitted(CODE_UPDATE_RESET, ready, WORKER_VERSION);
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toMatchObject({
-    ok: true,
     preparation: { ok: true, report: { stage: "ready" } },
   });
   expect(asked).toEqual([generationLabel(1), generationLabel(1)]);
@@ -161,11 +175,7 @@ test("prepares again when the Supervisor that a deploy was resetting answered wi
 });
 
 test("answers with the second preparation when a deploy reset the Supervisor and the check still fails", async () => {
-  const { asked, response } = await submitted(
-    new Error(CODE_UPDATE_RESET),
-    unavailable,
-    NEW_VERSION,
-  );
+  const { asked, response } = await submitted(CODE_UPDATE_RESET, unavailable, NEW_VERSION);
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toMatchObject({

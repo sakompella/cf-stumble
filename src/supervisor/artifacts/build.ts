@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import {
-  isCodeUpdateReset,
+  isRetryableFailure,
   isTimeoutFailure,
   logRedactedCause,
   redactLogText,
@@ -13,7 +13,12 @@ import type { MainHarnessArtifact, MainHarnessArtifactProblem } from "../../face
 import { HARNESS_BUILD_STEP_NAMES } from "../../harness-build.js";
 import type { HarnessBuildStepName } from "../../harness-build.js";
 import type { HarnessCommit } from "../../harness-commit.js";
-import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
+import {
+  boundedRpc,
+  WORKSPACE_RPC_TIMEOUT_MS,
+  WorkspaceRpcRejected,
+  type WorkspaceRpcFailure,
+} from "../../workspace-command-timeout.js";
 import type { CommandAnswer, CommandOutput, WorkspaceHostRpc } from "../../workspace/index.js";
 
 export type BuildWorkspace = WorkspaceHostRpc<"build" | "buildOutput" | "discardBuild">;
@@ -43,7 +48,7 @@ export type HarnessBuildProblem =
 const decodeBuiltModuleMap = Schema.decodeUnknownResult(Schema.fromJsonString(ModuleMapSchema));
 
 class WorkspaceRestarted extends Data.TaggedError("WorkspaceRestarted")<{
-  readonly harnessCommit: HarnessCommit;
+  readonly message: string;
 }> {}
 
 export function buildModuleMap(
@@ -93,32 +98,39 @@ class BuildWorkspaceRefused extends Data.TaggedError("BuildWorkspaceRefused")<{
   readonly message: string;
 }> {}
 
+function rejectedCall(error: WorkspaceRpcFailure): WorkspaceRpcFailure | WorkspaceRestarted {
+  return error instanceof WorkspaceRpcRejected && isRetryableFailure(error.cause)
+    ? new WorkspaceRestarted({ message: error.message })
+    : error;
+}
+
+function refusal(code: string, refused: string): BuildWorkspaceRefused | WorkspaceRestarted {
+  return code === "workspace-restarted"
+    ? new WorkspaceRestarted({ message: `the build workspace restarted during ${refused}` })
+    : new BuildWorkspaceRefused({ message: `the build workspace refused ${refused}: ${code}` });
+}
+
 function command(call: () => Promise<CommandAnswer>, label: string) {
   return boundedRpc(call, WORKSPACE_RPC_TIMEOUT_MS).pipe(
+    Effect.mapError(rejectedCall),
     Effect.flatMap((answer) =>
-      answer.ok
-        ? Effect.succeed(answer.output)
-        : Effect.fail(
-            new BuildWorkspaceRefused({
-              message: `the build workspace refused ${label}: ${answer.error.code}`,
-            }),
-          ),
+      answer.ok ? Effect.succeed(answer.output) : Effect.fail(refusal(answer.error.code, label)),
     ),
   );
 }
 
 function moduleMapText(workspace: () => BuildWorkspace, harnessCommit: HarnessCommit) {
   return boundedRpc(() => workspace().buildOutput(harnessCommit), WORKSPACE_RPC_TIMEOUT_MS).pipe(
+    Effect.mapError(rejectedCall),
     Effect.flatMap((answer) => {
       if (answer.ok) return Effect.succeed(answer.moduleMap);
 
       return Effect.fail(
-        new BuildWorkspaceRefused({
-          message:
-            answer.error.code === "publish-failed"
-              ? "the build wrote no readable module map: the publish step failed"
-              : `the build workspace refused the build output: ${answer.error.code}`,
-        }),
+        answer.error.code === "publish-failed"
+          ? new BuildWorkspaceRefused({
+              message: "the build wrote no readable module map: the publish step failed",
+            })
+          : refusal(answer.error.code, "the build output"),
       );
     }),
   );
@@ -131,10 +143,10 @@ function runStep(
 ): Effect.Effect<void, HarnessBuildProblem | WorkspaceRestarted> {
   const ran = command(() => workspace().build({ harnessCommit, step }), `the ${step} step`).pipe(
     Effect.mapError((error): HarnessBuildProblem | WorkspaceRestarted => {
-      if (isCodeUpdateReset(error)) {
+      if (error instanceof WorkspaceRestarted) {
         logRedactedCause(`harness-build.${step}: workspace-restarted`, error);
 
-        return new WorkspaceRestarted({ harnessCommit });
+        return error;
       }
 
       const reason = isTimeoutFailure(error) ? "timeout" : "build-workspace-unavailable";
@@ -165,10 +177,10 @@ function readModuleMap(
 ): Effect.Effect<MainHarnessArtifact, HarnessBuildProblem | WorkspaceRestarted> {
   const text = moduleMapText(workspace, harnessCommit).pipe(
     Effect.mapError((error): HarnessBuildProblem | WorkspaceRestarted => {
-      if (isCodeUpdateReset(error)) {
+      if (error instanceof WorkspaceRestarted) {
         logRedactedCause(`harness-build.output ${harnessCommit}: workspace-restarted`, error);
 
-        return new WorkspaceRestarted({ harnessCommit });
+        return error;
       }
 
       logRedactedCause(`harness-build.output ${harnessCommit}: build-output-missing`, error);

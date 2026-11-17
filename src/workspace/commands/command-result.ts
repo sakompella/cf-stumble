@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { isTimeoutFailure, logRedactedCause } from "../../diagnostics.js";
+import { isRetryableFailure, isTimeoutFailure, logRedactedCause } from "../../diagnostics.js";
 import {
   answerFailures,
   WorkspaceSyncIncomplete,
@@ -19,6 +19,7 @@ type WorkspaceFailureCode =
   | "invalid-request"
   | "path-outside-root"
   | "workspace-unavailable"
+  | "workspace-restarted"
   | "workspace-busy"
   | "workspace-sync-incomplete";
 
@@ -48,6 +49,10 @@ export function syncIncomplete(): WorkspaceFailure {
 
 function unavailable(): WorkspaceFailure {
   return { ok: false, error: { code: "workspace-unavailable" } };
+}
+
+function restarted(): WorkspaceFailure {
+  return { ok: false, error: { code: "workspace-restarted" } };
 }
 
 export function commandAnswer(output: CommandOutput): CommandAnswer {
@@ -96,6 +101,12 @@ export function answerDurableFailures(
 
 export function answerUnavailable(context: string): AnswerFailures {
   return answerWith((cause) => {
+    if (isRetryableFailure(cause)) {
+      logRedactedCause(`${context}: workspace-restarted`, cause);
+
+      return restarted();
+    }
+
     logRedactedCause(`${context}: ${timeoutOrUnavailable(cause)}`, cause);
 
     return unavailable();
