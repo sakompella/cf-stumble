@@ -38,7 +38,10 @@ async function activateAnother(control: Control, name: string): Promise<number> 
 function servingInstance(control: Control): Promise<number> {
   return runInDurableObject(
     control,
-    (_instance, state) => state.storage.kv.get<number>("serving-instance") ?? 0,
+    (_instance, state) =>
+      state.storage.sql
+        .exec<{ serving_instance: number }>("SELECT serving_instance FROM generation_state")
+        .one().serving_instance,
   );
 }
 

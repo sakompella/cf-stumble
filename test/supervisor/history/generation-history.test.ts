@@ -3,6 +3,7 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 import { Generations } from "../../../src/supervisor/generations.js";
+import { spyPorts } from "../generations/generation-ports.js";
 import type { GenerationLabel } from "../../../src/supervisor/generation-state.js";
 import { GenerationHistory } from "../../../src/supervisor/history/log.js";
 import { r2History } from "../../../src/supervisor/history/r2-history.js";
@@ -74,8 +75,11 @@ function recordedSupervisor(name: string, refusals: number, change: (g: Generati
 
   return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) => {
     change(
-      new Generations(state.storage, FACET_COMPATIBILITY, (recorded) => {
-        history.record(recorded);
+      new Generations(state.storage, FACET_COMPATIBILITY, {
+        ...spyPorts(),
+        changed: (recorded) => {
+          history.record(recorded);
+        },
       }),
     );
   }).then(settled);

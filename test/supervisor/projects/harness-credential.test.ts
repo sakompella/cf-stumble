@@ -2,8 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test } from "vitest";
-import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
-import { Generations } from "../../../src/supervisor/generations.js";
+import { generationsOf } from "../generations/generation-ports.js";
 import { GitHubConnection, GitHubConnectionStore } from "../../../src/supervisor/projects/index.js";
 import { ProvisionFence, WorkspaceReadiness } from "../../../src/supervisor/readiness/index.js";
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
@@ -29,7 +28,7 @@ function harnessTurn(
       workspaceName: name,
       fence: new ProvisionFence(),
       namespace,
-      generations: new Generations(state.storage, FACET_COMPATIBILITY),
+      generations: generationsOf(state.storage),
       github: new GitHubConnection({
         store: new GitHubConnectionStore(state.storage),
         workspaceName: name,

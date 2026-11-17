@@ -28,6 +28,11 @@ export type GenerationCommand = Data.TaggedEnum<{
     readonly outcome: string | null;
     readonly errorCode: string | null;
   };
+  ReplaceFacet: {
+    readonly kind: "activated" | "rolled-back";
+    readonly label: GenerationLabel;
+    readonly epoch: number;
+  };
   ProbationFailed: {
     readonly label: GenerationLabel;
     readonly fallback: GenerationLabel;
@@ -52,8 +57,6 @@ export type PreparationReply = Readonly<{
   effect: "recorded" | "no-op";
 }>;
 
-export type RollbackReply = Readonly<{ command: ActivationCommand; epoch: number }> | undefined;
-
 type RunVerdict = "proves" | "fails" | "neutral";
 
 const RUN_VERDICT: Readonly<Record<RunOutcome, RunVerdict>> = {
@@ -66,7 +69,7 @@ const RUN_VERDICT: Readonly<Record<RunOutcome, RunVerdict>> = {
   replaced: "neutral",
 };
 
-const UNCHANGED: Step<RollbackReply> = { commands: [], reply: undefined };
+const UNCHANGED: Step<undefined> = { commands: [], reply: undefined };
 
 function reply<Reply>(value: Reply): Step<Reply> {
   return { commands: [], reply: value };
@@ -118,9 +121,16 @@ function activated(
   const epoch = selection.epoch + 1;
 
   return {
-    selection: { epoch, serving: servingAfter(selection.serving, target.label) },
+    selection: {
+      epoch,
+      instance: selection.instance + 1,
+      serving: servingAfter(selection.serving, target.label),
+    },
     generation,
-    commands: [changed(kind, actor, epoch, target.label)],
+    commands: [
+      changed(kind, actor, epoch, target.label),
+      GenerationCommand.ReplaceFacet({ kind, label: target.label, epoch }),
+    ],
     reply: {
       ok: true,
       outcome: { kind, generation: wireGeneration(generation), epoch, effect: "activated" },
@@ -161,7 +171,7 @@ function rolledBack(
   target: LabeledGeneration | undefined,
   run: Readonly<{ outcome: RunOutcome; errorCode: string | null }>,
   compatibility: string,
-): Step<RollbackReply> {
+): Step<undefined> {
   const command = {
     kind: "rollback",
     label: probation.fallback,
@@ -200,7 +210,7 @@ function rolledBack(
       ...rollback.commands,
       GenerationCommand.ProbationFailed({ label, fallback, ...run, refused: null }),
     ],
-    reply: { command, epoch: rollback.reply.outcome.epoch },
+    reply: undefined,
   };
 }
 
@@ -209,10 +219,10 @@ export function settlement(
   fallback: LabeledGeneration | undefined,
   run: Readonly<{ outcome: RunOutcome; errorCode: string | null }>,
   compatibility: string,
-): Step<RollbackReply> {
+): Step<undefined> {
   const verdict = RUN_VERDICT[run.outcome];
 
-  const proven = (active: GenerationLabel): Step<RollbackReply> => ({
+  const proven = (active: GenerationLabel): Step<undefined> => ({
     selection: { ...selection, serving: Serving.cases.Proven.make({ active }) },
     commands: [changed("proven", "probation", selection.epoch, active, run.outcome)],
     reply: undefined,
