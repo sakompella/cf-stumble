@@ -123,14 +123,14 @@ test("a connection answer replaces what the page showed and clears the request w
   expect(connected.chatgptResult).toBe("");
 });
 
-test("connecting and disconnecting each ask the Worker once", () => {
+test("connecting asks the Worker once, and disconnecting asks only after it is confirmed", () => {
   const connecting = update(init().model, Message.ClickedChatGPTLogin());
-  const disconnecting = update(init().model, Message.ClickedChatGPTDisconnect());
+  const asked = update(init().model, Message.ClickedChatGPTDisconnect());
+  const confirmed = update(asked.model, Message.ConfirmedChatGPTDisconnect());
 
   expect((connecting.commands ?? []).map((command) => command.name)).toEqual(["StartChatGPTLogin"]);
-  expect((disconnecting.commands ?? []).map((command) => command.name)).toEqual([
-    "DisconnectChatGPT",
-  ]);
+  expect(asked.commands ?? []).toEqual([]);
+  expect((confirmed.commands ?? []).map((command) => command.name)).toEqual(["DisconnectChatGPT"]);
 });
 
 test("an unreachable Worker is reported in the banner and the result", () => {

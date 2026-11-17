@@ -22,6 +22,7 @@ export const FreshThreadEvent = defineTaggedUnion({
   Clicked: { ground: Ground },
   Sent: {},
   StreamReplaced: {},
+  Expired: {},
   Succeeded: {},
   Refused: { wording: Schema.String },
   Failed: {},
@@ -76,6 +77,13 @@ export function advanceFreshThread(phase: FreshThread, event: FreshThreadEvent):
         Told: () => stay(phase),
       }),
     StreamReplaced: () => stay(FreshThread.Idle()),
+    Expired: () =>
+      FreshThread.match<FreshThreadStep>(phase, {
+        Idle: () => stay(phase),
+        Armed: () => stay(FreshThread.Idle()),
+        Starting: () => stay(phase),
+        Told: () => stay(phase),
+      }),
     Succeeded: () => told("fresh thread started; repository files are untouched"),
     Refused: ({ wording }) => told(`not started: ${wording}`),
     Failed: () => told("request failed"),

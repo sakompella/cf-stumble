@@ -18,6 +18,7 @@ export type HarnessServer = Readonly<{
   requests: () => readonly RecordedRequest[];
   waitForBarrier: (timeoutMs?: number) => Promise<void>;
   release: () => void;
+  activateGeneration: (label: number) => void;
   openEventStreams: (projectId: string) => number;
   entries: Conversations["entries"];
   close: () => Promise<void>;
@@ -118,6 +119,11 @@ function controls(state: ScenarioState, url: string, close: () => Promise<void>)
       ),
     release: () => {
       state.conversations.barrier.release();
+    },
+    activateGeneration: (label) => {
+      state.generationLabel = label;
+
+      for (const stream of state.eventStreams.keys()) stream.end();
     },
     openEventStreams: (projectId) => state.openEventStreams.get(projectId) ?? 0,
     entries: (projectId) => state.conversations.entries(projectId),

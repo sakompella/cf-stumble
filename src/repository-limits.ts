@@ -1,0 +1,5 @@
+export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
+
+export const MAX_REPOSITORY_BLOB_BYTES = 150_000_000;
+
+export const MAX_REPOSITORY_SIZE_KB = 5_000_000;

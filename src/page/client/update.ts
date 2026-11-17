@@ -23,13 +23,14 @@ import {
   projectHandlers,
 } from "./update-projects.js";
 import type { UpdateReturn } from "./update-shared.js";
-import { composerHandlers, INITIAL_CONVERSATION, streamHandlers } from "./update-conversation.js";
+import { conversationHandlers, INITIAL_CONVERSATION } from "./update-conversation.js";
 
 const EMPTY_PANEL = { labelInput: "", request: ControlRequest.Idle() };
 
 export const init: Runtime.ElementInit<Model, Message> = () => ({
   model: {
     pageError: "",
+    isOnline: true,
     isSidebarExpanded: true,
     projectListStatus: "reading",
     projects: [],
@@ -39,6 +40,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     disconnect: Disconnect.Idle(),
     chatgpt: ChatGPT.Unknown(),
     chatgptResult: "",
+    isChatGPTDisconnectAsked: false,
     maybeBackend: Option.none(),
     backendResult: "",
     maybeProjectId: Option.none(),
@@ -48,6 +50,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     drafts: {},
     prompt: "",
     runBudget: DEFAULT_RUN_BUDGET_MINUTES,
+    queuedAtCancel: 0,
     maybeReading: Option.none(),
     statusRead: StatusRead.Running(),
     candidateCommitInput: "",
@@ -67,8 +70,7 @@ export function update(model: Model, message: Message): UpdateReturn {
     ...gitHubHandlers(model),
     ...chatGPTHandlers(model),
     ...backendHandlers(model),
-    ...composerHandlers(model),
-    ...streamHandlers(model),
+    ...conversationHandlers(model),
     ...statusHandlers(model),
     ...submitHandlers(model),
     ...controlHandlers(model),

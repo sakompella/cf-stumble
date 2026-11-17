@@ -14,6 +14,7 @@ import {
 
 export const Message = defineMessageUnion({
   ClickedSidebarToggle: {},
+  ChangedConnectivity: { isOnline: Schema.Boolean },
   ClickedProject: { projectId: Schema.String },
   UpdatedConnectRepositoryInput: { value: Schema.String },
   ClickedConnect: {},
@@ -23,6 +24,8 @@ export const Message = defineMessageUnion({
   UpdatedChatGPTCallbackInput: { value: Schema.String },
   ClickedChatGPTFinish: {},
   ClickedChatGPTDisconnect: {},
+  ConfirmedChatGPTDisconnect: {},
+  ClickedKeepChatGPT: {},
   ClickedBackend: { backend: BackendSetting },
   ClickedDisconnect: {},
   ConfirmedDisconnect: {},
@@ -34,6 +37,7 @@ export const Message = defineMessageUnion({
   PressedSendShortcut: {},
   ClickedCancelTurn: {},
   ClickedFreshThread: {},
+  ExpiredFreshThread: {},
   ClickedRetrySend: { requestId: Schema.String },
 
   ClickedRefreshStatus: {},

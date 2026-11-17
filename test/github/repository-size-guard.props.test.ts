@@ -5,7 +5,7 @@ import {
   MAX_REPOSITORY_BLOB_BYTES,
   MAX_REPOSITORY_BLOB_COUNT,
   MAX_REPOSITORY_SIZE_KB,
-} from "../../src/github/repository-size-guard.js";
+} from "../../src/repository-limits.js";
 import { CLONE_SIZE_FAILURE_EXIT_CODE } from "../../src/workspace/clone-script.js";
 import {
   answered,

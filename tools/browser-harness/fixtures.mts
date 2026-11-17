@@ -9,7 +9,8 @@ export type HarnessScenario =
   | "model-error"
   | "cut-off"
   | "github-disconnected"
-  | "github-awaiting-authorization";
+  | "github-awaiting-authorization"
+  | "chatgpt-connected";
 
 export const HARNESS_CREDENTIALS = { username: "aditya", password: "harness-password" } as const;
 
@@ -46,6 +47,10 @@ export const BASELINE_PROJECTS: readonly ProjectEntry[] = [
   },
   { kind: "harness", id: HARNESS_SELF_PROJECT_ID, displayName: "harness" },
 ];
+
+export const MISTYPED_REPOSITORY_URL = "https://github.com/octocat/Hello-Wrld";
+
+export const TOO_LARGE_REPOSITORY_URL = "https://github.com/torvalds/linux";
 
 export const NEW_PROJECT: ProjectEntry = {
   kind: "repository",
@@ -103,15 +108,27 @@ export function refreshPayload(
   return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }
 
-export const STATUS_PAYLOAD: Encoded<"GET /api/status"> = {
-  activeGeneration: {
-    generation: { label: 1, harnessCommit: "abc123", status: "ready" },
-    epoch: 3,
-  },
-  mainAhead: 2,
-};
+export const INITIAL_GENERATION_LABEL = 1;
 
-export const CHATGPT_PAYLOAD: Encoded<"GET /api/chatgpt/connection"> = {
-  ok: true,
-  chatgpt: { connection: { state: "disconnected" }, login: null, model: "gpt-6.1-sol" },
-};
+export function statusPayload(label: number): Encoded<"GET /api/status"> {
+  return {
+    activeGeneration: {
+      generation: { label, harnessCommit: `commit-${label}`, status: "ready" },
+      epoch: 2 + label,
+    },
+    mainAhead: 2,
+  };
+}
+
+export function chatgptPayload(isConnected: boolean): Encoded<"GET /api/chatgpt/connection"> {
+  return {
+    ok: true,
+    chatgpt: {
+      connection: isConnected
+        ? { state: "connected", expiresAt: 1_760_000_900_000 }
+        : { state: "disconnected" },
+      login: null,
+      model: "gpt-6.1-sol",
+    },
+  };
+}

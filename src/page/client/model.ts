@@ -113,6 +113,7 @@ export type ControlPanel = typeof ControlPanel.Type;
 
 export const Model = Schema.Struct({
   pageError: Schema.String,
+  isOnline: Schema.Boolean,
   isSidebarExpanded: Schema.Boolean,
 
   projectListStatus: Schema.String,
@@ -123,6 +124,7 @@ export const Model = Schema.Struct({
   disconnect: Disconnect,
   chatgpt: ChatGPT,
   chatgptResult: Schema.String,
+  isChatGPTDisconnectAsked: Schema.Boolean,
   maybeBackend: Schema.Option(BackendSetting),
   backendResult: Schema.String,
 
@@ -137,6 +139,7 @@ export const Model = Schema.Struct({
   prompt: Schema.String,
   runBudget: RunBudget,
   runNote: Schema.String,
+  queuedAtCancel: Schema.Number,
   freshThread: FreshThread,
 
   maybeReading: Schema.Option(GenerationReading),

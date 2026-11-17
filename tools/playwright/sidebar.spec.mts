@@ -70,7 +70,7 @@ test.describe("a run that is still going", () => {
     await owner.locator(`#${ID.disconnectConfirmButton}`).click();
 
     await expect(owner.locator(`#${ID.disconnectStatus}`)).toHaveText(
-      "not disconnected: a run is active in this project; cancel it first",
+      "not disconnected: A run is active. Cancel it or wait until it ends.",
     );
     await expect(projectButton(owner, "octocat-hello-world")).toBeVisible();
     server.release();

@@ -12,7 +12,7 @@ import { DisconnectChatGPT, FinishChatGPTLogin, StartChatGPTLogin } from "./comm
 import type { GitHubReport, Model, Project } from "./model.js";
 import { keepingAddress, pendingLogin, withAddress } from "./chatgpt.js";
 import { StreamPhase } from "./stream-phase.js";
-import { withOpenedStream } from "./update-conversation.js";
+import { withOpenedStream } from "./update-fresh-thread.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 export { backendHandlers, FetchBackend } from "./update-backend.js";
@@ -186,12 +186,12 @@ export function gitHubHandlers(
     ClickedRefreshGitHub: () => ({ model: askingGitHub(model), commands: [RefreshGitHub()] }),
     SucceededGitHub: ({ github }) => ({ model: withGitHub(model, github) }),
     RejectedGitHub: ({ wording }) => ({
-      model: { ...model, github: { ...model.github, state: wording, checked: "" } },
+      model: { ...model, github: { ...model.github, detail: wording, checked: "" } },
     }),
     FailedGitHub: ({ detail }) => ({
       model: {
         ...withError(model, "the GitHub request", detail),
-        github: { ...model.github, state: "request failed", checked: "" },
+        github: { ...model.github, state: "request failed", detail: "", checked: "" },
       },
     }),
   };
@@ -226,6 +226,8 @@ export function chatGPTHandlers(
   | "UpdatedChatGPTCallbackInput"
   | "ClickedChatGPTFinish"
   | "ClickedChatGPTDisconnect"
+  | "ConfirmedChatGPTDisconnect"
+  | "ClickedKeepChatGPT"
   | "SucceededChatGPT"
   | "RejectedChatGPT"
   | "FailedChatGPT"
@@ -236,9 +238,14 @@ export function chatGPTHandlers(
       model: { ...model, chatgpt: withAddress(model.chatgpt, value) },
     }),
     ClickedChatGPTFinish: () => finish(model),
-    ClickedChatGPTDisconnect: () => ({ model: asking(model), commands: [DisconnectChatGPT()] }),
+    ClickedChatGPTDisconnect: () => ({ model: { ...model, isChatGPTDisconnectAsked: true } }),
+    ClickedKeepChatGPT: () => ({ model: { ...model, isChatGPTDisconnectAsked: false } }),
+    ConfirmedChatGPTDisconnect: () => ({
+      model: { ...asking(model), isChatGPTDisconnectAsked: false },
+      commands: [DisconnectChatGPT()],
+    }),
     SucceededChatGPT: ({ chatgpt }) => ({
-      model: { ...model, chatgpt, chatgptResult: "" },
+      model: { ...model, chatgpt, chatgptResult: "", isChatGPTDisconnectAsked: false },
     }),
     RejectedChatGPT: ({ wording, maybeChatGPT }) => {
       const chatgpt = Option.match(maybeChatGPT, {

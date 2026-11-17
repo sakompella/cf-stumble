@@ -21,6 +21,8 @@ export const OWNER_PAGE_STYLES = `
     width: 18rem;
   }
   #owner-layout.sidebar-collapsed #project-sidebar { display: none; }
+  .danger-zone { border-top: 1px dashed rgba(200, 60, 60, 0.6); margin-top: 1.2rem; padding-top: 0.4rem; }
+  button.danger { border-color: rgba(200, 60, 60, 0.9); color: rgba(200, 60, 60, 1); }
   .sidebar-panel { border-top: 1px solid rgba(128, 128, 128, 0.3); margin-top: 0.6rem; }
   #project-list { list-style: none; margin: 0.3rem 0; padding: 0; }
   #project-list li { margin: 0.2rem 0; }
@@ -66,7 +68,11 @@ export const OWNER_PAGE_STYLES = `
   textarea { box-sizing: border-box; width: 100%; }
   button { cursor: pointer; padding: 0.3rem 0.7rem; }
   button:disabled { cursor: default; opacity: 0.55; }
-  button[aria-pressed="true"] { font-weight: 600; }
+  button[aria-pressed="true"] {
+    background: rgba(90, 140, 220, 0.3);
+    border-color: rgba(90, 140, 220, 0.95);
+    font-weight: 600;
+  }
   :focus-visible { outline: 2px solid rgba(90, 140, 220, 0.9); outline-offset: 2px; }
   .messages {
     list-style: none;
@@ -129,7 +135,20 @@ export const OWNER_PAGE_STYLES = `
     padding: 0.4rem 0.6rem;
   }
   @media (max-width: 52rem) {
-    #owner-layout { display: block; }
+    button, input, textarea, summary { min-height: 44px; }
+    button { min-width: 44px; }
+    textarea { min-height: 4.5rem; }
+    summary { align-items: center; display: flex; }
+    .messages { max-height: 45vh; }
+    .composer {
+      background: Canvas;
+      border-top: 1px solid rgba(128, 128, 128, 0.4);
+      bottom: 0;
+      padding-bottom: 0.4rem;
+      position: sticky;
+    }
+    #owner-layout { align-items: stretch; flex-direction: column; }
+    #conversation { order: -1; }
     #project-sidebar { margin-bottom: 0.75rem; width: auto; }
     .field-label { min-width: 7rem; }
   }

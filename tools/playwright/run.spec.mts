@@ -38,9 +38,7 @@ test.describe("a run that is still going", () => {
     await expect(runActive(owner)).toHaveText("yes");
     await expect(transcriptTexts(owner, "user").last()).toHaveText(PROMPT);
     await expect(transcriptTexts(owner, "assistant").last()).toHaveText(OPENING_TEXT);
-    await expect(toolCalls(owner).last().locator("summary")).toHaveText(
-      `bash {"command":"${TOOL_COMMAND}"}`,
-    );
+    await expect(toolCalls(owner).last().locator("summary")).toHaveText(`bash $ ${TOOL_COMMAND}`);
     await expect(toolCalls(owner).last().locator(".tool-output")).toHaveText(TOOL_OUTPUT[0]);
     await expect(owner.locator(`#${ID.sendTurnButton}`)).toBeEnabled();
     await expect(owner.locator(`#${ID.cancelTurnButton}`)).toBeEnabled();
@@ -133,7 +131,7 @@ test.describe("a follow-up queued before a cancel", () => {
     await expect(turnState(owner)).toHaveText("running · 1 queued");
     await owner.locator(`#${ID.cancelTurnButton}`).click();
 
-    await expect(turnState(owner)).toHaveText("stopped: aborted");
+    await expect(turnState(owner)).toHaveText("stopped: aborted · 1 queued message withdrawn");
     await expect(transcriptTexts(owner, "user")).toHaveText([/^Read the README/u, PROMPT]);
     server.release();
     await owner.reload();

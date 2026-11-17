@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { afterEach, expect, test, vi } from "vitest";
-import { subscriptions } from "../../../src/page/client/events-stream.js";
+import { subscriptions } from "../../../src/page/client/subscriptions.js";
 import { Message } from "../../../src/page/client/message.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { eventually } from "../../eventually.js";
@@ -279,7 +279,12 @@ test("a refused stream says why, and a line it cannot read is reported", async (
   );
 
   expect(refused).toEqual(
-    Option.some(Message.RefusedEvents({ streamId: 1, wording: "rejected: no-active-generation" })),
+    Option.some(
+      Message.RefusedEvents({
+        streamId: 1,
+        wording: "No generation is active. Activate one in the generation controls.",
+      }),
+    ),
   );
 
   vi.stubGlobal("fetch", () => ndjson('{"type":"message_end","entry":3}\nnot json\n'));

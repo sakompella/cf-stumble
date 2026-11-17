@@ -1,14 +1,17 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
+  MISTYPED_REPOSITORY_URL,
   NEW_PROJECT,
+  TOO_LARGE_REPOSITORY_URL,
   connectPayload,
   projectsPayload,
   refreshPayload,
-  CHATGPT_PAYLOAD,
-  STATUS_PAYLOAD,
+  chatgptPayload,
+  statusPayload,
 } from "./fixtures.mjs";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import type { ANSWERS, AnsweredEndpoint } from "../../src/api/answers.js";
+import { PROBLEM_STATUS, type ProblemCode } from "../../src/api/problems.js";
 import { matchEndpoint } from "../../src/api/endpoints.js";
 import type { ScenarioState } from "./server-state.mjs";
 
@@ -38,7 +41,10 @@ function readString(body: JsonValue, key: string): string | undefined {
   return value !== undefined && isJsonString(value) ? value : undefined;
 }
 
-type JsonState = Pick<ScenarioState, "scenario" | "projects">;
+type JsonState = Pick<
+  ScenarioState,
+  "scenario" | "projects" | "isChatGPTConnected" | "generationLabel"
+>;
 
 type Answer<E extends AnsweredEndpoint> = Readonly<{
   status: number;
@@ -50,6 +56,11 @@ const INVALID_REQUEST: RouteAnswer = {
   payload: { ok: false, error: { code: "invalid-connect-request" } },
 };
 
+const REFUSED_REPOSITORIES: ReadonlyMap<string, ProblemCode> = new Map([
+  [MISTYPED_REPOSITORY_URL, "repository-not-accessible"],
+  [TOO_LARGE_REPOSITORY_URL, "repository-too-large"],
+]);
+
 function connect(
   state: JsonState,
   body: JsonValue,
@@ -58,6 +69,12 @@ function connect(
 
   if (repositoryUrl === undefined || repositoryUrl === "") {
     return INVALID_REQUEST;
+  }
+
+  const refused = REFUSED_REPOSITORIES.get(repositoryUrl);
+
+  if (refused !== undefined) {
+    return { status: PROBLEM_STATUS[refused], payload: { ok: false, problem: { code: refused } } };
   }
 
   const already = state.projects.some((project) => project.id === NEW_PROJECT.id);
@@ -96,6 +113,8 @@ type ServedRoutes = {
       | "GET /api/chatgpt/connection"
       | "GET /api/workspace/backend"
       | "POST /api/projects/connect"
+      | "POST /api/chatgpt/disconnect"
+      | "POST /api/github/authorization/complete"
       | "GET /api/github/connection"
       | "POST /api/github/connection/refresh"
   ]: (state: JsonState, body: JsonValue) => Answer<E> | RouteAnswer;
@@ -103,8 +122,23 @@ type ServedRoutes = {
 
 export const JSON_ROUTES = {
   "GET /api/projects": (state) => ({ status: 200, payload: projectsPayload(state.projects) }),
-  "GET /api/status": () => ({ status: 200, payload: STATUS_PAYLOAD }),
-  "GET /api/chatgpt/connection": () => ({ status: 200, payload: CHATGPT_PAYLOAD }),
+  "GET /api/status": (state) => ({
+    status: 200,
+    payload: statusPayload(state.generationLabel),
+  }),
+  "GET /api/chatgpt/connection": (state) => ({
+    status: 200,
+    payload: chatgptPayload(state.isChatGPTConnected),
+  }),
+  "POST /api/github/authorization/complete": () => ({
+    status: PROBLEM_STATUS["not-configured"],
+    payload: { ok: false, problem: { code: "not-configured" } },
+  }),
+  "POST /api/chatgpt/disconnect": (state) => {
+    state.isChatGPTConnected = false;
+
+    return { status: 200, payload: chatgptPayload(false) };
+  },
   "GET /api/workspace/backend": () => ({ status: 200, payload: { ok: true, backend: "provider" } }),
   "POST /api/projects/connect": connect,
   "GET /api/github/connection": (state) => ({

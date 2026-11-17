@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { expect, test, vi } from "vitest";
-import { subscriptions } from "../../../src/page/client/events-stream.js";
+import { subscriptions } from "../../../src/page/client/subscriptions.js";
 import { Message } from "../../../src/page/client/message.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { openedTranscript } from "./transcript-resource.js";

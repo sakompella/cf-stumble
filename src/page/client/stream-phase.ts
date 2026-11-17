@@ -13,6 +13,14 @@ export const StreamPhase = defineTaggedUnion({
 
 export type StreamPhase = typeof StreamPhase.Type;
 
+export function wasInterrupted(phase: StreamPhase): boolean {
+  return StreamPhase.matchOrElse(
+    phase,
+    { Reconnecting: () => true, Refused: () => true, Unreadable: () => true },
+    () => false,
+  );
+}
+
 export function streamWording(phase: StreamPhase): string {
   return StreamPhase.match(phase, {
     Idle: () => "",

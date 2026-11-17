@@ -60,7 +60,7 @@ test("an answer that holds only tool calls adds no empty entry, and a running ca
     { _tag: "Text", role: "user" },
     {
       _tag: "Tool",
-      summary: 'read {"path":"a"}',
+      summary: "read path: a",
       maybeOutput: Option.some("so far"),
     },
   ]);

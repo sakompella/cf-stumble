@@ -6,7 +6,7 @@ const ToolCallBlock = Schema.Struct({
   type: Schema.Literal("toolCall"),
   id: Schema.String,
   name: Schema.String,
-  arguments: Schema.Record(Schema.String, Schema.Unknown),
+  arguments: Schema.Record(Schema.String, Schema.Json),
 });
 
 const OtherBlock = Schema.Struct({ type: Schema.String });
