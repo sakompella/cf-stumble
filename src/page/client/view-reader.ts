@@ -47,15 +47,21 @@ function applied(
   }
 }
 
+export const TranscriptKey = Schema.Struct({ streamId: Schema.Number, projectId: Schema.String });
+
+export type TranscriptKey = typeof TranscriptKey.Type;
+
 export type HeldTranscript = {
+  readonly key: TranscriptKey;
   readonly load: EntryLoader;
   transcript: ConversationTranscript;
   conversationId: number | undefined;
   latest: TranscriptView | undefined;
 };
 
-export function heldTranscript(load: EntryLoader): HeldTranscript {
+export function heldTranscript(key: TranscriptKey, load: EntryLoader): HeldTranscript {
   return {
+    key,
     load,
     transcript: new ConversationTranscript(load),
     conversationId: undefined,
@@ -91,5 +97,7 @@ export function viewReader(held: HeldTranscript): ViewReader {
 }
 
 export function readFirstView(line: string): Option.Option<Conversation> {
-  return viewReader(heldTranscript(() => Promise.reject(new Error("no history"))))(line);
+  return viewReader(
+    heldTranscript({ streamId: 0, projectId: "" }, () => Promise.reject(new Error("no history"))),
+  )(line);
 }

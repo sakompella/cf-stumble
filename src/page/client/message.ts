@@ -117,7 +117,8 @@ export const Message = defineMessageUnion({
   DisconnectedEvents: { streamId: Schema.Number, detail: Schema.String },
 
   CompletedFollowTranscript: {},
-  SettledTranscript: {},
+  AcquiredTranscript: { streamId: Schema.Number, projectId: Schema.String },
+  ReleasedTranscript: {},
 });
 
 export type Message = typeof Message.Type;

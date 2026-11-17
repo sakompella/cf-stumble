@@ -10,7 +10,11 @@ import { transcriptOf } from "../../../src/page/client/transcript.js";
 type Revision = JsonValue;
 
 function reader() {
-  return viewReader(heldTranscript(() => Promise.reject(new Error("no history"))));
+  return viewReader(
+    heldTranscript({ streamId: 0, projectId: "repo" }, () =>
+      Promise.reject(new Error("no history")),
+    ),
+  );
 }
 
 function userEntry(id: number) {

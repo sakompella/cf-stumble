@@ -44,6 +44,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     maybeBackend: Option.none(),
     backendResult: "",
     maybeProjectId: Option.none(),
+    maybeHeldTranscript: Option.none(),
     conversationProject: "No project selected",
     eventsStreamId: 0,
     ...INITIAL_CONVERSATION,
@@ -76,6 +77,5 @@ export function update(model: Model, message: Message): UpdateReturn {
     ...controlHandlers(model),
     ChoseRunBudget: ({ minutes }) => ({ model: { ...model, runBudget: minutes } }),
     CompletedFollowTranscript: () => ({ model }),
-    SettledTranscript: () => ({ model }),
   });
 }

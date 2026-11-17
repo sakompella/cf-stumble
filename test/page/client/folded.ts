@@ -3,7 +3,11 @@ import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/
 import { heldTranscript, viewReader } from "../../../src/page/client/view-reader.js";
 
 export function folded(lines: readonly string[]): readonly Conversation[] {
-  const read = viewReader(heldTranscript(() => Promise.reject(new Error("no history"))));
+  const read = viewReader(
+    heldTranscript({ streamId: 0, projectId: "repo" }, () =>
+      Promise.reject(new Error("no history")),
+    ),
+  );
 
   return lines.map((line) => {
     const conversation = read(line);

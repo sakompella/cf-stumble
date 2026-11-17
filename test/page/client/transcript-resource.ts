@@ -9,7 +9,7 @@ import {
 import { heldTranscript } from "../../../src/page/client/view-reader.js";
 
 export function openedTranscript(projectId = "repo") {
-  const held = heldTranscript(loaderFor(projectId));
+  const held = heldTranscript({ streamId: 1, projectId }, loaderFor(projectId));
 
   const ref = Ref.makeUnsafe(Option.some(held));
 

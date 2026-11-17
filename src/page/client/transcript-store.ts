@@ -7,13 +7,28 @@ import { transportDetail } from "./api.js";
 import { loaderFor } from "./entries-loader.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
-import { heldTranscript, type HeldTranscript } from "./view-reader.js";
+import { heldTranscript, TranscriptKey, type HeldTranscript } from "./view-reader.js";
 
 type LoadedView = NonNullable<HeldTranscript["latest"]>;
 
-export const MaybeTranscriptKey = Schema.Option(
-  Schema.Struct({ streamId: Schema.Number, projectId: Schema.String }),
-);
+export const MaybeTranscriptKey = Schema.Option(TranscriptKey);
+
+function requestedTranscript(model: Model): Option.Option<TranscriptKey> {
+  return Option.map(model.maybeProjectId, (projectId) => ({
+    streamId: model.eventsStreamId,
+    projectId,
+  }));
+}
+
+export function streamableTranscript(model: Model): Option.Option<TranscriptKey> {
+  return Option.filter(model.maybeHeldTranscript, (held) =>
+    Option.match(requestedTranscript(model), {
+      onNone: () => false,
+      onSome: (requested) =>
+        held.streamId === requested.streamId && held.projectId === requested.projectId,
+    }),
+  );
+}
 
 export const TranscriptResource = ManagedResource.tag<HeldTranscript>()("Transcript");
 
@@ -22,16 +37,12 @@ export type TranscriptService = ManagedResource.ServiceOf<typeof TranscriptResou
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
   transcript: entry(MaybeTranscriptKey, {
     resource: TranscriptResource,
-    modelToMaybeRequirements: (model) =>
-      Option.map(model.maybeProjectId, (projectId) => ({
-        streamId: model.eventsStreamId,
-        projectId,
-      })),
-    acquire: ({ projectId }) => Effect.sync(() => heldTranscript(loaderFor(projectId))),
+    modelToMaybeRequirements: requestedTranscript,
+    acquire: (key) => Effect.sync(() => heldTranscript(key, loaderFor(key.projectId))),
     release: () => Effect.void,
-    onAcquired: () => Message.SettledTranscript(),
-    onReleased: () => Message.SettledTranscript(),
-    onAcquireError: () => Message.SettledTranscript(),
+    onAcquired: ({ key }) => Message.AcquiredTranscript(key),
+    onReleased: () => Message.ReleasedTranscript(),
+    onAcquireError: () => Message.ReleasedTranscript(),
   }),
 }));
 

@@ -11,7 +11,12 @@ import {
 import { heldTranscript, viewReader } from "../../../src/page/client/view-reader.js";
 
 export function openReader() {
-  const read = viewReader(heldTranscript(() => Promise.reject(new Error("no history"))));
+  const read = viewReader(
+    heldTranscript({ streamId: 0, projectId: "repo" }, () =>
+      Promise.reject(new Error("no history")),
+    ),
+  );
+
   let latest = Option.none<Conversation>();
 
   return {

@@ -93,6 +93,8 @@ export function streamHandlers(
   | "ClickedFillGap"
   | "LoadedTranscript"
   | "FailedLoadTranscript"
+  | "AcquiredTranscript"
+  | "ReleasedTranscript"
   | "ReceivedConversation"
   | "ReceivedUnreadableEvent"
   | "RefusedEvents"
