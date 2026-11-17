@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Option from "effect/Option";
-import { logEvent, logRedactedCause } from "../diagnostics.js";
+import { isRetryableFailure, logEvent, logRedactedCause } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import * as Schema from "effect/Schema";
 import {
@@ -106,6 +106,12 @@ const prepareAfterDeploy = Effect.fnUntraced(function* (
   prepare: (stub: GenerationSubmissionSupervisor) => Effect.Effect<Prepared>,
 ) {
   const stub = deployment.stub();
+
+  if (Result.isFailure(failed) && isRetryableFailure(failed.failure.cause)) {
+    logEvent("warn", "api.preparation-after-deploy", { from: deployment.version, to: null });
+
+    return yield* prepare(stub);
+  }
 
   const version = yield* callSupervisor(() => stub.scriptVersion()).pipe(Effect.option);
 

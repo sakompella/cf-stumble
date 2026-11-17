@@ -5,6 +5,7 @@ import type { HarnessBuildStepName } from "../../../src/harness-build.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../../src/workspace-command-timeout.js";
 import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
+import { CODE_UPDATE_RESET } from "../../platform-reset.js";
 import { parsedArtifact } from "../../facet/fixture.js";
 import {
   BUILD_COMMIT,
@@ -64,8 +65,6 @@ test("a build survives a Workspace Host restart that kills the stub of an earlie
   expect(Result.isSuccess(result) ? "built" : result.failure.code).toBe("built");
 });
 
-const CODE_UPDATE_RESET = "Durable Object reset because its code was updated.";
-
 function resetAt(step: HarnessBuildStepName, times: number): FakeBuildHost {
   const host = new FakeBuildHost();
   const build = host.build.bind(host);
@@ -77,7 +76,7 @@ function resetAt(step: HarnessBuildStepName, times: number): FakeBuildHost {
     resets += 1;
     host.requests.push(request.step);
 
-    return Promise.reject(new Error(CODE_UPDATE_RESET));
+    return Promise.reject(CODE_UPDATE_RESET);
   };
 
   return host;
