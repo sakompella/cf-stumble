@@ -16,7 +16,7 @@ type ConnectProblemCode =
   | "provisioning-failed"
   | "workspace-busy";
 
-type DisconnectProblemCode =
+export type DisconnectProblemCode =
   | "invalid-project-id"
   | "unknown-project-id"
   | "run-active"

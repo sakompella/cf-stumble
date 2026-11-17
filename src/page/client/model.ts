@@ -28,6 +28,15 @@ const GitHubConnection = Schema.Struct({
 
 type GitHubConnection = typeof GitHubConnection.Type;
 
+export const Disconnect = defineTaggedUnion({
+  Idle: {},
+  Confirming: { projectId: Schema.String },
+  Disconnecting: { projectId: Schema.String },
+  Told: { wording: Schema.String },
+});
+
+export type Disconnect = typeof Disconnect.Type;
+
 export const GitHubReport = defineTaggedUnion({
   Unknown: {},
   Known: { connection: GitHubConnection },
@@ -111,6 +120,7 @@ export const Model = Schema.Struct({
   github: GitHubConnection,
   connectRepositoryInput: Schema.String,
   connectStatus: Schema.String,
+  disconnect: Disconnect,
   chatgpt: ChatGPT,
   chatgptResult: Schema.String,
   maybeBackend: Schema.Option(BackendSetting),

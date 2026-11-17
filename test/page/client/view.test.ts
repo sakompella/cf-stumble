@@ -37,6 +37,15 @@ function shownWithDiagnostics(): Model {
   ).model;
 }
 
+const REPOSITORY = { id: "repo", displayName: "hello-world", isHarness: false, location: "o/r" };
+
+function withRepository(messages: readonly Message[]): Model {
+  return messages.reduce(
+    (model, message) => update(model, message).model,
+    update(init().model, Message.SucceededFetchProjects({ projects: [REPOSITORY] })).model,
+  );
+}
+
 function idsRendered(model: Model): readonly string[] {
   return renderedIds(htmlOf(model));
 }
@@ -60,6 +69,8 @@ test("the page renders every stable element id, and none twice", () => {
         },
       }),
     ).model,
+    withRepository([]),
+    withRepository([Message.ClickedDisconnect()]),
   ].map((model) => idsRendered(model));
 
   for (const id of Object.values(ID)) {

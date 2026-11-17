@@ -5,21 +5,27 @@ import { startHarnessServer, type HarnessServer } from "../browser-harness/serve
 
 type OwnerPageFixtures = {
   scenario: HarnessScenario;
+  refusedStatuses: readonly number[];
   server: HarnessServer;
   owner: Page;
 };
 
 export const test = base.extend<OwnerPageFixtures>({
   scenario: ["ready", { option: true }],
+  refusedStatuses: [[], { option: true }],
   server: async ({ scenario }, use) => {
     const server = await startHarnessServer(scenario);
     await use(server);
     await server.close();
   },
-  owner: async ({ page, server }, use) => {
+  owner: async ({ page, server, refusedStatuses }, use) => {
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
-      if (message.type() === "error") {
+      const isRefusal = refusedStatuses.some((status) =>
+        message.text().includes(`the server responded with a status of ${status} `),
+      );
+
+      if (message.type() === "error" && !isRefusal) {
         consoleErrors.push(message.text());
       }
     });
