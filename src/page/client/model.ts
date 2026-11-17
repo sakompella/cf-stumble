@@ -1,15 +1,15 @@
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import { BackendSetting } from "../../backend-setting.js";
-import { Conversation } from "./conversation.js";
+import { Conversation, RunBudget } from "./conversation.js";
 import { ChatGPT } from "./chatgpt.js";
 import { FreshThread } from "./fresh-thread.js";
+import { GitHub } from "./github.js";
 import { StreamPhase } from "./stream-phase.js";
 import { Outgoing } from "./outgoing.js";
 import { TranscriptKey } from "./view-reader.js";
-import { RUN_BUDGET_MINUTES } from "../../turn-budget.js";
 
-export { DEFAULT_RUN_BUDGET_MINUTES } from "../../turn-budget.js";
+export { DEFAULT_RUN_BUDGET_MINUTES, RunBudget } from "./conversation.js";
 
 export const Project = Schema.Struct({
   id: Schema.String,
@@ -20,15 +20,6 @@ export const Project = Schema.Struct({
 
 export type Project = typeof Project.Type;
 
-const GitHubConnection = Schema.Struct({
-  state: Schema.String,
-  detail: Schema.String,
-  verificationUri: Schema.String,
-  checked: Schema.String,
-});
-
-type GitHubConnection = typeof GitHubConnection.Type;
-
 export const Disconnect = defineTaggedUnion({
   Idle: {},
   Confirming: { projectId: Schema.String },
@@ -37,17 +28,6 @@ export const Disconnect = defineTaggedUnion({
 });
 
 export type Disconnect = typeof Disconnect.Type;
-
-export const GitHubReport = defineTaggedUnion({
-  Unknown: {},
-  Known: { connection: GitHubConnection },
-});
-
-export type GitHubReport = typeof GitHubReport.Type;
-
-export const RunBudget = Schema.Literals(RUN_BUDGET_MINUTES);
-
-export type RunBudget = typeof RunBudget.Type;
 
 export const ControlKind = Schema.Literals(["activate", "rollback"]);
 
@@ -119,7 +99,7 @@ export const Model = Schema.Struct({
 
   projectListStatus: Schema.String,
   projects: Schema.Array(Project),
-  github: GitHubConnection,
+  github: GitHub,
   connectRepositoryInput: Schema.String,
   connectStatus: Schema.String,
   disconnect: Disconnect,

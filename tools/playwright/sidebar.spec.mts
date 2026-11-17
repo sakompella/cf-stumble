@@ -154,6 +154,8 @@ test.describe("GitHub connection", () => {
     await expect(owner.locator(`#${ID.githubChecked}`)).toHaveText(CHECKED_WORDING);
     expect(requestsTo(server, "GET", "/api/github/connection")).toHaveLength(1);
     expect(requestsTo(server, "POST", "/api/github/connection/refresh")).toEqual([]);
+    await expect(owner.locator(`#${ID.authorizeButton}`)).toHaveCount(0);
+    await expect(owner.locator(`#${ID.completeAuthorizationButton}`)).toHaveCount(0);
 
     await owner.locator(`#${ID.refreshGitHubButton}`).click();
 
@@ -166,7 +168,12 @@ test.describe("GitHub connection", () => {
   test.describe("awaiting authorization", () => {
     test.use({ scenario: "github-awaiting-authorization" });
 
-    test("shows the code and a safe device link", async ({ owner }) => {
+    test("offers a new code, finishing and checking, with the code and a safe device link", async ({
+      owner,
+    }) => {
+      await expect(owner.locator(`#${ID.authorizeButton}`)).toBeVisible();
+      await expect(owner.locator(`#${ID.completeAuthorizationButton}`)).toBeVisible();
+      await expect(owner.locator(`#${ID.refreshGitHubButton}`)).toBeVisible();
       await expect(owner.locator(`#${ID.githubState}`)).toHaveText("awaiting-authorization");
       await expect(owner.locator(`#${ID.githubDetail}`)).toContainText("WDJB-MJHT");
 
@@ -181,13 +188,15 @@ test.describe("GitHub connection", () => {
   test.describe("disconnected", () => {
     test.use({ scenario: "github-disconnected" });
 
-    test("shows no detail and a link with no address", async ({ owner }) => {
+    test("shows no detail and no link, and offers to authorize but not to finish", async ({
+      owner,
+    }) => {
       await expect(owner.locator(`#${ID.githubState}`)).toHaveText("disconnected");
       await expect(owner.locator(`#${ID.githubDetail}`)).toHaveText("");
-      await expect(owner.locator(`#${ID.githubVerificationLink}`)).not.toHaveAttribute(
-        "href",
-        /./u,
-      );
+      await expect(owner.locator(`#${ID.githubVerificationLink}`)).toHaveCount(0);
+      await expect(owner.locator(`#${ID.authorizeButton}`)).toBeVisible();
+      await expect(owner.locator(`#${ID.completeAuthorizationButton}`)).toHaveCount(0);
+      await expect(owner.locator(`#${ID.refreshGitHubButton}`)).toBeVisible();
     });
   });
 });

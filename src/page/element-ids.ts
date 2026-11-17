@@ -10,6 +10,7 @@ export const OWNER_PAGE_IDS = {
   githubState: "github-connection-state",
   githubDetail: "github-connection-detail",
   githubChecked: "github-connection-checked",
+  githubResult: "github-connection-result",
   githubVerificationLink: "github-verification-link",
   authorizeButton: "github-authorize-button",
   completeAuthorizationButton: "github-authorize-complete-button",

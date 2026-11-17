@@ -2,6 +2,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
+import { GitHubConnection } from "../../../src/page/client/github.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
@@ -75,6 +76,18 @@ test("the page renders every stable element id, and none twice", () => {
     ).model,
     withRepository([]),
     withRepository([Message.ClickedDisconnect()]),
+    update(
+      init().model,
+      Message.SucceededGitHub({
+        reading: {
+          connection: GitHubConnection.AwaitingAuthorization({
+            verificationUri: "https://github.com/login/device",
+            userCode: "WDJB-MJHT",
+          }),
+          checked: "",
+        },
+      }),
+    ).model,
   ].map((model) => idsRendered(model));
 
   for (const id of Object.values(ID)) {

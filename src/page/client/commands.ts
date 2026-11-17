@@ -4,11 +4,11 @@ import * as Schema from "effect/Schema";
 import {
   diagnosticsText,
   generationReading,
-  gitHubReport,
   preparationText,
   projectsOf,
   submitRejection,
 } from "./api.js";
+import { gitHubReading } from "./github.js";
 import { Message } from "./message.js";
 import { AuthorizationEndpoint, ControlKind } from "./model.js";
 import { apiRequest, rejectedAs } from "./api-request.js";
@@ -88,7 +88,9 @@ function gitHubRequest(endpoint: GitHubEndpoint) {
     },
     {
       answered: (answer, now) =>
-        Message.SucceededGitHub({ github: gitHubReport(answer.github, answer.checkedAt, now) }),
+        Message.SucceededGitHub({
+          reading: gitHubReading(answer.github, answer.checkedAt, now),
+        }),
       ...rejectedAs((wording) => Message.RejectedGitHub({ wording })),
       failed: (detail) => Message.FailedGitHub({ detail }),
     },

@@ -5,56 +5,9 @@ import type { Model } from "./model.js";
 import { conversationView } from "./view-conversation.js";
 import { backendPanel } from "./view-backend.js";
 import { chatGPTPanel } from "./view-chatgpt.js";
+import { gitHubPanel } from "./view-github.js";
 import { connectPanels, projectListView } from "./view-repositories.js";
 import { generationBarView } from "./view-generation.js";
-import { valueRow } from "./view-parts.js";
-
-function button(id: string, message: Message, label: string, h: HtmlBuilder<Message>): Html {
-  return h.button([h.Id(id), h.Type("button"), h.OnClick(message)], [label]);
-}
-
-function gitHubPanel(model: Model, h: HtmlBuilder<Message>): Html {
-  const uri = model.github.verificationUri;
-
-  const link = h.a(
-    [
-      h.Id(ID.githubVerificationLink),
-      ...(uri === "" ? [] : [h.Href(uri)]),
-      h.Rel("noreferrer noopener"),
-      h.Target("_blank"),
-    ],
-    [uri],
-  );
-
-  return h.div(
-    [h.Class("sidebar-panel")],
-    [
-      h.h3([], ["GitHub"]),
-      valueRow("connection", ID.githubState, model.github.state, h),
-      valueRow("detail", ID.githubDetail, model.github.detail, h),
-      valueRow("last checked", ID.githubChecked, model.github.checked, h),
-      h.p([h.Class("row")], [link]),
-      h.div(
-        [h.Class("row")],
-        [
-          button(
-            ID.authorizeButton,
-            Message.ClickedAuthorize({ endpoint: "POST /api/github/authorization" }),
-            "Authorize GitHub",
-            h,
-          ),
-          button(
-            ID.completeAuthorizationButton,
-            Message.ClickedAuthorize({ endpoint: "POST /api/github/authorization/complete" }),
-            "I authorized it",
-            h,
-          ),
-          button(ID.refreshGitHubButton, Message.ClickedRefreshGitHub(), "Check again", h),
-        ],
-      ),
-    ],
-  );
-}
 
 function sidebarView(model: Model, h: HtmlBuilder<Message>): Html {
   const isExpanded = model.isSidebarExpanded;

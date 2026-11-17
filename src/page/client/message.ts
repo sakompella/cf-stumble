@@ -2,15 +2,9 @@ import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
 import { BackendSetting } from "../../backend-setting.js";
 import { ChatGPT } from "./chatgpt.js";
-import { Conversation } from "./conversation.js";
-import {
-  AuthorizationEndpoint,
-  ControlKind,
-  GenerationReading,
-  GitHubReport,
-  Project,
-  RunBudget,
-} from "./model.js";
+import { Conversation, RunBudget } from "./conversation.js";
+import { GitHubReading } from "./github.js";
+import { AuthorizationEndpoint, ControlKind, GenerationReading, Project } from "./model.js";
 
 export const Message = defineMessageUnion({
   ClickedSidebarToggle: {},
@@ -66,7 +60,7 @@ export const Message = defineMessageUnion({
   RejectedDisconnect: { wording: Schema.String },
   FailedDisconnect: { detail: Schema.String },
 
-  SucceededGitHub: { github: GitHubReport },
+  SucceededGitHub: { reading: GitHubReading },
   RejectedGitHub: { wording: Schema.String },
   FailedGitHub: { detail: Schema.String },
 

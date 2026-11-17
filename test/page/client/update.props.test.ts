@@ -7,7 +7,7 @@ import { chatGPTConnection } from "../../../src/page/client/chatgpt.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
-import { entryItem, running, viewing, type Conversation } from "./views.js";
+import { entryItem, gitHubWithoutRecord, running, viewing, type Conversation } from "./views.js";
 
 const PROJECT_IDS = ["repo", "harness"] as const;
 
@@ -76,7 +76,7 @@ function staleStream(model: Model, tc: hegel.TestCase): number {
 }
 
 const ANSWERS: readonly Step[] = [
-  () => Message.SucceededGitHub({ github: { _tag: "Unknown" } }),
+  gitHubWithoutRecord,
   () => Message.RejectedGitHub({ wording: "rejected: x" }),
   () => Message.FailedGitHub({ detail: "x" }),
   () => Message.SucceededChatGPT({ chatgpt: CONNECTED_CHATGPT }),
