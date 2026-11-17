@@ -1,15 +1,15 @@
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import { BackendSetting } from "../../backend-setting.js";
-import { Conversation, RunBudget } from "./conversation.js";
+import { Conversation, RunBudget } from "../../conversation-view/conversation.js";
 import { ChatGPT } from "./chatgpt.js";
 import { FreshThread } from "./fresh-thread.js";
 import { GitHub } from "./github.js";
 import { StreamPhase } from "./stream-phase.js";
 import { Outgoing } from "./outgoing.js";
-import { TranscriptKey } from "./view-reader.js";
+import { TranscriptKey } from "../../conversation-view/view-reader.js";
 
-export { DEFAULT_RUN_BUDGET_MINUTES, RunBudget } from "./conversation.js";
+export { DEFAULT_RUN_BUDGET_MINUTES, RunBudget } from "../../conversation-view/conversation.js";
 
 export const Project = Schema.Struct({
   id: Schema.String,

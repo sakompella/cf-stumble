@@ -96,8 +96,12 @@ export function viewReader(held: HeldTranscript): ViewReader {
   };
 }
 
-export function readFirstView(line: string): Option.Option<Conversation> {
+export function freshViewReader(): ViewReader {
   return viewReader(
     heldTranscript({ streamId: 0, projectId: "" }, () => Promise.reject(new Error("no history"))),
-  )(line);
+  );
+}
+
+export function readView(line: string): Option.Option<Conversation> {
+  return freshViewReader()(line);
 }

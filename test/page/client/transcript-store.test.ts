@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { expect, test, vi } from "vitest";
 import { loadIntoTranscript } from "../../../src/page/client/transcript-store.js";
-import { viewReader } from "../../../src/page/client/view-reader.js";
-import type { Conversation } from "../../../src/page/client/conversation.js";
+import { viewReader } from "../../../src/conversation-view/view-reader.js";
+import type { Conversation } from "../../../src/conversation-view/conversation.js";
 import { eventually } from "../../eventually.js";
 import { openedTranscript } from "./transcript-resource.js";
 

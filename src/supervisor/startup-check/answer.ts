@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { redactedExcerpt } from "../../diagnostics.js";
-import { AssistantMessage, isRunning, type Conversation } from "../../page/index.js";
+import { isRunning, type Conversation } from "../../conversation-view/conversation.js";
+import { AssistantMessage } from "../../conversation-view/pi-message.js";
 import { STARTUP_CHECK_REPLY, startupCheckStep } from "../../startup-check-script.js";
 
 const isAssistantMessage = Schema.is(AssistantMessage);

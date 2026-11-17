@@ -1,8 +1,11 @@
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { RUN_NOTICE_KIND } from "../../../src/run-notice.js";
-import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
-import type { PiMessage } from "../../../src/page/client/pi-message.js";
+import {
+  EMPTY_CONVERSATION,
+  type Conversation,
+} from "../../../src/conversation-view/conversation.js";
+import type { PiMessage } from "../../../src/conversation-view/pi-message.js";
 import { Outgoing } from "../../../src/page/client/outgoing.js";
 import { boundedLines, transcriptOf } from "../../../src/page/client/transcript.js";
 import { entryItem } from "./views.js";

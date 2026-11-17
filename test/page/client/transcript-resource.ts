@@ -6,7 +6,7 @@ import {
   TranscriptResource,
   type TranscriptService,
 } from "../../../src/page/client/transcript-store.js";
-import { heldTranscript } from "../../../src/page/client/view-reader.js";
+import { heldTranscript } from "../../../src/conversation-view/view-reader.js";
 
 export function openedTranscript(projectId = "repo") {
   const held = heldTranscript({ streamId: 1, projectId }, loaderFor(projectId));

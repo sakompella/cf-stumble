@@ -1,9 +1,9 @@
 import * as Option from "effect/Option";
 import type * as Schema from "effect/Schema";
 import { afterEach, expect, test } from "vitest";
-import type { Conversation } from "../../../src/page/client/conversation.js";
-import { phaseWording, type RunPhase } from "../../../src/page/client/run-phase.js";
-import { readFirstView } from "../../../src/page/client/view-reader.js";
+import type { Conversation } from "../../../src/conversation-view/conversation.js";
+import { phaseWording, type RunPhase } from "../../../src/conversation-view/run-phase.js";
+import { readView } from "../../../src/conversation-view/view-reader.js";
 import { eventuallyTruthy } from "../../eventually.js";
 import { folded } from "./folded.js";
 import { context, openPiRun, type PiRun } from "./pi-run.js";
@@ -103,7 +103,7 @@ const LIVE_DOCS: readonly (readonly [string, Schema.Json, RunPhase, string])[] =
 ];
 
 test.each(LIVE_DOCS)("%s reads as its phase", (_name, live, tag, wording) => {
-  const conversation: Option.Option<Conversation> = readFirstView(viewWith(live));
+  const conversation: Option.Option<Conversation> = readView(viewWith(live));
 
   expect(Option.map(conversation, (state) => state.run)).toEqual(Option.some(tag));
   expect(Option.map(conversation, (state) => phaseWording(state.run))).toEqual(

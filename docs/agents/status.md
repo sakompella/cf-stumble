@@ -84,7 +84,6 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 
 **Structure with no live failure**
 
-- **The Supervisor imports page code, and the CLI copies a label parser (#21).** `rc-review-21.md`.
 - **Generation history is shaped like the old Git repository (#22).** `rc-review-22.md`.
 
 Decisions waiting for the owner: delete the oxlint Effect-free override (#28).

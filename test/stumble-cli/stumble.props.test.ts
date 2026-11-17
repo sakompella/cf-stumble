@@ -240,6 +240,20 @@ test("a control command reaches the Supervisor only with a decimal label and epo
   });
 });
 
+test("a label or epoch written as 1e3 or 0x10 reaches no control", async () => {
+  for (const args of [
+    ["1e3", "--epoch", "2"],
+    ["2", "--epoch", "0x10"],
+  ]) {
+    const { reached, ports } = generationControl({ label: undefined, epoch: 0 });
+
+    const ran = await runStumble(["gen", "activate", ...args], ports);
+
+    expect(reached, args.join(" ")).toStrictEqual([]);
+    expect(ran.exitCode, args.join(" ")).toBe(2);
+  }
+});
+
 test("an activation that drops the replaced generation's commit warns and still activates", async () => {
   const { ports } = generationControl({ label: 1, epoch: 3 });
   const dropped = testHarnessCommit("b".repeat(40));

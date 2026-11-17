@@ -1,13 +1,16 @@
 import * as Option from "effect/Option";
 import { Scene } from "foldkit/test";
 import { chatGPTConnection } from "../../../src/page/client/chatgpt.js";
-import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
+import {
+  EMPTY_CONVERSATION,
+  type Conversation,
+} from "../../../src/conversation-view/conversation.js";
 import { GitHubConnection } from "../../../src/page/client/github.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
 import { init, update } from "../../../src/page/client/update.js";
-import type { AssistantMessage, PiMessage } from "../../../src/page/client/pi-message.js";
+import type { AssistantMessage, PiMessage } from "../../../src/conversation-view/pi-message.js";
 
 export function entryItem(
   id: number,

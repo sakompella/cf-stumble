@@ -2,8 +2,8 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
-import { isRunning, type Conversation } from "./conversation.js";
-import { blocksText } from "./pi-message.js";
+import { isRunning, type Conversation } from "../../conversation-view/conversation.js";
+import { blocksText } from "../../conversation-view/pi-message.js";
 
 const sent = {
   requestId: Schema.String,

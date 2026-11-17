@@ -1,20 +1,15 @@
 import type { GenerationControl } from "../generation-requests.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
+import { parseCount } from "../count.js";
 import { isHarnessCommit } from "../harness-commit.js";
 import { failureText, printed, refused, type CommandNode, type CommandOutput } from "./tree.js";
 
 export type GenerationPorts = Readonly<{ generations: GenerationControl }>;
 
-function count(word: string | undefined): number | undefined {
-  return word !== undefined && /^\d+$/u.test(word) && Number.isSafeInteger(Number(word))
-    ? Number(word)
-    : undefined;
-}
-
 function epochTarget(args: readonly string[]) {
   const [labelWord, flag, epochWord, ...extra] = args;
-  const label = count(labelWord);
-  const observedEpoch = count(epochWord);
+  const label = parseCount(labelWord);
+  const observedEpoch = parseCount(epochWord);
 
   return label === undefined ||
     observedEpoch === undefined ||

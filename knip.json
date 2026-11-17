@@ -15,6 +15,7 @@
   "include": ["files", "exports", "types", "nsExports", "nsTypes", "duplicates"],
   "ignoreIssues": {
     "tools/**": ["files", "exports", "types", "nsExports", "nsTypes", "duplicates"],
+    "src/conversation-view/view-reader.ts": ["exports"],
     "src/github/repository-size-guard.ts": ["exports"],
     "src/page/client/api.ts": ["exports"],
     "src/project-catalog.ts": ["exports"],

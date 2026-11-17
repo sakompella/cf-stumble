@@ -1,7 +1,11 @@
 import * as Option from "effect/Option";
 import { ChatGPT } from "./chatgpt.js";
 import { FetchChatGPT, FetchStatus } from "./commands.js";
-import { EMPTY_CONVERSATION, isRunning, type Conversation } from "./conversation.js";
+import {
+  EMPTY_CONVERSATION,
+  isRunning,
+  type Conversation,
+} from "../../conversation-view/conversation.js";
 import type { Model } from "./model.js";
 import { settledOutgoing, withoutQueued } from "./outgoing.js";
 import { StreamPhase, wasInterrupted } from "./stream-phase.js";

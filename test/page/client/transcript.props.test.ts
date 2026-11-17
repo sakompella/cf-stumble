@@ -1,8 +1,8 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { EMPTY_CONVERSATION } from "../../../src/page/client/conversation.js";
-import type { PiMessage } from "../../../src/page/client/pi-message.js";
+import { EMPTY_CONVERSATION } from "../../../src/conversation-view/conversation.js";
+import type { PiMessage } from "../../../src/conversation-view/pi-message.js";
 import { entryItem } from "./views.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
 

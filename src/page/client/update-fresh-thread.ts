@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import { ReplaceThread } from "./commands.js";
-import { EMPTY_CONVERSATION, isRunning } from "./conversation.js";
+import { EMPTY_CONVERSATION, isRunning } from "../../conversation-view/conversation.js";
 import { advanceFreshThread, FreshThreadEvent, Ground } from "./fresh-thread.js";
 import type { Model } from "./model.js";
 import { withoutQueued } from "./outgoing.js";
