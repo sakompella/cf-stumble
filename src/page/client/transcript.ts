@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import type { Conversation } from "./conversation.js";
 import { Outgoing, undisplayedOutgoing } from "./outgoing.js";
+import { toolSummaryText } from "./tool-summary.js";
 import { RUN_NOTICE_KIND } from "../../run-notice.js";
 import { blocksText, type AssistantMessage, type Entry, type PiMessage } from "./pi-message.js";
 
@@ -58,12 +59,6 @@ export function diffLineKind(line: string): "hunk" | "added" | "removed" | "plai
   return line.startsWith("-") ? "removed" : "plain";
 }
 
-function toolSummaryText(toolName: string, argumentsJson: string): string {
-  return argumentsJson === "" || argumentsJson === "{}"
-    ? toolName
-    : `${toolName} ${argumentsJson.slice(0, 160)}`;
-}
-
 function textEntry(role: string, who: string, text: string): TranscriptEntry {
   return TranscriptEntry.Text({ role, who, text });
 }
@@ -109,7 +104,7 @@ function assistantEntries(message: AssistantMessage): readonly TranscriptEntry[]
     ...(text === "" ? [] : [textEntry("assistant", "assistant", text)]),
     ...message.content.flatMap((block) =>
       block.type === "toolCall" && "id" in block
-        ? [toolStartEntry(block.id, toolSummaryText(block.name, JSON.stringify(block.arguments)))]
+        ? [toolStartEntry(block.id, toolSummaryText(block.name, block.arguments))]
         : [],
     ),
     ...(message.stopReason === "aborted"

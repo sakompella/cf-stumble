@@ -135,7 +135,20 @@ export const OWNER_PAGE_STYLES = `
     padding: 0.4rem 0.6rem;
   }
   @media (max-width: 52rem) {
-    #owner-layout { display: block; }
+    button, input, textarea, summary { min-height: 44px; }
+    button { min-width: 44px; }
+    textarea { min-height: 4.5rem; }
+    summary { align-items: center; display: flex; }
+    .messages { max-height: 45vh; }
+    .composer {
+      background: Canvas;
+      border-top: 1px solid rgba(128, 128, 128, 0.4);
+      bottom: 0;
+      padding-bottom: 0.4rem;
+      position: sticky;
+    }
+    #owner-layout { align-items: stretch; flex-direction: column; }
+    #conversation { order: -1; }
     #project-sidebar { margin-bottom: 0.75rem; width: auto; }
     .field-label { min-width: 7rem; }
   }
