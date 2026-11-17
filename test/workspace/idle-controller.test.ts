@@ -96,6 +96,28 @@ test("a burst of work writes the alarm once", () => {
   expect(alarms).toHaveLength(1);
 });
 
+test("a lease that nothing ended stops holding the workspace at its end time", () => {
+  const { idle, clock, alarms } = controller();
+  idle.lease(60_000);
+  expect(idle.snapshot().leaseEndsAtMs).toBe(60_000);
+
+  clock.now = 60_000;
+
+  expect(idle.snapshot()).toMatchObject({ leaseEndsAtMs: null, lastActiveAtMs: 60_000 });
+  expect(alarms).toEqual([70_000]);
+});
+
+test("releasing a lease that already expired does not count as activity", () => {
+  const { idle, clock } = controller();
+  const release = idle.lease(20_000);
+  clock.now = 25_000;
+  idle.snapshot();
+  clock.now = 40_000;
+  release();
+
+  expect(idle.snapshot().lastActiveAtMs).toBe(20_000);
+});
+
 test("work in flight is counted until its own end, and ending twice counts once", () => {
   const { idle } = controller();
   const first = idle.begin();

@@ -74,6 +74,17 @@ test("an ended project capability holds the workspace one idle limit from its en
   expect(result.destroyed).toEqual(["idle"]);
 });
 
+test("a backend change is allowed after a capability's deadline although nothing ended the capability", async () => {
+  const change = await withHost("host-seam-lease-expiry", async (host) => {
+    await host.project({ remainingMs: 60_000 });
+    vi.setSystemTime(Date.now() + 60_000);
+
+    return host.setBackend("cloudflare");
+  });
+
+  expect(change).toEqual({ ok: true, backend: "cloudflare" });
+});
+
 test("a past-due alarm closes the Workspace and destroys the container for being idle", async () => {
   const destroyed = await withHost("host-seam-stop", async (host, _state, container) => {
     await host.build(REFUSED_BUILD);
