@@ -1,6 +1,7 @@
 import { isContextOverflow } from "@earendil-works/pi-ai/utils/overflow";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/utils/retry";
 import { expect, test } from "vitest";
+import { ROUTE_FAILURE, type RouteFailure } from "../../../src/model-route-wire/failure.js";
 import type { ValidationFailure } from "../../../src/model-route-wire/request.js";
 import {
   GO,
@@ -9,6 +10,7 @@ import {
   replies,
   scriptedRoute,
   streamThroughProvider as stream,
+  type Answer,
 } from "./scripted-route.js";
 
 async function settle(events: AsyncIterable<{ type: string }>): Promise<string[]> {
@@ -228,6 +230,55 @@ test("a route that throws, rejects the request, or ends early still ends the str
     content: [{ type: "text", text: "partial answer" }],
   });
 });
+
+test.each([
+  {
+    fault: "a route call that rejects",
+    answer: () => Promise.reject(new Error("rpc broke")),
+    kind: "routeUnreachable",
+  },
+  {
+    fault: "a stream that closes with no result",
+    answer: replies([{ type: "text-delta", delta: "part" }]),
+    kind: "streamInterrupted",
+  },
+  {
+    fault: "a stream that errors",
+    answer: () =>
+      Promise.resolve(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.error(new Error("stream broke"));
+          },
+        }),
+      ),
+    kind: "streamInterrupted",
+  },
+  {
+    fault: "a line that is not JSON",
+    answer: () => Promise.resolve(new Blob(["not json\n"]).stream()),
+    kind: "unreadableReply",
+  },
+  {
+    fault: "a line that is not an event",
+    answer: () => Promise.resolve(new Blob(['{"type":"mystery"}\n']).stream()),
+    kind: "unreadableReply",
+  },
+] satisfies ReadonlyArray<{ fault: string; answer: Answer; kind: RouteFailure }>)(
+  "$fault ends the stream with the failure text of $kind and a log line that names the kind",
+  async ({ answer, kind }) => {
+    const logged: Array<readonly [string, string, unknown]> = [];
+
+    const { capability } = scriptedRoute(answer);
+
+    const message = await stream(capability, GO, undefined, (level, event, fields) => {
+      logged.push([level, event, fields["kind"]]);
+    }).result();
+
+    expect(message).toMatchObject({ stopReason: "error", errorMessage: ROUTE_FAILURE[kind] });
+    expect(logged).toEqual([["error", "model-route-failed", kind]]);
+  },
+);
 
 test("abort mid-stream ends as aborted and drops what arrives afterwards", async () => {
   const route = pushableStream();

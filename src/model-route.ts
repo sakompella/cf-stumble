@@ -1,7 +1,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { GENERATION_REPLACED } from "./generation-replaced.js";
+import { admittedStream } from "./model-route-admission.js";
 import { chatgptTurn, type ChatGPTAccess, type ChatGPTCredential } from "./chatgpt/index.js";
 import {
   parseRequest,
@@ -11,7 +11,7 @@ import {
 import { runAtEntryPoint } from "./run-entry-point.js";
 import { workersAiTurn } from "./model-route-stream.js";
 import type { WorkersAiBinding } from "./model-route-wire/events.js";
-import { modelEventStream, type ModelTurn, type ModelTurnAnswer } from "./model-route-turn.js";
+import type { ModelTurn, ModelTurnAnswer } from "./model-route-turn.js";
 
 type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{
@@ -29,8 +29,6 @@ type ModelRouteEnv = Readonly<{
 }>;
 
 export type ModelRouteProps = Readonly<{ supervisor: string; instance: number }>;
-
-const SUPERVISOR_UNAVAILABLE = "the supervisor is unavailable";
 
 function withFallback(chatgpt: ReturnType<typeof chatgptTurn>, workersAi: ModelTurn): ModelTurn {
   return (emit) =>
@@ -83,20 +81,7 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
     const turn = withFallback(chatgpt, workersAi);
 
     return runAtEntryPoint(
-      Effect.tryPromise({
-        try: () => holder.admitModelTurn(this.ctx.props.instance),
-        catch: (): ValidationFailure => ({
-          ok: false,
-          error: { code: "invalid-request", reason: SUPERVISOR_UNAVAILABLE },
-        }),
-      }).pipe(
-        Effect.map((admitted): ReadableStream<Uint8Array> | ValidationFailure =>
-          admitted
-            ? modelEventStream(turn)
-            : { ok: false, error: { code: "invalid-request", reason: GENERATION_REPLACED } },
-        ),
-        Effect.catch(Effect.succeed),
-      ),
+      admittedStream(() => holder.admitModelTurn(this.ctx.props.instance), turn),
     );
   }
 }

@@ -20,7 +20,7 @@ const FACET_PATCHES: ReadonlyMap<string, Edits> = new Map([
         'import { ROUTE_MODEL, routeProvider } from "./route-provider.js";',
         'import { fuzzModel } from "./fuzz-exec.js";\nimport { ROUTE_MODEL, routeProvider } from "./route-provider.js";',
       ],
-      ["routeProvider(input.model)", "routeProvider(fuzzModel(input.model))"],
+      ["routeProvider(input.model, log)", "routeProvider(fuzzModel(input.model), log)"],
     ],
   ],
   [

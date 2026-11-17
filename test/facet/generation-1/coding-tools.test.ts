@@ -7,7 +7,7 @@ import { CodingTools } from "../../../src/facet/generation-1/coding-tools.js";
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
 import type { ProjectRpcTargetContract } from "../../../src/workspace/project/protocol.js";
 import { envWithoutGenerations } from "./generation-control.js";
-import { NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
+import { NO_LOG, NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
 
 const refused = () => Promise.reject(new Error("not used"));
 
@@ -84,7 +84,7 @@ async function runBash(args: BashArgs) {
 
 function openHarness(capability: ModelCapability) {
   const models = createModels();
-  models.setProvider(routeProvider(capability));
+  models.setProvider(routeProvider(capability, NO_LOG));
   const registry = createRegistry();
   registry.install(CodingTools);
 

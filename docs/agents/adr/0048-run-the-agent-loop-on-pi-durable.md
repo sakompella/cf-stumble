@@ -65,3 +65,5 @@ Loader starts it with `enable_weak_ref`, which `chord` needs. `FACET_RUNTIME`, b
 
 The harness no longer shows the repository's diff after a turn; that was a generation-0 frame with no
 Pi Durable equivalent.
+
+Pi retries a model error only when its text matches Pi's own list (`isRetryableAssistantError`), which Pi Durable cannot be told to extend. The route's own failures therefore live in one table, `src/model-route-wire/failure.ts`, and a test asks Pi about each text. The Supervisor not answering, the route not answering and a stream cut short are retried (three times, after 2, 4 and 8 s); a reply the facet cannot read is not.
