@@ -86,7 +86,6 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 
 **Structure with no live failure**
 
-- **The GitHub connection has dead fields, and the repository URL is parsed three times (#15).** `rc-review-15.md`.
 - **The facet replacement is inferred from replies (#16).** `rc-review-16.md`.
 - **The Supervisor imports page code, and the CLI copies a label parser (#21).** `rc-review-21.md`.
 - **Generation history is shaped like the old Git repository (#22).** `rc-review-22.md`.

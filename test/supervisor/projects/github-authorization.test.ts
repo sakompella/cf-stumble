@@ -284,3 +284,38 @@ test("a pending authorization does not hide the workspace credential from the re
   expect(afterwards).toMatchObject({ state: "awaiting-authorization" });
   expect(subject.workspace.credentialState).toBe("connected");
 });
+
+test("a blank client id never reaches GitHub, on start or on complete", async () => {
+  const name = "authorization-blank-client-id";
+  const workspace = new FakeTenantWorkspace();
+  const urls: string[] = [];
+
+  const withClientId = (clientId: string, fetcher: GitHubFetch) =>
+    runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) => {
+      const github = new GitHubConnection({
+        store: new GitHubConnectionStore(state.storage),
+        workspaceName: tenantWorkspaceName(name),
+        namespace: workspace.namespace,
+        environment: { clientId, fallbackToken: undefined, fetcher },
+      });
+
+      return Effect.runPromise(
+        Effect.all([github.startAuthorization(NOW), github.completeAuthorization(NOW + 1)]),
+      );
+    });
+
+  const recording: GitHubFetch = (url) => {
+    urls.push(url);
+
+    return Promise.resolve(Response.json(url.endsWith("/login/device/code") ? deviceReply : {}));
+  };
+
+  await withClientId(CLIENT_ID, recording);
+  urls.length = 0;
+
+  const [started, completed] = await withClientId("  ", recording);
+
+  expect(started).toEqual({ ok: false, problem: "not-configured" });
+  expect(completed).toEqual({ ok: false, problem: "not-configured" });
+  expect(urls).toEqual([]);
+});

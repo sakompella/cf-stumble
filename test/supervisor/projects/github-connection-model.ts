@@ -62,7 +62,6 @@ const pending = gs.record({
     "https://example.test/device",
   ]),
   expiresAt: small,
-  intervalSeconds: gs.integers(),
 });
 
 const credentialEvent = gs.composite<CredentialEvent>((tc) => {
@@ -104,7 +103,6 @@ function recordedByObserving(before: Recorded | null, event: Observed, login: st
   return {
     login,
     source: event.installedBy ?? before?.source ?? "device-authorization",
-    connectedAt: event.installedBy === undefined ? (before?.connectedAt ?? 0) : event.now,
   };
 }
 

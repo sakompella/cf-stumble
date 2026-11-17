@@ -1,20 +1,17 @@
 import {
-  canonicalRepositoryUrl,
-  defaultProjectDisplayName,
+  parseProject,
   parseProjectId,
-  projectIdForRepository,
   type Project,
   type ProjectCatalog,
   type ProjectId,
 } from "../src/project-catalog.js";
 
 export function projectOf(repositoryUrl: string): Project {
-  const id = projectIdForRepository(repositoryUrl);
-  const url = canonicalRepositoryUrl(repositoryUrl);
+  const project = parseProject(repositoryUrl);
 
-  if (id === undefined || url === undefined) throw new Error(`${repositoryUrl} must be a project`);
+  if (project === undefined) throw new Error(`${repositoryUrl} must be a project`);
 
-  return { id, displayName: defaultProjectDisplayName(url), repositoryUrl: url };
+  return project;
 }
 
 export const sampleProjectOne: Project = projectOf("https://github.com/sample/project-one");

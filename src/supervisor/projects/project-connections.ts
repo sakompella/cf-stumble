@@ -4,13 +4,11 @@ import { ConnectedProjects } from "./connected-projects.js";
 import { execute, markRemoving, recover } from "./project-lifecycle-commands.js";
 import type { GitHubConnection } from "./github-connection.js";
 import {
-  canonicalRepositoryUrl,
+  parseProject,
   parseProjectId,
-  projectIdForRepository,
   type Project,
   type ProjectCatalog,
   type ProjectId,
-  type PublicRepositoryUrl,
 } from "../../project-catalog.js";
 import { selectableCatalog, type SelectableCatalog } from "../../selectable-projects.js";
 import { checkRepositoryAccess, type WorkspaceHostNamespace } from "../../workspace/index.js";
@@ -95,14 +93,13 @@ export class ProjectConnections {
 
   connect(repositoryUrl: string, now: number): Effect.Effect<ConnectRepositoryResult> {
     return Effect.gen({ self: this }, function* () {
-      const canonical = canonicalRepositoryUrl(repositoryUrl);
-      const projectId = canonical === undefined ? undefined : projectIdForRepository(canonical);
+      const project = parseProject(repositoryUrl);
 
-      if (canonical === undefined || projectId === undefined) {
+      if (project === undefined) {
         return refused({ code: "invalid-repository-url", detail: "" });
       }
 
-      yield* this.sweep(projectId);
+      yield* this.sweep(project.id);
 
       const credentialRefusal = yield* this.github.ensureCredential(now).pipe(
         Effect.map(({ state }) =>
@@ -120,7 +117,7 @@ export class ProjectConnections {
       const accessRefusal = yield* checkRepositoryAccess({
         workspaceName: this.workspaceName,
         namespace: this.namespace,
-        repositoryUrl: canonical,
+        repositoryUrl: project.repositoryUrl,
       }).pipe(
         Effect.match({
           onFailure: (failure) =>
@@ -134,7 +131,7 @@ export class ProjectConnections {
 
       if (accessRefusal !== undefined) return accessRefusal;
 
-      return yield* this.lifecycle.withLock(projectId, this.store(canonical, now));
+      return yield* this.lifecycle.withLock(project.id, this.store(project, now));
     });
   }
 
@@ -193,22 +190,13 @@ export class ProjectConnections {
     });
   }
 
-  private store(
-    repositoryUrl: PublicRepositoryUrl,
-    now: number,
-  ): Effect.Effect<ConnectRepositoryResult> {
+  private store(project: Project, now: number): Effect.Effect<ConnectRepositoryResult> {
     return Effect.gen({ self: this }, function* () {
-      const known = projectIdForRepository(repositoryUrl);
-
-      if (known !== undefined && this.projects.stateOf(known) === "removing") {
-        yield* recover(this.effects(), known);
+      if (this.projects.stateOf(project.id) === "removing") {
+        yield* recover(this.effects(), project.id);
       }
 
-      const connected = this.projects.connect(repositoryUrl, now);
-
-      if (!connected.ok) {
-        return refused({ code: connected.problem.code, detail: "" });
-      }
+      const connected = this.projects.connect(project, now);
 
       if (connected.after === "removing") {
         return refused({

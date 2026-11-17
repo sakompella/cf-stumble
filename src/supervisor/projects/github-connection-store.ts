@@ -16,13 +16,11 @@ type PendingRow = {
   readonly user_code: string;
   readonly verification_uri: string;
   readonly expires_at: number;
-  readonly interval_seconds: number;
 };
 
 type ConnectionRow = {
   readonly login: string;
   readonly credential_source: string;
-  readonly connected_at: number;
 };
 
 type StoredCheck = {
@@ -65,7 +63,6 @@ function recordedFromRow(connection: ConnectionRow | undefined) {
     : {
         login: connection.login,
         source: sourceOf(connection.credential_source),
-        connectedAt: connection.connected_at,
       };
 }
 
@@ -84,7 +81,6 @@ function decodeRows(
         checkedAt,
         login: check.login ?? "",
         source: sourceOf(check.credential_source),
-        connectedAt: connection?.connected_at ?? checkedAt,
       });
     case "tooling-missing":
       return GitHubCredential.cases.toolingMissing.make({ checkedAt, recorded });
@@ -179,9 +175,7 @@ export class GitHubConnectionStore {
       .toArray()[0];
 
     const connection = this.sql
-      .exec<ConnectionRow>(
-        `SELECT login, credential_source, connected_at FROM github_connection WHERE id = 1`,
-      )
+      .exec<ConnectionRow>(`SELECT login, credential_source FROM github_connection WHERE id = 1`)
       .toArray()[0];
 
     return decodeRows(check, connection);
@@ -235,7 +229,7 @@ export class GitHubConnectionStore {
   private readAuthorization(): GitHubAuthorization {
     const row = this.sql
       .exec<PendingRow>(
-        `SELECT device_code, user_code, verification_uri, expires_at, interval_seconds
+        `SELECT device_code, user_code, verification_uri, expires_at
          FROM github_authorization WHERE id = 1`,
       )
       .toArray()[0];
@@ -247,7 +241,6 @@ export class GitHubConnectionStore {
           userCode: row.user_code,
           verificationUri: row.verification_uri,
           expiresAt: row.expires_at,
-          intervalSeconds: row.interval_seconds,
         });
   }
 
@@ -260,18 +253,16 @@ export class GitHubConnectionStore {
         this.sql.exec(
           `INSERT INTO github_authorization
              (id, device_code, user_code, verification_uri, expires_at, interval_seconds)
-           VALUES (1, ?, ?, ?, ?, ?)
+           VALUES (1, ?, ?, ?, ?, 0)
            ON CONFLICT (id) DO UPDATE SET
              device_code = excluded.device_code,
              user_code = excluded.user_code,
              verification_uri = excluded.verification_uri,
-             expires_at = excluded.expires_at,
-             interval_seconds = excluded.interval_seconds`,
+             expires_at = excluded.expires_at`,
           pending.deviceCode,
           pending.userCode,
           pending.verificationUri,
           pending.expiresAt,
-          pending.intervalSeconds,
         );
       },
     });
@@ -285,14 +276,12 @@ export class GitHubConnectionStore {
     } else {
       this.sql.exec(
         `INSERT INTO github_connection (id, login, credential_source, connected_at)
-         VALUES (1, ?, ?, ?)
+         VALUES (1, ?, ?, 0)
          ON CONFLICT (id) DO UPDATE SET
            login = excluded.login,
-           credential_source = excluded.credential_source,
-           connected_at = excluded.connected_at`,
+           credential_source = excluded.credential_source`,
         recorded.login,
         recorded.source,
-        recorded.connectedAt,
       );
     }
 

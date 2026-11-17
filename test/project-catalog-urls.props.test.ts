@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 import {
   canonicalRepositoryUrl,
   defaultProjectDisplayName,
+  parseProject,
   PROJECT_ID_LIMIT,
   projectIdForRepository,
   resolveProject,
@@ -59,6 +60,32 @@ test("canonicalising any text never throws and settles after one pass", () => {
     expect(canonical.startsWith("https://")).toBe(true);
     expect(canonicalRepositoryUrl(canonical)).toBe(canonical);
     expect(projectIdForRepository(canonical)).toBe(projectIdForRepository(text));
+  });
+});
+
+test("a project is parsed from any text exactly when the text names a project id, with the fields the single parsers give", () => {
+  hegel.test((tc) => {
+    const text = tc.draw(
+      gs.oneOf(
+        gs.text({ maxSize: 40 }),
+        gs.urls(),
+        gs.fromRegex("https://github\\.com/[A-Za-z0-9-]{1,10}/[A-Za-z0-9._-]{1,10}(\\.git)?/?"),
+      ),
+    );
+
+    const project = parseProject(text);
+    const id = projectIdForRepository(text);
+    const url = canonicalRepositoryUrl(text);
+
+    expect(project === undefined).toBe(id === undefined);
+
+    if (project === undefined || url === undefined) return;
+
+    expect(project).toEqual({
+      id,
+      displayName: defaultProjectDisplayName(url),
+      repositoryUrl: url,
+    });
   });
 });
 

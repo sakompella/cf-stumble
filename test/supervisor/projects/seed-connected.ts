@@ -1,11 +1,9 @@
 import { ConnectedProjects } from "../../../src/supervisor/projects/connected-projects.js";
-import { sampleCatalog } from "../../project-fixtures.js";
+import { projectOf, sampleCatalog } from "../../project-fixtures.js";
 import { LifecycleEvent } from "../../../src/supervisor/projects/project-lifecycle-machine.js";
 
 export function seedConnected(projects: ConnectedProjects, repositoryUrl: string, now: number) {
-  const connected = projects.connect(repositoryUrl, now);
-
-  if (!connected.ok) return connected;
+  const connected = projects.connect(projectOf(repositoryUrl), now);
 
   projects.apply(connected.project.id, LifecycleEvent.cases.provisioned.make({}));
 
