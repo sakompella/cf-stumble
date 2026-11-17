@@ -1,10 +1,5 @@
-import type {
-  Workspace,
-  WorkspaceRuntimeEvent,
-  WorkspaceRuntimeTruncation,
-} from "@cloudflare/computer";
+import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
 import { shellQuote } from "../../shell-quote.js";
-import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import {
   ContainerRestartedError,
   ISOLATE_BACKEND_ID,
@@ -35,6 +30,7 @@ type RuntimeExecOptions = Readonly<{
   cwd: string;
   timeoutMs: number;
   encoding: undefined;
+  output: false;
 }>;
 
 type PullProgress = Readonly<{ skipped: number; complete: boolean }>;
@@ -156,6 +152,7 @@ export function computerExecBackend(
           cwd: input.cwd,
           timeoutMs: input.timeoutMs,
           encoding: undefined,
+          output: false,
         })
         .catch((cause: unknown) => {
           if (guard.replaced()) throw new ContainerRestartedError();
@@ -177,20 +174,8 @@ export function computerExecBackend(
   };
 }
 
-function savedOutputPaths(truncation: WorkspaceRuntimeTruncation): readonly string[] {
-  return [truncation.stdout, truncation.stderr]
-    .flatMap((saved) => (saved?.status === "saved" ? [saved.path] : []))
-    .flatMap((path) =>
-      path.startsWith(`${WORKSPACE_ROOT}/`) ? [path.slice(WORKSPACE_ROOT.length)] : [],
-    );
-}
-
 function toBackendEvent(event: WorkspaceRuntimeEvent): BackendExecEvent {
-  if (event.name !== "exit") return { name: event.name, data: event.value };
-
-  const exited: BackendExecEvent = { name: "exit", exitCode: event.code };
-
-  if (event.truncated !== undefined) exited.fullOutputPaths = savedOutputPaths(event.truncated);
-
-  return exited;
+  return event.name === "exit"
+    ? { name: "exit", exitCode: event.code }
+    : { name: event.name, data: event.value };
 }

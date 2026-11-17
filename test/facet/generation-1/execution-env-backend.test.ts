@@ -31,12 +31,9 @@ function recordingTarget(started: StartExecWire[]): ProjectRpcTargetContract {
   };
 }
 
-function streamingTarget(
-  frames: readonly unknown[],
-  saved: Readonly<Record<string, string>> = {},
-): ProjectRpcTargetContract {
+function streamingTarget(frames: readonly unknown[]): ProjectRpcTargetContract {
   const stream = new Response(`${frames.map((frame) => JSON.stringify(frame)).join("\n")}\n`).body;
-  const files = new Map(Object.entries(saved).map(([path, text]) => [path, text]));
+  const files = new Map<string, string>();
 
   const readFile = (path: string): Promise<ProjectResult<Uint8Array>> => {
     const text = files.get(path);
@@ -100,66 +97,7 @@ test("the env sends no backend by default and the chosen one when asked", async 
   expect(started.map((input) => input.backend)).toEqual([undefined, "isolate", "container"]);
 });
 
-test("the env names its own spill file when the runtime cut the output", async () => {
-  const env = envWithoutGenerations({
-    cwd: "/workspace/project",
-    target: streamingTarget([
-      { kind: "stdout", seq: 0, data: "x".repeat(96) },
-      {
-        kind: "terminal",
-        seq: 1,
-        outcome: "exited",
-        exitCode: 0,
-        fullOutputPaths: [
-          "/.cf-stumble/output/run-1.stdout.log",
-          "/.cf-stumble/output/run-1.stderr.log",
-        ],
-      },
-    ]),
-  });
-
-  const result = getOrThrow(
-    await env.exec("noisy", { spill: { afterBytes: 8, afterLines: 8 } }, BACKGROUND_CONTEXT),
-  );
-
-  expect(result.exitCode).toBe(0);
-  expect(result.spillPath?.startsWith("/workspace/.cf-stumble/tmp/pi-output-")).toBe(true);
-  expect(getOrThrow(await env.readTextFile(result.spillPath ?? "", BACKGROUND_CONTEXT))).toBe(
-    "x".repeat(96),
-  );
-});
-
-test("the env names the saved runtime file when it spilled nothing of its own", async () => {
-  const env = envWithoutGenerations({
-    cwd: "/workspace/project",
-    target: streamingTarget(
-      [
-        { kind: "stdout", seq: 0, data: "x".repeat(96) },
-        {
-          kind: "terminal",
-          seq: 1,
-          outcome: "exited",
-          exitCode: 0,
-          fullOutputPaths: [
-            "/.cf-stumble/output/run-1.stdout.log",
-            "/.cf-stumble/output/run-1.stderr.log",
-          ],
-        },
-      ],
-      { "/.cf-stumble/output/run-1.stdout.log": "x".repeat(96) },
-    ),
-  });
-
-  const result = getOrThrow(await env.exec("noisy", {}, BACKGROUND_CONTEXT));
-
-  expect(result.exitCode).toBe(0);
-  expect(result.spillPath).toBe("/workspace/.cf-stumble/output/run-1.stdout.log");
-  expect(getOrThrow(await env.readTextFile(result.spillPath ?? "", BACKGROUND_CONTEXT))).toBe(
-    "x".repeat(96),
-  );
-});
-
-test("the env spills output to a file it can read back when the runtime cut nothing", async () => {
+test("the env spills output to a file it can read back", async () => {
   const env = envWithoutGenerations({
     cwd: "/workspace/project",
     target: streamingTarget([
