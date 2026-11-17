@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+import { textLines } from "../../log-capture.js";
 import { resultOf } from "../../effect-result.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import type { HarnessBuildStepName, HarnessBuildStepRequest } from "../../../src/harness-build.js";
@@ -19,6 +21,15 @@ export function moduleMapFile(
   modules: readonly Readonly<{ name: string; source: string }>[],
 ): string {
   return JSON.stringify({ entryModule: "main.js", modules });
+}
+
+export function failureLines(): () => string[] {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  return () =>
+    textLines(errors)
+      .filter((line) => line.startsWith("harness-build."))
+      .map((line) => line.slice(0, line.indexOf(": ", line.indexOf(": ") + 2)));
 }
 
 export type BuildWorkspaceFake = WorkspaceHostRpc<"build" | "buildOutput" | "discardBuild">;
