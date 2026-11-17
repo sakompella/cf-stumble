@@ -3,6 +3,9 @@ import {
   type ContainerLaunchSpec,
   type ContainerRuntimeInfo,
 } from "@cloudflare/computer/backends/container";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
@@ -132,23 +135,23 @@ async function countStorePaths(container: SnapshotContainer): Promise<number> {
   return count;
 }
 
-export function snapshotBeforeStop(container: SnapshotContainer, kv: SnapshotStore): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error("container snapshot timed out"));
-    }, SNAPSHOT_TIMEOUT_MS);
+export class SnapshotNotTaken extends Data.TaggedError("SnapshotNotTaken")<{
+  readonly cause: unknown;
+}> {}
 
-    save(container, kv).then(
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      (cause: unknown) => {
-        clearTimeout(timer);
-        reject(cause instanceof Error ? cause : new Error("container snapshot failed", { cause }));
-      },
-    );
-  });
+export function snapshotBeforeStop(
+  container: SnapshotContainer,
+  kv: SnapshotStore,
+): Effect.Effect<void, SnapshotNotTaken> {
+  return Effect.tryPromise({
+    try: () => save(container, kv),
+    catch: (cause) => new SnapshotNotTaken({ cause }),
+  }).pipe(
+    Effect.timeout(SNAPSHOT_TIMEOUT_MS),
+    Effect.mapError((failure) =>
+      Cause.isTimeoutError(failure) ? new SnapshotNotTaken({ cause: failure }) : failure,
+    ),
+  );
 }
 
 async function save(container: SnapshotContainer, kv: SnapshotStore): Promise<void> {

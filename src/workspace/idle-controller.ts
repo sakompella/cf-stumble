@@ -1,19 +1,12 @@
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
 import { ContainerStopFailed } from "./container-lifecycle.js";
 import type { ExecBackend } from "./project/index.js";
-import {
-  decideIdleStop,
-  nextStopStep,
-  StopCommand,
-  StopEvent,
-  StopPhase,
-  stopLatch,
-  type WorkspaceActivity,
-} from "./idle-stop.js";
+import { decideIdleStop, type IdleStopDecision, type WorkspaceActivity } from "./idle-stop.js";
 
 export { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 
@@ -34,6 +27,8 @@ type IdleControllerPorts = Readonly<{
   stopContainer(reason: "idle" | "backend"): Effect.Effect<void, ContainerStopFailed>;
 }>;
 
+type IdleStopOutcome = "stopped" | "not-running" | "skipped-busy" | "threw";
+
 class IdlePortRejected extends Data.TaggedError("IdlePortRejected")<{
   readonly cause: unknown;
 }> {}
@@ -48,11 +43,11 @@ function atEntryPoint(program: Effect.Effect<void, IdlePortRejected>): Promise<v
 
 export class WorkspaceIdleController implements ProjectActivity {
   readonly #ports: IdleControllerPorts;
+  readonly #stopping = Semaphore.makeUnsafe(1);
   #inFlight = 0;
   #lastActiveAtMs: number;
   readonly #leases = new Set<Readonly<{ endsAtMs: number }>>();
   #alarmAtMs: number | null = null;
-  #phase: StopPhase = StopPhase.Idle();
 
   constructor(ports: IdleControllerPorts) {
     this.#ports = ports;
@@ -101,8 +96,8 @@ export class WorkspaceIdleController implements ProjectActivity {
     this.#alarmAtMs = null;
   }
 
-  async settled(): Promise<void> {
-    await stopLatch(this.#phase)?.ended;
+  settled(): Promise<void> {
+    return runAtEntryPoint(this.#stopping.withPermits(1)(Effect.void));
   }
 
   #armForQuietPeriod(): void {
@@ -132,116 +127,86 @@ export class WorkspaceIdleController implements ProjectActivity {
   }
 
   onAlarm(): Promise<void> {
-    return atEntryPoint(
-      Effect.suspend(() => {
-        this.#alarmAtMs = null;
-
-        return this.#feed(
-          StopEvent.AlarmFired({
-            running: this.#ports.containerRunning(),
-            decision: this.#decision(),
-          }),
-        );
-      }),
-    );
+    return atEntryPoint(this.#stopping.withPermits(1)(this.#idleStop()));
   }
 
-  async stopForBackendChange(): Promise<void> {
-    const started = this.#feed(
-      StopEvent.BackendChanged({ running: this.#ports.containerRunning() }),
-    );
-
-    const done = stopLatch(this.#phase);
-    await atEntryPoint(started.pipe(Effect.ignore));
-    const end = await done?.ended;
-
-    if (end?.kind === "failed") throw end.cause;
+  stopForBackendChange(): Promise<void> {
+    return atEntryPoint(this.#stopping.withPermits(1)(this.#backendStop()));
   }
 
-  #decision() {
+  #decision(): IdleStopDecision {
     return decideIdleStop(this.snapshot(), this.#ports.nowMs(), this.#ports.idleLimitMs);
   }
 
-  #feed(event: StopEvent): Effect.Effect<void, IdlePortRejected> {
-    const { phase, commands } = nextStopStep(this.#phase, event);
-    this.#phase = phase;
+  #idleStop(): Effect.Effect<void, IdlePortRejected> {
+    return Effect.suspend(() => {
+      this.#alarmAtMs = null;
 
-    return Effect.forEach(commands, (command) => this.#execute(command), { discard: true });
-  }
+      if (!this.#ports.containerRunning()) return Effect.void;
 
-  #execute(command: StopCommand): Effect.Effect<void, IdlePortRejected> {
-    return StopCommand.$match(command, {
-      Arm: ({ atMs }) => this.#arm(atMs),
-      Close: () => this.#close(),
-      Destroy: ({ reason }) => this.#destroy(reason),
-      Report: ({ idleForMs, outcome }) =>
-        Effect.sync(() => {
+      const decision = this.#decision();
+
+      if (decision.kind === "check-at") return this.#arm(decision.atMs);
+
+      return this.#stopIdle().pipe(
+        Effect.flatMap((outcome) => {
           logEvent(outcome === "threw" ? "warn" : "info", "workspace.container.idle-stop", {
-            idleForMs,
+            idleForMs: decision.idleForMs,
             outcome,
           });
+
+          return outcome === "stopped" || outcome === "not-running"
+            ? Effect.void
+            : this.#arm(this.#retryAtMs());
         }),
-      Finish: ({ done, end }) =>
-        Effect.sync(() => {
-          done.end(end);
-        }),
+      );
     });
   }
 
-  #close(): Effect.Effect<void, IdlePortRejected> {
-    return this.#finalPull().pipe(
-      Effect.andThen(attempt(() => this.#ports.closeWorkspace())),
-      Effect.catch(({ cause }) =>
-        Effect.sync(() => {
-          logRedactedCause("workspace.idle-stop: workspace close failed", cause);
+  #stopIdle(): Effect.Effect<IdleStopOutcome> {
+    return this.#close().pipe(
+      Effect.andThen(
+        Effect.suspend((): Effect.Effect<IdleStopOutcome> => {
+          if (this.#decision().kind !== "stop") return Effect.succeed("skipped-busy");
+
+          if (!this.#ports.containerRunning()) return Effect.succeed("not-running");
+
+          return this.#destroy("idle").pipe(
+            Effect.as<IdleStopOutcome>("stopped"),
+            Effect.orElseSucceed((): IdleStopOutcome => "threw"),
+          );
         }),
       ),
-      Effect.andThen(
-        Effect.suspend(() =>
-          this.#feed(
-            StopEvent.Closed({
-              running: this.#ports.containerRunning(),
-              recheck: this.#decision(),
-              retryAtMs: this.#retryAtMs(),
-            }),
-          ),
-        ),
-      ),
     );
   }
 
-  #finalPull(): Effect.Effect<void> {
-    return this.#pullOnce().pipe(
-      Effect.flatMap((pulled) =>
-        pulled
-          ? Effect.void
-          : this.#pullOnce().pipe(
-              Effect.flatMap((retried) =>
-                retried
-                  ? Effect.void
-                  : Effect.sync(() => {
-                      logEvent("warn", "workspace.container.idle-stop", {
-                        outcome: "writes-may-be-lost",
-                      });
-                    }),
-              ),
-            ),
-      ),
+  #backendStop(): Effect.Effect<void, IdlePortRejected> {
+    return Effect.suspend(() =>
+      this.#ports.containerRunning()
+        ? this.#close().pipe(
+            Effect.andThen(this.#destroy("backend")),
+            Effect.tapError(() => this.#arm(this.#retryAtMs()).pipe(Effect.ignore)),
+          )
+        : Effect.void,
     );
   }
 
-  #pullOnce(): Effect.Effect<boolean> {
+  #close(): Effect.Effect<void> {
     return attempt(() => this.#ports.pullContainer()).pipe(
       Effect.timeout(FINAL_PULL_TIMEOUT_MS),
-      Effect.as(true),
       Effect.catch((failure) =>
         Effect.sync(() => {
           logRedactedCause(
             "workspace.idle-stop: final pull failed",
             Cause.isTimeoutError(failure) ? failure : failure.cause,
           );
-
-          return false;
+          logEvent("warn", "workspace.container.idle-stop", { outcome: "writes-may-be-lost" });
+        }),
+      ),
+      Effect.andThen(attempt(() => this.#ports.closeWorkspace())),
+      Effect.catch(({ cause }) =>
+        Effect.sync(() => {
+          logRedactedCause("workspace.idle-stop: workspace close failed", cause);
         }),
       ),
     );
@@ -249,19 +214,13 @@ export class WorkspaceIdleController implements ProjectActivity {
 
   #destroy(reason: "idle" | "backend"): Effect.Effect<void, IdlePortRejected> {
     return this.#ports.stopContainer(reason).pipe(
-      Effect.as(null),
-      Effect.catchCause((failed) =>
-        Effect.sync(() => {
-          const squashed = Cause.squash(failed);
-          const cause = squashed instanceof ContainerStopFailed ? squashed.cause : squashed;
-          logRedactedCause("workspace.idle-stop: container not stopped", cause);
+      Effect.catchCause((failed) => {
+        const squashed = Cause.squash(failed);
+        const cause = squashed instanceof ContainerStopFailed ? squashed.cause : squashed;
+        logRedactedCause("workspace.idle-stop: container not stopped", cause);
 
-          return { cause };
-        }),
-      ),
-      Effect.flatMap((failure) =>
-        this.#feed(StopEvent.Destroyed({ failure, retryAtMs: this.#retryAtMs() })),
-      ),
+        return Effect.fail(new IdlePortRejected({ cause }));
+      }),
     );
   }
 

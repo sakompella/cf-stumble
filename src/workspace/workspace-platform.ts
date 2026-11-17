@@ -146,10 +146,12 @@ export class WorkspacePlatform {
   #snapshotBeforeIdleStop(container: Container, reason: string): Effect.Effect<void> {
     if (reason !== "idle") return Effect.void;
 
-    return Effect.promise(() =>
-      snapshotBeforeStop(container, this.#state.storage.kv).catch((cause: unknown) => {
-        logRedactedCause("workspace.container: snapshot not taken", cause);
-      }),
+    return snapshotBeforeStop(container, this.#state.storage.kv).pipe(
+      Effect.catch(({ cause }) =>
+        Effect.sync(() => {
+          logRedactedCause("workspace.container: snapshot not taken", cause);
+        }),
+      ),
     );
   }
 

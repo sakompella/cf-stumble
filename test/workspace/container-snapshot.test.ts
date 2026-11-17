@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import type { ContainerLaunchSpec } from "@cloudflare/computer/backends/container";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   snapshotBeforeStop,
@@ -81,7 +82,7 @@ function withSnapshotHost(name: string, run: (host: Host) => Promise<void>): Pro
         return fake.starts.at(-1);
       },
       idleStop: async () => {
-        await snapshotBeforeStop(fake, state.storage.kv);
+        await Effect.runPromise(snapshotBeforeStop(fake, state.storage.kv));
         fake.running = false;
       },
     });
@@ -143,10 +144,10 @@ test("a snapshot that never settles is given up after its bound and saves nothin
     await launch();
     vi.useFakeTimers();
     fake.hangs = true;
-    const stopped = snapshotBeforeStop(fake, state.storage.kv);
-    const failure = expect(stopped).rejects.toBeInstanceOf(Error);
+    const stopped = Effect.runPromiseExit(snapshotBeforeStop(fake, state.storage.kv));
     await vi.advanceTimersByTimeAsync(60_000);
-    await failure;
+
+    expect(Exit.isFailure(await stopped)).toBe(true);
 
     expect(state.storage.kv.get("workspace-container-snapshot")).toBeUndefined();
   });
