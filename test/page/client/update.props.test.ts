@@ -233,3 +233,46 @@ test("the page asks to replace a stream's thread at most once until that request
     { testCases: 300 },
   );
 });
+
+const REPO_ONLY = PROJECTS.filter((project) => !project.isHarness);
+
+const HARNESS_ONLY = PROJECTS.filter((project) => project.isHarness);
+
+const THIRD = {
+  id: "third",
+  displayName: "third",
+  isHarness: false,
+  location: "https://github.com/o/t",
+};
+
+const LISTS = [PROJECTS, HARNESS_ONLY, REPO_ONLY, [], [...REPO_ONLY, THIRD, ...HARNESS_ONLY]];
+
+test("whatever the project list answers, the selected project is one of the listed ones, and one is selected whenever any is listed", () => {
+  hegel.test(
+    (tc) => {
+      let model = listedPage();
+
+      for (let count = tc.draw(gs.integers({ minValue: 1, maxValue: 12 })); count > 0; count -= 1) {
+        const message = tc.draw(
+          gs.sampledFrom([
+            Message.ClickedProject({ projectId: tc.draw(gs.sampledFrom(["repo", "third"])) }),
+            Message.SucceededFetchProjects({ projects: tc.draw(gs.sampledFrom(LISTS)) }),
+          ]),
+        );
+
+        tc.note(message._tag);
+        model = update(model, message).model;
+
+        const listed = model.projects.map((project) => project.id);
+
+        expect(
+          Option.match(model.maybeProjectId, {
+            onNone: () => listed.length === 0,
+            onSome: (selected) => listed.includes(selected),
+          }),
+        ).toBe(true);
+      }
+    },
+    { testCases: 300 },
+  );
+});

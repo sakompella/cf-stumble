@@ -15,6 +15,7 @@ import {
 export const Message = defineMessageUnion({
   ClickedSidebarToggle: {},
   ChangedConnectivity: { isOnline: Schema.Boolean },
+  ReturnedToPage: {},
   ClickedProject: { projectId: Schema.String },
   UpdatedConnectRepositoryInput: { value: Schema.String },
   ClickedConnect: {},

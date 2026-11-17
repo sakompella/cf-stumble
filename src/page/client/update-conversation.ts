@@ -1,21 +1,10 @@
 import * as Option from "effect/Option";
 import { AbortRun } from "./commands.js";
-import { FreshThread } from "./fresh-thread.js";
-import { EMPTY_CONVERSATION } from "./conversation.js";
 import type { Model } from "./model.js";
-import { StreamPhase } from "./stream-phase.js";
 import { freshThreadHandlers } from "./update-fresh-thread.js";
 import { send, sendResultHandlers } from "./update-send.js";
 import { streamHandlers } from "./update-stream.js";
 import { clearError, withError, type Handlers } from "./update-shared.js";
-
-export const INITIAL_CONVERSATION = {
-  conversation: EMPTY_CONVERSATION,
-  outgoing: [],
-  runNote: "",
-  freshThread: FreshThread.Idle(),
-  streamPhase: StreamPhase.Idle(),
-} satisfies Partial<Model>;
 
 export function composerHandlers(
   model: Model,

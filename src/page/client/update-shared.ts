@@ -1,7 +1,12 @@
+import * as Option from "effect/Option";
+import * as Record from "effect/Record";
 import type { Update } from "foldkit";
 import { FetchStatus } from "./commands.js";
+import { EMPTY_CONVERSATION } from "./conversation.js";
+import { FreshThread } from "./fresh-thread.js";
 import type { Message } from "./message.js";
 import { StatusRead, type Model } from "./model.js";
+import { StreamPhase } from "./stream-phase.js";
 import type { TranscriptService } from "./transcript-store.js";
 
 export type UpdateReturn = Update.Return<Model, Message, TranscriptService>;
@@ -25,4 +30,31 @@ export function refreshStatus(model: Model): UpdateReturn {
     model: { ...clearError(model), statusRead: StatusRead.Running() },
     commands: [FetchStatus()],
   };
+}
+
+export const INITIAL_CONVERSATION = {
+  conversation: EMPTY_CONVERSATION,
+  outgoing: [],
+  runNote: "",
+  freshThread: FreshThread.Idle(),
+  streamPhase: StreamPhase.Idle(),
+} satisfies Partial<Model>;
+
+export function withoutProject(model: Model, projectId: string): Model {
+  const kept = {
+    ...model,
+    drafts: Record.remove(model.drafts, projectId),
+    outgoing: model.outgoing.filter((item) => item.projectId !== projectId),
+  };
+
+  return Option.contains(model.maybeProjectId, projectId)
+    ? {
+        ...kept,
+        ...INITIAL_CONVERSATION,
+        outgoing: kept.outgoing,
+        maybeProjectId: Option.none(),
+        conversationProject: "No project selected",
+        prompt: "",
+      }
+    : kept;
 }
