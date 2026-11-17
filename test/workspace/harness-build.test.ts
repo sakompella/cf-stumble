@@ -133,6 +133,16 @@ test("a build step that cannot run is one workspace-unavailable failure", async 
   });
 });
 
+test("a build step that the platform reset is a workspace-restarted answer, not an outage", async () => {
+  const operations = new FakeBuildOperations();
+  operations.commandFailure = new Error("Durable Object reset because its code was updated.");
+
+  await expect(buildStep(operations, "install")).resolves.toEqual({
+    ok: false,
+    error: { code: "workspace-restarted" },
+  });
+});
+
 test("a build step this Host does not know is refused and runs nothing, so it can never reach the scratch cleanup", async () => {
   const operations = new FakeBuildOperations();
 
