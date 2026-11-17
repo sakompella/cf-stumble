@@ -3,6 +3,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import type { TranscriptView } from "@earendil-works/pi-durable";
 import { AssistantMessage, Block, blocksText, Entry, ToolSlot } from "./pi-message.js";
+import { RunPhase, runPhaseOf } from "./run-phase.js";
 
 const ViewItem = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("entry"), entry: Entry }),
@@ -13,9 +14,15 @@ const ViewItem = Schema.Union([
 type ViewItem = typeof ViewItem.Type;
 
 const LiveDoc = Schema.Struct({
-  run: Schema.optionalKey(Schema.Struct({ inputs: Schema.Array(Schema.Number) })),
+  run: Schema.optionalKey(
+    Schema.Struct({
+      inputs: Schema.Array(Schema.Number),
+      afterRun: Schema.optionalKey(Schema.Struct({})),
+    }),
+  ),
   generation: Schema.optionalKey(Schema.Struct({ message: Schema.optionalKey(AssistantMessage) })),
   tools: Schema.optionalKey(Schema.Array(ToolSlot)),
+  compactions: Schema.optionalKey(Schema.Array(Schema.Unknown)),
   runFailure: Schema.optionalKey(Schema.Struct({ reason: Schema.String })),
 });
 
@@ -44,7 +51,7 @@ export const Conversation = Schema.Struct({
   items: Schema.Array(ViewItem),
   maybePartial: Schema.Option(AssistantMessage),
   tools: Schema.Array(ToolSlot),
-  isRunning: Schema.Boolean,
+  run: RunPhase,
   maybeRunFailure: Schema.Option(Schema.String),
   inbox: Schema.Array(QueuedInput),
 });
@@ -56,7 +63,7 @@ export const EMPTY_CONVERSATION: Conversation = {
   items: [],
   maybePartial: Option.none(),
   tools: [],
-  isRunning: false,
+  run: "Idle",
   maybeRunFailure: Option.none(),
   inbox: [],
 };
@@ -67,13 +74,17 @@ export function conversationOf(view: TranscriptView): Option.Option<Conversation
     items,
     maybePartial: Option.fromUndefinedOr(docs["pi.live"]?.generation?.message),
     tools: docs["pi.live"]?.tools ?? [],
-    isRunning: docs["pi.live"]?.run !== undefined,
+    run: runPhaseOf(docs["pi.live"]),
     maybeRunFailure: Option.fromUndefinedOr(docs["pi.live"]?.runFailure?.reason),
     inbox: (docs["pi.inbox"]?.items ?? []).map(({ id, content }) => ({
       id,
       text: Predicate.isString(content) ? content : blocksText(content),
     })),
   }));
+}
+
+export function isRunning(conversation: Conversation): boolean {
+  return conversation.run !== "Idle";
 }
 
 export function newestEntryId(conversation: Conversation): number {

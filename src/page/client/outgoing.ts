@@ -2,7 +2,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
-import type { Conversation } from "./conversation.js";
+import { isRunning, type Conversation } from "./conversation.js";
 import { blocksText } from "./pi-message.js";
 
 const sent = {
@@ -132,7 +132,7 @@ function isHeld(conversation: Conversation, item: Outgoing): boolean {
     Sending: () => true,
     Unconfirmed: () => true,
     Queued: ({ submissionId }) =>
-      conversation.isRunning || conversation.inbox.some((queued) => queued.id === submissionId),
+      isRunning(conversation) || conversation.inbox.some((queued) => queued.id === submissionId),
   });
 }
 

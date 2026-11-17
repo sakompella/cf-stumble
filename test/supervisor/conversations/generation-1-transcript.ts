@@ -1,7 +1,7 @@
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import type { Conversation } from "../../../src/page/client/conversation.js";
+import { isRunning, type Conversation } from "../../../src/page/client/conversation.js";
 import {
   AssistantMessage,
   blocksText,
@@ -24,7 +24,8 @@ export function openReader() {
       latest = read(line);
     },
     viewed: () => Option.isSome(latest),
-    isRunning: () => Option.exists(latest, (value) => value.isRunning),
+    phase: () => Option.match(latest, { onNone: () => "unread", onSome: ({ run }) => run }),
+    isRunning: () => Option.exists(latest, isRunning),
     entries: (): readonly Entry[] =>
       Option.match(latest, {
         onNone: () => [],

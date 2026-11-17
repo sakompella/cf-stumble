@@ -2,10 +2,10 @@ import { createLazy, type Html, type HtmlBuilder } from "foldkit/html";
 import * as Option from "effect/Option";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import { Message } from "./message.js";
-import { FreshThread, freshThreadWording } from "./fresh-thread.js";
+import { freshThreadWording } from "./fresh-thread.js";
 import { RunBudget, type Model } from "./model.js";
 import { streamWording } from "./stream-phase.js";
-import { statusText } from "./view-parts.js";
+import { turnButtons } from "./view-turn.js";
 import { transcriptOf } from "./transcript.js";
 import { transcriptView } from "./view-transcript.js";
 
@@ -24,55 +24,6 @@ function sendShortcut(key: string, modifiers: Readonly<{ ctrlKey: boolean; metaK
   return key === "Enter" && (modifiers.ctrlKey || modifiers.metaKey)
     ? Option.some(Message.PressedSendShortcut())
     : Option.none();
-}
-
-function runState(model: Model): string {
-  const { isRunning, inbox } = model.conversation;
-
-  if (!isRunning) {
-    return model.runNote;
-  }
-
-  const running = inbox.length === 0 ? "running" : `running · ${inbox.length} queued`;
-
-  return model.runNote === "" ? running : `${running} · ${model.runNote}`;
-}
-
-function turnButtons(model: Model, h: HtmlBuilder<Message>): Html {
-  const isCancellable = model.conversation.isRunning || model.conversation.inbox.length > 0;
-
-  return h.div(
-    [h.Class("row")],
-    [
-      h.button(
-        [h.Id(ID.sendTurnButton), h.Type("button"), h.OnClick(Message.ClickedSendTurn())],
-        ["Send turn"],
-      ),
-      h.button(
-        [
-          h.Id(ID.cancelTurnButton),
-          h.Type("button"),
-          h.Disabled(!isCancellable),
-          h.OnClick(Message.ClickedCancelTurn()),
-        ],
-        ["Cancel turn"],
-      ),
-      h.button(
-        [
-          h.Id(ID.freshThreadButton),
-          h.Type("button"),
-          h.Disabled(FreshThread.guards.Starting(model.freshThread)),
-          h.OnClick(Message.ClickedFreshThread()),
-        ],
-        [
-          FreshThread.guards.Armed(model.freshThread)
-            ? "Confirm fresh thread"
-            : "Start fresh thread",
-        ],
-      ),
-      statusText(ID.turnState, runState(model), h),
-    ],
-  );
 }
 
 function budgetButtons(model: Model, h: HtmlBuilder<Message>): Html {

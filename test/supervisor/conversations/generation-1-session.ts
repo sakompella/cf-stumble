@@ -136,6 +136,14 @@ export async function hasRun(control: Control, projectId: string): Promise<boole
   return view.isRunning();
 }
 
+export async function untilPhase(
+  control: Control,
+  projectId: string,
+  phase: "Preparing" | "WaitingForModel",
+): Promise<void> {
+  await readEventsUntil(control, projectId, (read) => read.phase() === phase);
+}
+
 export async function untilIdle(control: Control, projectId: string): Promise<void> {
   await readEventsUntil(control, projectId, (read) => read.viewed() && !read.isRunning());
 }

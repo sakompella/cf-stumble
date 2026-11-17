@@ -11,6 +11,7 @@ import {
   submitted,
   untilAnswered,
   untilIdle,
+  untilPhase,
 } from "./generation-1-session.js";
 import { ProjectWorkspace } from "./project-workspace.js";
 import { calls, held, says, scriptModel } from "./scripted-model.js";
@@ -232,4 +233,21 @@ test("an events stream whose facet was replaced ends, and a fresh thread still a
 
   while (!(await reader.read()).done);
   expect(await control.freshProjectConversation(project)).toMatchObject({ ok: true });
+});
+
+test("a run reads as Preparing while its workspace is held, and the model is asked once it is released", async () => {
+  const workspace = new ProjectWorkspace();
+  const gate = held();
+  const model = scriptModel(gate.respond);
+  const control = await servingGeneration1("generation-1-preparing", workspace);
+  const release = workspace.hold();
+
+  await submitted(control, project, "hello", "r1");
+  await untilPhase(control, project, "Preparing");
+  expect(model.inputs).toHaveLength(0);
+
+  release();
+  await model.asked(1);
+  await untilPhase(control, project, "WaitingForModel");
+  gate.release(says("done"));
 });

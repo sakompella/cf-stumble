@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { redactedExcerpt } from "../../diagnostics.js";
-import { AssistantMessage, type Conversation } from "../../page/index.js";
+import { AssistantMessage, isRunning, type Conversation } from "../../page/index.js";
 import { STARTUP_CHECK_REPLY, startupCheckStep } from "../../startup-check-script.js";
 
 const isAssistantMessage = Schema.is(AssistantMessage);
@@ -17,7 +17,7 @@ export function finalAnswer(
   conversation: Conversation,
   answers: number,
 ): AssistantMessage | undefined {
-  if (conversation.isRunning) return undefined;
+  if (isRunning(conversation)) return undefined;
 
   const messages = conversationMessages(conversation);
 

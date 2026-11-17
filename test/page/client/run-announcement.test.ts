@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import type { Conversation } from "../../../src/page/client/conversation.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
+import { RunPhase } from "../../../src/page/client/run-phase.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { htmlOf, textOf, type Rendered } from "./rendered.js";
 import { received, running, streaming as streamingText, viewing } from "./views.js";
@@ -50,4 +51,12 @@ test("streamed text does not change what the live region holds", () => {
 
   expect(streaming).toEqual(waiting);
   expect(streaming).toEqual([{ politeness: "polite", text: "running" }]);
+});
+
+test("the live region holds running in every phase of a run", () => {
+  const phases = RunPhase.literals.filter((run) => run !== "Idle");
+
+  expect(phases.map((run) => announced(runWith(viewing({ run }))))).toEqual(
+    phases.map(() => [{ politeness: "polite", text: "running" }]),
+  );
 });
