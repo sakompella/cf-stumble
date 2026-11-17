@@ -1,7 +1,9 @@
 import {
+  parseGitHubClientId,
   parseGitHubToken,
   requestDeviceAuthorization,
   redeemDeviceAuthorization,
+  type GitHubClientId,
   type GitHubFetch,
   type GitHubToken,
 } from "../../github/index.js";
@@ -19,14 +21,13 @@ import {
   checkedAtOf,
   checkedStatus,
   CredentialEvent,
-  ensureCommand,
   GitHubAuthorization,
   isWorking,
   knownStatus,
+  needsRepair,
   type CredentialSource,
   type GitHubConnectionStatus,
   type GitHubCredential,
-  EnsureCommand,
 } from "./github-connection-machine.js";
 import type { GitHubConnectionStore } from "./github-connection-store.js";
 import {
@@ -59,13 +60,17 @@ export class GitHubConnection {
   private readonly store: GitHubConnectionStore;
   private readonly workspaceName: string;
   private readonly namespace: CredentialNamespace;
-  private readonly environment: GitHubConnectionEnvironment;
+  private readonly fetcher: GitHubFetch;
+  private readonly clientId: GitHubClientId | undefined;
+  private readonly fallbackToken: GitHubToken | undefined;
 
   constructor(input: GitHubConnectionInput) {
     this.store = input.store;
     this.workspaceName = input.workspaceName;
     this.namespace = input.namespace;
-    this.environment = input.environment;
+    this.fetcher = input.environment.fetcher;
+    this.clientId = parseGitHubClientId(input.environment.clientId);
+    this.fallbackToken = parseGitHubToken(input.environment.fallbackToken);
   }
 
   resetWorkspace(): void {
@@ -112,33 +117,28 @@ export class GitHubConnection {
     return Effect.gen({ self: this }, function* () {
       const credential = yield* this.observed(this.store.revision(), now);
       const current = checkedStatus(credential);
-      const fallback = parseGitHubToken(this.environment.fallbackToken);
 
-      return yield* EnsureCommand.$match(ensureCommand(credential, fallback), {
-        Usable: ({ credential: usable }) => Effect.succeed(checkedStatus(usable)),
-        Unrepairable: ({ credential: unrepairable }) =>
-          Effect.sync(() => {
-            const status = checkedStatus(unrepairable);
+      if (!needsRepair(credential)) return current;
 
-            logCredentialEnsure(status, false, status);
+      const token = this.fallbackToken;
 
-            return status;
-          }),
-        InstallConfigured: ({ token }) =>
-          this.install(token, "configured-token", now).pipe(
-            Effect.tap((repaired) =>
-              Effect.sync(() => {
-                logCredentialEnsure(current, true, repaired);
-              }),
-            ),
-          ),
-      });
+      if (token === undefined) {
+        logCredentialEnsure(current, false, current);
+
+        return current;
+      }
+
+      const repaired = yield* this.install(token, "configured-token", now);
+
+      logCredentialEnsure(current, true, repaired);
+
+      return repaired;
     });
   }
 
   installConfiguredCredential(now: number): Effect.Effect<void> {
     return Effect.suspend(() =>
-      parseGitHubToken(this.environment.fallbackToken) === undefined || this.credentialWorking()
+      this.fallbackToken === undefined || this.credentialWorking()
         ? Effect.void
         : this.ensureCredential(now).pipe(Effect.ignore),
     );
@@ -154,15 +154,13 @@ export class GitHubConnection {
     now: number,
   ): Effect.Effect<GitHubAuthorizationOutcome, CredentialWorkspaceUnavailable> {
     return Effect.gen({ self: this }, function* () {
-      const clientId = this.environment.clientId;
+      const clientId = this.clientId;
 
-      if (clientId === undefined || clientId.trim().length === 0) {
+      if (clientId === undefined) {
         return { ok: false, problem: "not-configured" } as const;
       }
 
-      const started = yield* Effect.result(
-        requestDeviceAuthorization(clientId, this.environment.fetcher),
-      );
+      const started = yield* Effect.result(requestDeviceAuthorization(clientId, this.fetcher));
 
       if (Result.isFailure(started)) {
         return { ok: false, problem: "provider-unavailable" } as const;
@@ -177,7 +175,6 @@ export class GitHubConnection {
             userCode: authorization.userCode,
             verificationUri: authorization.verificationUri,
             expiresAt: now + authorization.expiresInSeconds * 1_000,
-            intervalSeconds: authorization.intervalSeconds,
           }),
         }),
       );
@@ -196,7 +193,7 @@ export class GitHubConnection {
     now: number,
   ): Effect.Effect<GitHubAuthorizationOutcome, CredentialWorkspaceUnavailable> {
     return Effect.gen({ self: this }, function* () {
-      const clientId = this.environment.clientId;
+      const clientId = this.clientId;
       const authorization = this.store.authorization(now);
 
       if (clientId === undefined) {
@@ -209,7 +206,7 @@ export class GitHubConnection {
 
       const redeemed = yield* redeemDeviceAuthorization(
         { clientId, deviceCode: authorization.deviceCode },
-        this.environment.fetcher,
+        this.fetcher,
       );
 
       const settled =

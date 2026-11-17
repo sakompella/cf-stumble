@@ -2,16 +2,15 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
-import { parseGitHubToken } from "../../../src/github/device-flow.js";
 import {
   awaitingStatus,
   checkedAtOf,
   checkedStatus,
-  ensureCommand,
   GitHubAuthorization,
   GitHubCredential,
   isWorking,
   knownStatus,
+  needsRepair,
   recordedOf,
 } from "../../../src/supervisor/projects/github-connection-machine.js";
 import {
@@ -25,8 +24,6 @@ import {
   type Model,
   type Snapshot,
 } from "./github-connection-model.js";
-
-const FALLBACK = parseGitHubToken("ghp_fallbackToken01");
 
 test("the stored credential and authorization follow the documented model after every event", () => {
   hegel.test((tc) => {
@@ -78,27 +75,22 @@ test("the status the page reads shows a pending sign-in over the credential, and
 
 test("a credential is working only right after a check found it, and repair reads the credential alone", () => {
   hegel.test((tc) => {
-    const fallback = tc.draw(gs.sampledFrom([undefined, FALLBACK]));
     let model = INITIAL;
 
     walk(tc, (_before, taken, after) => {
       model = modelAfter(model, taken);
 
-      const usable = model.view.kind === "connected" || model.view.kind === "tooling-missing";
-      const command = ensureCommand(after.credential, fallback);
-
       if ("credential" in taken)
         expect(isWorking(after.credential)).toBe(model.view.kind === "connected");
 
-      if (usable) expect(command).toEqual({ _tag: "Usable", credential: after.credential });
-      else if (fallback === undefined) {
-        expect(command).toEqual({ _tag: "Unrepairable", credential: after.credential });
-      } else expect(command).toEqual({ _tag: "InstallConfigured", token: fallback });
+      const usable = model.view.kind === "connected" || model.view.kind === "tooling-missing";
+
+      expect(needsRepair(after.credential)).toBe(!usable);
     });
   });
 });
 
-test("a credential keeps what was recorded, and only an install moves the source and connected time", () => {
+test("a credential keeps what was recorded, and only an install moves the source", () => {
   hegel.test((tc) => {
     expect(checkedAtOf(START.credential)).toBeNull();
     expect(recordedOf(START.credential)).toBeNull();
@@ -121,9 +113,6 @@ test("a credential keeps what was recorded, and only an install moves the source
       }
 
       expect(now?.source).toBe(event.installedBy ?? was?.source ?? "device-authorization");
-      expect(now?.connectedAt).toBe(
-        event.installedBy === undefined ? (was?.connectedAt ?? 0) : event.now,
-      );
     });
   });
 });
@@ -154,7 +143,7 @@ test("a pending authorization is replaced by a newer one, survives other codes, 
 
 test("every reachable credential and authorization is valid, and a damaged recording is not", () => {
   hegel.test((tc) => {
-    const damage = tc.draw(gs.sampledFrom(["login", "source", "connectedAt"] as const));
+    const damage = tc.draw(gs.sampledFrom(["login", "source"] as const));
 
     walk(tc, (_before, _taken, after) => {
       expect(Schema.is(GitHubCredential)(after.credential)).toBe(true);

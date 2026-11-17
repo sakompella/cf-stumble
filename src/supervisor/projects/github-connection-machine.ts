@@ -1,6 +1,6 @@
 import * as Data from "effect/Data";
 import * as Schema from "effect/Schema";
-import type { GitHubCredentialStatus, GitHubToken } from "../../github/index.js";
+import type { GitHubCredentialStatus } from "../../github/index.js";
 
 export const CredentialSource = Schema.Literals(["device-authorization", "configured-token"]);
 
@@ -9,7 +9,6 @@ export type CredentialSource = typeof CredentialSource.Type;
 const Recorded = Schema.Struct({
   login: Schema.String,
   source: CredentialSource,
-  connectedAt: Schema.Number,
 });
 
 export type Recorded = typeof Recorded.Type;
@@ -26,7 +25,6 @@ export const GitHubCredential = Schema.TaggedUnion({
     checkedAt: Schema.Number,
     login: Schema.String,
     source: CredentialSource,
-    connectedAt: Schema.Number,
   },
   reconnectRequired: {
     checkedAt: Schema.Number,
@@ -44,7 +42,6 @@ export const GitHubAuthorization = Schema.TaggedUnion({
     userCode: Schema.String,
     verificationUri: Schema.String,
     expiresAt: Schema.Number,
-    intervalSeconds: Schema.Number,
   },
 });
 
@@ -71,14 +68,6 @@ export type AuthorizationEvent = Data.TaggedEnum<{
 
 export const AuthorizationEvent = Data.taggedEnum<AuthorizationEvent>();
 
-export type EnsureCommand = Data.TaggedEnum<{
-  Usable: { readonly credential: GitHubCredential };
-  Unrepairable: { readonly credential: GitHubCredential };
-  InstallConfigured: { readonly token: GitHubToken };
-}>;
-
-export const EnsureCommand = Data.taggedEnum<EnsureCommand>();
-
 export type CheckedStatus =
   | Readonly<{ state: "disconnected" }>
   | Readonly<{ state: "tooling-missing" }>
@@ -99,7 +88,7 @@ export function recordedOf(credential: GitHubCredential): Recorded | null {
     unchecked: () => null,
     disconnected: () => null,
     toolingMissing: ({ recorded }) => recorded,
-    connected: ({ login, source, connectedAt }) => ({ login, source, connectedAt }),
+    connected: ({ login, source }) => ({ login, source }),
     reconnectRequired: ({ recorded }) => recorded,
   });
 }
@@ -134,7 +123,6 @@ function observed(
         checkedAt: now,
         login: answer.login,
         source: installedBy ?? recorded?.source ?? "device-authorization",
-        connectedAt: installedBy === undefined ? (recorded?.connectedAt ?? 0) : now,
       });
     case "tooling-missing":
       return GitHubCredential.cases.toolingMissing.make({ checkedAt: now, recorded });
@@ -222,21 +210,12 @@ export function isWorking(credential: GitHubCredential): boolean {
   return GitHubCredential.guards.connected(credential);
 }
 
-export function ensureCommand(
-  credential: GitHubCredential,
-  fallback: GitHubToken | undefined,
-): EnsureCommand {
+export function needsRepair(credential: GitHubCredential): boolean {
   return GitHubCredential.match(credential, {
-    unchecked: () => repair(credential, fallback),
-    disconnected: () => repair(credential, fallback),
-    reconnectRequired: () => repair(credential, fallback),
-    toolingMissing: () => EnsureCommand.Usable({ credential }),
-    connected: () => EnsureCommand.Usable({ credential }),
+    unchecked: () => true,
+    disconnected: () => true,
+    reconnectRequired: () => true,
+    toolingMissing: () => false,
+    connected: () => false,
   });
-}
-
-function repair(credential: GitHubCredential, fallback: GitHubToken | undefined): EnsureCommand {
-  return fallback === undefined
-    ? EnsureCommand.Unrepairable({ credential })
-    : EnsureCommand.InstallConfigured({ token: fallback });
 }

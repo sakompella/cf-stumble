@@ -61,7 +61,6 @@ export function unredeemedOutcome(
 ): "pending" | GitHubAuthorizationProblem {
   switch (kind) {
     case "pending":
-    case "slow-down":
       return "pending";
     case "expired":
       return "authorization-expired";
