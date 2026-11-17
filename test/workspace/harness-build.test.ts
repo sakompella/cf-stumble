@@ -7,7 +7,7 @@ import {
   executeHarnessBuildOutput,
   executeHarnessBuildStep,
 } from "../../src/workspace/commands/build-harness.js";
-import { harnessBuildOutputPath } from "../../src/workspace-layout.js";
+import { BUILD_SCRATCH_ROOT, harnessBuildOutputPath } from "../../src/workspace-layout.js";
 import {
   workspaceEffects,
   type PromiseOperations,
@@ -17,7 +17,7 @@ import {
 
 const commit = testHarnessCommit("5000000000000000000000000000000000000001");
 
-const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
+const buildDirectory = `${BUILD_SCRATCH_ROOT}/${commit}`;
 
 const moduleMapPath = `${buildDirectory}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
 
@@ -184,7 +184,7 @@ test("rejects a commit that is not a harness commit, so no path can escape the b
 
 test("two commits published at once each read their own module map", async () => {
   const other = testHarnessCommit("5000000000000000000000000000000000000002");
-  const otherMap = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${other}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
+  const otherMap = `${BUILD_SCRATCH_ROOT}/${other}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
   const operations = new FakeBuildOperations();
   operations.files.set(moduleMapPath, '{"entryModule":"a.js","modules":[]}');
   operations.files.set(otherMap, '{"entryModule":"b.js","modules":[]}');

@@ -21,8 +21,10 @@ export const GIT_ENVIRONMENT = {
   ...GIT_IDENTITY,
 };
 
+const HOSTILE_ROOT_SUFFIX = " a b [x]*?";
+
 export function makeRoot(prefix: string): Root {
-  const root = mkdtempSync(join(tmpdir(), prefix));
+  const root = mkdtempSync(join(tmpdir(), `${prefix}${HOSTILE_ROOT_SUFFIX}`));
 
   const layout = {
     root,

@@ -6,12 +6,12 @@ import {
   NAMES,
   READS,
   path,
-  quote,
   random,
   type Backend,
   type Case,
   type Random,
 } from "./git-data.mts";
+import { shellQuote } from "../../../src/shell-quote.ts";
 
 type World = {
   files: string[];
@@ -118,18 +118,18 @@ export class Generator {
 
   #write(name: string): string {
     const r = this.#random;
-    const target = quote(path(name));
+    const target = shellQuote(path(name));
     const slash = name.lastIndexOf("/");
-    const parent = slash === -1 ? "" : `mkdir -p ${quote(name.slice(0, slash))} && `;
+    const parent = slash === -1 ? "" : `mkdir -p ${shellQuote(name.slice(0, slash))} && `;
     const lines = Array.from({ length: 1 + r.int(4) }, () => r.pick(LINES));
 
     const body = r.pick([
-      `printf ${quote(`${lines.join("\\n")}\\n`)} > ${target}`,
-      `printf ${quote(lines.join("\\r\\n"))} > ${target}`,
+      `printf ${shellQuote(`${lines.join("\\n")}\\n`)} > ${target}`,
+      `printf ${shellQuote(lines.join("\\r\\n"))} > ${target}`,
       `printf 'x\\n' >> ${target}`,
       `: > ${target}`,
       `seq 1 ${100 + r.int(2000)} > ${target}`,
-      `cp ${quote(path(this.#name()))} ${target}`,
+      `cp ${shellQuote(path(this.#name()))} ${target}`,
     ]);
 
     this.#made(name);
@@ -139,12 +139,12 @@ export class Generator {
 
   #change(): string {
     const r = this.#random;
-    const from = quote(path(this.#name()));
+    const from = shellQuote(path(this.#name()));
     const to = r.pick(NAMES);
     const slash = to.lastIndexOf("/");
     const mode = r.pick(["+x", "-x", "755", "644"]);
-    const edit = quote(`s/${r.pick(LINES)}/${r.pick(LINES)}/`);
-    const move = `mkdir -p ${quote(slash === -1 ? "." : to.slice(0, slash))} && mv -f ${from} ${quote(path(to))}`;
+    const edit = shellQuote(`s/${r.pick(LINES)}/${r.pick(LINES)}/`);
+    const move = `mkdir -p ${shellQuote(slash === -1 ? "." : to.slice(0, slash))} && mv -f ${from} ${shellQuote(path(to))}`;
     const kind = r.int(4);
 
     if (kind === 2) this.#made(to);
@@ -158,13 +158,13 @@ export class Generator {
     const r = this.#random;
 
     const forms = [
-      () => quote(path(this.#name())),
+      () => shellQuote(path(this.#name())),
       () => ".",
-      () => quote(r.pick(DIRS)),
-      () => `${quote(path(this.#name()))} ${quote(path(this.#name()))}`,
-      () => `-- ${quote(path(this.#name()))}`,
-      () => quote("*.txt"),
-      () => quote(`${r.pick(DIRS)}/`),
+      () => shellQuote(r.pick(DIRS)),
+      () => `${shellQuote(path(this.#name()))} ${shellQuote(path(this.#name()))}`,
+      () => `-- ${shellQuote(path(this.#name()))}`,
+      () => shellQuote("*.txt"),
+      () => shellQuote(`${r.pick(DIRS)}/`),
     ];
 
     return r.pick(forms)();
@@ -189,24 +189,25 @@ export class Generator {
       () => this.#git("rm", `rm --cached ${pathspec}`),
       () => this.#git("rm", `rm -r ${pathspec}`),
       () => this.#git("rm", `rm -rf ${pathspec}`),
-      () => this.#git("mv", `mv ${quote(path(this.#name()))} ${quote(path(this.#name()))}`),
-      () => this.#git("mv", `mv ${quote(path(this.#name()))} ${quote(r.pick(DIRS))}/`),
+      () =>
+        this.#git("mv", `mv ${shellQuote(path(this.#name()))} ${shellQuote(path(this.#name()))}`),
+      () => this.#git("mv", `mv ${shellQuote(path(this.#name()))} ${shellQuote(r.pick(DIRS))}/`),
       () => this.#git("restore", `restore ${pathspec}`),
       () => this.#git("restore", `restore --staged ${pathspec}`),
       () => this.#git("restore", `restore --source=HEAD ${pathspec}`),
       () => this.#git("restore", `restore -s HEAD --staged --worktree ${pathspec}`),
-      () => this.#git("checkout--", `checkout -- ${quote(path(this.#name()))}`),
-      () => this.#git("checkout--", `checkout HEAD -- ${quote(path(this.#name()))}`),
+      () => this.#git("checkout--", `checkout -- ${shellQuote(path(this.#name()))}`),
+      () => this.#git("checkout--", `checkout HEAD -- ${shellQuote(path(this.#name()))}`),
       () => this.#git("reset", "reset"),
-      () => this.#git("reset", `reset -- ${quote(path(this.#name()))}`),
-      () => this.#git("reset", `reset ${quote(path(this.#name()))}`),
-      () => this.#git("reset", `reset HEAD ${quote(path(this.#name()))}`),
+      () => this.#git("reset", `reset -- ${shellQuote(path(this.#name()))}`),
+      () => this.#git("reset", `reset ${shellQuote(path(this.#name()))}`),
+      () => this.#git("reset", `reset HEAD ${shellQuote(path(this.#name()))}`),
     ])();
   }
 
   #commit(): Case {
     const r = this.#random;
-    const message = quote(r.pick(MESSAGES));
+    const message = shellQuote(r.pick(MESSAGES));
 
     const forms = [
       `commit -m ${message}`,
@@ -216,10 +217,10 @@ export class Generator {
       `commit --allow-empty -m ${message}`,
       `commit --amend -m ${message}`,
       `commit --amend --no-edit`,
-      `commit -m ${message} -m ${quote(r.pick(MESSAGES))}`,
+      `commit -m ${message} -m ${shellQuote(r.pick(MESSAGES))}`,
       `commit -m ''`,
       `commit -q -m ${message}`,
-      `commit -m ${message} -- ${quote(path(this.#name()))}`,
+      `commit -m ${message} -- ${shellQuote(path(this.#name()))}`,
       `commit --no-verify -m ${message}`,
     ];
 
@@ -267,8 +268,8 @@ export class Generator {
 
     const forms = [
       ...READS,
-      `status -s -- ${quote(path(this.#name()))}`,
-      `diff -- ${quote(path(this.#name()))}`,
+      `status -s -- ${shellQuote(path(this.#name()))}`,
+      `diff -- ${shellQuote(path(this.#name()))}`,
       `diff HEAD~1 HEAD --stat`,
     ];
 

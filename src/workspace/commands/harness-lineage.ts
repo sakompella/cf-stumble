@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../../diagnostics.js";
 import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js";
+import { shellQuote } from "../../shell-quote.js";
 import { WORKSPACE_SHORT_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import { HARNESS_GIT_DIRECTORY, WORKSPACE_ROOT } from "../../workspace-layout.js";
 import { answerFailures, type WorkspaceEffects } from "../operations.js";
@@ -22,14 +23,16 @@ export const UNKNOWN_LINEAGE: HarnessLineage = {
 const MAIN = "refs/remotes/origin/main";
 
 function lineageSource(active: HarnessCommit, target: HarnessCommit): string {
-  const git = `git --git-dir=${HARNESS_GIT_DIRECTORY}`;
-
   return [
-    `if ${git} merge-base --is-ancestor ${active} ${target} 2>/dev/null; then echo "contains 0"`,
-    `elif ${git} merge-base ${active} ${target} >/dev/null 2>&1; then echo "contains 1"`,
+    `git_dir=${shellQuote(HARNESS_GIT_DIRECTORY)}`,
+    `active=${shellQuote(active)}`,
+    `target=${shellQuote(target)}`,
+    `main=${shellQuote(MAIN)}`,
+    'if git --git-dir="$git_dir" merge-base --is-ancestor "$active" "$target" 2>/dev/null; then echo "contains 0"',
+    'elif git --git-dir="$git_dir" merge-base "$active" "$target" >/dev/null 2>&1; then echo "contains 1"',
     'else echo "contains unknown"; fi',
-    `echo "active $(${git} rev-list --count ${active}..${MAIN} 2>/dev/null)"`,
-    `echo "target $(${git} rev-list --count ${target}..${MAIN} 2>/dev/null)"`,
+    'echo "active $(git --git-dir="$git_dir" rev-list --count "$active..$main" 2>/dev/null)"',
+    'echo "target $(git --git-dir="$git_dir" rev-list --count "$target..$main" 2>/dev/null)"',
   ].join("\n");
 }
 
