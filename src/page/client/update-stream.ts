@@ -1,7 +1,7 @@
 import * as Option from "effect/Option";
 import { ChatGPT } from "./chatgpt.js";
 import { FetchChatGPT, FetchStatus } from "./commands.js";
-import { EMPTY_CONVERSATION, type Conversation } from "./conversation.js";
+import { EMPTY_CONVERSATION, isRunning, type Conversation } from "./conversation.js";
 import type { Model } from "./model.js";
 import { settledOutgoing, withoutQueued } from "./outgoing.js";
 import { StreamPhase, wasInterrupted } from "./stream-phase.js";
@@ -20,19 +20,19 @@ function runEndNote(
   next: Conversation,
   withdrawn: number,
 ): Option.Option<string> {
-  if (next.isRunning) return Option.none();
+  if (isRunning(next)) return Option.none();
 
   if (Option.isSome(next.maybeRunFailure)) {
     const reason = next.maybeRunFailure.value;
 
-    return previous.isRunning || !Option.contains(previous.maybeRunFailure, reason)
+    return isRunning(previous) || !Option.contains(previous.maybeRunFailure, reason)
       ? Option.some(
           `stopped: ${reason}${reason === "aborted" ? withdrawnWording(withdrawn, next) : ""}`,
         )
       : Option.none();
   }
 
-  return previous.isRunning ? Option.some("answered") : Option.none();
+  return isRunning(previous) ? Option.some("answered") : Option.none();
 }
 
 function isReplacement(previous: Conversation, next: Conversation): boolean {
@@ -52,8 +52,8 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
     : held;
 
   const note = runEndNote(model.conversation, conversation, model.queuedAtCancel);
-  const ended = model.conversation.isRunning && !conversation.isRunning;
-  const started = !model.conversation.isRunning && conversation.isRunning;
+  const ended = isRunning(model.conversation) && !isRunning(conversation);
+  const started = !isRunning(model.conversation) && isRunning(conversation);
 
   const received: UpdateReturn = {
     model: {

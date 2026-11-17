@@ -46,6 +46,7 @@ export const OWNER_PAGE_IDS = {
   sendTurnButton: "send-turn-button",
   cancelTurnButton: "cancel-turn-button",
   turnState: "turn-state",
+  runPhase: "run-phase",
   freshThreadButton: "fresh-thread-button",
   freshThreadStatus: "fresh-thread-status",
 

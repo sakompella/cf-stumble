@@ -66,8 +66,20 @@ export class ProjectWorkspace extends FakeTenantWorkspace {
   readonly execs = new StartupCheckAnsweringExecs();
   readonly leases: Lease[] = [];
   killsCommands = true;
+  #held: Promise<void> = Promise.resolve();
 
-  project({ remainingMs }: Readonly<{ remainingMs: number }>) {
+  hold(): () => void {
+    const open = { release: (): void => {} };
+
+    this.#held = new Promise<void>((resolve) => {
+      open.release = resolve;
+    });
+
+    return open.release;
+  }
+
+  async project({ remainingMs }: Readonly<{ remainingMs: number }>) {
+    await this.#held;
     const Target = this.killsCommands ? ProjectRpcTarget : UnkillableProjectTarget;
     const lease: Lease = { remainingMs, ended: false };
     this.leases.push(lease);
@@ -76,14 +88,12 @@ export class ProjectWorkspace extends FakeTenantWorkspace {
       lease.ended = true;
     };
 
-    return Promise.resolve(
-      new RpcStub(
-        new Target(
-          this.files,
-          new FakeProjectTransactions(),
-          this.execs,
-          targetOptions({ remainingMs, endLease }),
-        ),
+    return new RpcStub(
+      new Target(
+        this.files,
+        new FakeProjectTransactions(),
+        this.execs,
+        targetOptions({ remainingMs, endLease }),
       ),
     );
   }

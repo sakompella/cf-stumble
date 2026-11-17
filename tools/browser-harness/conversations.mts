@@ -113,6 +113,15 @@ function freshBarrier(): Barrier {
   return { ...barrier, released };
 }
 
+async function preparing(barrier: Barrier): Promise<undefined> {
+  if (barrier.held) {
+    barrier.reached = true;
+    await barrier.released;
+  }
+
+  return undefined;
+}
+
 function stubTools(scenario: HarnessScenario, barrier: Barrier): Extension {
   const bash = defineTool({
     name: "bash",
@@ -165,7 +174,13 @@ async function openHarness(scenario: HarnessScenario, barrier: Barrier) {
   const registry = createRegistry();
   registry.install(stubTools(scenario, barrier));
   registry.install(RunNotices);
-  const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
+
+  const harness = await Harness.open(
+    new MemoryStorage(),
+    { models, registry, env: () => preparing(barrier) },
+    context,
+  );
+
   const model = faux.getModel();
 
   const create = () =>
@@ -255,6 +270,9 @@ export async function openConversations(scenario: HarnessScenario): Promise<Conv
     ...readers(registry),
     submit: async (projectId, content, requestId) => {
       const conversation = await registry.conversationOf(projectId);
+
+      if (scenario === "preparing-paused" && !barrier.reached) barrier.held = true;
+
       const submission = await conversation.submit({ type: "input", content, requestId }, context);
 
       return submission.id;

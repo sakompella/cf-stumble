@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import { ReplaceThread } from "./commands.js";
-import { EMPTY_CONVERSATION } from "./conversation.js";
+import { EMPTY_CONVERSATION, isRunning } from "./conversation.js";
 import { advanceFreshThread, FreshThreadEvent, Ground } from "./fresh-thread.js";
 import type { Model } from "./model.js";
 import { withoutQueued } from "./outgoing.js";
@@ -10,7 +10,7 @@ import { clearError, withError, type Handlers, type UpdateReturn } from "./updat
 function groundOf(model: Model): Ground {
   if (Option.isNone(model.maybeProjectId)) return Ground.NoProject();
 
-  return model.conversation.isRunning
+  return isRunning(model.conversation)
     ? Ground.RunActive()
     : Ground.Ready({ projectId: model.maybeProjectId.value, streamId: model.eventsStreamId });
 }

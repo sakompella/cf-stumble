@@ -6,6 +6,7 @@ type Encoded<E extends AnsweredEndpoint> = (typeof ANSWERS)[E]["Encoded"];
 export type HarnessScenario =
   | "ready"
   | "ready-paused"
+  | "preparing-paused"
   | "model-error"
   | "cut-off"
   | "github-disconnected"
