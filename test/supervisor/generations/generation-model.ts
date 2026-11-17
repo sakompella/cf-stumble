@@ -7,12 +7,12 @@ import type {
 import type {
   Generation,
   GenerationActor,
+  GenerationChange,
   GenerationControlResult,
   PreparationOutcome,
   Submission,
 } from "../../../src/supervisor/generation-state.js";
 import type { ControlProblemCode } from "../../../src/api/problems.js";
-import type { GenerationChange } from "../../../src/supervisor/history/commits.js";
 import { label as generationLabel } from "./fixtures.js";
 
 export type Kind = "candidate" | "failed" | "ready" | "served";

@@ -5,7 +5,7 @@ import {
   type GitHubConnectionEnvironment,
 } from "./projects/index.js";
 import { Generations } from "./generations.js";
-import { generationHistory } from "./history/wiring.js";
+import { GenerationHistory } from "./generation-history.js";
 import { FACET_COMPATIBILITY } from "../facet/index.js";
 import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
@@ -66,13 +66,23 @@ function chatgptConnection(storage: DurableObjectStorage, env: SupervisorEnv): C
   });
 }
 
+function generationHistory(ctx: DurableObjectState, env: SupervisorEnv): GenerationHistory {
+  return new GenerationHistory(
+    env.MODULE_MAPS,
+    (pending) => {
+      ctx.waitUntil(pending);
+    },
+    () => Date.now(),
+  );
+}
+
 export function supervisorParts(
   ctx: DurableObjectState,
   env: SupervisorEnv,
   resetting: () => boolean,
   generationOperations: GenerationOperations,
 ) {
-  const history = generationHistory(ctx, env.MODULE_MAPS);
+  const history = generationHistory(ctx, env);
 
   const generations = new Generations(ctx.storage, FACET_COMPATIBILITY, {
     changed: (change) => {

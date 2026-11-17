@@ -1,8 +1,10 @@
 import { vi } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 import { Generations } from "../../../src/supervisor/generations.js";
-import type { GenerationLabel } from "../../../src/supervisor/generation-state.js";
-import type { GenerationChange } from "../../../src/supervisor/history/commits.js";
+import type {
+  GenerationChange,
+  GenerationLabel,
+} from "../../../src/supervisor/generation-state.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 
 const READY = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;

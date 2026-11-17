@@ -18,6 +18,7 @@ import {
   type ActiveGeneration,
   type Generation,
   type GenerationActor,
+  type GenerationChange,
   type GenerationControlResult,
   type GenerationLabel,
   type LabeledGeneration,
@@ -35,7 +36,6 @@ import {
   type GenerationRow,
   type SelectionRow,
 } from "./generation-rows.js";
-import type { GenerationChange } from "./history/commits.js";
 
 export type GenerationPorts = Readonly<{
   changed: (change: GenerationChange) => void;

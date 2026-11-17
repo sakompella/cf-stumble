@@ -1,12 +1,11 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
 import { Generations } from "../../../src/supervisor/generations.js";
-import { spyPorts } from "../generations/generation-ports.js";
+import { spyPorts } from "./generation-ports.js";
 import type { GenerationLabel } from "../../../src/supervisor/generation-state.js";
-import { GenerationHistory } from "../../../src/supervisor/history/log.js";
-import { r2History } from "../../../src/supervisor/history/r2-history.js";
+import { GenerationHistory } from "../../../src/supervisor/generation-history.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 
 const firstCommit = "1".repeat(40);
@@ -19,19 +18,23 @@ afterEach(async () => {
 
 function recorder(refusals: number) {
   const pending: Promise<void>[] = [];
-  const append = r2History(env.MODULE_MAPS);
   let remaining = refusals;
 
-  const history = new GenerationHistory(
-    (commit) => {
+  const bucket: R2Bucket = {
+    ...env.MODULE_MAPS,
+    put(key, value, options) {
       if (remaining > 0) {
         remaining -= 1;
 
         return Promise.reject(new Error("the bucket refused the put"));
       }
 
-      return append(commit);
+      return env.MODULE_MAPS.put(key, value, options);
     },
+  };
+
+  const history = new GenerationHistory(
+    bucket,
     (promise) => {
       pending.push(promise);
     },
@@ -137,14 +140,24 @@ test("an activation stores the generation record and the event as JSON objects",
   expect(event?.httpMetadata?.contentType).toBe("application/json");
 });
 
-test("a failed history write does not block activation or later events", async () => {
+test("a failed history write does not block activation or later events, and names the event that is missing", async () => {
+  const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
   let active: number | undefined;
 
-  await recordedSupervisor("history-failure", 1, (generations) => {
+  await recordedSupervisor("history-failure", 2, (generations) => {
     served(generations, firstCommit);
     active = generations.active().generation?.label;
   });
 
   expect(active).toBe(0);
   expect(await eventNames()).toEqual(["2-prepared", "3-activated"]);
+  expect(warned).toHaveBeenCalledWith(
+    expect.objectContaining({
+      event: "generation.history-failed",
+      kind: "submitted",
+      label: 0,
+      epoch: 1,
+    }),
+  );
 });

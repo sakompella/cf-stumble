@@ -28,6 +28,15 @@ export type GenerationRecord = Readonly<{
   compatibility: string | undefined;
 }>;
 
+export type GenerationChange = Readonly<{
+  kind: "submitted" | "prepared" | "activated" | "rolled-back" | "probation-failed" | "proven";
+  actor: GenerationActor;
+  epoch: number;
+  outcome: string | null;
+  errorCode: string | null;
+  record: GenerationRecord;
+}>;
+
 export type ActiveGeneration = Readonly<{
   generation: Generation | undefined;
   epoch: number;

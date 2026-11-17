@@ -2,12 +2,13 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
-import type { GenerationStatus } from "../../../src/supervisor/generation-state.js";
-import type { GenerationChange } from "../../../src/supervisor/history/commits.js";
-import { GenerationHistory } from "../../../src/supervisor/history/log.js";
-import { r2History } from "../../../src/supervisor/history/r2-history.js";
+import { GenerationHistory } from "../../../src/supervisor/generation-history.js";
+import type {
+  GenerationChange,
+  GenerationStatus,
+} from "../../../src/supervisor/generation-state.js";
 import { tick } from "../../eventually.js";
-import { label, testHarnessCommit } from "../generations/fixtures.js";
+import { label, testHarnessCommit } from "./fixtures.js";
 
 afterEach(async () => {
   await reset();
@@ -70,7 +71,7 @@ test("a history write after one whose put failed waits for the older put still i
   const pending: Promise<void>[] = [];
 
   const history = new GenerationHistory(
-    r2History(bucket),
+    bucket,
     (promise) => {
       pending.push(promise);
     },
