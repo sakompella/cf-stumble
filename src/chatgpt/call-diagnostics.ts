@@ -1,7 +1,8 @@
 import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { logEvent, type LogFields } from "../diagnostics.js";
+import { logEvent, redactedCause, type LogFields } from "../diagnostics.js";
 import type { ModelUsage } from "../model-route-wire/events.js";
 import type { ResponsesRequestBody } from "./responses.js";
 
@@ -10,6 +11,28 @@ export class ChatGPTNotConnected extends Data.TaggedError("ChatGPTNotConnected")
 export class ChatGPTUsageLimited extends Data.TaggedError("ChatGPTUsageLimited")<{
   readonly limitedUntil: number | null;
 }> {}
+
+class AccountUpdateFailed extends Data.TaggedError("AccountUpdateFailed")<{
+  update: "refused" | "usage-limited";
+  detail: string;
+}> {}
+
+export function recorded(
+  update: AccountUpdateFailed["update"],
+  token: string,
+  write: () => Promise<void>,
+): Effect.Effect<void> {
+  return Effect.tryPromise({
+    try: write,
+    catch: (cause) => new AccountUpdateFailed({ update, detail: redactedCause(cause, token) }),
+  }).pipe(
+    Effect.catchTag("AccountUpdateFailed", ({ update: lost, detail }) =>
+      Effect.sync(() => {
+        logEvent("error", "chatgpt.account-update-failed", { update: lost, detail });
+      }),
+    ),
+  );
+}
 
 type PromptFingerprints = Readonly<{
   instructionsHash: string;
