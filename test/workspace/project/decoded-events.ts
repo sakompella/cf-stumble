@@ -15,7 +15,6 @@ const ExecFrame = Schema.Union([
     seq: Schema.Number,
     outcome: Schema.Literal("exited"),
     exitCode: Schema.Number,
-    fullOutputPaths: Schema.optional(Schema.Array(Schema.String)),
   }),
   Schema.Struct({
     kind: Schema.Literal("terminal"),

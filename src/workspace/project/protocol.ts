@@ -56,13 +56,7 @@ type ExecFailureCode = (typeof EXEC_FAILURE_CODES)[number];
 export type ExecEvent =
   | { kind: "stdout"; seq: number; data: string }
   | { kind: "stderr"; seq: number; data: string }
-  | {
-      kind: "terminal";
-      seq: number;
-      outcome: "exited";
-      exitCode: number;
-      fullOutputPaths?: readonly string[] | undefined;
-    }
+  | { kind: "terminal"; seq: number; outcome: "exited"; exitCode: number }
   | { kind: "terminal"; seq: number; outcome: "killed" | "timed-out" }
   | {
       kind: "terminal";
@@ -78,14 +72,6 @@ function isOneOf<const Known extends string>(
   return known.some((item) => item === value);
 }
 
-function isSavedPaths(value: unknown): value is readonly string[] | undefined {
-  if (value === undefined) return true;
-
-  if (!Array.isArray(value)) return false;
-
-  return value.every((path): path is string => typeof path === "string");
-}
-
 export function isExecEvent(value: unknown): value is ExecEvent {
   if (typeof value !== "object" || value === null) return false;
 
@@ -98,9 +84,7 @@ export function isExecEvent(value: unknown): value is ExecEvent {
   if (value.kind !== "terminal" || !("outcome" in value)) return false;
 
   if (value.outcome === "exited") {
-    const saved = "fullOutputPaths" in value ? value.fullOutputPaths : undefined;
-
-    return "exitCode" in value && typeof value.exitCode === "number" && isSavedPaths(saved);
+    return "exitCode" in value && typeof value.exitCode === "number";
   }
 
   if (value.outcome === "failed") {

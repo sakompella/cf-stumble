@@ -147,9 +147,7 @@ class ExecRun implements ExecOperation {
     }
 
     this.#settle(
-      event === undefined
-        ? failure(false)
-        : { outcome: "exited", exitCode: event.exitCode, fullOutputPaths: event.fullOutputPaths },
+      event === undefined ? failure(false) : { outcome: "exited", exitCode: event.exitCode },
     );
   }
 
