@@ -1,7 +1,7 @@
 import * as Option from "effect/Option";
 import { MintRequestId, SendMessage } from "./commands.js";
 import { advanceFreshThread, FreshThreadEvent } from "./fresh-thread.js";
-import { newestEntryId } from "./conversation.js";
+import { newestEntryId } from "../../conversation-view/conversation.js";
 import type { Model } from "./model.js";
 import { advanceRequest, Outgoing, OutgoingEvent } from "./outgoing.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";

@@ -3,7 +3,7 @@ import * as Option from "effect/Option";
 import { Command } from "foldkit";
 import * as Schema from "effect/Schema";
 import { loadIntoTranscript } from "./transcript-store.js";
-import { conversationOf } from "./conversation.js";
+import { conversationOf } from "../../conversation-view/conversation.js";
 import { Message } from "./message.js";
 
 export const LoadTranscript = Command.define("LoadTranscript", {

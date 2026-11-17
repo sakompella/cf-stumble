@@ -3,7 +3,8 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { MainFacetTarget } from "../../facet/index.js";
 import { logRedactedCause } from "../../diagnostics.js";
-import { readFirstView, type AssistantMessage } from "../../page/index.js";
+import type { AssistantMessage } from "../../conversation-view/pi-message.js";
+import { readView } from "../../conversation-view/view-reader.js";
 import { startupCheckSteps } from "../../startup-check-model.js";
 import { describe, finalAnswer, isReply, turnStep } from "./answer.js";
 
@@ -67,7 +68,7 @@ function settledAnswer(
   return snapshotLine(candidate, conversationId).pipe(
     Effect.mapError((reason): StepFailure => ({ step, reason })),
     Effect.flatMap((line) => {
-      const conversation = readFirstView(line);
+      const conversation = readView(line);
 
       if (Option.isNone(conversation)) {
         return Effect.fail({

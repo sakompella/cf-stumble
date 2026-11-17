@@ -7,7 +7,11 @@ import { transportDetail } from "./api.js";
 import { loaderFor } from "./entries-loader.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
-import { heldTranscript, TranscriptKey, type HeldTranscript } from "./view-reader.js";
+import {
+  heldTranscript,
+  TranscriptKey,
+  type HeldTranscript,
+} from "../../conversation-view/view-reader.js";
 
 type LoadedView = NonNullable<HeldTranscript["latest"]>;
 

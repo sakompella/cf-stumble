@@ -2,7 +2,7 @@ import * as Option from "effect/Option";
 import * as Record from "effect/Record";
 import type { Update } from "foldkit";
 import { FetchStatus } from "./commands.js";
-import { EMPTY_CONVERSATION } from "./conversation.js";
+import { EMPTY_CONVERSATION } from "../../conversation-view/conversation.js";
 import { FreshThread } from "./fresh-thread.js";
 import type { Message } from "./message.js";
 import { StatusRead, type Model } from "./model.js";
