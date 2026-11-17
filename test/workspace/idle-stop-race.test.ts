@@ -7,7 +7,10 @@ import { eventually, tick } from "../eventually.js";
 
 const LIMIT = 10_000;
 
-function gated(phase: "close" | "destroy") {
+function gated(
+  phase: "close" | "destroy",
+  failures: Readonly<{ destroy?: boolean; alarm?: boolean }> = {},
+) {
   const clock = { now: 1_000 };
   const calls: string[] = [];
   const release = { open: (): void => {} };
@@ -19,7 +22,8 @@ function gated(phase: "close" | "destroy") {
   const idle = new WorkspaceIdleController({
     nowMs: () => clock.now,
     idleLimitMs: LIMIT,
-    setAlarm: () => Promise.resolve(),
+    setAlarm: () =>
+      failures.alarm === true ? Promise.reject(new Error("alarm write failed")) : Promise.resolve(),
     containerRunning: () => true,
     pullContainer: () => {
       calls.push("pull");
@@ -34,7 +38,14 @@ function gated(phase: "close" | "destroy") {
     stopContainer: () =>
       Effect.sync(() => {
         calls.push("destroy");
-      }).pipe(Effect.andThen(phase === "destroy" ? Effect.promise(() => gate) : Effect.void)),
+      }).pipe(
+        Effect.andThen(phase === "destroy" ? Effect.promise(() => gate) : Effect.void),
+        Effect.andThen(
+          failures.destroy === true
+            ? Effect.fail(new ContainerStopFailed({ cause: new Error("provider stop failed") }))
+            : Effect.void,
+        ),
+      ),
   });
 
   return { idle, clock, calls, release };
@@ -91,7 +102,41 @@ test.each(["close", "destroy"] as const)(
   },
 );
 
-test("a backend change during an idle stop that work keeps alive still stops the container", async () => {
+test("work waiting on an idle stop that work kept alive runs when the stop cannot arm the alarm again", async () => {
+  const { idle, clock, calls, release } = gated("close", { alarm: true });
+  idle.begin()();
+  clock.now = 11_000;
+  const alarm = idle.onAlarm().catch((cause: unknown) => cause);
+  await eventually(() => {
+    expect(calls).toEqual(["pull", "close"]);
+  });
+  const end = idle.begin();
+  const waiting = idle.settled();
+  release.open();
+
+  await expect(alarm).resolves.toEqual(new Error("alarm write failed"));
+  await expect(waiting).resolves.toBeUndefined();
+  end();
+
+  expect(calls).toEqual(["pull", "close"]);
+});
+
+test("work waiting on an idle stop whose destroy failed runs when the stop cannot arm the alarm again", async () => {
+  const { idle, clock, calls, release } = gated("destroy", { destroy: true, alarm: true });
+  idle.begin()();
+  clock.now = 11_000;
+  const alarm = idle.onAlarm().catch((cause: unknown) => cause);
+  await eventually(() => {
+    expect(calls).toEqual(["pull", "close", "destroy"]);
+  });
+  const waiting = idle.settled();
+  release.open();
+
+  await expect(alarm).resolves.toEqual(new Error("alarm write failed"));
+  await expect(waiting).resolves.toBeUndefined();
+});
+
+test("a backend change during an idle stop that work keeps alive waits for it, then destroys the container once", async () => {
   const { idle, clock, calls, release } = gated("close");
   idle.begin()();
   clock.now = 11_000;
@@ -107,7 +152,8 @@ test("a backend change during an idle stop that work keeps alive still stops the
   await backendChange;
   end();
 
-  expect(calls).toEqual(["pull", "close", "destroy"]);
+  expect(calls.filter((call) => call === "destroy")).toEqual(["destroy"]);
+  expect(calls.at(-1)).toBe("destroy");
 });
 
 test("a failed stop for a backend change rejects, and work waiting on the stop still runs", async () => {

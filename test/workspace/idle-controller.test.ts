@@ -12,7 +12,7 @@ const LIMIT = 10_000;
 
 type Behavior = Readonly<{
   running?: boolean;
-  pull?: "fails" | "fails-once" | "hangs";
+  pull?: "fails" | "hangs";
   closeFails?: boolean;
   destroyFails?: boolean;
   alarmFails?: boolean;
@@ -26,7 +26,6 @@ function controller(options: Behavior = {}) {
   const state = { running: options.running ?? true };
   const alarms: number[] = [];
   const calls: string[] = [];
-  let pullAttempts = 0;
 
   const world = {
     get idle() {
@@ -48,10 +47,8 @@ function controller(options: Behavior = {}) {
     containerRunning: () => state.running,
     pullContainer: () => {
       calls.push("pull");
-      pullAttempts += 1;
 
-      if (options.pull === "fails" || (options.pull === "fails-once" && pullAttempts === 1))
-        return Promise.reject(new Error("pull failed"));
+      if (options.pull === "fails") return Promise.reject(new Error("pull failed"));
 
       return options.pull === "hangs" ? new Promise<void>(() => {}) : Promise.resolve();
     },
@@ -252,29 +249,18 @@ function flaggedWrites(events: readonly LoggedEvent[]): LoggedEvent[] {
   );
 }
 
-test("a final pull that fails both attempts flags the writes as maybe lost, and the container is still destroyed", async () => {
+test("a final pull that fails flags the writes as maybe lost, and the container is still destroyed", async () => {
   const events = capturedEvents();
   const { idle, clock, calls } = controller({ pull: "fails" });
   idle.begin()();
   clock.now = 11_000;
   await idle.onAlarm();
 
-  expect(calls).toEqual(["pull", "pull", "close", "destroy"]);
+  expect(calls).toEqual(["pull", "close", "destroy"]);
   expect(flaggedWrites(events())).toHaveLength(1);
 });
 
-test("a final pull that fails once succeeds on its retry, so no writes are flagged", async () => {
-  const events = capturedEvents();
-  const { idle, clock, calls } = controller({ pull: "fails-once" });
-  idle.begin()();
-  clock.now = 11_000;
-  await idle.onAlarm();
-
-  expect(calls).toEqual(["pull", "pull", "close", "destroy"]);
-  expect(flaggedWrites(events())).toEqual([]);
-});
-
-test("a pull that never settles is given up after its bound, retried, and the container is destroyed", async () => {
+test("a pull that never settles is given up after its bound, and the container is destroyed", async () => {
   vi.useFakeTimers();
   const events = capturedEvents();
   const { idle, clock, calls } = controller({ pull: "hangs" });
@@ -284,6 +270,6 @@ test("a pull that never settles is given up after its bound, retried, and the co
   await vi.runAllTimersAsync();
   await alarm;
 
-  expect(calls).toEqual(["pull", "pull", "close", "destroy"]);
+  expect(calls).toEqual(["pull", "close", "destroy"]);
   expect(flaggedWrites(events())).toHaveLength(1);
 });

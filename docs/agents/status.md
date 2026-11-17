@@ -83,7 +83,6 @@ These come from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plan
 
 **Proved in code or by a scratch test, not seen in production**
 
-- **An idle stop can hang the Host.** If `setAlarm` fails at the end of a stop, every Host RPC and exec waits forever. `rc-review-25.md`.
 - **The turn deadline is enforced in five places (#19).** A lease ends only through a timer. `rc-review-19.md`.
 - **Two ChatGPT account writes fail without a log line (#17).** `rc-review-17.md`.
 - **The route reports its own failures as `invalid-request` (#18).** Pi retries only when the text matches its list. `rc-review-18.md`.

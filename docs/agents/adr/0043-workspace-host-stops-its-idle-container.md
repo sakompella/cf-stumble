@@ -49,10 +49,13 @@ finds the container running with the same launch record and adopts it (`outcome:
 same runtime id), and the pull copies what a background process wrote since the last exec. If the
 launch record differs (a changed container environment, instance size or ignore list), Computer
 destroys and relaunches the container instead, those writes are lost, and the stop pays one cold
-start; Computer has no adopt-only connect to avoid it. The pull is bounded at 60 seconds and tried twice, and a pull that fails or times out does not
-stop the destroy. When both attempts fail, the Host logs the failures and logs
+start; Computer has no adopt-only connect to avoid it. The pull is bounded at 60 seconds and runs once, and a pull that fails or times out does not
+stop the destroy. When it fails, the Host logs the failure and logs
 `workspace.container.idle-stop` with `outcome: "writes-may-be-lost"` before the destroy, because
-a write made since the last pull is then lost with the container.
+a write made since the last pull is then lost with the container. (An earlier version pulled
+twice. No run showed a failed first pull, and a timed-out first pull is not cancelled, so the
+second pull ran beside it.) The snapshot taken before an idle stop has its own 60-second bound
+and does not stop the destroy either.
 
 **Alternatives.**
 
@@ -69,11 +72,13 @@ and checks again one limit later. The check and the destroy follow each other wi
 them, and an exec that begins after the destroy has started waits for it to finish and then
 launches a fresh container.
 
-**One stop at a time.** The stop is one phase machine (`src/workspace/idle-stop.ts`): idle, closing
-or destroying for an idle stop, and closing or destroying for a backend change. A pure transition
-returns the next phase and the commands to run, and the controller runs them. A backend change
-that arrives during an idle stop is queued in that stop: when the idle stop ends with the container
-still running (work began during the close, or the destroy failed), the container is destroyed for
-the backend change. `stopForBackendChange` rejects with the destroy's own error when that destroy
+**One stop at a time.** One permit (`src/workspace/idle-controller.ts`) serializes the stops: the
+alarm's idle stop and the stop for a backend change each run under it, and `settled()`, which
+waits for a stop in progress, takes the same permit for a moment. The permit is released whatever
+way the stop ends, so work waiting on a stop never outlives it, including a stop that cannot arm
+its next alarm (a failed `setAlarm` rejects the alarm, so the platform runs it again). A backend
+change that arrives during an idle stop waits for the permit and then stops the container if it
+still runs (work began during the close, or the destroy failed); it pulls and closes again
+before it destroys. `stopForBackendChange` rejects with the destroy's own error when that destroy
 fails, and work waiting on the stop goes on either way. A provider `stop` or `delete` job that gets
 no answer in 30 s drops the provider's socket (ADR-0050), so a stop never waits forever.

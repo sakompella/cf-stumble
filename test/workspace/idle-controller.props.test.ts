@@ -3,6 +3,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
+import { tick } from "../eventually.js";
 
 const LIMIT = 10_000;
 
@@ -15,6 +16,7 @@ const OPERATIONS = [
   "advance",
   "fireAlarm",
   "fireAlarmTwice",
+  "fireAlarmWithWaiter",
   "containerStops",
   "containerStarts",
 ] as const;
@@ -35,12 +37,13 @@ interface World {
   activeStops: number;
   lastActivity: number;
   work: (() => void)[];
+  waiters: { released: boolean }[];
   leases: { end: () => void; endsAt: number }[];
   violations: string[];
 }
 
 async function settleTasks(): Promise<void> {
-  for (let tick = 0; tick < 20; tick += 1) await Promise.resolve();
+  for (let turn = 0; turn < 20; turn += 1) await Promise.resolve();
 }
 
 function newWorld(): World {
@@ -52,6 +55,7 @@ function newWorld(): World {
     activeStops: 0,
     lastActivity: 1_000,
     work: [],
+    waiters: [],
     leases: [],
     violations: [],
   };
@@ -106,13 +110,24 @@ async function fireAlarm(
   world: World,
   idle: WorkspaceIdleController,
   copies: number,
+  waiter = false,
 ): Promise<void> {
-  if (world.armed === null) return;
-  world.now = Math.max(world.now, world.armed);
+  if (world.armed === null && !waiter) return;
+  world.now = Math.max(world.now, world.armed ?? world.now + LIMIT);
   world.armed = null;
   world.arming = true;
 
   const alarms = Array.from({ length: copies }, () => idle.onAlarm().catch(() => {}));
+
+  if (waiter) {
+    const entry = { released: false };
+    world.waiters.push(entry);
+    await Promise.resolve();
+
+    void idle.settled().then(() => {
+      entry.released = true;
+    });
+  }
 
   await Promise.all(alarms);
   world.arming = false;
@@ -139,6 +154,7 @@ async function perform(
   } else if (operation === "advance") world.now += amount;
   else if (operation === "fireAlarm") await fireAlarm(world, idle, 1);
   else if (operation === "fireAlarmTwice") await fireAlarm(world, idle, 2);
+  else if (operation === "fireAlarmWithWaiter") await fireAlarm(world, idle, 1, true);
   else if (operation === "containerStops") world.running = false;
   else if (operation === "containerStarts") {
     world.running = true;
@@ -177,10 +193,18 @@ async function runScenario(tc: hegel.TestCase) {
 
   for (const step of steps) await perform(step, world, idle);
 
+  for (let turn = 0; turn < 3 && world.waiters.some((waiter) => !waiter.released); turn += 1) {
+    await tick();
+  }
+
+  if (world.waiters.some((waiter) => !waiter.released)) {
+    world.violations.push("work still waits on a stop that ended");
+  }
+
   return { failures, world, idle };
 }
 
-test("whatever work, leases, alarms, failures and container stops interleave, the container is destroyed only when idle and never twice at once", async () => {
+test("whatever work, leases, alarms, failures and container stops interleave, the container is destroyed only when idle and never twice at once, and work waiting on a stop is released when the stop ends", async () => {
   await hegel.testAsync(
     async (tc) => {
       const { world } = await runScenario(tc);
