@@ -1,8 +1,7 @@
-import { FACET_COMPATIBILITY } from "../../src/facet/runtime-contract.js";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
-import { Generations } from "../../src/supervisor/generations.js";
+import { generationsOf } from "./generations/generation-ports.js";
 import type { Generation } from "../../src/supervisor/generation-state.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { label as generationLabel } from "./generations/fixtures.js";
@@ -12,7 +11,7 @@ export function readGeneration(
   labelValue: number,
 ): Promise<Generation | undefined> {
   return runInDurableObject(control, (_instance, state) =>
-    new Generations(state.storage, FACET_COMPATIBILITY).byLabel(generationLabel(labelValue)),
+    generationsOf(state.storage).byLabel(generationLabel(labelValue)),
   );
 }
 
@@ -20,7 +19,7 @@ export function readGenerations(
   control: DurableObjectStub<Supervisor>,
 ): Promise<{ label: number; harnessCommit: string; status: string }[]> {
   return runInDurableObject(control, (_instance, state) => {
-    const generations = new Generations(state.storage, FACET_COMPATIBILITY);
+    const generations = generationsOf(state.storage);
     const read: { label: number; harnessCommit: string; status: string }[] = [];
 
     for (

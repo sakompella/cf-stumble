@@ -1,7 +1,12 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { activation, preparation, settlement } from "../../../src/supervisor/generation-machine.js";
+import {
+  activation,
+  preparation,
+  settlement,
+  type GenerationCommand,
+} from "../../../src/supervisor/generation-machine.js";
 import { rowFromSelection, selectionFromRow } from "../../../src/supervisor/generation-rows.js";
 import {
   GenerationState,
@@ -26,6 +31,30 @@ const event = gs.sampledFrom([
   "check-failed",
 ] as const);
 
+function replacesExactlyOnSwap(
+  before: Selection,
+  after: Selection,
+  commands: readonly GenerationCommand[],
+): void {
+  const swapped = after.serving.active !== before.serving.active;
+
+  expect(commands.filter(({ _tag }) => _tag === "ReplaceFacet")).toHaveLength(swapped ? 1 : 0);
+  expect(after.instance).toBe(before.instance + (swapped ? 1 : 0));
+}
+
+function readyStore(): Map<number, LabeledGeneration> {
+  return new Map(
+    LABELS.map((value) => [
+      value,
+      {
+        label: value,
+        harnessCommit: testHarnessCommit(String(value).repeat(40)),
+        state: GenerationState.cases.Ready.make({ compatibility: COMPATIBILITY }),
+      },
+    ]),
+  );
+}
+
 function stored(store: ReadonlyMap<number, LabeledGeneration>, value: number) {
   const found = store.get(value);
 
@@ -34,20 +63,15 @@ function stored(store: ReadonlyMap<number, LabeledGeneration>, value: number) {
   return found;
 }
 
-test("every reachable selection survives its columns, and serves and falls back only to served generations", () => {
+test("every reachable selection survives its columns, serves and falls back only to served generations, and replaces the facet exactly when the active generation changes", () => {
   hegel.test((tc) => {
-    const store = new Map<number, LabeledGeneration>(
-      LABELS.map((value) => [
-        value,
-        {
-          label: value,
-          harnessCommit: testHarnessCommit(String(value).repeat(40)),
-          state: GenerationState.cases.Ready.make({ compatibility: COMPATIBILITY }),
-        },
-      ]),
-    );
+    const store = readyStore();
 
-    let selection: Selection = { epoch: 0, serving: Serving.cases.Unproven.make({ active: null }) };
+    let selection: Selection = {
+      epoch: 0,
+      instance: 0,
+      serving: Serving.cases.Unproven.make({ active: null }),
+    };
 
     for (let step = 0; step < 4; step += 1) {
       const kind = tc.draw(event);
@@ -77,7 +101,10 @@ test("every reachable selection survives its columns, and serves and falls back 
 
       if (next.generation !== undefined) store.set(next.generation.label, next.generation);
 
+      const before = selection;
       selection = next.selection ?? selection;
+
+      replacesExactlyOnSwap(before, selection, next.commands);
 
       expect(selectionFromRow(rowFromSelection(selection))).toEqual(selection);
 

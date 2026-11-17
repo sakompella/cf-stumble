@@ -8,7 +8,6 @@ import {
   settlement,
   submission,
   type PreparationReply,
-  type RollbackReply,
   type Step,
 } from "./generation-machine.js";
 import {
@@ -38,19 +37,22 @@ import {
 } from "./generation-rows.js";
 import type { GenerationChange } from "./history/commits.js";
 
+export type GenerationPorts = Readonly<{
+  changed: (change: GenerationChange) => void;
+  facetReplaced: () => void;
+}>;
+
+const SERVING_INSTANCE_KEY = "serving-instance";
+
 export class Generations {
   readonly #storage: DurableObjectStorage;
   readonly #sql: SqlStorage;
   readonly #compatibility: string;
-  readonly #onChange: ((change: GenerationChange) => void) | undefined;
+  readonly #ports: GenerationPorts;
 
-  constructor(
-    storage: DurableObjectStorage,
-    compatibility: string,
-    onChange?: (change: GenerationChange) => void,
-  ) {
+  constructor(storage: DurableObjectStorage, compatibility: string, ports: GenerationPorts) {
     this.#storage = storage;
-    this.#onChange = onChange;
+    this.#ports = ports;
     this.#sql = storage.sql;
     this.#compatibility = compatibility;
     storage.transactionSync(() => {
@@ -67,12 +69,28 @@ export class Generations {
           active_label INTEGER REFERENCES generations(label),
           proven_label INTEGER REFERENCES generations(label)
             CHECK (proven_label IS NULL OR active_label IS NOT NULL),
-          epoch INTEGER NOT NULL CHECK (epoch >= 0)
+          epoch INTEGER NOT NULL CHECK (epoch >= 0),
+          serving_instance INTEGER NOT NULL DEFAULT 0 CHECK (serving_instance >= 0)
         );
         INSERT INTO generation_state (singleton, active_label, proven_label, epoch)
         VALUES (1, NULL, NULL, 0)
         ON CONFLICT (singleton) DO NOTHING;
       `);
+
+      const columns = this.#sql
+        .exec<{ name: string }>("PRAGMA table_info(generation_state)")
+        .toArray();
+
+      if (!columns.some(({ name }) => name === "serving_instance")) {
+        this.#sql.exec(
+          "ALTER TABLE generation_state ADD COLUMN serving_instance INTEGER NOT NULL DEFAULT 0 CHECK (serving_instance >= 0)",
+        );
+        this.#sql.exec(
+          "UPDATE generation_state SET serving_instance = ? WHERE singleton = 1",
+          storage.kv.get<number>(SERVING_INSTANCE_KEY) ?? 0,
+        );
+        storage.kv.delete(SERVING_INSTANCE_KEY);
+      }
     });
   }
 
@@ -105,8 +123,8 @@ export class Generations {
     );
   }
 
-  settled(run: Settlement): RollbackReply {
-    return this.#run(() => {
+  settled(run: Settlement): void {
+    this.#run(() => {
       const selection = this.#selection();
 
       const { serving } = selection;
@@ -133,6 +151,10 @@ export class Generations {
         ? { commands: [], reply: undefined }
         : preparation(this.#selection(), current, outcome, actor);
     });
+  }
+
+  servingInstance(): number {
+    return this.#selection().instance;
   }
 
   active(): ActiveGeneration {
@@ -170,8 +192,19 @@ export class Generations {
         const changed = this.#generation(label);
 
         if (changed !== undefined) {
-          this.#onChange?.({ kind, actor, epoch, outcome, errorCode, record: wireRecord(changed) });
+          this.#ports.changed({
+            kind,
+            actor,
+            epoch,
+            outcome,
+            errorCode,
+            record: wireRecord(changed),
+          });
         }
+      },
+      ReplaceFacet: ({ kind, label, epoch }) => {
+        logEvent("info", `generation.${kind}`, { label, epoch });
+        this.#ports.facetReplaced();
       },
       ProbationFailed: ({ _tag, ...fields }) => {
         logEvent("warn", "generation.probation-failed", fields);
@@ -198,10 +231,11 @@ export class Generations {
     const row = rowFromSelection(selection);
 
     this.#sql.exec(
-      "UPDATE generation_state SET active_label = ?, proven_label = ?, epoch = ? WHERE singleton = 1",
+      "UPDATE generation_state SET active_label = ?, proven_label = ?, epoch = ?, serving_instance = ? WHERE singleton = 1",
       row.active_label,
       row.proven_label,
       row.epoch,
+      row.serving_instance,
     );
   }
 

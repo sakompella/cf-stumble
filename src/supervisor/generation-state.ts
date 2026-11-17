@@ -87,7 +87,7 @@ export type LabeledGeneration = Readonly<{
   state: GenerationState;
 }>;
 
-export type Selection = Readonly<{ epoch: number; serving: Serving }>;
+export type Selection = Readonly<{ epoch: number; instance: number; serving: Serving }>;
 
 const WIRE_STATUS: Readonly<Record<GenerationState["_tag"], GenerationStatus>> = {
   Candidate: "candidate",

@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { FACET_COMPATIBILITY } from "../../../src/facet/runtime-contract.js";
-import { Generations } from "../../../src/supervisor/generations.js";
+import type { Generations } from "../../../src/supervisor/generations.js";
+import { generationsOf } from "./generation-ports.js";
 import type { GenerationLabel } from "../../../src/supervisor/generation-state.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
@@ -30,13 +31,13 @@ function rollback(control: DurableObjectStub<Supervisor>, observedEpoch: number)
 }
 
 function servedAcrossProtocols(storage: DurableObjectStorage): Generations {
-  const before = new Generations(storage, PREVIOUS_HOST_PROTOCOL);
+  const before = generationsOf(storage, PREVIOUS_HOST_PROTOCOL);
   const previous = { status: "ready", compatibility: PREVIOUS_HOST_PROTOCOL } as const;
   const first = before.submit(testHarnessCommit(fixtureMainHarnessCommit), "owner").generation;
   before.recordPreparation(first.label, previous, "owner");
   before.activate(command("activate", first.label, before.active().epoch), "owner");
 
-  const after = new Generations(storage, FACET_COMPATIBILITY);
+  const after = generationsOf(storage);
   const current = { status: "ready", compatibility: FACET_COMPATIBILITY } as const;
   const second = after.submit(testHarnessCommit(secondCommit), "owner").generation.label;
   after.recordPreparation(second, current, "owner");
