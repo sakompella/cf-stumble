@@ -1,172 +1,84 @@
-import { Workspace, type WorkspaceBackend } from "@cloudflare/computer";
-import { runInDurableObject } from "cloudflare:test";
-import { env } from "cloudflare:workers";
+import type { Workspace } from "@cloudflare/computer";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { getOrThrow } from "@earendil-works/pi-durable/env";
 import { expect, test } from "vitest";
-import { CONTAINER_BACKEND_ID } from "../../../src/workspace/project/exec-backend.js";
-import { computerStorage } from "../../../src/workspace/workspace-platform.js";
+import { createComputerEnv } from "../../../src/facet/generation-1/execution-env.js";
 import { WORKSPACE_OUTPUT_OPTIONS } from "../../../infra/worker-settings.js";
+import { unscriptedGenerations } from "../../facet/generation-1/generation-control.js";
 import { withDecodedEvents, type ExecEvent } from "./decoded-events.js";
-import { computerTarget } from "./computer-target.js";
+import { chunkLines, inWorkspace } from "./echoing-container.js";
 
-type Connection = Awaited<ReturnType<WorkspaceBackend["connect"]>>;
-
-type ComputerExecEvent =
-  Awaited<ReturnType<Connection["rpc"]["shell"]["exec"]>>["events"] extends ReadableStream<infer E>
-    ? E
-    : never;
-
-type Exited = Extract<ExecEvent, { outcome: "exited" }>;
-
-type Run = Readonly<{ events: ExecEvent[]; workspace: Workspace; saved: string | undefined }>;
-
-function closed<T>(...chunks: T[]): ReadableStream<T> {
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) controller.enqueue(chunk);
-      controller.close();
-    },
-  });
-}
-
-class ContainerThatEchoes {
-  readonly backend: WorkspaceBackend = {
-    id: CONTAINER_BACKEND_ID,
-    type: "fake-container",
-    connect: () => Promise.resolve(this.#connection()),
-  };
-
-  #stdout: readonly string[];
-
-  constructor(stdout: readonly string[]) {
-    this.#stdout = stdout;
-  }
-
-  #connection(): Connection {
-    const events: ComputerExecEvent[] = this.#stdout.map((chunk, index) => ({
-      id: "exec",
-      seq: index,
-      name: "stdout",
-      value: new TextEncoder().encode(chunk),
-    }));
-
-    events.push({ id: "exec", seq: events.length, name: "exit", code: 0 });
-
-    return {
-      runtimeId: "fake-runtime",
-      sync: "remote",
-      close: async () => {},
-      rpc: {
-        shell: {
-          exec: () => Promise.resolve({ id: "exec", events: closed(...events) }),
-          getExec: () => Promise.reject(new Error("unused")),
-          killExec: async () => {},
-          disposeExec: async () => {},
-        },
-        sync: {
-          push: ({ senderRev }: { senderRev: number }) =>
-            Promise.resolve({ rev: senderRev, appliedPushCursor: { rev: senderRev, path: null } }),
-          fetchChanges: () =>
-            Promise.resolve({
-              currentCursor: { rev: 0, path: null },
-              appliedPushCursor: { rev: 0, path: null },
-              stream: closed(),
-            }),
-          watermarks: () =>
-            Promise.resolve({ currentRev: 0, pushRev: 0, fetchCursor: { rev: 0, path: null } }),
-          readEntry: () => Promise.resolve(null),
-          hasObjects: () => Promise.resolve([]),
-          fetchObjects: () => closed(),
-          pushObjects: async () => {},
-        },
-      },
-    };
-  }
-}
-
-function chunkLines(lines: readonly string[], perChunk: number): readonly string[] {
-  const chunks: string[] = [];
-
-  for (let start = 0; start < lines.length; start += perChunk) {
-    chunks.push(lines.slice(start, start + perChunk).join(""));
-  }
-
-  return chunks;
-}
+type Run = Readonly<{ events: ExecEvent[]; workspace: Workspace }>;
 
 function runEcho(stdout: readonly string[]): Promise<Run> {
-  return runInDurableObject(
-    env.SUPERVISOR.getByName("exec-output-limits"),
-    async (_instance, state): Promise<Run> => {
-      const container = new ContainerThatEchoes(stdout);
+  return inWorkspace(stdout, async (workspace, target) => {
+    const started = await withDecodedEvents(target).startExec({ command: "echo" });
 
-      const workspace = new Workspace({
-        storage: computerStorage(state.storage),
-        backends: [container.backend],
-        output: WORKSPACE_OUTPUT_OPTIONS,
-      });
+    if (!started.ok) throw new Error(JSON.stringify(started));
 
-      await workspace.fs.mkdir("/workspace", { recursive: true });
+    const events: ExecEvent[] = [];
 
-      const target = computerTarget(workspace, state.storage);
+    for await (const event of started.value.events) events.push(event);
 
-      const started = await withDecodedEvents(target).startExec({ command: "echo" });
-
-      if (!started.ok) throw new Error(JSON.stringify(started));
-
-      const events: ExecEvent[] = [];
-
-      for await (const event of started.value.events) events.push(event);
-
-      const terminal = events.at(-1);
-
-      const path =
-        terminal?.kind === "terminal" && terminal.outcome === "exited"
-          ? terminal.fullOutputPaths?.[0]
-          : undefined;
-
-      const read = path === undefined ? undefined : await target.readFile(path);
-      const saved = read?.ok === true ? new TextDecoder().decode(read.value) : undefined;
-
-      return { events, workspace, saved };
-    },
-  );
-}
-
-function exitedTerminal(events: readonly ExecEvent[]): Exited | undefined {
-  const terminal = events.at(-1);
-
-  return terminal?.kind === "terminal" && terminal.outcome === "exited" ? terminal : undefined;
+    return { events, workspace };
+  });
 }
 
 function stdoutOf(events: readonly ExecEvent[]): string {
   return events.flatMap((event) => (event.kind === "stdout" ? [event.data] : [])).join("");
 }
 
-test("output past the limits is cut and the full output is saved in the workspace", async () => {
+test("a long command's full output is kept once, in the env's spill file", async () => {
   const lines = Array.from({ length: 3_000 }, (_, index) => `line-${index}\n`);
-  const { events, saved } = await runEcho(chunkLines(lines, 100));
+  const text = lines.join("");
 
-  const terminal = exitedTerminal(events);
+  const kept = await inWorkspace(chunkLines(lines, 100), async (workspace, target) => {
+    const computerEnv = createComputerEnv({
+      cwd: "/workspace/project",
+      target,
+      generations: unscriptedGenerations,
+    });
 
-  expect(terminal).toMatchObject({ kind: "terminal", outcome: "exited", exitCode: 0 });
-  expect(terminal?.fullOutputPaths).toEqual([
-    expect.stringMatching(/^\/\.cf-stumble\/output\/.+\.stdout\.log$/u),
-  ]);
+    const seen: string[] = [];
 
-  expect(stdoutOf(events)).toBe(lines.join(""));
+    const result = getOrThrow(
+      await computerEnv.exec(
+        "echo",
+        {
+          spill: { afterBytes: 50 * 1024, afterLines: 2_000 },
+          onOutput: (data) => {
+            seen.push(data);
+          },
+        },
+        BACKGROUND_CONTEXT,
+      ),
+    );
 
-  expect(saved).toBe(lines.join(""));
+    const read = getOrThrow(
+      await computerEnv.readTextFile(result.spillPath ?? "", BACKGROUND_CONTEXT),
+    );
+
+    const saved = await workspace.fs.readdir(WORKSPACE_OUTPUT_OPTIONS.dir).catch(() => []);
+
+    return {
+      streamed: seen.join(""),
+      spillPath: result.spillPath,
+      spilledText: read,
+      saved,
+    };
+  });
+
+  expect(kept.streamed).toBe(text);
+  expect(kept.spillPath).toMatch(/^\/workspace\/\.cf-stumble\/tmp\/pi-output-/u);
+  expect(kept.spilledText).toBe(text);
+  expect(kept.saved).toEqual([]);
 });
 
 test("output that fits the limits is delivered whole and saves nothing", async () => {
-  const { events, workspace, saved } = await runEcho(["hello\n", "world\n"]);
+  const { events, workspace } = await runEcho(["hello\n", "world\n"]);
 
-  const terminal = exitedTerminal(events);
-
-  expect(terminal).toMatchObject({ kind: "terminal", outcome: "exited", exitCode: 0 });
-  expect(terminal?.fullOutputPaths).toBeUndefined();
+  expect(events.at(-1)).toMatchObject({ kind: "terminal", outcome: "exited", exitCode: 0 });
   expect(stdoutOf(events)).toBe("hello\nworld\n");
-  expect(saved).toBeUndefined();
 
   await expect(workspace.fs.readdir(WORKSPACE_OUTPUT_OPTIONS.dir)).rejects.toThrow();
 });

@@ -8,11 +8,7 @@ import {
 import { shellQuote } from "../../shell-quote.js";
 import { MAX_EXEC_TIMEOUT_MS, type ExecEvent } from "../../workspace/project/protocol.js";
 import { NdjsonFrameReader } from "./execution-env-frame-reader.js";
-import {
-  resolveInWorkspace,
-  fromAddressed,
-  type ComputerWorkspace,
-} from "./execution-env-paths.js";
+import { resolveInWorkspace, type ComputerWorkspace } from "./execution-env-paths.js";
 import { OutputSpill } from "./execution-env-spill.js";
 
 type ExecResult = Result<ShellExecResult, ExecutionError>;
@@ -62,13 +58,6 @@ async function nextEvent(frames: NdjsonFrameReader): Promise<ExecEvent | Executi
   if (frame.kind !== "value") return new ExecutionError("unknown", "the exec stream broke");
 
   return frame.value;
-}
-
-function fullOutputPath(terminal: Terminal): string | undefined {
-  const paths = terminal.outcome === "exited" ? (terminal.fullOutputPaths ?? []) : [];
-  const first = paths[0];
-
-  return first === undefined ? undefined : fromAddressed(first).absolute;
 }
 
 function exitedResult(
@@ -176,7 +165,7 @@ async function settle(command: RunningCommand): Promise<ExecResult> {
 
       if (spilled?.ok === false) return stop(spilled.error);
 
-      return settledResult(event, command.argv, spilled?.value ?? fullOutputPath(event), context);
+      return settledResult(event, command.argv, spilled?.value, context);
     }
 
     if (event.data === "") continue;
