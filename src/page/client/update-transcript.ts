@@ -5,7 +5,14 @@ import { withError, type Handlers } from "./update-shared.js";
 
 export function transcriptHandlers(
   model: Model,
-): Handlers<"ClickedLoadEarlier" | "ClickedFillGap" | "LoadedTranscript" | "FailedLoadTranscript"> {
+): Handlers<
+  | "ClickedLoadEarlier"
+  | "ClickedFillGap"
+  | "LoadedTranscript"
+  | "FailedLoadTranscript"
+  | "AcquiredTranscript"
+  | "ReleasedTranscript"
+> {
   const load = (maybeGapIndex: Option.Option<number>) => ({
     model,
     commands: [LoadTranscript({ streamId: model.eventsStreamId, maybeGapIndex })],
@@ -22,5 +29,9 @@ export function transcriptHandlers(
       streamId === model.eventsStreamId
         ? { model: withError(model, "the earlier messages request", detail) }
         : { model },
+    AcquiredTranscript: ({ streamId, projectId }) => ({
+      model: { ...model, maybeHeldTranscript: Option.some({ streamId, projectId }) },
+    }),
+    ReleasedTranscript: () => ({ model: { ...model, maybeHeldTranscript: Option.none() } }),
   };
 }

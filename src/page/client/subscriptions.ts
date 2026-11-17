@@ -7,7 +7,11 @@ import { eventsOf } from "./events-stream.js";
 import { FreshThread } from "./fresh-thread.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
-import { MaybeTranscriptKey, type TranscriptService } from "./transcript-store.js";
+import {
+  MaybeTranscriptKey,
+  streamableTranscript,
+  type TranscriptService,
+} from "./transcript-store.js";
 
 const FRESH_THREAD_CONFIRMATION = "10 seconds";
 
@@ -41,12 +45,7 @@ export const subscriptions = Subscription.make<Model, Message, TranscriptService
   events: entry(
     { maybeStream: MaybeTranscriptKey },
     {
-      modelToDependencies: (model) => ({
-        maybeStream: Option.map(model.maybeProjectId, (projectId) => ({
-          streamId: model.eventsStreamId,
-          projectId,
-        })),
-      }),
+      modelToDependencies: (model) => ({ maybeStream: streamableTranscript(model) }),
       dependenciesToStream: ({ maybeStream }) =>
         Option.match(maybeStream, {
           onNone: () => Stream.empty,

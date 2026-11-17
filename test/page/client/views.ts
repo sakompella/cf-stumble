@@ -35,6 +35,13 @@ export function received(model: Model, conversation: Conversation): Message {
   return Message.ReceivedConversation({ streamId: model.eventsStreamId, conversation });
 }
 
+export function acquired(model: Model): Message {
+  return Message.AcquiredTranscript({
+    streamId: model.eventsStreamId,
+    projectId: Option.getOrThrow(model.maybeProjectId),
+  });
+}
+
 export type { Conversation };
 
 export const followResolved = Scene.Mount.resolve(

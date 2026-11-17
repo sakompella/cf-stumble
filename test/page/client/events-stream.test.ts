@@ -7,7 +7,7 @@ import { Message } from "../../../src/page/client/message.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { eventually } from "../../eventually.js";
 import { openedTranscript } from "./transcript-resource.js";
-import { received, running, viewing } from "./views.js";
+import { acquired, received, running, viewing } from "./views.js";
 
 type Model = ReturnType<typeof init>["model"];
 
@@ -30,8 +30,14 @@ function after(start: Model, messages: readonly Message[]): Model {
   return messages.reduce((model, message) => update(model, message).model, start);
 }
 
-function listedPage(): Model {
+function selectedPage(): Model {
   return after(init().model, [Message.SucceededFetchProjects({ projects: PROJECTS })]);
+}
+
+function listedPage(): Model {
+  const selected = selectedPage();
+
+  return after(selected, [acquired(selected)]);
 }
 
 function ndjson(body: string): Promise<Response> {
@@ -42,6 +48,35 @@ function ndjson(body: string): Promise<Response> {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+test("the stream opens once the transcript for the selected project is held, and not before", () => {
+  const selected = selectedPage();
+
+  expect(Option.isNone(events.modelToDependencies(selected).maybeStream)).toBe(true);
+
+  const held = after(selected, [acquired(selected)]);
+
+  expect(events.modelToDependencies(held).maybeStream).toEqual(
+    Option.some({ streamId: selected.eventsStreamId, projectId: "repo" }),
+  );
+});
+
+test("after a click on another project the old stream stops, and the new one waits for its own transcript", () => {
+  const start = listedPage();
+  const clicked = after(start, [Message.ClickedProject({ projectId: "harness" })]);
+
+  expect(Option.isNone(events.modelToDependencies(clicked).maybeStream)).toBe(true);
+
+  const released = after(clicked, [Message.ReleasedTranscript()]);
+
+  expect(Option.isNone(events.modelToDependencies(released).maybeStream)).toBe(true);
+
+  const held = after(released, [acquired(released)]);
+
+  expect(events.modelToDependencies(held).maybeStream).toEqual(
+    Option.some({ streamId: clicked.eventsStreamId, projectId: "harness" }),
+  );
 });
 
 test("the stream's dependencies stay equal while the conversation runs, the reader sends and clicks its project again", () => {
