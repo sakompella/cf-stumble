@@ -1,5 +1,6 @@
 import { logEvent, redactedExcerpt } from "../../diagnostics.js";
 import {
+  ISOLATE_REFUSED_EXIT_CODE,
   isContainerRestartedError,
   type ExecBackend,
   type ExecBackendHandle,
@@ -25,8 +26,6 @@ type Ending = TerminalEvent extends infer Event
   : never;
 
 type BackendRead = Awaited<ReturnType<ExecBackendHandle["reader"]["read"]>>;
-
-const ISOLATE_REFUSED_EXIT_CODE = 129;
 
 function failure(restarted: boolean): Ending {
   return {

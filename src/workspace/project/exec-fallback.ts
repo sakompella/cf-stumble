@@ -1,9 +1,10 @@
 import * as Data from "effect/Data";
-import type {
-  BackendExecEvent,
-  ExecBackend,
-  ExecBackendHandle,
-  ExecBackendInput,
+import {
+  ISOLATE_REFUSED_EXIT_CODE,
+  type BackendExecEvent,
+  type ExecBackend,
+  type ExecBackendHandle,
+  type ExecBackendInput,
 } from "./exec-backend.js";
 import { commandMayWrite } from "./exec-routing.js";
 import type { ExecBackendChoice } from "./protocol.js";
@@ -43,8 +44,6 @@ type Step = Readonly<{ phase: Phase; commands: readonly FallbackCommand[] }>;
 function step(phase: Phase, ...commands: readonly FallbackCommand[]): Step {
   return { phase, commands };
 }
-
-const ISOLATE_REFUSED_EXIT_CODE = 129;
 
 const NOTHING_RAN_EXIT_CODES: ReadonlySet<number> = new Set([127, ISOLATE_REFUSED_EXIT_CODE]);
 

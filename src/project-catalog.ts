@@ -143,11 +143,14 @@ export function parseProject(text: string): Project | undefined {
     : { id, displayName: defaultProjectDisplayName(repositoryUrl), repositoryUrl };
 }
 
-type ProjectResolution =
-  | Readonly<{ ok: true; project: Project }>
+type ProjectResolution<Found> =
+  | Readonly<{ ok: true; project: Found }>
   | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
 
-export function resolveProject(projectId: string, catalog: ProjectCatalog): ProjectResolution {
+export function resolveProject<Found extends Readonly<{ id: ProjectId }>>(
+  projectId: string,
+  catalog: readonly Found[],
+): ProjectResolution<Found> {
   const parsedProjectId = parseProjectId(projectId);
 
   if (parsedProjectId === undefined) {

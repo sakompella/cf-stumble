@@ -266,6 +266,7 @@ async function changesDuringReset(host: WorkspaceHost) {
     credentialInstall: await host.installCredential(FAKE_TOKEN),
     credentialStatus: await host.credentialStatus(),
     credentialRepositoryCheck: await host.checkRepositoryAccess(sampleProjectOne.repositoryUrl),
+    setBackend: await host.setBackend("provider"),
     reset: await host.reset(),
     capability: await capabilityAnswer(host),
   };
@@ -288,6 +289,7 @@ test("while a reset runs, file changes, credential requests, project capabilitie
 
     const during = await changesDuringReset(host);
     const startsDuring = container.starts;
+    const destroyedDuring = container.destroyed.length;
 
     held.release();
     await resetting.catch(() => {});
@@ -295,6 +297,7 @@ test("while a reset runs, file changes, credential requests, project capabilitie
     return {
       during,
       startsDuring,
+      destroyedDuring,
       afterwards: await host.build(REFUSED_BUILD),
     };
   });
@@ -314,10 +317,12 @@ test("while a reset runs, file changes, credential requests, project capabilitie
     credentialInstall: credentialRefused,
     credentialStatus: credentialRefused,
     credentialRepositoryCheck: credentialRefused,
+    setBackend: { ok: false, problem: { code: "workspace-busy" } },
     reset: { ok: false, problem: { code: "workspace-busy" } },
     capability: "refused",
   });
   expect(seen.startsDuring, "no refused request reached the container").toBe(0);
+  expect(seen.destroyedDuring, "a refused backend choice stopped no container").toBe(0);
   expect(seen.afterwards, "the exclusion ends with the reset").toEqual({
     ok: false,
     error: { code: "invalid-request" },

@@ -36,24 +36,3 @@ function repositoryProject(project: Project): RepositoryProject {
 export function selectableCatalog(projects: ProjectCatalog): SelectableCatalog {
   return Object.freeze([...projects.map((project) => repositoryProject(project)), HARNESS_PROJECT]);
 }
-
-type SelectableResolution =
-  | Readonly<{ ok: true; project: SelectableProject }>
-  | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
-
-export function resolveSelectableProject(
-  projectId: string,
-  catalog: SelectableCatalog,
-): SelectableResolution {
-  const parsedProjectId = parseProjectId(projectId);
-
-  if (parsedProjectId === undefined) {
-    return { ok: false, reason: "invalid-project-id" };
-  }
-
-  const project = catalog.find((candidate) => candidate.id === parsedProjectId);
-
-  return project === undefined
-    ? { ok: false, reason: "unknown-project-id" }
-    : { ok: true, project };
-}

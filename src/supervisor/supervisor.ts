@@ -201,8 +201,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   setWorkspaceBackend(setting: BackendSetting): Promise<WorkspaceBackendChange> {
-    if (this.#resetInProgress) return Promise.resolve(WORKSPACE_BUSY);
-
     return this.env.WORKSPACE_HOST.getByName(this.#parts.workspaceName).setBackend(setting);
   }
 

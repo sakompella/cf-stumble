@@ -20,16 +20,6 @@ export type StartupCheckOutcome = Readonly<{
 
 export type StartupCheckDeadlines = Readonly<{ compatibilityMs: number; conversationMs: number }>;
 
-export function runStartupCheck(
-  host: StartupCheckHost,
-  artifact: MainHarnessArtifact,
-  deadlines: StartupCheckDeadlines,
-): Effect.Effect<StartupCheckOutcome> {
-  const name = candidateFacetName(artifact.harnessCommit);
-
-  return checkCandidate(host, artifact, name, deadlines);
-}
-
 function withinDeadline(
   durationMs: number,
   reason: string,
@@ -40,12 +30,13 @@ function withinDeadline(
   });
 }
 
-function checkCandidate(
+export function runStartupCheck(
   host: StartupCheckHost,
   artifact: MainHarnessArtifact,
-  name: string,
   deadlines: StartupCheckDeadlines,
 ): Effect.Effect<StartupCheckOutcome> {
+  const name = candidateFacetName(artifact.harnessCommit);
+
   return Effect.gen(function* () {
     const candidate = mountCandidateFacet(host, artifact, name);
 
