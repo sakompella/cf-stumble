@@ -1,4 +1,5 @@
 import * as Option from "effect/Option";
+import { parseCount } from "../../count.js";
 import { RunControl, SubmitCandidate } from "./commands.js";
 import {
   ControlRequest,
@@ -16,13 +17,8 @@ import {
   type UpdateReturn,
 } from "./update-shared.js";
 
-const DIGITS = /^\d+$/u;
-
 function controlLabel(raw: string): Option.Option<number> {
-  const trimmed = raw.trim();
-  const value = Number(trimmed);
-
-  return DIGITS.test(trimmed) && Number.isSafeInteger(value) ? Option.some(value) : Option.none();
+  return Option.fromUndefinedOr(parseCount(raw.trim()));
 }
 
 function withPanel(model: Model, kind: ControlKind, change: Partial<ControlPanel>): Model {
