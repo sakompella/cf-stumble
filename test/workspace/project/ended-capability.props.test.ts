@@ -70,7 +70,7 @@ function liveTarget() {
     provider,
     new FakeProjectTransactions(),
     execBackend,
-    targetOptions({ remainingMs: 1_000, activity }),
+    targetOptions({ endsAtMs: Date.now() + 1_000, activity }),
   );
 
   return { provider, execBackend, target, touches };
@@ -120,7 +120,10 @@ test("however a turn ends, by endTurn or at its deadline, every later capability
       try {
         const turn = await runTurn(before, byDeadline, after);
 
-        expect(turn.ended).toEqual({ ok: true, value: { killed: turn.liveExecs } });
+        expect(turn.ended).toEqual({
+          ok: true,
+          value: { killed: byDeadline ? 0 : turn.liveExecs },
+        });
         expect(turn.execBackend.handles.map((handle) => handle.killCalls)).toEqual(
           Array.from({ length: turn.liveExecs }, () => 1),
         );

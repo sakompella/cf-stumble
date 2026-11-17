@@ -149,8 +149,9 @@ async function perform(
     const endsAt = world.now + amount;
     world.leases.push({ end: idle.lease(endsAt), endsAt });
   } else if (operation === "endLease" && world.leases.length > 0) {
-    world.leases.shift()?.end();
-    world.lastActivity = world.now;
+    const lease = world.leases.shift();
+    lease?.end();
+    world.lastActivity = Math.min(world.now, lease?.endsAt ?? world.now);
   } else if (operation === "advance") world.now += amount;
   else if (operation === "fireAlarm") await fireAlarm(world, idle, 1);
   else if (operation === "fireAlarmTwice") await fireAlarm(world, idle, 2);
@@ -215,15 +216,14 @@ test("whatever work, leases, alarms, failures and container stops interleave, th
   );
 });
 
-test("once all work and leases have ended, a running container with an alarm armed is destroyed within three alarms of the last failure", async () => {
+test("once all work has ended and every lease is released or past its end time, a running container with an alarm armed is destroyed within three alarms of the last failure", async () => {
   await hegel.testAsync(
     async (tc) => {
       const { failures, world, idle } = await runScenario(tc);
       failures.current = { ...failures.current, alarm: false };
 
-      for (const end of [...world.work, ...world.leases.map((lease) => lease.end)]) end();
+      for (const end of world.work) end();
       world.work = [];
-      world.leases = [];
       await settleTasks();
 
       if (!world.running || world.armed === null) return;
@@ -234,6 +234,9 @@ test("once all work and leases have ended, a running container with an alarm arm
       for (let fires = 0; fires < 3; fires += 1) await perform(["fireAlarm", 0], world, idle);
 
       expect(world.running).toBe(false);
+
+      world.now = Math.max(world.now, ...world.leases.map((lease) => lease.endsAt));
+      expect(idle.snapshot().leaseEndsAtMs).toBeNull();
     },
     { testCases: 300 },
   );

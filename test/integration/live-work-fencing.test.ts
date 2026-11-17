@@ -62,7 +62,9 @@ class LiveWorkWorkspace extends FakeTenantWorkspace {
   resets = 0;
 
   project(budget: Readonly<{ remainingMs: number }>) {
-    const target = projectTarget(new FakeProjectFilesystemProvider(), this.execBackend, budget);
+    const target = projectTarget(new FakeProjectFilesystemProvider(), this.execBackend, {
+      endsAtMs: Date.now() + budget.remainingMs,
+    });
 
     const held = Object.assign(target, { [Symbol.dispose]: () => {} });
 

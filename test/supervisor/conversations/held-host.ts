@@ -41,11 +41,9 @@ export class HeldHost implements WorkspaceHostRpc<
 
     if (this.projectError !== undefined) throw this.projectError;
 
-    const target = projectTarget(
-      new FakeProjectFilesystemProvider(),
-      new FakeExecBackend(),
-      budget,
-    );
+    const target = projectTarget(new FakeProjectFilesystemProvider(), new FakeExecBackend(), {
+      endsAtMs: Date.now() + budget.remainingMs,
+    });
 
     const endTurn = target.endTurn.bind(target);
     const turns = this.turns;
