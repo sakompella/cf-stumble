@@ -2,11 +2,16 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
-import type { Conversation } from "./conversation.js";
+import type { Conversation } from "../../conversation-view/conversation.js";
 import { Outgoing, undisplayedOutgoing } from "./outgoing.js";
 import { toolSummaryText } from "./tool-summary.js";
 import { RUN_NOTICE_KIND } from "../../run-notice.js";
-import { blocksText, type AssistantMessage, type Entry, type PiMessage } from "./pi-message.js";
+import {
+  blocksText,
+  type AssistantMessage,
+  type Entry,
+  type PiMessage,
+} from "../../conversation-view/pi-message.js";
 
 export const TranscriptEntry = defineTaggedUnion({
   Text: { role: Schema.String, who: Schema.String, text: Schema.String },

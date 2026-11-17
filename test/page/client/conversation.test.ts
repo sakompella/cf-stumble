@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import { afterEach, expect, test } from "vitest";
-import { isRunning, type Conversation } from "../../../src/page/client/conversation.js";
+import { isRunning, type Conversation } from "../../../src/conversation-view/conversation.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
 import { eventuallyTruthy } from "../../eventually.js";
 import { folded, lastFolded } from "./folded.js";

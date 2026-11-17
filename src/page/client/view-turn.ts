@@ -1,10 +1,10 @@
 import { type Html, type HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
-import { isRunning } from "./conversation.js";
+import { isRunning } from "../../conversation-view/conversation.js";
 import { FreshThread } from "./fresh-thread.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
-import { phaseWording } from "./run-phase.js";
+import { phaseWording } from "../../conversation-view/run-phase.js";
 import { statusText } from "./view-parts.js";
 
 function runState(model: Model): string {

@@ -2,12 +2,6 @@ import { OWNER_PAGE_IDS } from "./element-ids.js";
 import { OWNER_PAGE_SCRIPT_PATH, OWNER_PAGE_SCRIPT_SOURCE } from "./owner-script.generated.js";
 import { OWNER_PAGE_STYLES } from "./styles.js";
 
-export { isRunning, type Conversation } from "./client/conversation.js";
-
-export { AssistantMessage } from "./client/pi-message.js";
-
-export { readFirstView } from "./client/view-reader.js";
-
 export const OWNER_PAGE_SCRIPT_FILE = {
   path: OWNER_PAGE_SCRIPT_PATH,
   source: OWNER_PAGE_SCRIPT_SOURCE,

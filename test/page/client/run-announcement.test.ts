@@ -1,9 +1,9 @@
 import * as Predicate from "effect/Predicate";
 import { expect, test } from "vitest";
-import type { Conversation } from "../../../src/page/client/conversation.js";
+import type { Conversation } from "../../../src/conversation-view/conversation.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
-import { RunPhase } from "../../../src/page/client/run-phase.js";
+import { RunPhase } from "../../../src/conversation-view/run-phase.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { htmlOf, textOf, type Rendered } from "./rendered.js";
 import { received, running, streaming as streamingText, viewing } from "./views.js";

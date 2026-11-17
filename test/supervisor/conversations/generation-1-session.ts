@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { storeGrant } from "../../chatgpt/connection-harness.js";
-import type { Entry } from "../../../src/page/client/pi-message.js";
+import type { Entry } from "../../../src/conversation-view/pi-message.js";
 import { builtGeneration } from "../../facet/generation-1/built-module-map.js";
 import { replaceWorkspaceHost } from "../../workspace-host-spy.js";
 import {

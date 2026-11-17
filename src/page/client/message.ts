@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
 import { BackendSetting } from "../../backend-setting.js";
 import { ChatGPT } from "./chatgpt.js";
-import { Conversation, RunBudget } from "./conversation.js";
+import { Conversation, RunBudget } from "../../conversation-view/conversation.js";
 import { GitHubReading } from "./github.js";
 import { AuthorizationEndpoint, ControlKind, GenerationReading, Project } from "./model.js";
 

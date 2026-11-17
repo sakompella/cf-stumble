@@ -1,21 +1,17 @@
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import { isRunning, type Conversation } from "../../../src/page/client/conversation.js";
+import { isRunning, type Conversation } from "../../../src/conversation-view/conversation.js";
 import {
   AssistantMessage,
   blocksText,
   type Entry,
   type PiMessage,
-} from "../../../src/page/client/pi-message.js";
-import { heldTranscript, viewReader } from "../../../src/page/client/view-reader.js";
+} from "../../../src/conversation-view/pi-message.js";
+import { freshViewReader } from "../../../src/conversation-view/view-reader.js";
 
 export function openReader() {
-  const read = viewReader(
-    heldTranscript({ streamId: 0, projectId: "repo" }, () =>
-      Promise.reject(new Error("no history")),
-    ),
-  );
+  const read = freshViewReader();
 
   let latest = Option.none<Conversation>();
 

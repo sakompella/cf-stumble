@@ -10,7 +10,7 @@ import {
   type GenerationReading,
   type Model,
 } from "./model.js";
-import { isRunning } from "./conversation.js";
+import { isRunning } from "../../conversation-view/conversation.js";
 import { controlRow, valueRow } from "./view-parts.js";
 
 const NO_SUBMISSION = {

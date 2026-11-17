@@ -4,18 +4,10 @@ import type { JsonValue } from "@earendil-works/chord";
 import { diffRevisions } from "@earendil-works/chord/delta";
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
-import { heldTranscript, viewReader } from "../../../src/page/client/view-reader.js";
+import { freshViewReader } from "../../../src/conversation-view/view-reader.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
 
 type Revision = JsonValue;
-
-function reader() {
-  return viewReader(
-    heldTranscript({ streamId: 0, projectId: "repo" }, () =>
-      Promise.reject(new Error("no history")),
-    ),
-  );
-}
 
 function userEntry(id: number) {
   return {
@@ -26,7 +18,7 @@ function userEntry(id: number) {
   };
 }
 
-function entryIds(line: string, read: ReturnType<typeof reader>): readonly number[] {
+function entryIds(line: string, read: ReturnType<typeof freshViewReader>): readonly number[] {
   return Option.match(read(line), {
     onNone: () => [],
     onSome: ({ items }) => items.flatMap((item) => (item.kind === "entry" ? [item.entry.id] : [])),
@@ -38,7 +30,7 @@ test("merging windows that slide, jump and restart keeps every entry once and in
     (tc) => {
       const ids = Array.from({ length: 40 }, (_, index) => index * 2 + 1);
       const steps = tc.draw(gs.integers({ minValue: 1, maxValue: 12 }));
-      const read = reader();
+      const read = freshViewReader();
       const seen = new Set<number>();
       let newest = 0;
 
@@ -111,8 +103,8 @@ test("a page that joins mid-run shows what a page that watched from the start sh
       });
 
       const joinAt = tc.draw(gs.integers({ minValue: 0, maxValue: count - 1 }));
-      const early = reader();
-      const late = reader();
+      const early = freshViewReader();
+      const late = freshViewReader();
       const empty = revision(0, 0, 0);
 
       revisions.forEach((current, index) => {

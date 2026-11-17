@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream";
 import { answerOf, fetchEffect, problemText, endpointPath, transportDetail } from "./api.js";
 import { Message } from "./message.js";
 import { TranscriptResource, type TranscriptService } from "./transcript-store.js";
-import { viewReader } from "./view-reader.js";
+import { viewReader } from "../../conversation-view/view-reader.js";
 
 const RECONNECT_PAUSE = "1 second";
 
