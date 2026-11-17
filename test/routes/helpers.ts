@@ -6,8 +6,23 @@ import { routeApiRequest } from "../../src/routes/index.js";
 import type { ApiSupervisor } from "../../src/routes/api.js";
 import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
 
-export function apiResponse(request: Request, supervisor: ApiSupervisor): Promise<Response> {
-  return Effect.runPromise(routeApiRequest(request, supervisor));
+export function apiResponse(
+  request: Request,
+  ...stubs: readonly ApiSupervisor[]
+): Promise<Response> {
+  const remaining = [...stubs];
+
+  const next = () => (remaining.length > 1 ? remaining.shift() : remaining[0]);
+
+  return Effect.runPromise(
+    routeApiRequest(request, () => {
+      const stub = next();
+
+      if (stub === undefined) throw new Error("a route test needs a Supervisor stub");
+
+      return stub;
+    }),
+  );
 }
 
 export const disconnectedChatGPT: ChatGPTConnectionView = {

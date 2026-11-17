@@ -43,7 +43,7 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
     return Effect.succeed(page);
   }
 
-  return routeApiRequest(request, env.SUPERVISOR.getByName(SUPERVISOR_NAME)).pipe(
+  return routeApiRequest(request, () => env.SUPERVISOR.getByName(SUPERVISOR_NAME)).pipe(
     Effect.map((response) => noStore(response)),
   );
 }

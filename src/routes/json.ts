@@ -65,7 +65,7 @@ type Routed = Effect.Effect<Response, SupervisorCallFailed>;
 export type Handlers<S, K extends Endpoint> = {
   readonly [E in K]: E extends ProjectEndpoint
     ? (request: Request, projectId: string, supervisor: S) => Routed
-    : (request: Request, supervisor: S) => Routed;
+    : (request: Request, supervisor: S, fresh: () => S) => Routed;
 };
 
 export function answeringInternalErrors(

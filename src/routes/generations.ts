@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { logRedactedCause } from "../diagnostics.js";
+import { isCodeUpdateReset, logRedactedCause } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import * as Schema from "effect/Schema";
 import {
@@ -90,14 +90,26 @@ const handleGenerationControl = Effect.fnUntraced(
 const handleGenerationSubmission = Effect.fnUntraced(function* (
   request: Request,
   supervisor: GenerationSubmissionSupervisor,
+  fresh: () => GenerationSubmissionSupervisor,
 ) {
   const { harnessCommit } = yield* decodeRequestBody(request, GenerationSubmissionRequest);
 
   const submitted = yield* callSupervisor(() => supervisor.submitGeneration(harnessCommit));
 
-  const preparation = yield* callSupervisor(() =>
-    supervisor.prepareGeneration(submitted.generation.label),
-  ).pipe(Effect.result);
+  const prepare = (stub: GenerationSubmissionSupervisor) =>
+    callSupervisor(() => stub.prepareGeneration(submitted.generation.label));
+
+  const preparation = yield* prepare(supervisor).pipe(
+    Effect.catchIf(
+      (failure) => isCodeUpdateReset(failure.cause),
+      (failure) => {
+        logRedactedCause("api POST /api/generations/submit: preparation-restarted", failure.cause);
+
+        return prepare(fresh());
+      },
+    ),
+    Effect.result,
+  );
 
   if (Result.isFailure(preparation)) {
     logRedactedCause(
