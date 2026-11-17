@@ -3,6 +3,7 @@ import { createExecutionContext } from "cloudflare:test";
 import { expect, test, vi } from "vitest";
 import { GENERATION_REPLACED } from "../src/generation-replaced.js";
 import { ModelRoute } from "../src/model-route.js";
+import { ROUTE_FAILURE } from "../src/model-route-wire/failure.js";
 import {
   collectEvents,
   DONE_LINE,
@@ -88,7 +89,7 @@ test("a Supervisor's route refuses a facet whose serving instance was replaced, 
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
-test("a Supervisor admission that rejects answers a validation failure instead of throwing", async () => {
+test("a Supervisor admission that rejects answers a retryable model-unavailable stream, before any model call", async () => {
   const binding = bindingStreaming([DONE_LINE]);
   const context = createExecutionContext();
   Object.defineProperty(context, "props", { value: { supervisor: "owner", instance: 0 } });
@@ -106,10 +107,14 @@ test("a Supervisor admission that rejects answers a validation failure instead o
     CHATGPT_MODEL: "gpt-test",
   });
 
-  await expect(route.runStream(REQUEST)).resolves.toEqual({
-    ok: false,
-    error: { code: "invalid-request", reason: "the supervisor is unavailable" },
-  });
+  const events = await collectEvents(await streamOf(route.runStream(REQUEST)));
+
+  expect(events).toEqual([
+    {
+      type: "error",
+      error: { code: "model-unavailable", detail: ROUTE_FAILURE.supervisorUnavailable },
+    },
+  ]);
   expect(binding.calls).toEqual([]);
 });
 
