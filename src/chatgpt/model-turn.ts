@@ -12,7 +12,12 @@ import {
 } from "../model-route-turn.js";
 import type { ChatGPTAccess } from "./connection-view.js";
 import { discardBody, type ProviderFetch } from "./oauth.js";
-import { ChatGPTNotConnected, ChatGPTUsageLimited, logAnsweredCall } from "./call-diagnostics.js";
+import {
+  ChatGPTNotConnected,
+  ChatGPTUsageLimited,
+  logAnsweredCall,
+  recorded,
+} from "./call-diagnostics.js";
 import {
   isUsageLimit,
   providerErrorOfText,
@@ -136,8 +141,8 @@ function refused(
     limitedUntil === null ? limitFields : { ...limitFields, limitedUntil },
   );
 
-  return Effect.promise(() =>
-    credential.markUsageLimited(token, limitedUntil).catch(() => {}),
+  return recorded("usage-limited", token, () =>
+    credential.markUsageLimited(token, limitedUntil),
   ).pipe(
     Effect.andThen(
       Effect.fail(outputSent ? unavailable : new ChatGPTUsageLimited({ limitedUntil })),
@@ -180,7 +185,7 @@ function refusedTwice(
 ): Effect.Effect<never, ModelTurnFailed> {
   logEvent("error", "chatgpt.model-call", { outcome: "refused", status: 401 });
 
-  return Effect.promise(() => credential.markRefused(token).catch(() => {})).pipe(
+  return recorded("refused", token, () => credential.markRefused(token)).pipe(
     Effect.andThen(Effect.fail(reconnectRequired())),
   );
 }
