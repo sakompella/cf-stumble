@@ -84,3 +84,5 @@ still runs (work began during the close, or the destroy failed); it pulls and cl
 before it destroys. `stopForBackendChange` rejects with the destroy's own error when that destroy
 fails, and work waiting on the stop goes on either way. A provider `stop` or `delete` job that gets
 no answer in 30 s drops the provider's socket (ADR-0050), so a stop never waits forever.
+
+**Amendment (2026-11-17).** The stop was a five-phase machine with a latch that a separate command had to release. When `setAlarm` failed at the end of a kept stop, that command was skipped and `settled()` never resolved, so every Host RPC and exec waited forever. The permit above replaced the machine; `src/workspace/idle-stop.ts` keeps only the pure `decideIdleStop`. The run deadline reaches the Host once, as the remaining time in `project()`, and the Host turns it into one end time (`endsAtMs`) that the lease, the capability and the capability's commands all use. Before, each of them derived its own end from a duration, and only the capability's timer ended a lease.

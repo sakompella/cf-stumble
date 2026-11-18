@@ -34,7 +34,15 @@ the Supervisor aborts the run when that deadline passes.
 A run that the deadline aborts, or whose reply the model's output length limit cuts off, ends with a
 run notice: a harness entry in the conversation that says what happened and that a message continues
 the run. The model reads it on the next turn, and the owner page shows it
-(`src/facet/generation-1/run-notices.ts`). An owner cancel leaves no notice.
+(`src/facet/generation-1/run-notices.ts`). An owner cancel leaves no notice. A cancel that reaches the Supervisor before the facet's first
+running report for the conversation is stored, and the run that the next report starts settles as
+cancelled.
+
+**Run phase**:
+What the owner page shows beside a run's status while the run works, folded from Pi Durable's live
+document: `Idle`, `Preparing`, `Compacting`, `WaitingForModel` or `Working`
+(`src/conversation-view/run-phase.ts`). `Preparing` is the wait for the workspace before the model is
+asked, and a cold container start is one cause of it.
 
 **Run budget**:
 The time the owner gives one message, chosen in the page composer: 8, 30 or 60 minutes, 30 by
@@ -45,6 +53,18 @@ With 30 minutes a message gets up to three runs, with 60 up to seven. When the b
 the run got no reply, the notice asks for a message as before. A cancel clears the budget before it
 aborts the run, so no deadline abort continues the run after a cancel, and a resend of the same
 message does not bring the budget back. A new owner message starts its own budget (`src/facet/generation-1/run-budget.ts`).
+
+**Serving instance**:
+The number of the facet that serves the active generation. The Supervisor adds one each time an
+activation or rollback replaces the facet, and stores it with the active label in
+`generation_state.serving_instance`, so one transaction moves both. A facet's model turns and run
+reports count only while its instance is the serving one, so a mount that finished after a
+replacement cannot act with the new facet's authority.
+
+**Thread replaced**:
+The refusal `thread-replaced` (HTTP 409). Each message the page posts names the conversation it was
+written for. When a fresh thread has replaced that conversation, the Supervisor refuses the message
+and the page puts its text back in the prompt, so a retry never reaches the new thread.
 
 ## Repositories and files
 
@@ -73,6 +93,11 @@ has its own directory and Git history, but the directories are not security boun
 Conversation history, compacted context, and other useful context that can survive a change of
 main-harness generation.
 
+**Workspace Host**:
+The Durable Object that owns the Computer workspace and its container (`WorkspaceHost`). It counts
+work, stops the container after ten minutes with none (ADR-0043), and answers the Supervisor's build,
+provision, credential and project calls.
+
 **Worker-shell**:
 Computer's text-oriented execution backend. It has no Git; every `git` command runs in the container backend.
 
@@ -89,6 +114,21 @@ A request to make a specific existing generation active. The requester may name 
 
 **Startup check**:
 The supervisor's check of a prepared generation before it may become ready. The candidate runs in isolation and must report the supervisor's facet compatibility and answer one scripted conversation that runs one workspace command. A failed check marks the generation failed and leaves the active generation serving.
+
+**Release**:
+The step of the Deploy workflow that, after a production deploy, submits `main`'s commit as a
+generation and activates it (`tools/release-generation.mts`; `docs/deploy.md`, "Release of main as a
+generation"). The release owns the repeat after an infrastructure interruption, under one recovery
+deadline of 10 minutes (`INTERRUPTION_DEADLINE_MS`).
+
+**Infrastructure interruption**:
+A platform reset or fault that ends a Durable Object's work, such as a deploy's restart or a cold
+Workspace Host that fails to start its storage, as opposed to a candidate that is wrong. The
+Supervisor's build reports it as `build-workspace-unavailable` (the Host also logs
+`workspace-restarted` when the platform marked the failure retryable), and the Worker answers a
+rejected submit or prepare call as 503 `infrastructure-interrupted`. Both mean the same commit can
+be prepared again. A failed build step or a failed startup check is not an interruption and is not
+repeated.
 
 **Self-activation**:
 The main harness activating a generation from its own conversation with `stumble gen activate`. The serving facet ends, and the conversation resumes under the new generation.
