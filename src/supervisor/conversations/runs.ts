@@ -92,26 +92,34 @@ export class ConversationRuns {
         instance INTEGER,
         continues INTEGER NOT NULL DEFAULT 0
       );
+      CREATE TABLE IF NOT EXISTS conversation_cancels (conversation_id TEXT PRIMARY KEY);
     `);
   }
 
   cancelled(conversationId: string): string {
-    return this.#ends(conversationId, "cancelled");
+    return this.#step(conversationId, RunEvent.Ended({ ending: "cancelled" }));
   }
 
   interrupted(conversationId: string): string {
-    return this.#ends(conversationId, "interrupted");
+    return this.#step(conversationId, RunEvent.Ended({ ending: "interrupted" }));
+  }
+
+  submitted(conversationId: string): void {
+    this.#storage.sql.exec(
+      "DELETE FROM conversation_cancels WHERE conversation_id = ?",
+      conversationId,
+    );
   }
 
   modelTurn(instance: number, now: number): void {
     this.#storage.kv.put(MODEL_TURN_KEY, { instance, at: now } satisfies ModelTurn);
   }
 
-  #ends(conversationId: string, ending: RunEnding): string {
+  #step(conversationId: string, event: RunEvent): string {
     this.#storage.transactionSync(() => {
-      const state = this.#runs().get(conversationId) ?? RunState.cases.Idle.make({});
+      const state = this.#states().get(conversationId) ?? RunState.cases.Idle.make({});
 
-      this.#write(conversationId, transition(state, RunEvent.Ended({ ending })).state);
+      this.#write(conversationId, transition(state, event).state);
     });
 
     return conversationId;
@@ -157,23 +165,23 @@ export class ConversationRuns {
 
   #reported(
     { running, failed }: RunReport,
-    tracked: (runs: ReadonlyMap<string, ActiveRun>) => Iterable<string>,
+    tracked: (states: ReadonlyMap<string, RunState>) => Iterable<string>,
     now: number,
     instance: number,
     generation: number | null,
   ): readonly Settlement[] {
     const steps = this.#storage.transactionSync(() => {
-      const runs = this.#runs();
+      const states = this.#states();
       const modelTurn = this.#storage.kv.get<ModelTurn>(MODEL_TURN_KEY);
 
       const conversations = new Set([
-        ...tracked(runs),
+        ...tracked(states),
         ...running.map((reported) => reported.conversationId),
       ]);
 
       return [...conversations].map((conversationId) => {
         const step = transition(
-          runs.get(conversationId) ?? RunState.cases.Idle.make({}),
+          states.get(conversationId) ?? RunState.cases.Idle.make({}),
           RunEvent.Reported({
             report: running.find((reported) => reported.conversationId === conversationId),
             errorCode: failed[conversationId] ?? null,
@@ -241,12 +249,30 @@ export class ConversationRuns {
         run.continues,
       );
 
+    const deleteRun = () =>
+      sql.exec("DELETE FROM conversation_runs WHERE conversation_id = ?", conversationId);
+
+    sql.exec("DELETE FROM conversation_cancels WHERE conversation_id = ?", conversationId);
     RunState.match(state, {
-      Idle: () =>
-        sql.exec("DELETE FROM conversation_runs WHERE conversation_id = ?", conversationId),
+      Idle: deleteRun,
+      Cancelled: () => {
+        deleteRun();
+        sql.exec("INSERT INTO conversation_cancels (conversation_id) VALUES (?)", conversationId);
+      },
       Running: (run) => upsert(run, null),
       Ending: (run) => upsert(run, run.ending),
     });
+  }
+
+  #states(): ReadonlyMap<string, RunState> {
+    const cancels = this.#storage.sql
+      .exec<Readonly<{ conversation_id: string }>>(
+        "SELECT conversation_id FROM conversation_cancels",
+      )
+      .toArray()
+      .map(({ conversation_id }) => [conversation_id, RunState.cases.Cancelled.make({})] as const);
+
+    return new Map<string, RunState>([...cancels, ...this.#runs()]);
   }
 
   #runs(): ReadonlyMap<string, ActiveRun> {

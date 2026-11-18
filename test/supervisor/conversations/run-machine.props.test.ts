@@ -23,10 +23,11 @@ type World = {
   state: RunState;
   now: number;
   open: Open | null;
+  cancelled: boolean;
   unsettled: boolean;
 };
 
-type View = Open | null;
+type View = Open | "cancelled" | null;
 
 type Seen = Readonly<{ run: number | undefined; continues: number | undefined }>;
 
@@ -63,6 +64,8 @@ function answeredOutcome(code: string | null): RunOutcome {
 function view(state: RunState): View {
   if (state._tag === "Idle") return null;
 
+  if (state._tag === "Cancelled") return "cancelled";
+
   return {
     run: state.run,
     deadline: state.deadline,
@@ -85,6 +88,7 @@ function endedOutcome(open: Open, code: string | null, signs: Signs): RunOutcome
 
 function expectedReport(
   open: Open | null,
+  cancelled: boolean,
   report: Seen | null,
   code: string | null,
   by: number,
@@ -135,17 +139,17 @@ function expectedReport(
       deadline,
       instance: by,
       continues: report.continues ?? 0,
-      ending: null,
+      ending: cancelled ? "cancelled" : null,
     },
     commands,
   };
 }
 
-function apply(world: World, event: RunEvent, expected: Expected) {
+function apply(world: World, event: RunEvent, expected: Expected, cancelled = false) {
   const step = transition(world.state, event);
 
   expect(step.commands).toEqual(expected.commands);
-  expect(view(step.state)).toEqual(expected.next);
+  expect(view(step.state)).toEqual(cancelled ? "cancelled" : expected.next);
 
   for (const command of step.commands) {
     if (command._tag === "Settled") {
@@ -157,10 +161,11 @@ function apply(world: World, event: RunEvent, expected: Expected) {
     }
   }
 
-  expect(step.state._tag === "Idle").toBe(!world.unsettled);
+  expect(step.state._tag === "Idle" || step.state._tag === "Cancelled").toBe(!world.unsettled);
 
   world.state = step.state;
   world.open = expected.next;
+  world.cancelled = cancelled;
 }
 
 function reported(tc: hegel.TestCase, world: World, seen: Seen | null) {
@@ -181,7 +186,7 @@ function reported(tc: hegel.TestCase, world: World, seen: Seen | null) {
   apply(
     world,
     RunEvent.Reported({ report, errorCode: code, instance: by, now: world.now, ...signs }),
-    expectedReport(world.open, seen, code, by, world.now, signs),
+    expectedReport(world.open, world.cancelled, seen, code, by, world.now, signs),
   );
 }
 
@@ -196,10 +201,15 @@ const machine: hegel.stateful.StateMachine<World> = {
     ended: (tc, world) => {
       const by = tc.draw(ending);
 
-      apply(world, RunEvent.Ended({ ending: by }), {
-        next: world.open === null ? null : { ...world.open, ending: world.open.ending ?? by },
-        commands: [],
-      });
+      apply(
+        world,
+        RunEvent.Ended({ ending: by }),
+        {
+          next: world.open === null ? null : { ...world.open, ending: world.open.ending ?? by },
+          commands: [],
+        },
+        world.open === null && (world.cancelled || by === "cancelled"),
+      );
     },
   },
 };
@@ -222,10 +232,10 @@ const initial = gs.composite<World>((tc) => {
         ? [RunState.cases.Running.make(fields), { ...fields, ending: null }]
         : [RunState.cases.Ending.make({ ...fields, ending: by }), { ...fields, ending: by }];
 
-  return { state, now: 0, open, unsettled: open !== null };
+  return { state, now: 0, open, cancelled: false, unsettled: open !== null };
 });
 
-test("a run settles exactly once before the next starts, whatever the facet reports and however it is ended", () => {
+test("a run settles exactly once before the next starts, whatever the facet reports, however it is ended, and whether its cancel came before its first report", () => {
   hegel.test((tc) => {
     hegel.stateful.run(tc, machine, tc.draw(initial), { stepCount: 30 });
   });

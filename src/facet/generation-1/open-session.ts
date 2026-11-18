@@ -22,6 +22,8 @@ import { ROUTE_MODEL, routeProvider } from "./route-provider.js";
 
 const CONTEXT_BUDGET_TOKENS = 131_072;
 
+const REPORTED_KEY = "relay.reported";
+
 const SETTINGS: HarnessSettings = {
   compaction: {
     reserveTokens: ROUTE_MODEL.contextWindow - CONTEXT_BUDGET_TOKENS + ROUTE_MODEL.maxTokens,
@@ -92,7 +94,7 @@ export async function openSession(input: SessionInput): Promise<Session> {
     else log("info", "session-closed", {});
   });
 
-  await relayRunningConversations(harness, host, input.abort);
+  await relayRunningConversations(harness, host, input.storage, input.abort);
 
   return { harness, host };
 }
@@ -100,12 +102,22 @@ export async function openSession(input: SessionInput): Promise<Session> {
 async function relayRunningConversations(
   harness: Harness,
   host: ConversationHost,
+  storage: DurableObjectStorage,
   abort: (reason: string) => void,
 ): Promise<void> {
   const graph = await harness.watchTaskGraph(BACKGROUND_CONTEXT);
-  let reported = await runningConversations(harness, graph.value);
+  let reported = storage.kv.get<readonly Reported[]>(REPORTED_KEY) ?? [];
 
-  await host.running(reported).catch((cause: unknown) => {
+  const relay = async (running: readonly Reported[], failed: RunFailures) => {
+    storage.kv.put(REPORTED_KEY, [...reported, ...running]);
+    await host.running(running, failed);
+    reported = running;
+    storage.kv.put(REPORTED_KEY, running);
+  };
+
+  const first = await runningConversations(harness, graph.value);
+
+  await relay(first, await failedRuns(harness, reported, first)).catch((cause: unknown) => {
     abort("the Supervisor did not take the running conversations");
     throw cause;
   });
@@ -126,10 +138,7 @@ async function relayRunningConversations(
 
     if (JSON.stringify(running) === JSON.stringify(reported)) return;
 
-    const failed = await failedRuns(harness, reported, running);
-
-    reported = running;
-    await host.running(running, failed).catch(() => {
+    await relay(running, await failedRuns(harness, reported, running)).catch(() => {
       abort("the Supervisor did not take the running conversations");
     });
   });
