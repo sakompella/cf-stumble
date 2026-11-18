@@ -1,6 +1,6 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import type { JsonValue } from "@earendil-works/chord";
+import type { JsonValue } from "@earendil-works/chord/json";
 import { diffRevisions } from "@earendil-works/chord/delta";
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
