@@ -7,9 +7,9 @@ import {
   type Conversation,
 } from "../../conversation-view/conversation.js";
 import type { Model } from "./model.js";
-import { settledOutgoing, withoutQueued } from "./outgoing.js";
+import { settledOutgoing } from "./outgoing.js";
 import { StreamPhase, wasInterrupted } from "./stream-phase.js";
-import { retriedUnconfirmed } from "./update-send.js";
+import { retriedUnconfirmed, withThreadReplaced } from "./update-send.js";
 import type { Handlers, UpdateReturn } from "./update-shared.js";
 import { transcriptHandlers } from "./update-transcript.js";
 
@@ -48,9 +48,8 @@ function receivedConversation(held: Model, conversation: Conversation): UpdateRe
 
   const model = replaced
     ? {
-        ...held,
+        ...withThreadReplaced(held),
         conversation: EMPTY_CONVERSATION,
-        outgoing: withoutQueued(held.outgoing),
         runNote: "this conversation was replaced by a fresh thread",
       }
     : held;

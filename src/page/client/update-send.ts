@@ -3,7 +3,7 @@ import { MintRequestId, SendMessage } from "./commands.js";
 import { advanceFreshThread, FreshThreadEvent } from "./fresh-thread.js";
 import { newestEntryId } from "../../conversation-view/conversation.js";
 import type { Model } from "./model.js";
-import { advanceRequest, Outgoing, OutgoingEvent } from "./outgoing.js";
+import { advanceRequest, Outgoing, OutgoingEvent, withoutQueued } from "./outgoing.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 export function send(model: Model): UpdateReturn {
@@ -50,6 +50,28 @@ function advanced(model: Model, requestId: string, event: OutgoingEvent): Model 
   return Option.isSome(step.before) && Option.isNone(step.after)
     ? withTextRestored(next, step.before.value.projectId, step.before.value.text)
     : next;
+}
+
+function lost(model: Model, requestId: string): Model {
+  const next = advanced(model, requestId, OutgoingEvent.Lost());
+
+  return next.outgoing.some(
+    (item) => item.requestId === requestId && Outgoing.guards.Unconfirmed(item),
+  )
+    ? { ...next, runNote: NOT_CONFIRMED }
+    : next;
+}
+
+export function withThreadReplaced(model: Model): Model {
+  const unqueued = withoutQueued(model.outgoing);
+  const isOpen = (item: Outgoing) => Option.contains(model.maybeProjectId, item.projectId);
+
+  return unqueued
+    .filter(isOpen)
+    .reduceRight<Model>((sofar, item) => withTextRestored(sofar, item.projectId, item.text), {
+      ...model,
+      outgoing: unqueued.filter((item) => !isOpen(item)),
+    });
 }
 
 function retried(model: Model, requestId: string): UpdateReturn {
@@ -135,21 +157,10 @@ export function sendResultHandlers(
       model: { ...advanced(model, requestId, OutgoingEvent.Refused()), runNote: wording },
     }),
     HeldSend: ({ requestId, wording }) => ({
-      model: {
-        ...advanced(model, requestId, OutgoingEvent.Lost()),
-        pageError: wording,
-        runNote: NOT_CONFIRMED,
-      },
+      model: { ...lost(model, requestId), pageError: wording },
     }),
     FailedSend: ({ requestId, detail }) => ({
-      model: {
-        ...withError(
-          advanced(model, requestId, OutgoingEvent.Lost()),
-          "the message request",
-          detail,
-        ),
-        runNote: NOT_CONFIRMED,
-      },
+      model: withError(lost(model, requestId), "the message request", detail),
     }),
   };
 }
