@@ -36,7 +36,7 @@ type Caller = Readonly<{
 
 type Sent = Readonly<{ method: string; body: string | undefined; asRequest: boolean }>;
 
-const location: gs.Generator<Location> = gs.oneOf<Location>(
+const location: gs.PrintableGenerator<Location> = gs.oneOf<Location>(
   gs.sampledFrom(ORIGINS).map((origin) => ({ kind: "absolute" as const, origin })),
   gs.just({ kind: "relative" as const }),
   gs.just({ kind: "unresolvable" as const }),
