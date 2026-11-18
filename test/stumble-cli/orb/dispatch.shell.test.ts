@@ -1,7 +1,8 @@
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { fileURLToPath } from "node:url";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { dispatch } from "../../../src/stumble-cli/orb/dispatch.js";
@@ -14,6 +15,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await rm(directory, { recursive: true, force: true });
 });
 
@@ -57,3 +59,26 @@ test("an interrupted dispatch leaves no child process", async () => {
     expect(alive(pid)).toBe(false);
   });
 });
+
+const dockerDispatch = fileURLToPath(
+  new URL("../../../src/stumble-cli/orb/docker-dispatch.sh", import.meta.url),
+);
+
+test.each(["stop", "delete"] as const)(
+  "a %s that the container engine refuses fails with the engine's error",
+  async (job) => {
+    const engine = join(directory, "docker");
+
+    await writeFile(engine, `#!/usr/bin/env bash\necho "engine refused $*" >&2\nexit 125\n`);
+    await chmod(engine, 0o755);
+    vi.stubEnv("PATH", `${directory}:${process.env["PATH"] ?? ""}`);
+    vi.stubEnv("STUMBLE_IMAGE", "image");
+
+    const result = await Effect.runPromise(
+      dispatch(dockerDispatch, { job, container: "c1", egressPort: 9, env: {} }),
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("engine refused rm -f stumble-c1");
+  },
+);
