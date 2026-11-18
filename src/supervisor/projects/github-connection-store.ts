@@ -8,7 +8,7 @@ import {
   GitHubCredential,
   recordedOf,
   AuthorizationEvent,
-  type CredentialEvent,
+  CredentialEvent,
 } from "./github-connection-machine.js";
 
 type PendingRow = {
@@ -56,6 +56,12 @@ const reasonOf = (stored: string | null): ReconnectReason =>
   isReason(stored) ? stored : UNKNOWN_REASON;
 
 const sameAuthorization = Schema.toEquivalence(GitHubAuthorization);
+
+const installs = (event: CredentialEvent): boolean =>
+  CredentialEvent.$match(event, {
+    Observed: ({ installedBy }) => installedBy !== undefined,
+    InstallRefused: () => true,
+  });
 
 function recordedFromRow(connection: ConnectionRow | undefined) {
   return connection === undefined
@@ -187,9 +193,13 @@ export class GitHubConnectionStore {
 
   applyCredential(revision: number, event: CredentialEvent): GitHubCredential {
     return this.storage.transactionSync(() => {
+      if (this.revision() !== revision) return this.credential();
+
       const next = credentialTransition(this.credential(), event);
 
-      if (this.revision() === revision) this.writeCredential(next);
+      this.writeCredential(next);
+
+      if (installs(event)) this.advanceRevision();
 
       return next;
     });
@@ -219,11 +229,15 @@ export class GitHubConnectionStore {
   clear(): void {
     this.storage.transactionSync(() => {
       this.writeCredential(GitHubCredential.cases.unchecked.make({}));
-      this.sql.exec(
-        `INSERT INTO github_connection_revision (id, revision) VALUES (1, 1)
-         ON CONFLICT (id) DO UPDATE SET revision = revision + 1`,
-      );
+      this.advanceRevision();
     });
+  }
+
+  private advanceRevision(): void {
+    this.sql.exec(
+      `INSERT INTO github_connection_revision (id, revision) VALUES (1, 1)
+       ON CONFLICT (id) DO UPDATE SET revision = revision + 1`,
+    );
   }
 
   private readAuthorization(): GitHubAuthorization {

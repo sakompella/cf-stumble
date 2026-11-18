@@ -209,9 +209,13 @@ export class FakeTenantWorkspace implements PromiseOperations {
   }
 
   private async heldOutput(command: HeldCommand, source: string): Promise<CommandOutput> {
+    const observed = source.includes("gh auth token") ? this.answer(source) : undefined;
+
     command.start();
 
     const exitCode = await command.exitCode;
+
+    if (observed !== undefined) return { ...observed, exitCode };
 
     return source.includes("gh auth login")
       ? { ...this.answer(source), exitCode }
