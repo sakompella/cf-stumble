@@ -1,11 +1,13 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import { eventuallyTruthy } from "../eventually.js";
 import {
   activateGeneration,
   activeSupervisor,
   artifact,
+  connectedSupervisor,
   prepareWithModuleMap,
   servedText,
   servingFacetSource,
@@ -17,8 +19,8 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
 }
 
-function servingArtifact(harnessCommit: string) {
-  return artifact(harnessCommit, servingFacetSource("candidate serving body"));
+function servingArtifact(harnessCommit: string, body = "candidate serving body") {
+  return artifact(harnessCommit, servingFacetSource(body));
 }
 
 function failingArtifact(harnessCommit: string) {
@@ -28,18 +30,51 @@ function failingArtifact(harnessCommit: string) {
   );
 }
 
-async function activateServingCandidate(
+async function readyServingCandidate(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
-): Promise<void> {
+  body?: string,
+): Promise<number> {
   const candidate = await submitCandidate(control, harnessCommit);
-  const startup = await prepareWithModuleMap(control, candidate, servingArtifact(harnessCommit));
+
+  const startup = await prepareWithModuleMap(
+    control,
+    candidate,
+    servingArtifact(harnessCommit, body),
+  );
 
   if (!startup.ok || startup.report.stage !== "ready") {
     throw new Error("the candidate must pass startup before activation");
   }
 
-  await activateGeneration(control, candidate);
+  return candidate;
+}
+
+async function activateServingCandidate(
+  control: DurableObjectStub<Supervisor>,
+  harnessCommit: string,
+): Promise<void> {
+  await activateGeneration(control, await readyServingCandidate(control, harnessCommit));
+}
+
+function holdFirstModuleMapRead(commit: string) {
+  const read = env.MODULE_MAPS.get.bind(env.MODULE_MAPS);
+  const gate = { reading: false, release: (): void => {} };
+
+  const held = new Promise<void>((resolve) => {
+    gate.release = resolve;
+  });
+
+  vi.spyOn(env.MODULE_MAPS, "get").mockImplementation(async (key: string) => {
+    if (key.includes(commit) && !gate.reading) {
+      gate.reading = true;
+      await held;
+    }
+
+    return read(key);
+  });
+
+  return gate;
 }
 
 afterEach(async () => {
@@ -90,4 +125,40 @@ test("keeps the active retained artifact when a failed candidate cannot activate
 
   expect(activation).toEqual({ ok: false, problem: { code: "not-ready" } });
   expect(await servedText(control)).toBe("candidate serving body");
+});
+
+test("a rollback during the module map read of a cold mount serves the rolled-back generation", async () => {
+  const first = "a0a0000000000000000000000000000000000001";
+  const control = await connectedSupervisor("rollback-during-cold-mount");
+  const labelA = await readyServingCandidate(control, first, "served by A");
+
+  await activateGeneration(control, labelA);
+
+  const labelB = await readyServingCandidate(
+    control,
+    "b0b0000000000000000000000000000000000002",
+    "served by B",
+  );
+
+  await activateGeneration(control, labelB);
+  await activateGeneration(control, labelA);
+  await evictDurableObject(control);
+
+  const read = holdFirstModuleMapRead(first);
+  const { epoch } = await control.getActiveGeneration();
+  const racing = servedText(control);
+
+  await eventuallyTruthy(() => read.reading);
+
+  const rollback = await control.controlGeneration({
+    kind: "rollback",
+    label: generationLabel(labelB),
+    observedEpoch: epoch,
+  });
+
+  read.release();
+
+  expect(rollback).toMatchObject({ ok: true, outcome: { effect: "activated" } });
+  expect(await racing).toBe("served by B");
+  expect(await servedText(control)).toBe("served by B");
 });

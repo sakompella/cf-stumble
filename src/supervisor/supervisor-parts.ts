@@ -103,7 +103,8 @@ export function supervisorParts(
 
   const serving = new ServingConversations({
     ctx,
-    mount: () => artifacts.mount(generations.active(), env.LOADER, ctx.facets),
+    load: () => artifacts.load(generations.active()),
+    start: (artifact) => artifacts.start(artifact, env.LOADER, ctx.facets),
     model: (instance) => ctx.exports.ModelRoute({ props: { supervisor: name, instance } }),
     catalog: () => projects.connections.catalog(),
     resetting,
