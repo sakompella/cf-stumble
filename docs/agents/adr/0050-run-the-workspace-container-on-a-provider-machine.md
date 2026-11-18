@@ -24,9 +24,10 @@ costs nothing. JSON frames (`src/orb-protocol.ts`) carry:
 
 - jobs from the Host: `start` (with the container's environment), `stop` (idle stop) and `delete`
   (reset). The provider runs the dispatch script once per job, with the job in environment
-  variables, and answers `job-done` or `failed`. A `stop` or `delete` with no answer in 30 s
-  closes the provider's socket and counts as a disconnect. `start` prints the address of the container's
-  port 8080.
+  variables, and answers `job-done` or `failed`. The bundled scripts' `stop` and `delete` fail
+  when the engine cannot remove the container; a container that is already gone counts as
+  removed. A `stop` or `delete` with no answer in 30 s closes the provider's socket and counts as
+  a disconnect. `start` prints the address of the container's port 8080.
 - `fetch` from the Host: the setup calls `ContainerBackend` makes to port 8080 (`/health`, the
   `/api` auth check, `POST /connect`, `/__computerd/info`), answered with `fetch-result`.
 - `hello` and `exited` from the provider: its local listener's port, and a container that stopped
@@ -58,8 +59,9 @@ socket, and the old value no longer connects.
 the container exited, and the next connect falls back to the Cloudflare container. Files in
 SQLite survive, as after any container replacement; files under ignored segments do not. The
 provider stops its container when its socket closes or when it receives SIGINT or SIGTERM, because
-every later connect launches a fresh container anyway. It then connects again, waiting from 1 to 30
-seconds between attempts, so a Worker deploy does not end it.
+every later connect launches a fresh container anyway. It forgets a container only after a `stop`
+or `delete` succeeds, so this cleanup also stops a container whose earlier stop failed. It then
+connects again, waiting from 1 to 30 seconds between attempts, so a Worker deploy does not end it.
 
 **Alternatives.** Carrying computerd's WebSocket frames on the job socket would need a WebSocket
 server in the provider and an in-memory relay in the Host, which keeps the Host awake just the same.
