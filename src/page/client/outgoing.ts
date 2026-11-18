@@ -112,18 +112,29 @@ function unseenOutgoing(
   outgoing: readonly Outgoing[],
 ): readonly Outgoing[] {
   const placed = placedUserTexts(conversation);
-  const claimed = new Set<number>();
+  const claims = new Map<number, Outgoing>();
 
-  return outgoing.filter((item) => {
+  for (const item of [
+    ...outgoing.filter(Outgoing.guards.Queued),
+    ...outgoing.filter((unsure) => !Outgoing.guards.Queued(unsure)),
+  ]) {
     const match = placed.find(
-      ({ id, text }) => id > item.afterEntry && text === item.text && !claimed.has(id),
+      ({ id, text }) => id > item.afterEntry && text === item.text && !claims.has(id),
     );
 
-    if (match === undefined) return true;
+    if (match !== undefined) claims.set(match.id, item);
+  }
 
-    claimed.add(match.id);
+  const seen = new Set(claims.values());
 
-    return false;
+  return outgoing.flatMap((item) => {
+    if (seen.has(item)) return [];
+
+    const passed = [...claims].flatMap(([id, claimant]) =>
+      claimant.text === item.text && id > item.afterEntry ? [id] : [],
+    );
+
+    return [passed.length === 0 ? item : { ...item, afterEntry: Math.max(...passed) }];
   });
 }
 
