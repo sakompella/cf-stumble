@@ -43,7 +43,7 @@ test("a failed step gives the owner its output tail with every credential redact
 
 test.each([
   ["build", "build-workspace-unavailable"],
-  ["build-output", "build-output-missing"],
+  ["build-output", "build-workspace-unavailable"],
 ] as const)(
   "a thrown %s RPC fails as %s and logs its cause with every credential redacted",
   async (kind, code) => {

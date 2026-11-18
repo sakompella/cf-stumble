@@ -87,10 +87,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.#parts.generations.submit(harnessCommit, "owner");
   }
 
-  scriptVersion(): string | null {
-    return this.env.CF_VERSION_METADATA?.id ?? null;
-  }
-
   getStatus() {
     return this.#parts.lineage.status(this.#parts.generations.active());
   }

@@ -71,7 +71,7 @@ const ERROR_WORDING = {
   "invalid-backend-request": "The Worker could not read the workspace container request.",
   "cross-origin-request": "The Worker refused a request that came from another site.",
   "not-found": "The Worker has nothing at that address.",
-  "preparation-failed": "The generation was recorded but its preparation failed.",
+  "infrastructure-interrupted": `The platform interrupted the submit before it finished. ${RETRY_LATER}`,
   "internal-error": `The Worker failed on its own. ${RETRY_LATER}`,
 } as const satisfies Readonly<Record<ErrorCode, string>>;
 

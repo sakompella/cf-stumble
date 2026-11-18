@@ -50,7 +50,6 @@ function reachingSupervisor(onReach: () => void): ApiSupervisor {
     controlGeneration: reach,
     submitGeneration: reach,
     prepareGeneration: reach,
-    scriptVersion: reach,
     listProjects: reach,
     connectProject: reach,
     getGitHubConnection: reach,

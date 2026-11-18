@@ -6,6 +6,7 @@ import { ISOLATE_PROGRAMS } from "../../../src/workspace/project/isolate-program
 
 const SYSTEM_DIRECTORIES = [
   "/bin",
+  "/boot",
   "/dev",
   "/etc",
   "/home",
@@ -13,6 +14,7 @@ const SYSTEM_DIRECTORIES = [
   "/lib64",
   "/media",
   "/mnt",
+  "/nix",
   "/opt",
   "/proc",
   "/root",
@@ -258,6 +260,14 @@ test.each(["echo >/bin", "echo hi>/tmp/x", "cat </etc/hosts", ">ls node"])(
     expect(routedBackend(command)).toBe("container");
   },
 );
+
+test.each([
+  "ls /nix/store",
+  "cat /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh",
+  "ls /nix/store | grep rustc",
+])("a read of the container's Nix store goes to the container: %j", (command) => {
+  expect(routedBackend(command)).toBe("container");
+});
 
 test.each([
   "awk 'BEGIN{for(i=0;i<100000;i++)printf \"%d\\n\",i}' | wc -l",

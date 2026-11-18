@@ -107,12 +107,13 @@ test("the status answer is read into a numeric label and epoch", () => {
   });
 });
 
-test("a submit refused after the label was recorded says so", () => {
-  expect(
-    submitRejection({
-      ok: false,
-      error: { code: "preparation-failed" },
-      recorded: { label: 7, harnessCommit: "abc" },
-    }),
-  ).toBe("label 7 recorded (commit abc), preparation failed: error: preparation-failed");
+test("a submit the platform interrupted says whether its label was recorded", () => {
+  const error = { code: "infrastructure-interrupted" } as const;
+
+  expect(submitRejection({ ok: false, error, recorded: { label: 7, harnessCommit: "abc" } })).toBe(
+    "label 7 recorded (commit abc), submit interrupted: error: infrastructure-interrupted",
+  );
+  expect(submitRejection({ ok: false, error })).toBe(
+    "no label recorded, submit interrupted: error: infrastructure-interrupted",
+  );
 });

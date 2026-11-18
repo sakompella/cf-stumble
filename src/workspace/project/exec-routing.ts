@@ -114,6 +114,7 @@ export function commandMayWrite(command: string): boolean {
 
 const OUTSIDE_WORKSPACE_PREFIXES = [
   "/bin",
+  "/boot",
   "/dev",
   "/etc",
   "/home",
@@ -121,6 +122,7 @@ const OUTSIDE_WORKSPACE_PREFIXES = [
   "/lib64",
   "/media",
   "/mnt",
+  "/nix",
   "/opt",
   "/proc",
   "/root",
