@@ -2,7 +2,7 @@ import { appendFileSync } from "node:fs";
 import { routedBackend } from "../../../src/workspace/project/exec-routing.ts";
 import { Rng, generateCase, type Case } from "./exec-gen.mts";
 import { leakProblems } from "./exec-leak.mts";
-import { judge, stepsFor, type CaseSteps } from "./exec-oracle.mts";
+import { judge, runRoot, stepsFor, type CaseSteps } from "./exec-oracle.mts";
 import { freshThread, installFuzzGeneration, runSteps } from "./exec-session.mts";
 import type { FuzzContext as FuzzRun, Fuzzer } from "./context.mts";
 
@@ -95,6 +95,8 @@ async function fuzzCases(run: FuzzRun): Promise<boolean> {
 
     if (commands.length > 0) break;
   }
+
+  await runSteps(run, [{ command: `rm -rf ${runRoot(run.target.runId)}`, backend: "container" }]);
 
   console.error(`fuzz exec: seed ${run.seed}, ${cases} cases, ${failed} failures`);
 
