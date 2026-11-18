@@ -20,7 +20,7 @@ const CAPABILITY_METHODS = Object.getOwnPropertyNames(ProjectRpcTarget.prototype
   (name) => name !== "constructor" && !CLEANUP_METHODS.includes(name),
 );
 
-const call: gs.Generator<Call> = gs
+const call: gs.PrintableGenerator<Call> = gs
   .tuples(gs.sampledFrom(CAPABILITY_METHODS), gs.sampledFrom(["echo hi", ""]))
   .map(([method, command]) => ({ method, command }));
 

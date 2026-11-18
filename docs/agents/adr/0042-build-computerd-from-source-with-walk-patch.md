@@ -3,9 +3,9 @@
 > **Review:** Agent-only
 
 The workspace image builds `computerd` from Computer source commit
-`bb0a5db4b7e8c8a79625d63e0e272602f909640e` (release 0.10.0) with one checked-in patch,
+`9d11fa7b7f77cb8130d3f53f285ba8e0f8ea258b` (release 0.11.3) with one checked-in patch,
 `infra/workspace-image/computerd-walk.patch`, instead of copying the binary out of
-`ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:6ec793fa80f109acf8b3cd4e295284cfed97f61c03030b780a612ec22c49b294`.
+`ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:2978fc5b5ad3b2bc8429ef83e2b56079f938003ca94c3c89612f78d509d027ff`.
 This changes the image half of the pins that ADR-0026 records; the source commit stays the same.
 
 A Cloudflare container cannot mount FUSE, so computerd keeps `/workspace` in step with its store
@@ -34,7 +34,8 @@ store watcher's next tick, up to 100 ms later, so a command could still read the
 command that wrote to it brought the file back with its old content. The git fuzz found this on
 staging (seed 1361621634): a file that an isolate `rm -rf` deleted was still in the container.
 A probe on staging stage `fzgit-sldb1` (2026-11-12) saw it in 1 of 42 tries before the change and
-in none of 50 after it. Upstream main (812bce58, 2026-11-11) has the same `flush`.
+in none of 50 after it. Release 0.11.3 (9d11fa7b, 2026-11-17) has the same `flush`, walk and
+shim as 0.10.0, so the patch applies to it unchanged.
 
 The build follows upstream's release workflow. Since 0.8.0 the binary embeds a native FUSE addon,
 which the source stage compiles on Debian trixie and passes to the build through

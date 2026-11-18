@@ -2,7 +2,7 @@
 
 > **Review:** Human-approved
 
-Use Cloudflare Computer release `0.10.0`: the `@cloudflare/computer` package from npm and source commit `bb0a5db4b7e8c8a79625d63e0e272602f909640e` with image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:6ec793fa80f109acf8b3cd4e295284cfed97f61c03030b780a612ec22c49b294`. Upgrade and retest the three together. The first pin was source commit `12336475c9fd03f5280a4537a707797fc0131fbd`, whose unreleased `0.3.0` package cf-stumble vendored as a tarball; 0.8.0 was a published release, so the lockfile integrity hash replaced the vendored copy.
+Use Cloudflare Computer release `0.11.3`: the `@cloudflare/computer` package from npm and source commit `9d11fa7b7f77cb8130d3f53f285ba8e0f8ea258b` with image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:2978fc5b5ad3b2bc8429ef83e2b56079f938003ca94c3c89612f78d509d027ff`. Upgrade and retest the three together. The first pin was source commit `12336475c9fd03f5280a4537a707797fc0131fbd`, whose unreleased `0.3.0` package cf-stumble vendored as a tarball; 0.8.0 was a published release, so the lockfile integrity hash replaced the vendored copy.
 
 The workspace image builds `computerd` from that commit with one patch instead of shipping the image's binary; ADR-0042 records why. The image's binary remains the reference an unpatched build of the commit must reproduce.
 
