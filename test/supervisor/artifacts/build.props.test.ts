@@ -141,9 +141,9 @@ function expectedProblem({ step, output }: Scenario) {
 
   if (step !== null) return { code: "build-workspace-unavailable", harnessCommit };
 
-  if (output === "missing" || output === "refused") {
-    return { code: "build-output-missing", harnessCommit };
-  }
+  if (output === "refused") return { code: "build-workspace-unavailable", harnessCommit };
+
+  if (output === "missing") return { code: "build-output-missing", harnessCommit };
 
   if (output === null) return null;
 

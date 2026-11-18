@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import * as Result from "effect/Result";
 import { resultOf } from "../../effect-result.js";
-import type { HarnessBuildStepName } from "../../../src/harness-build.js";
+import { textLines } from "../../log-capture.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../../src/workspace-command-timeout.js";
 import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
@@ -67,67 +67,74 @@ test("a build survives a Workspace Host restart that kills the stub of an earlie
   expect(Result.isSuccess(result) ? "built" : result.failure.code).toBe("built");
 });
 
-function resetAt(step: HarnessBuildStepName, times: number): FakeBuildHost {
+const STORAGE_STARTUP = new Error(
+  "Internal error while starting up Durable Object storage caused object to be reset; reference = b8sd9000hraaunrso5ttv63p",
+);
+
+function rejectingAt(step: "provision" | "build-output", failure: Error): FakeBuildHost {
   const host = new FakeBuildHost();
   const build = host.build.bind(host);
-  let resets = 0;
 
   host.build = (request) => {
-    if (request.step !== step || resets >= times) return build(request);
+    if (step !== request.step) return build(request);
 
-    resets += 1;
     host.requests.push(request.step);
 
-    return Promise.reject(CODE_UPDATE_RESET);
+    return Promise.reject(failure);
+  };
+
+  host.buildOutput = () => {
+    host.requests.push("build-output");
+
+    return Promise.reject(failure);
   };
 
   return host;
 }
 
-test("a build starts again once when a deploy resets the Workspace Host under it (3b5a74a5, deploy 43934982845)", async () => {
-  for (const step of ["provision", "install"] as const) {
-    const host = resetAt(step, 1);
+test("a build that the platform interrupts is unavailable after one try, whatever mark the error carries (deploy 44185631101), and discards the scratch tree", async () => {
+  for (const failure of [STORAGE_STARTUP, CODE_UPDATE_RESET]) {
+    const host = rejectingAt("provision", failure);
 
     const result = await built(host);
 
-    expect(Result.isSuccess(result) ? "built" : result.failure.code, step).toBe("built");
-    expect(
-      host.steps().filter((request) => request === "provision"),
-      step,
-    ).toHaveLength(2);
-    expect(
-      host.steps().filter((request) => request === "build-discard"),
-      step,
-    ).toHaveLength(2);
+    expect(Result.isFailure(result) ? result.failure : "built").toEqual({
+      code: "build-workspace-unavailable",
+      harnessCommit: BUILD_COMMIT,
+    });
+    expect(host.steps()).toEqual(["provision", "build-discard"]);
   }
 });
 
-test("a build that the deploy resets twice is unavailable, not retried again", async () => {
-  const host = resetAt("provision", 2);
-
-  const result = await built(host);
-
-  expect(Result.isFailure(result) ? result.failure : "built").toEqual({
-    code: "build-workspace-unavailable",
-    harnessCommit: BUILD_COMMIT,
-  });
-  expect(host.steps().filter((request) => request === "provision")).toHaveLength(2);
-});
-
-test("a Workspace Host error that is not a code update is not retried", async () => {
-  const host = new FakeBuildHost();
-  host.build = (request) => {
-    host.requests.push(request.step);
-
-    return Promise.reject(new Error("the container is not running"));
-  };
+test("a module map read that the platform interrupts is unavailable, not a missing output", async () => {
+  const host = rejectingAt("build-output", STORAGE_STARTUP);
 
   const result = await built(host);
 
   expect(Result.isFailure(result) ? result.failure.code : "built").toBe(
     "build-workspace-unavailable",
   );
-  expect(host.steps().filter((request) => request === "provision")).toHaveLength(1);
+});
+
+test("a module map the build did not publish is a missing output, not an interruption", async () => {
+  const host = new FakeBuildHost();
+  host.output = undefined;
+
+  const result = await built(host);
+
+  expect(Result.isFailure(result) ? result.failure.code : "built").toBe("build-output-missing");
+});
+
+test("logs the platform's retryable and overloaded flags of an interrupted call once, and 'absent' when it sets none", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await built(rejectingAt("provision", STORAGE_STARTUP));
+  await built(rejectingAt("provision", CODE_UPDATE_RESET));
+
+  expect(textLines(errors).filter((line) => line.startsWith("harness-build."))).toEqual([
+    `harness-build.provision: build-workspace-unavailable: ${STORAGE_STARTUP.message} [retryable=absent overloaded=absent]`,
+    `harness-build.provision: build-workspace-unavailable: ${CODE_UPDATE_RESET.message} [retryable=true overloaded=absent]`,
+  ]);
 });
 
 test("gives the built module map the commit the Supervisor asked to build", async () => {

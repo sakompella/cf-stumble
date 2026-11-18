@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { releaseGeneration, type ActivationAnswer, type ReleaseDeps } from "./release.mts";
+import {
+  INTERRUPTION_DEADLINE_MS,
+  releaseGeneration,
+  RequestInterrupted,
+  type ActivationAnswer,
+  type ReleaseDeps,
+  type ReleaseOwner,
+  type Submitted,
+} from "./release.mts";
 
 const ACTIVE = "a".repeat(40);
 
@@ -9,6 +17,8 @@ const MAIN = "b".repeat(40);
 type Fake = Readonly<{
   deps: ReleaseDeps;
   submitted: string[];
+  attempts: { atMs: number; budgetMs: number }[];
+  reports: string[];
   activations: number[];
   activatedAtMs: number[];
   forced: boolean[];
@@ -17,9 +27,11 @@ type Fake = Readonly<{
 function fake(
   answers: readonly ActivationAnswer[],
   changed = true,
-  preparations: readonly string[] = [],
+  preparations: readonly Submitted[] = [],
 ): Fake {
   const submitted: string[] = [];
+  const attempts: { atMs: number; budgetMs: number }[] = [];
+  const reports: string[] = [];
   const activations: number[] = [];
   const activatedAtMs: number[] = [];
   const forced: boolean[] = [];
@@ -28,22 +40,19 @@ function fake(
 
   return {
     submitted,
+    attempts,
+    reports,
     activations,
     activatedAtMs,
     forced,
     deps: {
       owner: {
         active: () => Promise.resolve({ harnessCommit: ACTIVE, epoch }),
-        submit: (harnessCommit) => {
+        submit: (harnessCommit, timeoutMs) => {
           submitted.push(harnessCommit);
+          attempts.push({ atMs: clock, budgetMs: timeoutMs });
 
-          const code = preparations[submitted.length - 1];
-
-          return Promise.resolve({
-            label: 6 + submitted.length,
-            ready: code === undefined,
-            reason: code ?? "ready",
-          });
+          return Promise.resolve(preparations[submitted.length - 1] ?? { kind: "ready", label: 7 });
         },
         activate: (_label, observedEpoch, force) => {
           activations.push(observedEpoch);
@@ -62,6 +71,9 @@ function fake(
         return Promise.resolve();
       },
       now: () => clock,
+      report: (line) => {
+        reports.push(line);
+      },
     },
   };
 }
@@ -135,10 +147,117 @@ describe("activation answers other than success", () => {
     assert.deepEqual(forced, [true]);
   });
 
-  it("fails when the startup check is not ready", async () => {
-    const { deps, activations } = fake([], true, ["conversation-failed"]);
+  it("fails when the startup check is not ready, and does not submit again", async () => {
+    const failed: Submitted = { kind: "failed", label: 7, reason: "conversation-failed" };
+    const { deps, activations, submitted } = fake([], true, [failed]);
 
     await assert.rejects(releaseGeneration(MAIN, deps), /not ready: conversation-failed/u);
     assert.deepEqual(activations, []);
+    assert.equal(submitted.length, 1);
   });
+});
+
+describe("preparation interrupted by the infrastructure", () => {
+  const interrupted: Submitted = { kind: "interrupted", reason: "build-workspace-unavailable" };
+
+  it("submits the same commit again after a pause and activates the one label once", async () => {
+    const { deps, submitted, attempts, activations } = fake([], true, [interrupted, interrupted]);
+
+    assert.match(await releaseGeneration(MAIN, deps), /Activated generation 7/u);
+    assert.deepEqual(submitted, [MAIN, MAIN, MAIN]);
+    assert.deepEqual(
+      attempts.map((attempt) => attempt.atMs),
+      [0, 5_000, 15_000],
+    );
+    assert.equal(activations.length, 1);
+  });
+
+  it("repeats a submit that was rejected after its label was recorded", async () => {
+    const early: Submitted = {
+      kind: "interrupted",
+      reason: "infrastructure-interrupted, label 7 recorded",
+    };
+
+    const { deps, submitted, reports } = fake([], true, [early]);
+
+    assert.match(await releaseGeneration(MAIN, deps), /Activated generation 7/u);
+    assert.equal(submitted.length, 2);
+    assert.match(reports.join("\n"), /label 7 recorded/u);
+  });
+
+  it("gives each attempt only the time left of one deadline, with pauses that stop growing", async () => {
+    const all = Array.from({ length: 100 }, () => interrupted);
+    const { deps, attempts } = fake([], true, all);
+
+    await assert.rejects(
+      releaseGeneration(MAIN, deps),
+      /interrupted the release of b+ \d+ times within 10 minutes/u,
+    );
+
+    const starts = attempts.map((attempt) => attempt.atMs);
+
+    assert.deepEqual(
+      attempts.map((attempt) => attempt.budgetMs),
+      starts.map((at) => INTERRUPTION_DEADLINE_MS - at),
+    );
+    assert.ok(starts.every((at) => at < INTERRUPTION_DEADLINE_MS));
+    assert.deepEqual(
+      starts.slice(1).map((at, index) => at - (starts[index] ?? 0)),
+      [5_000, 10_000, 20_000, 40_000, ...Array.from({ length: starts.length - 5 }, () => 60_000)],
+    );
+  });
+
+  it("ends with an error that names the infrastructure and the last interruption", async () => {
+    const all = Array.from({ length: 100 }, () => interrupted);
+    const { deps, activations } = fake([], true, all);
+
+    await assert.rejects(
+      releaseGeneration(MAIN, deps),
+      /infrastructure interrupted the release of b+ .*last: build-workspace-unavailable/u,
+    );
+    assert.deepEqual(activations, []);
+  });
+});
+
+function failingOnce(owner: ReleaseOwner, method: keyof ReleaseOwner, call: number): ReleaseOwner {
+  let calls = 0;
+
+  const guarded =
+    <Args extends unknown[], T>(name: keyof ReleaseOwner, run: (...args: Args) => Promise<T>) =>
+    (...args: Args): Promise<T> => {
+      if (name === method) {
+        calls += 1;
+
+        if (calls === call) return Promise.reject(new RequestInterrupted("fetch failed"));
+      }
+
+      return run(...args);
+    };
+
+  return {
+    active: guarded("active", owner.active),
+    submit: guarded("submit", owner.submit),
+    activate: guarded("activate", owner.activate),
+  };
+}
+
+describe("a request that did not complete", () => {
+  const cases = [
+    ["reading the active commit", "active", 1],
+    ["submitting", "submit", 1],
+    ["reading the epoch before the activation", "active", 2],
+    ["activating", "activate", 1],
+  ] as const;
+
+  for (const [moment, method, call] of cases) {
+    it(`is repeated after a pause when it happens while ${moment}`, async () => {
+      const { deps, reports, submitted, activations } = fake([]);
+      const owner = failingOnce(deps.owner, method, call);
+
+      assert.match(await releaseGeneration(MAIN, { ...deps, owner }), /Activated generation 7/u);
+      assert.deepEqual(reports, ["interruption 1: fetch failed"]);
+      assert.deepEqual(submitted, [MAIN]);
+      assert.equal(activations.length, 1);
+    });
+  }
 });

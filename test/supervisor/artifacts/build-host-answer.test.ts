@@ -68,16 +68,7 @@ function afterFailing(failure: Error, times: number): ResettableOperations {
   return operations;
 }
 
-test("a build starts again once when the platform resets what the Workspace Host called and the Host answers it (deploy 44114195991)", async () => {
-  const operations = afterFailing(CODE_UPDATE_RESET, 1);
-
-  const result = await built(hostOver(operations));
-
-  expect(Result.isSuccess(result) ? "built" : result.failure.code).toBe("built");
-  expect(operations.provisions).toBe(2);
-});
-
-test("a build that is reset under the Host twice is unavailable after two tries", async () => {
+test("a build whose Host answers the platform reset is unavailable after one try, so the caller owns the repeat (deploy 44114195991)", async () => {
   const operations = afterFailing(CODE_UPDATE_RESET, 2);
 
   const result = await built(hostOver(operations));
@@ -85,7 +76,7 @@ test("a build that is reset under the Host twice is unavailable after two tries"
   expect(Result.isFailure(result) ? result.failure.code : "built").toBe(
     "build-workspace-unavailable",
   );
-  expect(operations.provisions).toBe(2);
+  expect(operations.provisions).toBe(1);
 });
 
 test("a build whose workspace is really unavailable fails after one try", async () => {

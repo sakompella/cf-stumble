@@ -1,13 +1,15 @@
 import { appendFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
-import * as Schema from "effect/Schema";
-import { ANSWERS, Submitted } from "../src/api/answers.ts";
 import { execute } from "./e2e/process.mts";
 import { GENERATION_1_MODULE_MAP, moduleMapSourceFiles } from "./module-map-build.mts";
-import { releaseGeneration, type ReleaseOwner } from "./release-generation/release.mts";
-
-const Refusal = Schema.Struct({ problem: Schema.optional(Schema.Struct({ code: Schema.String })) });
+import {
+  releaseOwner,
+  type Answer,
+  type ApiClient,
+  type RequestBody,
+} from "./release-generation/owner.mts";
+import { releaseGeneration } from "./release-generation/release.mts";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -24,10 +26,6 @@ const url = required("STUMBLE_URL");
 const target = required("TARGET_SHA");
 
 const authorization = `Basic ${Buffer.from(`aditya:${required("OWNER_PASSWORD")}`).toString("base64")}`;
-
-type Answer = Readonly<{ status: number; text: string }>;
-
-type RequestBody = Readonly<Record<string, string | number | boolean>>;
 
 const headers = {
   authorization,
@@ -46,59 +44,15 @@ function get(path: string): Promise<Answer> {
   return answered(fetch(`${url}${path}`, { headers }));
 }
 
-function post(path: string, body: RequestBody): Promise<Answer> {
-  return answered(fetch(`${url}${path}`, { method: "POST", headers, body: JSON.stringify(body) }));
+function post(path: string, body: RequestBody, timeoutMs?: number): Promise<Answer> {
+  const signal = timeoutMs === undefined ? null : AbortSignal.timeout(timeoutMs);
+
+  return answered(
+    fetch(`${url}${path}`, { method: "POST", headers, body: JSON.stringify(body), signal }),
+  );
 }
 
-async function decoded<S extends Schema.ConstraintDecoder<unknown>>(
-  answer: Promise<Answer>,
-  schema: S,
-) {
-  const { status, text } = await answer;
-
-  if (status !== 200) throw new Error(`the API answered ${status}: ${text}`);
-
-  return Schema.decodeSync(Schema.fromJsonString(schema))(text);
-}
-
-const owner: ReleaseOwner = {
-  async active() {
-    const { activeGeneration } = await decoded(get("/api/status"), ANSWERS["GET /api/status"]);
-
-    return {
-      harnessCommit: activeGeneration.generation?.harnessCommit,
-      epoch: activeGeneration.epoch,
-    };
-  },
-  async submit(harnessCommit) {
-    const { outcome, preparation } = await decoded(
-      post("/api/generations/submit", { harnessCommit }),
-      Submitted,
-    );
-
-    return {
-      label: outcome.generation.label,
-      ready: preparation.ok && preparation.report.stage === "ready",
-      reason: preparation.ok
-        ? `${preparation.report.stage}: ${preparation.report.reason}`
-        : preparation.problem.code,
-    };
-  },
-  async activate(label, observedEpoch, force) {
-    const { status, text } = await post("/api/generations/activate", {
-      label,
-      observedEpoch,
-      force,
-    });
-
-    const refusal = Schema.decodeOption(Schema.fromJsonString(Refusal))(text);
-
-    return {
-      ok: status === 200,
-      code: refusal._tag === "Some" ? refusal.value.problem?.code : undefined,
-    };
-  },
-};
+const client: ApiClient = { get, post };
 
 async function facetChangedSince(harnessCommit: string): Promise<boolean> {
   const files = await moduleMapSourceFiles(GENERATION_1_MODULE_MAP);
@@ -120,11 +74,14 @@ async function facetChangedSince(harnessCommit: string): Promise<boolean> {
 }
 
 const summary = await releaseGeneration(target, {
-  owner,
+  owner: releaseOwner(client),
   force: values.force,
   facetChangedSince,
   wait: (ms) => sleep(ms),
   now: Date.now,
+  report: (line) => {
+    console.log(`${new Date().toISOString()} ${line}`);
+  },
 });
 
 console.log(summary);

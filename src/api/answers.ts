@@ -76,13 +76,15 @@ export const Submitted = Schema.Struct({
   preparation: Preparation,
 });
 
-const PreparationFailed = Schema.Struct({
+export const SubmissionInterrupted = Schema.Struct({
   ok: Schema.Literal(false),
-  error: Schema.Struct({ code: Schema.Literal("preparation-failed") }),
-  recorded: Schema.Struct({ label: Schema.Number, harnessCommit: Schema.String }),
+  error: Schema.Struct({ code: Schema.Literal("infrastructure-interrupted") }),
+  recorded: Schema.optionalKey(
+    Schema.Struct({ label: Schema.Number, harnessCommit: Schema.String }),
+  ),
 });
 
-const SubmitAnswer = Schema.Union([Submitted, PreparationFailed]);
+const SubmitAnswer = Schema.Union([Submitted, SubmissionInterrupted]);
 
 const ControlAnswer = Schema.Struct({
   ok: Schema.Literal(true),
@@ -272,4 +274,4 @@ export type AnsweredEndpoint = keyof typeof ANSWERS;
 
 export type AnswerOf<E extends AnsweredEndpoint> = (typeof ANSWERS)[E]["Type"];
 
-export type PreparationFailed = typeof PreparationFailed.Type;
+export type SubmissionInterrupted = typeof SubmissionInterrupted.Type;
