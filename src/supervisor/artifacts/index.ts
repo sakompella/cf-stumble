@@ -47,23 +47,17 @@ export class HarnessArtifacts {
     });
   }
 
-  mount(
-    active: ActiveGeneration,
+  start(
+    artifact: MainHarnessArtifact,
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
-  ): Effect.Effect<MountedFacet, MainFacetMountProblem> {
-    return this.load(active).pipe(
-      Effect.map((artifact) =>
-        facets.get(SERVING_FACET_NAME, () => ({
-          class: loadMainFacet(loader, artifact).facetClass,
-        })),
-      ),
-    );
+  ): MountedFacet {
+    return facets.get(SERVING_FACET_NAME, () => ({
+      class: loadMainFacet(loader, artifact).facetClass,
+    }));
   }
 
-  private load(
-    active: ActiveGeneration,
-  ): Effect.Effect<MainHarnessArtifact, MainFacetMountProblem> {
+  load(active: ActiveGeneration): Effect.Effect<MainHarnessArtifact, MainFacetMountProblem> {
     if (active.generation === undefined) {
       return Effect.fail({ code: "no-active-generation" });
     }
@@ -106,7 +100,7 @@ export class HarnessArtifacts {
   }
 }
 
-export type { MainFacetModel } from "../../facet/index.js";
+export type { MainFacetModel, MainHarnessArtifact } from "../../facet/index.js";
 
 export { candidateFacetName, SERVING_FACET_NAME } from "./facet-name.js";
 
