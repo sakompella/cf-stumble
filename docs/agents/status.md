@@ -33,7 +33,7 @@ The workspace image is published to GHCR by CI and pulled by the deploy and by t
 
 The deployed commit, the active generation, its epoch and its compatibility key change with every deploy, so this file does not record them. Read the live values instead: `GET /api/status` (with Basic auth) returns the active generation's label, commit and status and its epoch; `stumble gen status` prints the same status from inside a conversation; `pnpm exec cf workers deployments list --worker cf-stumble` lists the Worker's deployments. For what merged, read `git log --first-parent` on `main`. Do not take the active generation from R2 history: `wasActive` in `history/generations/<n>.json` means that the generation was active at some point, not that it is active now.
 
-The stack sets `codeUpdateStrategy: { mode: "immediate" }` (`infra/alchemy.run.ts`), so every `pnpm run deploy`, locally and in CI, restarts both Durable Object classes on the new version within seconds. A restart interrupts what the object is serving. `cf workers secrets update` still creates its version with the default `deferred` strategy, so after a secret change an active object can keep its old code for up to 300 seconds; run `pnpm run deploy <stage> --force` to apply the new version at once. See `docs/deploy.md`, "Durable Objects and new versions". `ops:check` reports a Durable Object that still runs an old version with the `do-version-skew` rule.
+The stack sets `codeUpdateStrategy: { mode: "immediate" }` (`infra/alchemy.run.ts`), so every `pnpm run deploy`, locally and in CI, restarts both Durable Object classes on the new version within seconds. A restart interrupts what the object is serving, so the release step that follows a production deploy repeats its calls under one 10-minute deadline (`docs/deploy.md`, "Release of main as a generation"). `cf workers secrets update` still creates its version with the default `deferred` strategy, so after a secret change an active object can keep its old code for up to 300 seconds; run `pnpm run deploy <stage> --force` to apply the new version at once. See `docs/deploy.md`, "Durable Objects and new versions". `ops:check` reports a Durable Object that still runs an old version with the `do-version-skew` rule.
 
 Every request except `GET /health` needs HTTP Basic auth with the `OWNER_PASSWORD` secret (ADR-0051), and then reaches one Supervisor named `owner`. On 2026-11-03 GitHub was connected through the `GH_TOKEN` secret and only the harness project existed. Checked on production on 2026-11-03: a run with a `bash` tool call saved; a retried `requestId` returned the same submission; an abort answered in 0.9 s and killed a running `sleep 120` within about 2 s; the container stopped 600 s after the last run settled.
 
@@ -43,6 +43,7 @@ ChatGPT is connected on production and is the default model. The model route ans
 
 - **No Cloudflare Access** (Aditya, 2026-10-30; Basic auth added 2026-11-03, ADR-0051). State under the old per-identity Supervisor name was abandoned, and `GH_TOKEN` reinstalls the GitHub credential on the fresh workspace.
 - **Bombadil stays out of `pnpm verify`** (Aditya, 2026-09-28). `@antithesishq/bombadil` is a devDependency used by the manual page fuzz (`tools/e2e/fuzz/page/`, `pnpm e2e:fuzz --area page`); it is not in `pnpm verify`.
+- **The formal models are an audit tool, not part of CI.** On 2026-11-18 seven small TLA+ models of the activation, run, exec-abort, idle-stop, GitHub credential, page-outgoing and release logic were checked with everystate (`npx everystate@0.3.1`). They found real races, and five fixes followed (see "Open items"). The models and their reports sit in `.audit/session-2026-11-02/formal/`, which Git ignores. Nothing in `pnpm verify`, `package.json` or the workflows runs them. A model is a hand-written copy of the code's logic and nothing ties it to the code, so a model in CI would keep passing after the code changed under it. Run one by hand after you change the logic it describes; `pnpm test:mutation` and the Vitest property tests remain the checks in the repository (`AGENTS.md`, "Verification").
 - **Skip Cloudflare Artifacts for now** (Aditya, 2026-10-02). See `design/computer-integration.md`, "Artifacts (deferred)".
 - **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance secrets".
 - **Old generation tables are not converted** (Aditya, 2026-11-02). Production migrated its generation table in place on the 2026-10-31 deploy, and the Supervisor no longer carries that migration: it creates only the current schema. Rows prepared before that deploy have no recorded compatibility or a bare Pi Durable version such as `1.4.0`, so activation and rollback refuse them with `facet-compatibility-mismatch`. Submitting their harness commit again re-runs the startup check under the same label, and only a commit that reports the current key passes it.
@@ -68,8 +69,75 @@ Each item that this file used to list as open is now classified: **resolved** (w
 
 **Reproduced**
 
-No page failure from the 2026-11-16 QA run is open.
+None. Every failure that the 2026-11-16 QA run, the 2026-11-16 root-cause plans, the 2026-11-18 scan and the 2026-11-18 formal verification reproduced is fixed; "Open items" lists the commits.
+
+## Known and accepted
+
+These were found while the fixes above were made. Each is a weakness that someone looked at, could not remove without more cost than the owner gets back, and wrote down. None is an open item.
+
+- **Stalls seen once, with no cause shown.** While `fix-cancel-flake` reproduced the cancel flake on a throwaway stage with Workers AI, three slow moments appeared once each: an abort during a model call waited for the call and ran one more tool before the run settled (5.7 s); one `POST /messages` took 61 s while a Workspace Host alarm ran (25 s of wall time); and the Supervisor was unresponsive for about 70 s and restarted. No trace tied any of them to the code, and this repository records no later case. If one recurs, read `run.settled` and the Host's and Supervisor's `do.started` lines for the same minute.
+- **A refused retry of an admitted message puts its text back in the prompt (finding E of the formal check of the page's outgoing messages).** When the Worker admitted a message, its answer was lost, and the retry meets `workspace-busy`, the page treats the refusal as "not kept" (`src/page/client/send-refusals.ts`) and restores the text although the conversation already holds the message. The owner can then send it a second time. It needs a workspace reset in progress at the retry. It was argued from the model and not run.
+- **A reset plus a lost reply can still let `GH_TOKEN` replace the owner's device token.** `GitHubConnection` runs one credential operation at a time, so two installs no longer cross. The model that checked this still fails in one case: the device install's reply is lost after a Host reset, a status check reads the device credential, the reset clears the record so that check counts as stale, and the next repair installs `GH_TOKEN`. It needs a Host reset and a lost reply at once. It was found with the model and not reproduced against the code.
+- **Cloudflare's cold storage start-up failure is unexplained.** Both attempts of Deploy run 44185631101 ran `Plan: no changes`, and the cold Workspace Host failed its first call after 33 and 45 seconds with `Internal error while starting up Durable Object storage caused object to be reset`, then started normally a few seconds later. The application code does not reach that point; the object used no CPU and made no RPC call. The release now recovers from it (`docs/deploy.md`, "Durable Objects and new versions"), but the cause stays with the platform. If cold starts keep failing, send Cloudflare the references from the log lines and the Host's object id. Do not reset production storage to test a theory.
+- **The startup check can mistake an infrastructure fault for a failed candidate.** The check turns a candidate call that rejects into a failed stage (`mount-failed`, `conversation-failed`), so a rejected candidate call, such as one caused by a Host fault inside the check, ends the release as a failed check and not as an interruption. A rerun of the release prepares the same commit again and runs the check again.
 
 ## Open items
 
-None. The open items came from the 2026-11-16 root-cause plans (`.audit/session-2026-11-02/plans/`, kept out of Git); the last one, #28, is done. F14 (a reload shows fewer entries) is closed: the code is by design, and the `overview.md` sentence that invited the report is fixed.
+None. All 17 root-cause plans from 2026-11-16, the cancel flake, the release race, the 13 scan fixes and the 5 formal verification fixes are merged. The plans and reports are in `.audit/session-2026-11-02/` (kept out of Git). Commits are the merge commits on `main`.
+
+**Root-cause plans (2026-11-16)**
+
+- The first events connection failed on every page load: `2ad0da24`.
+- Panels went stale in a second tab (F13): `29192fe7`.
+- A cold start showed only `running` (F4): `33238bc8`.
+- The GitHub panel kept four strings, not the Worker's state (F12): `af6b0fb4`.
+- The workspace backend switch said nothing about its effect (F15): `032446df`.
+- An idle stop could hang the Host (#25): `6eec8fa5`.
+- The turn deadline was enforced in five places (#19): `e7cd5b5e`.
+- Two ChatGPT account writes failed without a log line (#17): `96be4be1`.
+- The route reported its own failures as `invalid-request` (#18): `47698b03`.
+- Shell scripts took values by interpolation (#20): `9e034635`.
+- A long command's output was saved twice (#23): `4415738b`.
+- The e2e step limits did not stop the work, and the bundle budget measured another bundle (#26): `3c938ad6`.
+- Dead config, members and prose (#28): `2d5d4c90`.
+- The GitHub connection had dead fields and parsed the repository URL three times (#15): `d894d890`.
+- The facet replacement was inferred from replies (#16): `cc9a0d92`.
+- The Supervisor imported page code, and the CLI copied a label parser (#21): `8fbcd752`.
+- Generation history was shaped like the old Git repository (#22): `242226da`.
+- F14 (a reload shows fewer entries) is closed: the code is by design, and the `overview.md` sentence that invited the report is fixed (`40523a98`).
+
+**Deploy and release race**
+
+The CI release raced the deploy's Durable Object restart in five runs: 43934982845 (`22c80da9`), 44075948231 (`22c80da9`), 44114195991 and 44128047200 (`dd671905`) and 44185631101 (`fb3b9ac0`). Each earlier fix caught one shape of interruption in one layer. `fb3b9ac0` moved the repeat to the release step, under one deadline, and deleted the retries below it. See `docs/deploy.md`, "Durable Objects and new versions".
+
+**Cancel flake**
+
+The e2e cancel step flaked four times on 2026-11-16 and 2026-11-17 because a cancel that landed while a command was still starting found no operation to kill (`56e15f51`). The 97 cancel loops on a stage with the fix all settled within 2.9 s.
+
+**Scan (2026-11-18)**
+
+22 candidates: 16 real, 6 not an issue or not worth a fix (`supervisor-02`, which is by design, `github-02`, `github-03`, `github-04`, `tools-infra-03` and `tools-infra-04`). One branch fixed each real group:
+
+- `supervisor-01`, a cold mount that served a replaced generation's code: `1ece1090`.
+- `facet-01` and `model-chatgpt-01`, a request over 1 MiB that Pi did not compact: `33f901bb`.
+- `workspace-01`, a read of `/nix` routed to the isolate: `a359e808`.
+- `api-page-01`, identical prompts matched to the wrong stream entry: `82b854cb`.
+- `github-01`, a stale credential check that overwrote a newer install: `41ab9d13` (its revision guard is replaced by the single permit of `b2135acd`).
+- `workspace-02`, redirects in the isolate's egress gateway: `ffadade6`.
+- `tools-infra-01`, the e2e run adopting the owner's connected project: `3f819f4f`.
+- `api-page-02`, an unadmitted message sent into a fresh thread: `4b18bed6`.
+- `workspace-03` and `workspace-04`, the orb provider reporting success for a refused stop: `7e8d33bb`.
+- `tools-infra-02`, a grandchild that outlived its step: `379f0449`.
+- `tools-infra-05`, the lifecycle fuzzer's status poller: `c568c891`.
+- `tools-infra-06`, the browser stub's held run: `f7b99b3b`.
+- `tools-infra-07`, fuzzer scratch directories left in the workspace: `0088a33e`.
+
+**Formal verification (2026-11-18)**
+
+Seven small TLA+ models checked with everystate. Five fixes followed; each fix passed its model again and the unfixed model still failed.
+
+- A release could activate its generation twice after a lost activation answer: `427d44a4`.
+- The page could send a message twice or lose one: `d8b0af1f`.
+- The deadline continued a run the owner had cancelled: `c934d54b`.
+- Two concurrent credential installs could leave the record wrong: `b2135acd`.
+- A refused failure report settled a faulted run `completed`, and a cancel before the first running report was not stored: `6fb2d147`.
