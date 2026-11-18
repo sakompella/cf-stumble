@@ -413,7 +413,9 @@ limit:
 1. Page: a Playwright spec opens the owner page, sends a message, waits for the streamed answer,
    reloads and finds the turn again, then sends a turn that runs `sleep 300` and cancels it. The run
    must settle as `aborted`.
-2. Product loop: the script connects `sakompella/cf-stumble` as a project. The agent commits a
+2. Product loop: the script connects `sakompella/cf-stumble` as a project. When the instance had
+   it connected before the run, the step fails before it sends a turn and the cleanup leaves the
+   project alone, since a disconnect would delete the owner's clone. The agent commits a
    marker file and pushes the branch `e2e/<run id>`, and the script reads the file back through the
    GitHub API.
 3. Self-modification: as `SYSTEM.md` tells the agent, it commits a marker file to the harness on a
@@ -444,7 +446,7 @@ first in `PATH`. Set `CHROMIUM_PATH` where Playwright's own Chromium does not ru
   destroys, the cleanup still deletes the run's branches and restores the target.
   `pnpm e2e --run-id <id> --cleanup` cleans up a kept run later.
 - `--stage <stage>` or `--url <url>` runs the workflows against an existing instance. The script
-  then does not deploy or destroy; it disconnects the project and rolls back to the generation that
+  then does not deploy or destroy; it disconnects the project the run connected and rolls back to the generation that
   was active before. Set `E2E_OWNER_PASSWORD` to that instance's password.
 
 A run takes about 5 minutes, 3 of them deploying. It uses about 4 container instance-minutes and 10
