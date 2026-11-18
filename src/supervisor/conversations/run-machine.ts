@@ -16,13 +16,14 @@ const runFields = {
 
 export const RunState = Schema.TaggedUnion({
   Idle: {},
+  Cancelled: {},
   Running: runFields,
   Ending: { ...runFields, ending: Ending },
 });
 
 export type RunState = typeof RunState.Type;
 
-export type ActiveRun = Exclude<RunState, { readonly _tag: "Idle" }>;
+export type ActiveRun = Extract<RunState, { readonly _tag: "Running" | "Ending" }>;
 
 export type RunOutcome =
   | "completed"
@@ -80,16 +81,24 @@ function stay(state: RunState): RunStep {
   return { state, commands: [] };
 }
 
-function started({ report, instance, now }: Reported & { report: RunningConversation }): RunStep {
+function started(
+  { report, instance, now }: Reported & { report: RunningConversation },
+  ending: RunEnding | null,
+): RunStep {
   const deadline = now + PROJECT_RUN_DEADLINE_MS;
 
+  const fields = {
+    run: report.run ?? null,
+    deadline,
+    instance,
+    continues: report.continues ?? 0,
+  };
+
   return {
-    state: RunState.cases.Running.make({
-      run: report.run ?? null,
-      deadline,
-      instance,
-      continues: report.continues ?? 0,
-    }),
+    state:
+      ending === null
+        ? RunState.cases.Running.make(fields)
+        : RunState.cases.Ending.make({ ...fields, ending }),
     commands: [RunCommand.Started({ deadline })],
   };
 }
@@ -151,7 +160,7 @@ function reportedOn(active: ActiveRun, event: Reported, outcome: RunOutcome): Ru
 
   if (report === undefined) return { state: RunState.cases.Idle.make({}), commands: [settled] };
 
-  const next = started({ ...event, report });
+  const next = started({ ...event, report }, null);
 
   return { state: next.state, commands: [settled, ...next.commands] };
 }
@@ -163,7 +172,16 @@ export function transition(state: RunState, event: RunEvent): RunStep {
         Reported: (reported) =>
           reported.report === undefined
             ? stay(state)
-            : started({ ...reported, report: reported.report }),
+            : started({ ...reported, report: reported.report }, null),
+        Ended: ({ ending }) =>
+          stay(ending === "cancelled" ? RunState.cases.Cancelled.make({}) : state),
+      }),
+    Cancelled: () =>
+      RunEvent.$match(event, {
+        Reported: (reported) =>
+          reported.report === undefined
+            ? stay(RunState.cases.Idle.make({}))
+            : started({ ...reported, report: reported.report }, "cancelled"),
         Ended: () => stay(state),
       }),
     Running: (running) =>

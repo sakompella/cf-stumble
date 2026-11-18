@@ -107,9 +107,13 @@ export class ServingConversations {
           (current) => this.#use(mounted, (facet) => createConversation(facet, current)),
           (conversationId) =>
             writtenFor === undefined || writtenFor === conversationId
-              ? this.#use(mounted, (facet) =>
-                  facet.submit(conversationId, message.content, message.requestId, budgetMinutes),
-                ).pipe(Effect.map((submissionId) => ({ submissionId })))
+              ? Effect.suspend(() => {
+                  this.#runs.submitted(conversationId);
+
+                  return this.#use(mounted, (facet) =>
+                    facet.submit(conversationId, message.content, message.requestId, budgetMinutes),
+                  );
+                }).pipe(Effect.map((submissionId) => ({ submissionId })))
               : fail("thread-replaced"),
         );
       }),
