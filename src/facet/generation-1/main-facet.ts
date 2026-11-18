@@ -14,7 +14,7 @@ import type {
 } from "../conversation-protocol.js";
 import { openSession, type Session } from "./open-session.js";
 import { ROUTE_AGENT } from "./route-provider.js";
-import { endDeadlineRun, submitWithBudget } from "./run-budget.js";
+import { cancelBudget, endDeadlineRun, submitWithBudget } from "./run-budget.js";
 
 const context = BACKGROUND_CONTEXT;
 
@@ -158,14 +158,17 @@ export class MainFacet extends DurableObject implements ConversationFacet {
     const conversation = await this.#conversation(conversationId);
     const endWork = await this.#beginWork();
 
-    const ended = conversation
-      .abort(context)
-      .then(() => (reason === "deadline" ? endDeadlineRun(conversation, context) : null))
-      .finally(endWork);
+    if (reason === "deadline") {
+      return conversation
+        .abort(context)
+        .then(() => endDeadlineRun(conversation, context))
+        .finally(endWork);
+    }
 
-    if (reason === "deadline") return ended;
-
-    void ended.catch(() => {});
+    void cancelBudget(conversation, context)
+      .then(() => conversation.abort(context))
+      .finally(endWork)
+      .catch(() => {});
 
     return null;
   }
