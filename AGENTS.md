@@ -35,7 +35,7 @@ The repo has no editor config. `pnpm typecheck` and `pnpm typecheck:tools` run `
 }
 ```
 
-Other editors run `tsrs --lsp -stdio` as an LSP server for TypeScript files, and should turn off other TypeScript servers. To see the Effect diagnostics of `pnpm lint:effect` in the editor, run `pnpm exec effect-tsgo tsrs --lsp -stdio` in place of `tsrs --lsp -stdio`, not beside it: both report the TypeScript diagnostics, so running both shows each one twice. That server is the tsrs version that `@effect/tsgo` ships (0.25.0 for `@effect/tsgo` 0.69.0), the same version as the one in `package.json`. The VS Code extension starts the `tsrs` in `node_modules`, so it shows no Effect diagnostics; the repo does not run `effect-tsgo patch`, which rewrites `node_modules`. The server passes 4,092 of 4,562 upstream editor-feature test groups, so a missing hover or fix is not proof of a type error: trust `pnpm typecheck`.
+Other editors run `tsrs --lsp -stdio` as an LSP server for TypeScript files, and should turn off other TypeScript servers. To see the Effect diagnostics of `pnpm lint:effect` in the editor, run `pnpm exec effect-tsgo tsrs --lsp -stdio` in place of `tsrs --lsp -stdio`, not beside it: both report the TypeScript diagnostics, so running both shows each one twice. That server is the tsrs version that `@effect/tsgo` ships (0.25.0 for `@effect/tsgo` 0.70.0), the same version as the one in `package.json`. The VS Code extension starts the `tsrs` in `node_modules`, so it shows no Effect diagnostics; the repo does not run `effect-tsgo patch`, which rewrites `node_modules`. The server passes 4,092 of 4,562 upstream editor-feature test groups, so a missing hover or fix is not proof of a type error: trust `pnpm typecheck`.
 
 ### Cloudflare operations
 
