@@ -32,8 +32,6 @@ const RunBudgetsDoc = defineDoc<RunBudgets>({
   checkpointWhen: () => true,
 });
 
-const NO_CONTINUE: Chain = { minutes: RUN_DEADLINE_MINUTES, continues: 0 };
-
 const SCAN_PAGE = 100;
 
 const DEADLINE_STOP = `Harness notice: the run stopped at its ${RUN_DEADLINE_MINUTES}-minute time limit before it finished, so its last step may be incomplete.`;
@@ -44,10 +42,13 @@ function continuedNotice({ minutes, continues }: Chain): string {
   return `${DEADLINE_STOP} The harness continued it automatically, ${continues * RUN_DEADLINE_MINUTES} of ${minutes} minutes used.`;
 }
 
-function chainOf(budgets: Readonly<RunBudgets>, inputs: readonly SubmissionId[]): Chain {
+function chainOf(
+  budgets: Readonly<RunBudgets>,
+  inputs: readonly SubmissionId[],
+): Chain | undefined {
   const newest = inputs.toSorted((a, b) => b - a).find((id) => String(id) in budgets.runs);
 
-  return (newest === undefined ? undefined : budgets.runs[String(newest)]) ?? NO_CONTINUE;
+  return newest === undefined ? undefined : budgets.runs[String(newest)];
 }
 
 export function submitWithBudget(
@@ -57,8 +58,15 @@ export function submitWithBudget(
   context: Context,
 ): Promise<SubmissionId> {
   return conversation.commit(async (tx) => {
+    const retried =
+      draft.requestId !== undefined &&
+      (await tx.submissionByRequest(conversation.id, draft.requestId)) !== undefined;
+
     const idle = (await tx.doc(LiveDoc, conversation.id)).run === undefined;
     const id = await conversation.submit(tx, draft);
+
+    if (retried) return id;
+
     const budgets = await tx.doc(RunBudgetsDoc, conversation.id);
 
     const runs = idle ? {} : budgets.runs;
@@ -105,8 +113,8 @@ async function continuedChain(
   tx: Tx,
   conversationId: ConversationId,
   failure: RunFailure,
+  chain: Chain,
 ): Promise<Chain | undefined> {
-  const chain = chainOf(await tx.doc(RunBudgetsDoc, conversationId), failure.inputs);
   const continues = chain.continues + 1;
 
   return (continues + 1) * RUN_DEADLINE_MINUTES <= chain.minutes &&
@@ -116,13 +124,16 @@ async function continuedChain(
     : undefined;
 }
 
-async function startedContinue(
+async function replaceBudgets(
   tx: Tx,
   conversationId: ConversationId,
-  id: SubmissionId,
-  chain: Chain,
+  runs: RunBudgets["runs"],
 ): Promise<void> {
-  (await tx.doc(RunBudgetsDoc, conversationId)).runs = { [String(id)]: chain };
+  (await tx.doc(RunBudgetsDoc, conversationId)).runs = runs;
+}
+
+export function cancelBudget(conversation: Conversation, context: Context): Promise<void> {
+  return conversation.commit((tx) => replaceBudgets(tx, conversation.id, {}), context);
 }
 
 export function endDeadlineRun(
@@ -131,20 +142,18 @@ export function endDeadlineRun(
 ): Promise<RunningConversation | null> {
   return conversation.commit(async (tx) => {
     const failure = (await tx.doc(LiveDoc, conversation.id)).runFailure;
-    const latest = await tx.latestEntryId(conversation.id);
-    const last = latest === undefined ? undefined : await tx.entry(latest);
 
-    if (
-      failure?.reason !== "aborted" ||
-      (last?.kind === RUN_NOTICE_KIND && last.data === failure.taskId)
-    ) {
-      return null;
-    }
+    if (failure?.reason !== "aborted") return null;
 
-    const chain = await continuedChain(tx, conversation.id, failure);
+    const budget = chainOf(await tx.doc(RunBudgetsDoc, conversation.id), failure.inputs);
+
+    if (budget === undefined) return null;
+
+    const chain = await continuedChain(tx, conversation.id, failure, budget);
 
     if (chain === undefined) {
       await conversation.submit(tx, noticeWrite(DEADLINE_NOTICE, Date.now(), failure.taskId));
+      await replaceBudgets(tx, conversation.id, {});
 
       return null;
     }
@@ -155,7 +164,7 @@ export function endDeadlineRun(
       entry: { kind: RUN_NOTICE_KIND, data: failure.taskId },
     });
 
-    await startedContinue(tx, conversation.id, id, chain);
+    await replaceBudgets(tx, conversation.id, { [String(id)]: chain });
 
     return { conversationId: String(conversation.id), run: id, continues: chain.continues };
   }, context);
@@ -169,5 +178,5 @@ export async function continuesOf(
 ): Promise<number> {
   const budgets = await harness.snapshot(RunBudgetsDoc, conversationId, context);
 
-  return budgets === undefined ? 0 : chainOf(budgets, placed).continues;
+  return budgets === undefined ? 0 : (chainOf(budgets, placed)?.continues ?? 0);
 }

@@ -69,7 +69,7 @@ test("a reply cut off at the output limit is followed by a notice the model read
   });
 });
 
-test("a deadline abort leaves one notice however often it repeats, and an owner cancel none", async () => {
+test("a deadline abort leaves one notice however often it repeats, also after a retried send, and an owner cancel none", async () => {
   const { capability, requests } = scriptedRoute(silent, silent);
 
   await runInDurableObject(env.SUPERVISOR.getByName("run-notice-deadline"), async (_i, state) => {
@@ -86,6 +86,8 @@ test("a deadline abort leaves one notice however often it repeats, and an owner 
     });
     await facet.abort(cancelled);
     await facet.abort(expired, "deadline");
+    await facet.abort(expired, "deadline");
+    await facet.submit(expired, "work", "r2");
     await facet.abort(expired, "deadline");
 
     await eventually(async () => {
@@ -165,3 +167,56 @@ test("a deadline abort after progress only notices when the budget is one run", 
     expect(requests).toHaveLength(2);
   });
 });
+
+const cancelAndDeadline = [
+  {
+    order: "cancel, then deadline",
+    aborts: async (facet: MainFacet, id: string) => {
+      await facet.abort(id);
+
+      return facet.abort(id, "deadline");
+    },
+  },
+  {
+    order: "cancel, a retry of the message, then deadline",
+    aborts: async (facet: MainFacet, id: string) => {
+      await facet.abort(id);
+      await facet.submit(id, "work", "r1", 30);
+
+      return facet.abort(id, "deadline");
+    },
+  },
+  {
+    order: "cancel and deadline together, cancel first",
+    aborts: async (facet: MainFacet, id: string) =>
+      (await Promise.all([facet.abort(id), facet.abort(id, "deadline")]))[1],
+  },
+  {
+    order: "deadline and cancel together, deadline first",
+    aborts: async (facet: MainFacet, id: string) =>
+      (await Promise.all([facet.abort(id, "deadline"), facet.abort(id)]))[0],
+  },
+];
+
+test.for(cancelAndDeadline)(
+  "the deadline does not continue a run the owner cancelled: $order",
+  async ({ aborts }) => {
+    const { capability, requests } = scriptedRoute(toolCall, silent, answers);
+
+    await runInDurableObject(env.SUPERVISOR.getByName("run-cancel-deadline"), async (_i, state) => {
+      const facet = new MainFacet(state, env);
+
+      await facet.attach(host, capability, unscriptedGenerations);
+      const id = await facet.createConversation("/workspace");
+
+      await facet.submit(id, "work", "r1", 30);
+      await eventually(() => {
+        expect(requests).toHaveLength(2);
+      });
+
+      expect(await aborts(facet, id)).toBeNull();
+      expect(await noticeCount(facet, id)).toBe(0);
+      expect(requests).toHaveLength(2);
+    });
+  },
+);
