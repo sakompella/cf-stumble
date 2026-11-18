@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Preparation } from "../../src/api/answers.ts";
 import { releaseOwner, type Answer, type ApiClient } from "./owner.mts";
+import { RequestInterrupted } from "./release.mts";
 
 const COMMIT = "b".repeat(40);
 
@@ -73,12 +74,12 @@ describe("a submit answer that is ready or interrupted", () => {
     });
   });
 
-  it("is interrupted when the request did not complete", async () => {
-    const answer = await submitting(new Error("fetch failed")).submit(COMMIT, 1_000);
+  it("rejects as an interrupted request when the request did not complete", async () => {
+    const owner = submitting(new Error("fetch failed"));
 
-    assert.deepEqual(answer, {
-      kind: "interrupted",
-      reason: "the request did not complete: fetch failed",
+    await assert.rejects(owner.submit(COMMIT, 1_000), RequestInterrupted);
+    await assert.rejects(owner.submit(COMMIT, 1_000), {
+      message: "the request did not complete: fetch failed",
     });
   });
 });

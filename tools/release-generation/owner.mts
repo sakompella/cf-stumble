@@ -4,7 +4,7 @@ import {
   Submitted as SubmittedAnswer,
   SubmissionInterrupted,
 } from "../../src/api/answers.ts";
-import type { ReleaseOwner, Submitted } from "./release.mts";
+import { RequestInterrupted, type ReleaseOwner, type Submitted } from "./release.mts";
 
 const Refusal = Schema.Struct({ problem: Schema.optional(Schema.Struct({ code: Schema.String })) });
 
@@ -16,6 +16,16 @@ export type ApiClient = Readonly<{
   get: (path: string) => Promise<Answer>;
   post: (path: string, body: RequestBody, timeoutMs?: number) => Promise<Answer>;
 }>;
+
+async function reached(request: Promise<Answer>): Promise<Answer> {
+  try {
+    return await request;
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+
+    throw new RequestInterrupted(`the request did not complete: ${message}`);
+  }
+}
 
 function decoded<S extends Schema.ConstraintDecoder<unknown>>(answer: Answer, schema: S) {
   const { status, text } = answer;
@@ -63,7 +73,7 @@ export function releaseOwner(client: ApiClient): ReleaseOwner {
   return {
     async active() {
       const { activeGeneration } = decoded(
-        await client.get("/api/status"),
+        await reached(client.get("/api/status")),
         ANSWERS["GET /api/status"],
       );
 
@@ -73,24 +83,16 @@ export function releaseOwner(client: ApiClient): ReleaseOwner {
       };
     },
     async submit(harnessCommit, timeoutMs) {
-      let answer: Answer;
-
-      try {
-        answer = await client.post("/api/generations/submit", { harnessCommit }, timeoutMs);
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-
-        return { kind: "interrupted", reason: `the request did not complete: ${message}` };
-      }
+      const answer = await reached(
+        client.post("/api/generations/submit", { harnessCommit }, timeoutMs),
+      );
 
       return submission(answer);
     },
     async activate(label, observedEpoch, force) {
-      const { status, text } = await client.post("/api/generations/activate", {
-        label,
-        observedEpoch,
-        force,
-      });
+      const { status, text } = await reached(
+        client.post("/api/generations/activate", { label, observedEpoch, force }),
+      );
 
       const refusal = Schema.decodeOption(Schema.fromJsonString(Refusal))(text);
 

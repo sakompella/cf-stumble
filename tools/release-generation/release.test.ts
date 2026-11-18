@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  PREPARE_DEADLINE_MS,
+  INTERRUPTION_DEADLINE_MS,
   releaseGeneration,
+  RequestInterrupted,
   type ActivationAnswer,
   type ReleaseDeps,
+  type ReleaseOwner,
   type Submitted,
 } from "./release.mts";
 
@@ -187,15 +189,18 @@ describe("preparation interrupted by the infrastructure", () => {
     const all = Array.from({ length: 100 }, () => interrupted);
     const { deps, attempts } = fake([], true, all);
 
-    await assert.rejects(releaseGeneration(MAIN, deps), /on all \d+ attempts within 10 minutes/u);
+    await assert.rejects(
+      releaseGeneration(MAIN, deps),
+      /interrupted the release of b+ \d+ times within 10 minutes/u,
+    );
 
     const starts = attempts.map((attempt) => attempt.atMs);
 
     assert.deepEqual(
       attempts.map((attempt) => attempt.budgetMs),
-      starts.map((at) => PREPARE_DEADLINE_MS - at),
+      starts.map((at) => INTERRUPTION_DEADLINE_MS - at),
     );
-    assert.ok(starts.every((at) => at < PREPARE_DEADLINE_MS));
+    assert.ok(starts.every((at) => at < INTERRUPTION_DEADLINE_MS));
     assert.deepEqual(
       starts.slice(1).map((at, index) => at - (starts[index] ?? 0)),
       [5_000, 10_000, 20_000, 40_000, ...Array.from({ length: starts.length - 5 }, () => 60_000)],
@@ -208,8 +213,51 @@ describe("preparation interrupted by the infrastructure", () => {
 
     await assert.rejects(
       releaseGeneration(MAIN, deps),
-      /infrastructure interrupted the preparation of b+ .*last: build-workspace-unavailable/u,
+      /infrastructure interrupted the release of b+ .*last: build-workspace-unavailable/u,
     );
     assert.deepEqual(activations, []);
   });
+});
+
+function failingOnce(owner: ReleaseOwner, method: keyof ReleaseOwner, call: number): ReleaseOwner {
+  let calls = 0;
+
+  const guarded =
+    <Args extends unknown[], T>(name: keyof ReleaseOwner, run: (...args: Args) => Promise<T>) =>
+    (...args: Args): Promise<T> => {
+      if (name === method) {
+        calls += 1;
+
+        if (calls === call) return Promise.reject(new RequestInterrupted("fetch failed"));
+      }
+
+      return run(...args);
+    };
+
+  return {
+    active: guarded("active", owner.active),
+    submit: guarded("submit", owner.submit),
+    activate: guarded("activate", owner.activate),
+  };
+}
+
+describe("a request that did not complete", () => {
+  const cases = [
+    ["reading the active commit", "active", 1],
+    ["submitting", "submit", 1],
+    ["reading the epoch before the activation", "active", 2],
+    ["activating", "activate", 1],
+  ] as const;
+
+  for (const [moment, method, call] of cases) {
+    it(`is repeated after a pause when it happens while ${moment}`, async () => {
+      const { deps, reports, submitted, activations } = fake([]);
+      const owner = failingOnce(deps.owner, method, call);
+
+      assert.match(await releaseGeneration(MAIN, { ...deps, owner }), /Activated generation 7/u);
+      assert.deepEqual(reports, ["interruption 1: fetch failed"]);
+      assert.deepEqual(submitted, [MAIN]);
+      assert.equal(activations.length, 1);
+    });
+  }
 });

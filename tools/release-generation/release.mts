@@ -22,21 +22,70 @@ export type ReleaseDeps = Readonly<{
   report: (line: string) => void;
 }>;
 
-export const PREPARE_DEADLINE_MS = 10 * 60_000;
+export const INTERRUPTION_DEADLINE_MS = 10 * 60_000;
 
-export const PREPARE_BACKOFF_MS = 5_000;
+export const INTERRUPTION_BACKOFF_MS = 5_000;
 
-export const PREPARE_BACKOFF_MAX_MS = 60_000;
+export const INTERRUPTION_BACKOFF_MAX_MS = 60_000;
 
 export const RUN_ACTIVE_RETRY_MS = 15 * 60_000;
 
 export const RUN_ACTIVE_POLL_MS = 30_000;
 
-async function preparedLabel(target: string, deps: ReleaseDeps): Promise<number> {
-  const deadline = deps.now() + PREPARE_DEADLINE_MS;
+export class RequestInterrupted extends Error {}
 
-  for (let attempt = 1; ; attempt += 1) {
-    const submitted = await deps.owner.submit(target, deadline - deps.now());
+type Recovery = Readonly<{
+  remainingMs: () => number;
+  after: (reason: string) => Promise<void>;
+}>;
+
+function recovery(target: string, deps: ReleaseDeps): Recovery {
+  const deadline = deps.now() + INTERRUPTION_DEADLINE_MS;
+  let interruptions = 0;
+
+  return {
+    remainingMs: () => deadline - deps.now(),
+    async after(reason) {
+      interruptions += 1;
+      deps.report(`interruption ${interruptions}: ${reason}`);
+
+      const pause = Math.min(
+        INTERRUPTION_BACKOFF_MS * 2 ** (interruptions - 1),
+        INTERRUPTION_BACKOFF_MAX_MS,
+      );
+
+      if (deps.now() + pause >= deadline) {
+        throw new Error(
+          `the infrastructure interrupted the release of ${target} ${interruptions} times within ${INTERRUPTION_DEADLINE_MS / 60_000} minutes; last: ${reason}`,
+        );
+      }
+
+      await deps.wait(pause);
+    },
+  };
+}
+
+async function reaching<T>(recover: Recovery, call: () => Promise<T>): Promise<T> {
+  for (;;) {
+    try {
+      return await call();
+    } catch (cause) {
+      if (!(cause instanceof RequestInterrupted)) throw cause;
+
+      await recover.after(cause.message);
+    }
+  }
+}
+
+async function preparedLabel(
+  target: string,
+  deps: ReleaseDeps,
+  recover: Recovery,
+): Promise<number> {
+  for (;;) {
+    const submitted = await reaching(recover, () =>
+      deps.owner.submit(target, recover.remainingMs()),
+    );
 
     if (submitted.kind === "ready") return submitted.label;
 
@@ -46,23 +95,14 @@ async function preparedLabel(target: string, deps: ReleaseDeps): Promise<number>
       );
     }
 
-    const pause = Math.min(PREPARE_BACKOFF_MS * 2 ** (attempt - 1), PREPARE_BACKOFF_MAX_MS);
-
-    deps.report(`attempt ${attempt} was interrupted: ${submitted.reason}`);
-
-    if (deps.now() + pause >= deadline) {
-      throw new Error(
-        `the infrastructure interrupted the preparation of ${target} on all ${attempt} attempts within ${PREPARE_DEADLINE_MS / 60_000} minutes; last: ${submitted.reason}`,
-      );
-    }
-
-    await deps.wait(pause);
+    await recover.after(submitted.reason);
   }
 }
 
 export async function releaseGeneration(target: string, deps: ReleaseDeps): Promise<string> {
   const { owner } = deps;
-  const { harnessCommit: active } = await owner.active();
+  const recover = recovery(target, deps);
+  const { harnessCommit: active } = await reaching(recover, () => owner.active());
 
   if (active === target) return `${target} is already the active generation.`;
 
@@ -70,13 +110,13 @@ export async function releaseGeneration(target: string, deps: ReleaseDeps): Prom
     return `Skipped: nothing the facet bundles changed since the active generation's ${active}.`;
   }
 
-  const label = await preparedLabel(target, deps);
+  const label = await preparedLabel(target, deps, recover);
 
   const deadline = deps.now() + RUN_ACTIVE_RETRY_MS;
 
   for (;;) {
-    const { epoch } = await owner.active();
-    const answer = await owner.activate(label, epoch, deps.force);
+    const { epoch } = await reaching(recover, () => owner.active());
+    const answer = await reaching(recover, () => owner.activate(label, epoch, deps.force));
 
     if (answer.ok) return `Activated generation ${label} for ${target}.`;
 

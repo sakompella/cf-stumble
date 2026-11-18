@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { PREPARE_DEADLINE_MS } from "../../tools/release-generation/release.mts";
+import { INTERRUPTION_DEADLINE_MS } from "../../tools/release-generation/release.mts";
 import { ATTEMPT_MS, ProvisionHost, release } from "./recovering-release.js";
 
 test("a release recovers when the Workspace Host's first provision rejects with an unmarked storage-startup error (deploy 44185631101)", async () => {
@@ -46,10 +46,10 @@ test("a release that the infrastructure keeps interrupting ends at its one deadl
   const run = release(new ProvisionHost(Number.POSITIVE_INFINITY));
 
   await expect(run.summary).rejects.toThrow(
-    /infrastructure interrupted the preparation of b+ on all \d+ attempts within 10 minutes/u,
+    /infrastructure interrupted the release of b+ \d+ times within 10 minutes/u,
   );
 
-  expect(run.clock()).toBeLessThanOrEqual(PREPARE_DEADLINE_MS + ATTEMPT_MS);
+  expect(run.clock()).toBeLessThanOrEqual(INTERRUPTION_DEADLINE_MS + ATTEMPT_MS);
   expect(run.waits.every((wait) => wait <= 60_000)).toBe(true);
   expect(run.events).not.toContain("activate");
   expect(run.labels.size).toBe(1);
