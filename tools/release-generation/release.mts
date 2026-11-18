@@ -65,15 +65,23 @@ function recovery(target: string, deps: ReleaseDeps): Recovery {
   };
 }
 
+async function completed<T>(call: () => Promise<T>): Promise<T | RequestInterrupted> {
+  try {
+    return await call();
+  } catch (cause) {
+    if (cause instanceof RequestInterrupted) return cause;
+
+    throw cause;
+  }
+}
+
 async function reaching<T>(recover: Recovery, call: () => Promise<T>): Promise<T> {
   for (;;) {
-    try {
-      return await call();
-    } catch (cause) {
-      if (!(cause instanceof RequestInterrupted)) throw cause;
+    const result = await completed(call);
 
-      await recover.after(cause.message);
-    }
+    if (!(result instanceof RequestInterrupted)) return result;
+
+    await recover.after(result.message);
   }
 }
 
@@ -113,12 +121,27 @@ export async function releaseGeneration(target: string, deps: ReleaseDeps): Prom
   const label = await preparedLabel(target, deps, recover);
 
   const deadline = deps.now() + RUN_ACTIVE_RETRY_MS;
+  let unanswered: number | undefined;
 
   for (;;) {
-    const { epoch } = await reaching(recover, () => owner.active());
-    const answer = await reaching(recover, () => owner.activate(label, epoch, deps.force));
+    const epoch = unanswered ?? (await reaching(recover, () => owner.active())).epoch;
+    const answer = await completed(() => owner.activate(label, epoch, deps.force));
+
+    if (answer instanceof RequestInterrupted) {
+      unanswered = epoch;
+      await recover.after(answer.message);
+      continue;
+    }
 
     if (answer.ok) return `Activated generation ${label} for ${target}.`;
+
+    if (answer.code === "stale-epoch" && unanswered !== undefined) {
+      const current = await reaching(recover, () => owner.active());
+
+      return current.harnessCommit === target
+        ? `Activated generation ${label} for ${target}.`
+        : `Not activated: the active generation changed after an activation of generation ${label} whose answer was lost, so the release does not repeat it. Generation ${label} is ready; activate it from the owner page if it should serve.`;
+    }
 
     if (answer.code === "drops-active-commit") {
       return `Not activated: ${target} does not contain the active generation's ${active ?? "commit"}. Generation ${label} is ready; activate it with \`force: true\` to drop that commit.`;
