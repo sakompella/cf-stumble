@@ -59,8 +59,9 @@ socket, and the old value no longer connects.
 the container exited, and the next connect falls back to the Cloudflare container. Files in
 SQLite survive, as after any container replacement; files under ignored segments do not. The
 provider stops its container when its socket closes or when it receives SIGINT or SIGTERM, because
-every later connect launches a fresh container anyway. It then connects again, waiting from 1 to 30
-seconds between attempts, so a Worker deploy does not end it.
+every later connect launches a fresh container anyway. It forgets a container only after a `stop`
+or `delete` succeeds, so this cleanup also stops a container whose earlier stop failed. It then
+connects again, waiting from 1 to 30 seconds between attempts, so a Worker deploy does not end it.
 
 **Alternatives.** Carrying computerd's WebSocket frames on the job socket would need a WebSocket
 server in the provider and an in-memory relay in the Host, which keeps the Host awake just the same.

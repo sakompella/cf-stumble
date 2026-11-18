@@ -189,11 +189,8 @@ export class OrbProvider {
     return Effect.suspend(() => {
       this.#options.log(`job ${job._tag} ${job.container}`);
 
-      if (!Predicate.isTagged(job, "start")) {
-        this.#launch = undefined;
-
-        return this.#script(job._tag, job.container).pipe(Effect.as(null));
-      }
+      if (!Predicate.isTagged(job, "start"))
+        return this.#remove(job._tag, job.container).pipe(Effect.as(null));
 
       return this.#stopLaunch("delete").pipe(
         Effect.andThen(
@@ -225,26 +222,33 @@ export class OrbProvider {
         onFailure: ({ message }) => message,
       }),
       Effect.flatMap((reason) =>
-        Effect.sync(() => {
-          if (this.#launch?.runtime !== launch.runtime) return;
+        this.#jobs.withPermits(1)(
+          Effect.sync(() => {
+            if (this.#launch?.runtime !== launch.runtime) return;
 
+            this.#launch = undefined;
+            this.#options.log(`container ${launch.container} ${reason}`);
+            send(providerFrame.exited({ runtime: launch.runtime, reason }));
+          }),
+        ),
+      ),
+    );
+  }
+
+  #remove(job: "stop" | "delete", container: string): Effect.Effect<void, OrbFailure> {
+    return this.#script(job, container).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
           this.#launch = undefined;
-          this.#options.log(`container ${launch.container} ${reason}`);
-          send(providerFrame.exited({ runtime: launch.runtime, reason }));
         }),
       ),
     );
   }
 
   #stopLaunch(job: "stop" | "delete"): Effect.Effect<void, OrbFailure> {
-    return Effect.suspend(() => {
-      const launch = this.#launch;
-      this.#launch = undefined;
-
-      return launch === undefined
-        ? Effect.void
-        : Effect.asVoid(this.#script(job, launch.container));
-    });
+    return Effect.suspend(() =>
+      this.#launch === undefined ? Effect.void : this.#remove(job, this.#launch.container),
+    );
   }
 
   #fetch(frame: Extract<HostFrame, { _tag: "fetch" }>): Effect.Effect<FetchAnswer, OrbFailure> {
