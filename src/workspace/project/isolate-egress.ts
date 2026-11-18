@@ -6,6 +6,13 @@ const GITHUB_API_ORIGIN = "https://api.github.com";
 
 const MAX_REDIRECTS = 5;
 
+const REQUEST_BODY_HEADERS = [
+  "content-encoding",
+  "content-language",
+  "content-location",
+  "content-type",
+] as const;
+
 type EgressFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 function refusal(status: number, message: string): Response {
@@ -31,25 +38,18 @@ function resolveFrom(base: string, location: string): string | null {
   }
 }
 
+function redirectsAsGet(status: number, method: string): boolean {
+  if (status === 303) return method !== "GET" && method !== "HEAD";
+
+  return (status === 301 || status === 302) && method === "POST";
+}
+
 export function isolateEgressFetch(upstream: EgressFetch, githubToken?: string): EgressFetch {
   return async (input, init): Promise<Response> => {
-    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
-
-    const carried = new Headers(
-      init?.headers ?? (input instanceof Request ? input.headers : undefined),
-    );
-
-    const body = init?.body ?? (input instanceof Request ? input.body : undefined);
-
-    let url = input instanceof Request ? input.url : input.toString();
-
-    const forwardInit = (headers: Headers): RequestInit => {
-      const requestInit: RequestInit = { method, headers, redirect: "manual" };
-
-      if (body !== undefined) requestInit.body = body;
-
-      return requestInit;
-    };
+    const request = new Request(input, init);
+    const carried = new Headers(request.headers);
+    let { method, url } = request;
+    let body = request.body === null ? null : await request.arrayBuffer();
 
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
       const headers = new Headers(carried);
@@ -61,7 +61,7 @@ export function isolateEgressFetch(upstream: EgressFetch, githubToken?: string):
       )
         headers.set("authorization", `Bearer ${githubToken}`);
 
-      const response = await upstream(url, forwardInit(headers));
+      const response = await upstream(url, { method, headers, body, redirect: "manual" });
 
       if (response.status < 300 || response.status >= 400) return response;
 
@@ -73,6 +73,13 @@ export function isolateEgressFetch(upstream: EgressFetch, githubToken?: string):
       if (originOf(next) !== originOf(url)) {
         carried.delete("authorization");
         carried.delete("cookie");
+      }
+
+      if (redirectsAsGet(response.status, method)) {
+        method = "GET";
+        body = null;
+
+        for (const name of REQUEST_BODY_HEADERS) carried.delete(name);
       }
 
       url = next;
