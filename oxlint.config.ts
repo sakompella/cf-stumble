@@ -35,6 +35,7 @@ export default defineConfig({
     ],
     "typescript/no-misused-promises": "error",
     "typescript/use-unknown-in-catch-callback-variable": "error",
+    "typescript/no-import-type-side-effects": "error",
     "eslint/no-useless-assignment": "error",
     "import/no-cycle": "error",
     "typescript/prefer-readonly-parameter-types": "off",

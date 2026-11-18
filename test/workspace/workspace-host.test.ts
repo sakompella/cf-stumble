@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
-import { type CommandOutput } from "../../src/workspace/operations.js";
+import type { CommandOutput } from "../../src/workspace/operations.js";
 import {
   MANAGED_AGENT_INSTRUCTIONS,
   ensureManagedInstructions,
