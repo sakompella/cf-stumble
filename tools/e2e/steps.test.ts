@@ -84,24 +84,6 @@ describe("a step that is stopped", () => {
     }
   });
 
-  it("kills a process that ignores the termination request", { timeout: 30_000 }, async () => {
-    const steps = new Steps();
-    const file = join(scratch, "stubborn-pid");
-
-    const passed = await steps.run("stubborn", 500, async () => {
-      await execute("sh", ["-c", `trap '' TERM; echo $$ > ${file}; sleep 30 & wait`]);
-    });
-
-    const pid = await pidIn(file);
-
-    try {
-      assert.equal(passed, false);
-      assert.equal(alive(pid), false);
-    } finally {
-      if (alive(pid)) process.kill(pid, "SIGKILL");
-    }
-  });
-
   it("does not start the work of a step that comes after an interrupt", async () => {
     const steps = new Steps();
     let started = false;
@@ -126,6 +108,45 @@ describe("a step that is stopped", () => {
     steps.startCleanup();
 
     assert.equal(await steps.run("cleanup", MINUTE, () => Promise.resolve()), true);
+  });
+});
+
+describe("a stopped step's process that ignores the termination request", () => {
+  it("is killed when the work started it", { timeout: 30_000 }, async () => {
+    const steps = new Steps();
+    const file = join(scratch, "stubborn-pid");
+
+    const passed = await steps.run("stubborn", 500, async () => {
+      await execute("sh", ["-c", `trap '' TERM; echo $$ > ${file}; sleep 30 & wait`]);
+    });
+
+    const pid = await pidIn(file);
+
+    try {
+      assert.equal(passed, false);
+      assert.equal(alive(pid), false);
+    } finally {
+      if (alive(pid)) process.kill(pid, "SIGKILL");
+    }
+  });
+
+  it("is killed when it is a grandchild that closed its output", { timeout: 30_000 }, async () => {
+    const steps = new Steps();
+    const file = join(scratch, "detached-pid");
+    const grandchild = `trap '' TERM; echo \\$\\$ > ${file}; exec sleep 30`;
+
+    const passed = await steps.run("detached", 500, async () => {
+      await execute("sh", ["-c", `sh -c "${grandchild}" </dev/null >/dev/null 2>&1 & wait`]);
+    });
+
+    const pid = await pidIn(file);
+
+    try {
+      assert.equal(passed, false);
+      assert.equal(alive(pid), false, "the grandchild still runs after the step failed");
+    } finally {
+      if (alive(pid)) process.kill(pid, "SIGKILL");
+    }
   });
 });
 
