@@ -5,6 +5,7 @@ import { advanceFreshThread, FreshThreadEvent, Ground } from "./fresh-thread.js"
 import type { Model } from "./model.js";
 import { withoutQueued } from "./outgoing.js";
 import { StreamPhase } from "./stream-phase.js";
+import { withThreadReplaced } from "./update-send.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 function groundOf(model: Model): Ground {
@@ -37,7 +38,7 @@ export function withOpenedStream(model: Model): Model {
 }
 
 function replacedThread(model: Model): UpdateReturn {
-  return withFreshThread(withOpenedStream(model), FreshThreadEvent.Succeeded());
+  return withFreshThread(withOpenedStream(withThreadReplaced(model)), FreshThreadEvent.Succeeded());
 }
 
 export function freshThreadHandlers(
