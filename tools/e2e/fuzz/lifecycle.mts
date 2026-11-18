@@ -72,6 +72,22 @@ async function rounds(run: FuzzContext, context: RoundContext) {
   return { round, turns };
 }
 
+async function play(run: FuzzContext, context: RoundContext) {
+  let played = { round: 0, turns: 0 };
+
+  try {
+    played = await rounds(run, context);
+
+    if (context.probe.violations.length === 0) await finalTurn(context.probe, context.signal);
+  } catch (cause) {
+    context.probe.violation(
+      `the fuzzer threw: ${cause instanceof Error ? (cause.stack ?? cause.message) : String(cause)}`,
+    );
+  }
+
+  return played;
+}
+
 async function verdict(
   run: FuzzContext,
   probe: Probe,
@@ -118,25 +134,19 @@ export const fuzz: Fuzzer = async (run) => {
   };
 
   const poller = pollStatus(probe, ledger, stop.signal);
-
-  await readStatus(probe, ledger);
-
-  for (const known of commits.slice(0, 1)) await submit(probe, ledger, known);
-
   let played = { round: 0, turns: 0 };
 
   try {
-    played = await rounds(run, context);
+    await readStatus(probe, ledger);
 
-    if (probe.violations.length === 0) await finalTurn(probe, context.signal);
-  } catch (cause) {
-    probe.violation(
-      `the fuzzer threw: ${cause instanceof Error ? (cause.stack ?? cause.message) : String(cause)}`,
-    );
+    for (const known of commits.slice(0, 1)) await submit(probe, ledger, known);
+
+    played = await play(run, context);
+  } finally {
+    stop.abort();
+    await poller;
   }
 
-  stop.abort();
-  await poller;
   console.error(`fuzz: ${played.round} rounds, ${played.turns} turns, seed ${run.seed}`);
   console.error(
     [...probe.counts]
