@@ -42,8 +42,9 @@ default. When the deadline aborts a run that got at least one model reply, and a
 still fits in the budget, the facet submits the run notice as a new message, which starts the next
 run at once; the notice then says how many of the budget's minutes are used. This is an auto-continue.
 With 30 minutes a message gets up to three runs, with 60 up to seven. When the budget is spent, or
-the run got no reply, the notice asks for a message as before. A cancel stops the chain, and a new
-owner message starts its own budget (`src/facet/generation-1/run-budget.ts`).
+the run got no reply, the notice asks for a message as before. A cancel clears the budget before it
+aborts the run, so no deadline abort continues the run after a cancel, and a resend of the same
+message does not bring the budget back. A new owner message starts its own budget (`src/facet/generation-1/run-budget.ts`).
 
 ## Repositories and files
 
