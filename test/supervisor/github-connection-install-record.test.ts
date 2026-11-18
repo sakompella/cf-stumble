@@ -100,3 +100,54 @@ test("a credential install held across a reset leaves the cleared record alone",
     },
   );
 });
+
+test.each([
+  ["no configured token", undefined],
+  ["a configured token", "ghp_cfstumbleFAKEconfiguredFAKEtoken012345"],
+] as const)(
+  "a check that read the old credential before a device authorization install keeps the install's record, with %s",
+  async (_label, fallbackToken) => {
+    await runInDurableObject(
+      env.SUPERVISOR.getByName("check-across-install"),
+      async (_instance, state) => {
+        const workspace = new FakeTenantWorkspace();
+        workspace.login = "new-owner";
+
+        const replies = [
+          {
+            device_code: "synthetic-device",
+            user_code: "TEST-CODE",
+            verification_uri: "https://github.com/login/device",
+            expires_in: 900,
+            interval: 5,
+          },
+          { access_token: "ghp_cfstumbleFAKEtokenFAKEtoken0123456789", token_type: "bearer" },
+        ];
+
+        const github = new GitHubConnection({
+          store: new GitHubConnectionStore(state.storage),
+          workspaceName: "check-across-install",
+          namespace: workspace.namespace,
+          environment: {
+            clientId: "synthetic-client",
+            fallbackToken,
+            fetcher: () => Promise.resolve(Response.json(replies.shift())),
+          },
+        });
+
+        await Effect.runPromise(github.startAuthorization(NOW));
+        const check = workspace.holdNext("gh auth token");
+        const refreshing = Effect.runPromise(github.refresh(NOW + 1_000));
+        await check.reached;
+        await Effect.runPromise(github.completeAuthorization(NOW + 2_000));
+        check.release();
+        await refreshing;
+
+        expect(github.lastKnown(NOW + 3_000)).toEqual({
+          github: { state: "connected", login: "new-owner", source: "device-authorization" },
+          checkedAt: NOW + 2_000,
+        });
+      },
+    );
+  },
+);
