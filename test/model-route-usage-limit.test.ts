@@ -58,9 +58,8 @@ function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess, recordingF
 async function eventsOf(pending: ReturnType<ModelRoute["runStream"]>) {
   const outcome = await pending;
 
-  if (!(outcome instanceof ReadableStream)) throw new Error(outcome.error.reason);
-
-  return collectEvents(outcome);
+  if (outcome instanceof ReadableStream) return collectEvents(outcome);
+  throw new Error(outcome.error.reason);
 }
 
 function responsesAnswer(events: readonly object[]) {

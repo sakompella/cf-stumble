@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import { logEvent } from "../../diagnostics.js";
-import { type ProjectId } from "../../project-catalog.js";
+import type { ProjectId } from "../../project-catalog.js";
 import { projectDirectory } from "../../workspace-layout.js";
-import { type WorkspaceEffects, type WorkspaceFault } from "../operations.js";
+import type { WorkspaceEffects, WorkspaceFault } from "../operations.js";
 
 export function removedDirectories(projectId: ProjectId): readonly [string, string] {
   const root = projectDirectory(projectId);

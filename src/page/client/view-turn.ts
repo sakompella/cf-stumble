@@ -1,4 +1,4 @@
-import { type Html, type HtmlBuilder } from "foldkit/html";
+import type { Html, HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import { isRunning } from "../../conversation-view/conversation.js";
 import { FreshThread } from "./fresh-thread.js";

@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { type Project, type ProjectCatalog, type ProjectId } from "../../project-catalog.js";
+import type { Project, ProjectCatalog, ProjectId } from "../../project-catalog.js";
 import {
   lifecycleStep,
   LifecycleEvent,
