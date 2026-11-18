@@ -149,12 +149,18 @@ export class Owner {
   }
 
   async connect(repositoryUrl: string): Promise<string> {
-    return (
-      await this.#json(
-        this.post("/api/projects/connect", { repositoryUrl }),
-        ANSWERS["POST /api/projects/connect"],
-      )
-    ).project.id;
+    const { project, alreadyConnected } = await this.#json(
+      this.post("/api/projects/connect", { repositoryUrl }),
+      ANSWERS["POST /api/projects/connect"],
+    );
+
+    if (alreadyConnected) {
+      throw new Error(
+        `${repositoryUrl} was already connected as project ${project.id} before this run; disconnect it first, or finish a killed run with pnpm e2e --run-id <id> --cleanup`,
+      );
+    }
+
+    return project.id;
   }
 
   async disconnect(projectId: string): Promise<void> {

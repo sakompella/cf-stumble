@@ -3,8 +3,11 @@ import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { after, describe, it } from "node:test";
 import * as Predicate from "effect/Predicate";
+import { connectPayload } from "../browser-harness/fixtures.mts";
+import { Owner } from "./owner-api.mts";
 import { forgetRestoreState, loadRestoreState, saveRestoreState } from "./restore-state.mts";
 import { Target } from "./target.mts";
+import { productLoop } from "./workflows.mts";
 
 const PROJECT = "e2e-project";
 
@@ -41,7 +44,11 @@ async function owner(project: Project): Promise<Readonly<{ url: string; server: 
     }
   });
 
-  const address = await new Promise<string>((resolve, reject) => {
+  return { url: await listen(server), server };
+}
+
+function listen(server: Server): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     server.listen(0, "127.0.0.1", () => {
       const bound = server.address();
 
@@ -49,8 +56,6 @@ async function owner(project: Project): Promise<Readonly<{ url: string; server: 
       else resolve(`http://127.0.0.1:${bound.port}`);
     });
   });
-
-  return { url: address, server };
 }
 
 function cleanupTarget(url: string): Target {
@@ -99,5 +104,58 @@ describe("restoring a target the e2e run connected a project to", () => {
 
     assert.equal(project.removed, false);
     assert.equal(loadRestoreState(target.runId).project, PROJECT);
+  });
+});
+
+describe("an e2e run against an instance where the owner connected the project before the run", () => {
+  it("sends no turn to the owner's project and leaves it connected after the cleanup", async () => {
+    const requests: string[] = [];
+
+    const server = createServer((request, response) => {
+      requests.push(`${request.method} ${request.url}`);
+      response.writeHead(200, { "content-type": "application/json" });
+
+      if (request.url === "/api/projects/connect") {
+        response.end(JSON.stringify(connectPayload(true)));
+      } else if (request.url?.endsWith("/events") === true) {
+        response.end(view({ running: false, removed: false, refuses: false }));
+      } else if (request.url?.endsWith("/disconnect") === true) {
+        response.end(JSON.stringify({ ok: true, projectId: "owned", workspace: "removed" }));
+      } else {
+        response.end(JSON.stringify({ ok: true }));
+      }
+    });
+
+    const url = await listen(server);
+
+    const target = new Target({
+      runId: randomBytes(4).toString("hex"),
+      url,
+      stage: undefined,
+      password: "pw",
+      env: {},
+    });
+
+    const run = {
+      id: target.runId,
+      owner: new Owner(url, "pw"),
+      github: target.github,
+      password: "pw",
+      signal: new AbortController().signal,
+    };
+
+    try {
+      const failure = await productLoop(run, (projectId) => {
+        target.connectedProject = projectId;
+      }).then(() => "", String);
+
+      await target.restore();
+
+      assert.deepEqual(requests, ["POST /api/projects/connect"]);
+      assert.match(failure, /already connected/u);
+    } finally {
+      server.close();
+      forgetRestoreState(target.runId);
+    }
   });
 });
