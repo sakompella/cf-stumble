@@ -110,7 +110,7 @@ function freshBarrier(): Barrier {
     };
   });
 
-  return { ...barrier, released };
+  return Object.assign(barrier, { released });
 }
 
 async function preparing(barrier: Barrier): Promise<undefined> {
