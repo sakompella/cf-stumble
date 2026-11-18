@@ -8,11 +8,11 @@ import { apiRequest } from "./api-request.js";
 import { sendRefusal } from "./send-refusals.js";
 
 export const MintRequestId = Command.define("MintRequestId", {
-  args: { projectId: Schema.String, content: Schema.String },
+  args: { projectId: Schema.String, content: Schema.String, conversationId: Schema.Number },
   messages: [Message.MintedRequestId],
-  execute: ({ projectId, content }) =>
+  execute: (written) =>
     Effect.sync(() =>
-      Message.MintedRequestId({ projectId, content, requestId: globalThis.crypto.randomUUID() }),
+      Message.MintedRequestId({ ...written, requestId: globalThis.crypto.randomUUID() }),
     ),
 });
 
@@ -21,15 +21,21 @@ export const SendMessage = Command.define("SendMessage", {
     projectId: Schema.String,
     requestId: Schema.String,
     content: Schema.String,
+    conversationId: Schema.Number,
     budgetMinutes: Schema.Number,
   },
   messages: [Message.SucceededSend, Message.RejectedSend, Message.HeldSend, Message.FailedSend],
-  execute: ({ projectId, requestId, content, budgetMinutes }) =>
+  execute: ({ projectId, requestId, content, conversationId, budgetMinutes }) =>
     apiRequest(
       {
         endpoint: "POST /api/projects/:projectId/messages",
         projectId,
-        maybeBody: Option.some({ content, requestId, budgetMinutes }),
+        maybeBody: Option.some({
+          content,
+          requestId,
+          budgetMinutes,
+          conversationId: String(conversationId),
+        }),
       },
       {
         answered: ({ submissionId }) => Message.SucceededSend({ requestId, submissionId }),

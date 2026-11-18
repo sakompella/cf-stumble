@@ -39,12 +39,13 @@ const STEPS: readonly Step[] = [
       streamId: model.eventsStreamId,
       conversation: tc.draw(gs.sampledFrom(VIEWS)),
     }),
-  (model) => Message.SucceededFreshThread({ streamId: model.eventsStreamId }),
+  (model) => Message.SucceededFreshThread({ streamId: model.eventsStreamId, conversationId: "2" }),
   (model, tc) =>
     Message.MintedRequestId({
       projectId: Option.getOrElse(model.maybeProjectId, () => "repo"),
       requestId: tc.draw(gs.sampledFrom(REQUEST_IDS)),
       content: "sent",
+      conversationId: 1,
     }),
   (_model, tc) =>
     Message.SucceededSend({
@@ -65,7 +66,8 @@ const STALE: readonly Step[] = [
   (model, tc) => Message.ReceivedUnreadableEvent({ streamId: staleStream(model, tc) }),
   (model, tc) => Message.RefusedEvents({ streamId: staleStream(model, tc), wording: "busy" }),
   (model, tc) => Message.DisconnectedEvents({ streamId: staleStream(model, tc), detail: "x" }),
-  (model, tc) => Message.SucceededFreshThread({ streamId: staleStream(model, tc) }),
+  (model, tc) =>
+    Message.SucceededFreshThread({ streamId: staleStream(model, tc), conversationId: "2" }),
   (model, tc) =>
     Message.RejectedFreshThread({ streamId: staleStream(model, tc), wording: "rejected: x" }),
   (model, tc) => Message.FailedFreshThread({ streamId: staleStream(model, tc), detail: "x" }),
@@ -187,7 +189,7 @@ test("only the owner's own request checks the GitHub connection again after the 
 });
 
 const FRESH_THREAD_ANSWERS = [
-  (streamId: number) => Message.SucceededFreshThread({ streamId }),
+  (streamId: number) => Message.SucceededFreshThread({ streamId, conversationId: "2" }),
   (streamId: number) => Message.RejectedFreshThread({ streamId, wording: "rejected: x" }),
   (streamId: number) => Message.FailedFreshThread({ streamId, detail: "x" }),
 ] as const;

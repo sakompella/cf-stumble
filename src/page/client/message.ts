@@ -77,7 +77,12 @@ export const Message = defineMessageUnion({
   RejectedBackend: { wording: Schema.String },
   FailedBackend: { detail: Schema.String },
 
-  MintedRequestId: { projectId: Schema.String, requestId: Schema.String, content: Schema.String },
+  MintedRequestId: {
+    projectId: Schema.String,
+    requestId: Schema.String,
+    content: Schema.String,
+    conversationId: Schema.Number,
+  },
   SucceededSend: { requestId: Schema.String, submissionId: Schema.Number },
   RejectedSend: { requestId: Schema.String, wording: Schema.String },
   HeldSend: { requestId: Schema.String, wording: Schema.String },
@@ -87,7 +92,7 @@ export const Message = defineMessageUnion({
   RejectedAbort: { wording: Schema.String },
   FailedAbort: { detail: Schema.String },
 
-  SucceededFreshThread: { streamId: Schema.Number },
+  SucceededFreshThread: { streamId: Schema.Number, conversationId: Schema.String },
   RejectedFreshThread: { streamId: Schema.Number, wording: Schema.String },
   FailedFreshThread: { streamId: Schema.Number, detail: Schema.String },
 

@@ -84,7 +84,13 @@ export class ServingConversations {
     return this.#runs.running(Date.now());
   }
 
-  submit(projectId: string, content: string, requestId: string, budgetMinutes: number) {
+  submit(
+    projectId: string,
+    content: string,
+    requestId: string,
+    budgetMinutes: number,
+    writtenFor?: string,
+  ) {
     return answered(
       Effect.gen({ self: this }, function* () {
         const message = parseMessage(content, requestId);
@@ -100,9 +106,11 @@ export class ServingConversations {
           project,
           (current) => this.#use(mounted, (facet) => createConversation(facet, current)),
           (conversationId) =>
-            this.#use(mounted, (facet) =>
-              facet.submit(conversationId, message.content, message.requestId, budgetMinutes),
-            ).pipe(Effect.map((submissionId) => ({ submissionId }))),
+            writtenFor === undefined || writtenFor === conversationId
+              ? this.#use(mounted, (facet) =>
+                  facet.submit(conversationId, message.content, message.requestId, budgetMinutes),
+                ).pipe(Effect.map((submissionId) => ({ submissionId })))
+              : fail("thread-replaced"),
         );
       }),
     );

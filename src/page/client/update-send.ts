@@ -18,13 +18,23 @@ export function send(model: Model): UpdateReturn {
     return { model: { ...cleared, runNote: "type a prompt first" } };
   }
 
+  if (Option.isNone(model.conversation.maybeId)) {
+    return { model: { ...cleared, runNote: "wait until the conversation has loaded" } };
+  }
+
   return {
     model: {
       ...cleared,
       prompt: "",
       freshThread: advanceFreshThread(model.freshThread, FreshThreadEvent.Sent()).phase,
     },
-    commands: [MintRequestId({ projectId: model.maybeProjectId.value, content })],
+    commands: [
+      MintRequestId({
+        projectId: model.maybeProjectId.value,
+        content,
+        conversationId: model.conversation.maybeId.value,
+      }),
+    ],
   };
 }
 
@@ -62,15 +72,18 @@ function lost(model: Model, requestId: string): Model {
     : next;
 }
 
-export function withThreadReplaced(model: Model): Model {
+export function withThreadReplaced(model: Model, current: string): Model {
   const unqueued = withoutQueued(model.outgoing);
-  const isOpen = (item: Outgoing) => Option.contains(model.maybeProjectId, item.projectId);
+
+  const isReplaced = (item: Outgoing) =>
+    Option.contains(model.maybeProjectId, item.projectId) &&
+    String(item.conversationId) !== current;
 
   return unqueued
-    .filter(isOpen)
+    .filter(isReplaced)
     .reduceRight<Model>((sofar, item) => withTextRestored(sofar, item.projectId, item.text), {
       ...model,
-      outgoing: unqueued.filter((item) => !isOpen(item)),
+      outgoing: unqueued.filter((item) => !isReplaced(item)),
     });
 }
 
@@ -88,6 +101,7 @@ function retried(model: Model, requestId: string): UpdateReturn {
                 projectId: before.projectId,
                 requestId,
                 content: before.text,
+                conversationId: before.conversationId,
                 budgetMinutes: before.budgetMinutes,
               }),
             ],
@@ -117,7 +131,8 @@ function mintedRequest(
     projectId,
     requestId,
     content,
-  }: Readonly<{ projectId: string; requestId: string; content: string }>,
+    conversationId,
+  }: Readonly<{ projectId: string; requestId: string; content: string; conversationId: number }>,
 ): UpdateReturn {
   if (!Option.contains(model.maybeProjectId, projectId)) {
     return { model: withTextRestored(model, projectId, content) };
@@ -127,13 +142,22 @@ function mintedRequest(
     requestId,
     projectId,
     text: content,
+    conversationId,
     afterEntry: newestEntryId(model.conversation),
     budgetMinutes: model.runBudget,
   });
 
   return {
     model: { ...model, runNote: "", outgoing: [...model.outgoing, item] },
-    commands: [SendMessage({ projectId, requestId, content, budgetMinutes: model.runBudget })],
+    commands: [
+      SendMessage({
+        projectId,
+        requestId,
+        content,
+        conversationId,
+        budgetMinutes: model.runBudget,
+      }),
+    ],
   };
 }
 

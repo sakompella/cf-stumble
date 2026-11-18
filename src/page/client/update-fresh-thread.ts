@@ -37,8 +37,11 @@ export function withOpenedStream(model: Model): Model {
   };
 }
 
-function replacedThread(model: Model): UpdateReturn {
-  return withFreshThread(withOpenedStream(withThreadReplaced(model)), FreshThreadEvent.Succeeded());
+function replacedThread(model: Model, conversationId: string): UpdateReturn {
+  return withFreshThread(
+    withOpenedStream(withThreadReplaced(model, conversationId)),
+    FreshThreadEvent.Succeeded(),
+  );
 }
 
 export function freshThreadHandlers(
@@ -57,7 +60,8 @@ export function freshThreadHandlers(
     ClickedFreshThread: () =>
       withFreshThread(clearError(model), FreshThreadEvent.Clicked({ ground: groundOf(model) })),
     ExpiredFreshThread: () => withFreshThread(model, FreshThreadEvent.Expired()),
-    SucceededFreshThread: ({ streamId }) => forStream(streamId, () => replacedThread(model)),
+    SucceededFreshThread: ({ streamId, conversationId }) =>
+      forStream(streamId, () => replacedThread(model, conversationId)),
     RejectedFreshThread: ({ streamId, wording }) =>
       forStream(streamId, () => withFreshThread(model, FreshThreadEvent.Refused({ wording }))),
     FailedFreshThread: ({ streamId, detail }) =>

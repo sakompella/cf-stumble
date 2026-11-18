@@ -136,6 +136,12 @@ export async function hasRun(control: Control, projectId: string): Promise<boole
   return view.isRunning();
 }
 
+export async function shownConversation(control: Control, projectId: string): Promise<string> {
+  const view = await readEventsUntil(control, projectId, (read) => read.viewed());
+
+  return view.conversationId();
+}
+
 export async function untilPhase(
   control: Control,
   projectId: string,

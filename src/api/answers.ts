@@ -137,6 +137,7 @@ export const MessageRequest = Schema.Struct({
   content: Schema.String,
   requestId: Schema.String,
   budgetMinutes: Schema.optional(Schema.Literals(RUN_BUDGET_MINUTES)),
+  conversationId: Schema.optional(Schema.String),
 });
 
 const GitHubStatus = Schema.Union([

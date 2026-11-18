@@ -23,7 +23,7 @@ const PROJECTS = [
   { id: "harness", displayName: "harness", isHarness: true, location: "/workspace/harness" },
 ];
 
-const MINTED = { projectId: "repo", requestId: "r1", content: "do it" };
+const MINTED = { projectId: "repo", requestId: "r1", content: "do it", conversationId: 1 };
 
 type Step = Message | ((model: Model) => Message);
 
@@ -214,7 +214,7 @@ test("a fresh thread needs two clicks and no active run, and starts the conversa
   const fresh = after(armed, [
     conversation(viewing({ items: [userEntry(3, "hi")] })),
     Message.ClickedFreshThread(),
-    Message.SucceededFreshThread({ streamId: armed.eventsStreamId }),
+    Message.SucceededFreshThread({ streamId: armed.eventsStreamId, conversationId: "2" }),
   ]);
 
   expect(rowsShown(fresh)).toEqual([]);

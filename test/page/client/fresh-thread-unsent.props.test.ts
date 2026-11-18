@@ -36,7 +36,8 @@ const REPLACEMENTS: readonly (readonly Step[])[] = [
   [
     () => Message.ClickedFreshThread(),
     () => Message.ClickedFreshThread(),
-    (model) => Message.SucceededFreshThread({ streamId: model.eventsStreamId }),
+    (model) =>
+      Message.SucceededFreshThread({ streamId: model.eventsStreamId, conversationId: "2" }),
     freshView,
   ],
   [freshView],
@@ -66,7 +67,12 @@ function drawnSends(tc: hegel.TestCase): readonly Send[] {
 
 function beforeReplacement(send: Send): readonly Step[] {
   const minted: Step = () =>
-    Message.MintedRequestId({ projectId: "repo", requestId: send.requestId, content: send.text });
+    Message.MintedRequestId({
+      projectId: "repo",
+      requestId: send.requestId,
+      content: send.text,
+      conversationId: 1,
+    });
 
   if (send.before === "lost")
     return [minted, () => Message.FailedSend({ requestId: send.requestId, detail: "offline" })];

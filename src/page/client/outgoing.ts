@@ -9,6 +9,7 @@ const sent = {
   requestId: Schema.String,
   projectId: Schema.String,
   text: Schema.String,
+  conversationId: Schema.Number,
   afterEntry: Schema.Number,
   budgetMinutes: Schema.Number,
 };
@@ -31,8 +32,8 @@ export const OutgoingEvent = defineTaggedUnion({
 export type OutgoingEvent = typeof OutgoingEvent.Type;
 
 function advance(item: Outgoing, event: OutgoingEvent): Option.Option<Outgoing> {
-  const { requestId, projectId, text, afterEntry, budgetMinutes } = item;
-  const fields = { requestId, projectId, text, afterEntry, budgetMinutes };
+  const { requestId, projectId, text, conversationId, afterEntry, budgetMinutes } = item;
+  const fields = { requestId, projectId, text, conversationId, afterEntry, budgetMinutes };
 
   return Outgoing.match(item, {
     Sending: () =>
@@ -114,10 +115,7 @@ function unseenOutgoing(
   const placed = placedUserTexts(conversation);
   const claims = new Map<number, Outgoing>();
 
-  for (const item of [
-    ...outgoing.filter(Outgoing.guards.Queued),
-    ...outgoing.filter((unsure) => !Outgoing.guards.Queued(unsure)),
-  ]) {
+  for (const item of outgoing.filter(Outgoing.guards.Queued)) {
     const match = placed.find(
       ({ id, text }) => id > item.afterEntry && text === item.text && !claims.has(id),
     );

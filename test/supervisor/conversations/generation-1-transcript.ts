@@ -20,6 +20,8 @@ export function openReader() {
       latest = read(line);
     },
     viewed: () => Option.isSome(latest),
+    conversationId: () =>
+      String(Option.getOrThrow(Option.flatMap(latest, ({ maybeId }) => maybeId))),
     phase: () => Option.match(latest, { onNone: () => "unread", onSome: ({ run }) => run }),
     isRunning: () => Option.exists(latest, isRunning),
     entries: (): readonly Entry[] =>

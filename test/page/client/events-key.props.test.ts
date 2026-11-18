@@ -27,7 +27,7 @@ function nextMessage(model: Model, tc: hegel.TestCase): Message {
   return tc.draw(
     gs.sampledFrom([
       Message.ClickedProject({ projectId }),
-      Message.SucceededFreshThread({ streamId: model.eventsStreamId }),
+      Message.SucceededFreshThread({ streamId: model.eventsStreamId, conversationId: "2" }),
       Message.AcquiredTranscript({ streamId, projectId }),
       Message.ReleasedTranscript(),
     ]),

@@ -20,7 +20,7 @@ export function entryItem(
 }
 
 export function viewing(change: Partial<Conversation> = {}): Conversation {
-  return { ...EMPTY_CONVERSATION, ...change };
+  return { ...EMPTY_CONVERSATION, maybeId: Option.some(1), ...change };
 }
 
 export function running(change: Partial<Conversation> = {}): Conversation {
