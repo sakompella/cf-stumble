@@ -3,7 +3,7 @@ import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js
 import { parseProjectId, type ProjectId } from "../../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
 import { shellQuote } from "../../shell-quote.js";
-import { type WorkspaceEffects } from "../operations.js";
+import type { WorkspaceEffects } from "../operations.js";
 import { holdProvisionLock } from "../clone-script.js";
 import { projectProvisionLockPath } from "./provision-project.js";
 import { removedDirectories, removedFromStore } from "./remove-project-store.js";

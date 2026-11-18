@@ -7,7 +7,7 @@ const HOST_LINE = /^(\S+):\s*$/u;
 const TOKEN_LINE = /^\s+oauth_token:\s*(\S+)\s*$/u;
 
 function githubTokenFromHosts(hosts: string): string | undefined {
-  let host: string | undefined = undefined;
+  let host: string | undefined;
 
   for (const line of hosts.split("\n")) {
     const entry = HOST_LINE.exec(line);

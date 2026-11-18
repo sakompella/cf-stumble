@@ -1,4 +1,4 @@
-import { type Cursor, type EntryLoader, type EntryRecord } from "@earendil-works/pi-durable";
+import type { Cursor, EntryLoader, EntryRecord } from "@earendil-works/pi-durable";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
