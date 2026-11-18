@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -31,7 +31,7 @@ async function until(done: () => boolean | Promise<boolean>): Promise<void> {
   });
 }
 
-async function dispatchScript(start: string): Promise<string> {
+async function dispatchScript(start: string, stop = "true"): Promise<string> {
   const script = join(directory, "dispatch.sh");
 
   await writeFile(
@@ -40,7 +40,7 @@ async function dispatchScript(start: string): Promise<string> {
 echo "$STUMBLE_JOB $STUMBLE_CONTAINER" >> "${directory}/jobs"
 case "$STUMBLE_JOB" in
   start) ${start} ;;
-  stop | delete) touch "${directory}/stopped" ;;
+  stop | delete) ${stop} && touch "${directory}/stopped" ;;
   wait) while [ ! -e "${directory}/stopped" ]; do sleep 0.05; done ;;
 esac
 `,
@@ -170,6 +170,69 @@ test("a stop while connected stops the running container and closes the link", a
   expect(await jobs()).toContain("stop c1");
   await until(() => host.closedLinks() === 1);
   expect(host.attempts()).toBe(1);
+});
+
+const stopC1 = hostFrame.job({ id: 2, job: orbJob.stop({ container: "c1" }) });
+
+function answerTo(id: number): ProviderFrame | undefined {
+  return host
+    .received()
+    .find(
+      (frame): frame is ProviderFrame => frame !== ORB_PING && "id" in frame && frame.id === id,
+    );
+}
+
+function containerStopped(): Promise<boolean> {
+  return access(join(directory, "stopped")).then(
+    () => true,
+    () => false,
+  );
+}
+
+test.each([
+  [
+    "the provider stops",
+    (running: Provider) => {
+      running.stop();
+    },
+  ],
+  [
+    "the link closes",
+    () => {
+      host.closeLink();
+    },
+  ],
+])("a container whose stop failed is stopped when %s", async (_, end) => {
+  host = await startFakeHost({ greeting: startC1 });
+  const refusedOnce = `[ -e "${directory}/refused" ] || { touch "${directory}/refused"; exit 1; }`;
+  const running = provider(await dispatchScript('echo "127.0.0.1:9"', refusedOnce));
+
+  await until(async () => (await jobs()).includes("wait c1"));
+  host.send(stopC1);
+  await until(() => answerTo(2)?._tag === "failed");
+  end(running);
+
+  await until(containerStopped);
+  running.stop();
+  await running.exitCode;
+});
+
+test("a container the Host stops is not reported as exited before the stop answers", async () => {
+  host = await startFakeHost({ greeting: startC1 });
+
+  const running = provider(
+    await dispatchScript('echo "127.0.0.1:9"', `touch "${directory}/stopped" && sleep 0.3`),
+  );
+
+  await until(async () => (await jobs()).includes("wait c1"));
+  host.send(stopC1);
+  await until(() => answerTo(2)?._tag === "job-done");
+
+  expect(host.received().some((frame) => frame !== ORB_PING && frame._tag === "exited")).toBe(
+    false,
+  );
+  running.stop();
+  await running.exitCode;
 });
 
 type FetchResult = Extract<ProviderFrame, { _tag: "fetch-result" }>;
