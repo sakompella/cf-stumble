@@ -1,6 +1,9 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import type { ModelCapability } from "../../../src/facet/conversation-protocol.js";
+import type {
+  ConversationHost,
+  ModelCapability,
+} from "../../../src/facet/conversation-protocol.js";
 import { MainFacet } from "../../../src/facet/generation-1/main-facet.js";
 import { hostWith } from "./conversation-host.js";
 import { unscriptedGenerations } from "./generation-control.js";
@@ -11,11 +14,13 @@ export async function inTurn(
   name: string,
   model: ModelCapability,
   body: (turn: Turn) => Promise<void>,
+  overrides: Partial<ConversationHost> = {},
 ): Promise<void> {
   const reports: string[] = [];
   let alarm: (() => void) | undefined;
 
   const host = hostWith({
+    ...overrides,
     arm: ({ at }) => {
       if (at !== undefined) setTimeout(() => alarm?.(), Math.max(0, at - Date.now()));
 

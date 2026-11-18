@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import { ROUTE_FAILURE } from "./failure.js";
 
 const MAX_REQUEST_BYTES = 1_048_576;
 
@@ -118,7 +119,7 @@ function parseFields(raw: RouteWire): Parsed<ModelRouteRequest> {
   return Result.gen(function* () {
     const bytes = yield* wireBytes(raw);
 
-    if (bytes > MAX_REQUEST_BYTES) return yield* Result.fail("request exceeds 1 MiB size limit");
+    if (bytes > MAX_REQUEST_BYTES) return yield* Result.fail(ROUTE_FAILURE.requestTooLarge);
 
     return yield* Result.mapError(decodeRequest(raw), decodeReason);
   });
