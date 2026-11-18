@@ -73,8 +73,8 @@ importers:
         specifier: 1.0.0-rc.1
         version: 1.0.0-rc.1(@types/node@22.20.5)
       foldkit:
-        specifier: 0.170.0
-        version: 0.170.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4)
+        specifier: 0.171.0
+        version: 0.171.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4)
       knip:
         specifier: 6.45.1
         version: 6.45.1
@@ -2273,8 +2273,8 @@ packages:
     resolution: {integrity: sha512-kWyh8ADvHBFz6ua5xYOPnUroZTT/bwWfrCeL0Wj1dzG4/YOmOcfJ99W8dOVyyynJN35rZ9aCOtHChqQovV7yog==}
     engines: {node: '>=6'}
 
-  foldkit@0.170.0:
-    resolution: {integrity: sha512-H/MRQe/IZ/LqpgPi+Zy1S1OXQ8o12e2S/6U+phQu3WmoHSm7Vase/dEnOvrq9YZfqxK44/oVq6wE9oqXzEIaig==}
+  foldkit@0.171.0:
+    resolution: {integrity: sha512-85T5T69XJd8S6hcjU9d8uXje8UmPf+WIvQvQVYyQvJYPo3L8iLl+W62Req7PxOiQtCw0AuSNPJfiyy+A1OBucA==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
       '@effect/platform-browser': ~4.1.0
@@ -5139,7 +5139,7 @@ snapshots:
 
   flru@1.0.2: {}
 
-  foldkit@0.170.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4):
+  foldkit@0.171.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4):
     dependencies:
       '@effect/platform-browser': 4.1.4(effect@4.1.4)
       effect: 4.1.4
