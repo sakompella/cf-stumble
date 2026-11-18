@@ -88,7 +88,12 @@ test("the stream's dependencies stay equal while the conversation runs, the read
     received(start, running()),
     Message.UpdatedPrompt({ value: "follow up" }),
     Message.ClickedSendTurn(),
-    Message.MintedRequestId({ projectId: "repo", requestId: "r", content: "follow up" }),
+    Message.MintedRequestId({
+      projectId: "repo",
+      requestId: "r",
+      content: "follow up",
+      conversationId: 1,
+    }),
     Message.SucceededSend({ requestId: "r", submissionId: 2 }),
     Message.ClickedProject({ projectId: "repo" }),
     Message.DisconnectedEvents({ streamId, detail: "the stream ended" }),
@@ -110,7 +115,7 @@ test("leaving the project or starting a fresh thread opens another stream", () =
 
   const changes = [
     Message.ClickedProject({ projectId: "harness" }),
-    Message.SucceededFreshThread({ streamId: start.eventsStreamId }),
+    Message.SucceededFreshThread({ streamId: start.eventsStreamId, conversationId: "2" }),
   ];
 
   for (const change of changes) {

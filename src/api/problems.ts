@@ -5,7 +5,8 @@ export type ConversationProblemCode =
   | "no-active-generation"
   | "mount-failed"
   | "generation-failed"
-  | "workspace-busy";
+  | "workspace-busy"
+  | "thread-replaced";
 
 type ConnectProblemCode =
   | "invalid-repository-url"
@@ -76,6 +77,7 @@ export const PROBLEM_STATUS = {
   "authorization-expired": 410,
   "repository-too-large": 413,
   "workspace-busy": 409,
+  "thread-replaced": 409,
   "run-active": 409,
   "no-pending-authorization": 409,
   "stale-epoch": 409,

@@ -8,6 +8,7 @@ import {
   answeredLines,
   hasRun,
   servingGeneration1,
+  shownConversation,
   submitted,
   untilAnswered,
   untilIdle,
@@ -116,6 +117,32 @@ test("a fresh thread is a new conversation that does not see the old messages", 
   expect(await control.freshProjectConversation(project)).toMatchObject({ ok: true });
   await submitted(control, project, "new message", "r2");
 
+  expect(await answeredLines(control, project, 1)).toEqual([
+    { role: "user", text: "new message" },
+    { role: "assistant", text: "new answer" },
+  ]);
+  expect(model.inputs[1], "the new conversation sends only its own message").toHaveLength(1);
+});
+
+test("a message written for a conversation that a fresh thread replaced is refused, and the new thread never gets it", async () => {
+  const model = scriptModel(says("old answer"), says("new answer"));
+  const control = await servingGeneration1("generation-1-written-for", new ProjectWorkspace());
+
+  const sent = (content: string, requestId: string, conversationId: string) =>
+    control.submitProjectMessage(project, content, requestId, 30, conversationId);
+
+  const old = await shownConversation(control, project);
+  expect(await sent("old message", "r1", old)).toMatchObject({ ok: true });
+  await untilAnswered(control, project, 1);
+  expect(await control.freshProjectConversation(project)).toMatchObject({ ok: true });
+
+  expect(await sent("old message", "r1", old)).toEqual({
+    ok: false,
+    problem: { code: "thread-replaced" },
+  });
+  expect(await sent("new message", "r2", await shownConversation(control, project))).toMatchObject({
+    ok: true,
+  });
   expect(await answeredLines(control, project, 1)).toEqual([
     { role: "user", text: "new message" },
     { role: "assistant", text: "new answer" },

@@ -23,6 +23,7 @@ export type ConversationApiSupervisor = Readonly<{
     content: string,
     requestId: string,
     budgetMinutes: number,
+    conversationId?: string,
   ) => Promise<ConversationResult<{ submissionId: number }>>;
   projectEvents: (
     projectId: string,
@@ -86,11 +87,13 @@ const messageResponse = Effect.fnUntraced(function* (
     content,
     requestId,
     budgetMinutes = DEFAULT_RUN_BUDGET_MINUTES,
+    conversationId,
   } = yield* decodeRequestBody(request, MessageRequest);
 
   return yield* answered(
     "POST /api/projects/:projectId/messages",
-    () => supervisor.submitProjectMessage(projectId, content, requestId, budgetMinutes),
+    () =>
+      supervisor.submitProjectMessage(projectId, content, requestId, budgetMinutes, conversationId),
     202,
   );
 }, invalidRequestBody("invalid-message-request"));

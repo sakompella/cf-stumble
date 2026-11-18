@@ -6,6 +6,7 @@ const KEEPS_MESSAGE = {
   "unknown-project-id": false,
   "invalid-message": false,
   "workspace-busy": false,
+  "thread-replaced": false,
   "no-active-generation": true,
   "mount-failed": true,
   "generation-failed": true,

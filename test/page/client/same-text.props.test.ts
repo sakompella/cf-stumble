@@ -82,6 +82,7 @@ test("a send that never reached the Worker stays not confirmed while sends with 
               projectId: "repo",
               requestId: send.requestId,
               content: send.text,
+              conversationId: 1,
             }),
         ),
         ...arrived.map(

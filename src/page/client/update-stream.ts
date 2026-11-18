@@ -39,16 +39,17 @@ function runEndNote(
   return isRunning(previous) ? Option.some("answered") : Option.none();
 }
 
-function isReplacement(previous: Conversation, next: Conversation): boolean {
-  return Option.isSome(previous.maybeId) && !Option.contains(next.maybeId, previous.maybeId.value);
-}
-
 function receivedConversation(held: Model, conversation: Conversation): UpdateReturn {
-  const replaced = isReplacement(held.conversation, conversation);
+  const replaced =
+    Option.isSome(held.conversation.maybeId) &&
+    !Option.contains(conversation.maybeId, held.conversation.maybeId.value);
 
   const model = replaced
     ? {
-        ...withThreadReplaced(held),
+        ...withThreadReplaced(
+          held,
+          Option.match(conversation.maybeId, { onNone: () => "", onSome: String }),
+        ),
         conversation: EMPTY_CONVERSATION,
         runNote: "this conversation was replaced by a fresh thread",
       }

@@ -19,6 +19,8 @@ const PROBLEM_WORDING = {
   "generation-failed":
     "The active generation failed on this request. Try again, or roll back to an earlier one.",
   "workspace-busy": `The workspace is resetting or changing. ${RETRY_LATER}`,
+  "thread-replaced":
+    "A fresh thread replaced the conversation this message was written for, so it was not sent.",
   "invalid-repository-url":
     "That is not a GitHub repository address. Use https://github.com/owner/name.",
   "repository-not-accessible":

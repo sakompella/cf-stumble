@@ -149,7 +149,7 @@ test.each(BODY_ROUTES)("$path refuses each bad body before the Supervisor", asyn
   }
 });
 
-test("the message route hands the Supervisor its project id, content, request id and budget", async () => {
+test("the message route hands the Supervisor its project id, content, request id, budget and the conversation it was written for", async () => {
   await hegel.testAsync(async (tc) => {
     const projectId = tc.draw(
       gs.oneOf(gs.text({ minSize: 1 }), gs.text({ alphabet: "%2541/ .-é", minSize: 1 })),
@@ -164,12 +164,13 @@ test("the message route hands the Supervisor its project id, content, request id
       gs.optional(gs.sampledFrom([8, 30, 60])).map((minutes) => minutes ?? undefined),
     );
 
-    const received: Array<string | number> = [];
+    const conversationId = tc.draw(gs.optional(gs.text()).map((id) => id ?? undefined));
+    const received: Array<string | number | undefined> = [];
 
     await apiResponse(
       post(
         `/api/projects/${encodeURIComponent(projectId)}/messages`,
-        JSON.stringify({ content, requestId, budgetMinutes }),
+        JSON.stringify({ content, requestId, budgetMinutes, conversationId }),
       ),
       supervisor({
         submitProjectMessage: (...args) => {
@@ -180,6 +181,6 @@ test("the message route hands the Supervisor its project id, content, request id
       }),
     );
 
-    expect(received).toEqual([projectId, content, requestId, budgetMinutes ?? 30]);
+    expect(received).toEqual([projectId, content, requestId, budgetMinutes ?? 30, conversationId]);
   });
 });

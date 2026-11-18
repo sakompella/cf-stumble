@@ -6,6 +6,7 @@ import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { Outgoing } from "../../../src/page/client/outgoing.js";
 import { init, update } from "../../../src/page/client/update.js";
+import { received, viewing } from "./views.js";
 
 const PROJECT_IDS = ["repo", "harness"] as const;
 
@@ -39,8 +40,14 @@ function apply(run: Run, message: Message): void {
   run.model = update(run.model, message).model;
 }
 
+function showConversation(run: Run): void {
+  const conversationId = currentProject(run.model) === "repo" ? 1 : 2;
+
+  apply(run, received(run.model, viewing({ maybeId: Option.some(conversationId) })));
+}
+
 function mint(run: Run, send: Send): void {
-  apply(run, Message.MintedRequestId({ ...send, content: send.text }));
+  apply(run, Message.MintedRequestId({ ...send, content: send.text, conversationId: 1 }));
   (currentProject(run.model) === send.projectId ? run.inFlight : run.owed).push(send);
 }
 
@@ -87,8 +94,10 @@ function step(tc: hegel.TestCase, run: Run): void {
       run,
       Message.SucceededSend({ requestId: takeAny(tc, run.inFlight).requestId, submissionId: 1 }),
     );
-  else if (action === "switch")
+  else if (action === "switch") {
     apply(run, Message.ClickedProject({ projectId: tc.draw(gs.sampledFrom(PROJECT_IDS)) }));
+    showConversation(run);
+  }
 }
 
 function settle(run: Run): void {
@@ -110,6 +119,8 @@ test("a refused text comes back in its own project's prompt and a lost one stays
         lost: [],
         sent: 0,
       };
+
+      showConversation(run);
 
       for (let index = tc.draw(gs.integers({ minValue: 0, maxValue: 24 })); index > 0; index -= 1)
         step(tc, run);

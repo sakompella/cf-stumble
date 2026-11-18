@@ -142,7 +142,8 @@ export const ReplaceThread = Command.define("ReplaceThread", {
         maybeBody: Option.none(),
       },
       {
-        answered: () => Message.SucceededFreshThread({ streamId }),
+        answered: ({ conversationId }) =>
+          Message.SucceededFreshThread({ streamId, conversationId }),
         ...rejectedAs((wording) => Message.RejectedFreshThread({ streamId, wording })),
         failed: (detail) => Message.FailedFreshThread({ streamId, detail }),
       },
