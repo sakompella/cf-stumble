@@ -272,14 +272,13 @@ export class GitHubConnection {
   private observed(
     revision: number,
     now: number,
-    installedBy?: CredentialSource,
   ): Effect.Effect<GitHubCredential, CredentialWorkspaceUnavailable> {
     return readWorkspaceCredentialStatus({
       workspaceName: this.workspaceName,
       namespace: this.namespace,
     }).pipe(
       Effect.map((answer) =>
-        this.record(revision, CredentialEvent.Observed({ answer, installedBy, now })),
+        this.record(revision, CredentialEvent.Observed({ answer, installedBy: undefined, now })),
       ),
     );
   }
