@@ -61,7 +61,7 @@ const BODY_ROUTES: readonly BodyRoute[] = [
     good: { harnessCommit: SHA },
     badBodies: ['{"harnessCommit":"0123456789abcdef"}', `{"harnessCommit":"${SHA.toUpperCase()}"}`],
     refusalCode: "invalid-submission-request",
-    reachedStatus: 500,
+    reachedStatus: 503,
     supervisorReached: (reached) => ({
       submitGeneration: () => {
         reached();

@@ -115,7 +115,7 @@ export const ERROR_STATUS = {
   "invalid-backend-request": 400,
   "cross-origin-request": 403,
   "not-found": 404,
-  "preparation-failed": 500,
+  "infrastructure-interrupted": 503,
   "internal-error": 500,
 } as const;
 

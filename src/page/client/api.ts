@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import type { AnswerOf, Preparation, PreparationFailed } from "../../api/answers.js";
+import type { AnswerOf, Preparation, SubmissionInterrupted } from "../../api/answers.js";
 
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
 import { errorWording, problemWording } from "./problem-wording.js";
@@ -149,6 +149,11 @@ export function diagnosticsText(preparation: typeof Preparation.Type): Option.Op
   return Option.some(parts.join("\n\n"));
 }
 
-export function submitRejection({ recorded, error }: PreparationFailed): string {
-  return `label ${recorded.label} recorded (commit ${recorded.harnessCommit}), preparation failed: error: ${error.code}`;
+export function submitRejection({ recorded, error }: SubmissionInterrupted): string {
+  const label =
+    recorded === undefined
+      ? "no label recorded"
+      : `label ${recorded.label} recorded (commit ${recorded.harnessCommit})`;
+
+  return `${label}, submit interrupted: error: ${error.code}`;
 }

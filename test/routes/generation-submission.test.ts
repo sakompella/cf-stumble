@@ -1,15 +1,10 @@
 import { expect, test } from "vitest";
+import { capturedEvents, everythingLogged } from "../log-capture.js";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generation-state.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label as generationLabel } from "../supervisor/generations/fixtures.js";
-import {
-  controlRequest,
-  apiResponse,
-  apiSupervisor as supervisor,
-  WORKER_VERSION,
-} from "./helpers.js";
-import { CODE_UPDATE_RESET, STORAGE_RESET } from "../platform-reset.js";
-import type { StartupCheckResult } from "../../src/supervisor/startup-check/index.js";
+import { controlRequest, apiResponse, apiSupervisor as supervisor } from "./helpers.js";
+import { CODE_UPDATE_RESET } from "../platform-reset.js";
 
 const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -65,7 +60,66 @@ test("returns a failed build step's output tail to the owner", async () => {
   });
 });
 
-test("reports the recorded label with a preparation failure, without echoing the internal error", async () => {
+test("answers that the platform interrupted the preparation, with the recorded label and without echoing the internal error", async () => {
+  const unmarked = new Error(
+    "storage rejected a row with account secret ghp_cfstumbleFAKEtoken0123456789abcd",
+  );
+
+  for (const failure of [unmarked, CODE_UPDATE_RESET]) {
+    const asked: number[] = [];
+    capturedEvents();
+
+    const response = await apiResponse(
+      submitRequest(submissionBody()),
+      supervisor({
+        submitGeneration() {
+          return Promise.resolve(labeled);
+        },
+        prepareGeneration(label) {
+          asked.push(label);
+
+          return Promise.reject(failure);
+        },
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: { code: "infrastructure-interrupted" },
+      recorded: { label: generationLabel(1), harnessCommit },
+    });
+    expect(asked, "the Worker leaves the repeat to its caller").toEqual([generationLabel(1)]);
+
+    const logged = everythingLogged();
+
+    expect(logged).not.toContain("ghp_cfstumbleFAKEtoken");
+    expect(logged).toContain(failure === unmarked ? "retryable=absent" : "retryable=true");
+    expect(logged).toContain("overloaded=absent");
+  }
+});
+
+test("answers that the platform interrupted the submit when the Supervisor rejects it", async () => {
+  capturedEvents();
+
+  const response = await apiResponse(
+    submitRequest(submissionBody()),
+    supervisor({
+      submitGeneration() {
+        return Promise.reject(new Error("Internal error in Durable Object storage"));
+      },
+    }),
+  );
+
+  expect(response.status).toBe(503);
+  await expect(response.json()).resolves.toEqual({
+    ok: false,
+    error: { code: "infrastructure-interrupted" },
+  });
+  expect(everythingLogged()).toContain("Internal error in Durable Object storage");
+});
+
+test("answers a build problem as the preparation, not as an interruption", async () => {
   const response = await apiResponse(
     submitRequest(submissionBody()),
     supervisor({
@@ -73,121 +127,16 @@ test("reports the recorded label with a preparation failure, without echoing the
         return Promise.resolve(labeled);
       },
       prepareGeneration() {
-        return Promise.reject(new Error("storage rejected a row with account secret sk-live-1"));
+        return Promise.resolve({
+          ok: false,
+          problem: { code: "build-workspace-unavailable", harnessCommit },
+        });
       },
     }),
   );
-
-  expect(response.status).toBe(500);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    error: { code: "preparation-failed" },
-    recorded: { label: generationLabel(1), harnessCommit },
-  });
-});
-
-const ready: StartupCheckResult = {
-  ok: true,
-  report: {
-    stage: "ready",
-    reason: "the startup check passed",
-    generation: candidate("ready"),
-    effect: "recorded",
-  },
-};
-
-const unavailable: StartupCheckResult = {
-  ok: false,
-  problem: { code: "build-workspace-unavailable", harnessCommit },
-};
-
-type Answer = Error | StartupCheckResult;
-
-function stub(answer: Answer, version: string, asked: number[]) {
-  return supervisor({
-    submitGeneration() {
-      return Promise.resolve(labeled);
-    },
-    prepareGeneration(label) {
-      asked.push(label);
-
-      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
-    },
-    scriptVersion: () => Promise.resolve(version),
-  });
-}
-
-async function submitted(first: Answer, second: Answer, secondVersion: string) {
-  const asked: number[] = [];
-
-  const response = await apiResponse(
-    submitRequest(submissionBody()),
-    stub(first, WORKER_VERSION, asked),
-    stub(second, secondVersion, asked),
-  );
-
-  return { asked, response };
-}
-
-const NEW_VERSION = "version-deployed-during-the-request";
-
-test("prepares the generation again when a storage reset rejected the call (stage race, internal error in Durable Object storage)", async () => {
-  const { asked } = await submitted(STORAGE_RESET, ready, WORKER_VERSION);
-
-  expect(asked).toHaveLength(2);
-});
-
-test("does not prepare again when an Error without the platform's retryable mark is thrown in the same version", async () => {
-  const { asked } = await submitted(
-    new Error("Durable Object reset because its code was updated."),
-    ready,
-    WORKER_VERSION,
-  );
-
-  expect(asked).toHaveLength(1);
-});
-
-test("prepares the generation again when the reset Supervisor already runs the Worker's version by the time of the check (deploy 44075948231, deploy 44128047200)", async () => {
-  const { asked, response } = await submitted(CODE_UPDATE_RESET, ready, WORKER_VERSION);
-
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toMatchObject({
-    preparation: { ok: true, report: { stage: "ready" } },
-  });
-  expect(asked).toEqual([generationLabel(1), generationLabel(1)]);
-});
-
-test("prepares again when the Supervisor that a deploy was resetting answered with a workspace problem (forced race on a throwaway stage)", async () => {
-  const { asked, response } = await submitted(
-    { ok: true, report: { ...ready.report, stage: "mount-failed" } },
-    ready,
-    NEW_VERSION,
-  );
-
-  await expect(response.json()).resolves.toMatchObject({ preparation: { ok: true } });
-  expect(asked).toHaveLength(2);
-
-  const second = await submitted(unavailable, ready, NEW_VERSION);
-
-  await expect(second.response.json()).resolves.toMatchObject({
-    preparation: { ok: true, report: { stage: "ready" } },
-  });
-});
-
-test("answers with the second preparation when a deploy reset the Supervisor and the check still fails", async () => {
-  const { asked, response } = await submitted(CODE_UPDATE_RESET, unavailable, NEW_VERSION);
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toMatchObject({
     preparation: { ok: false, problem: { code: "build-workspace-unavailable" } },
   });
-  expect(asked).toHaveLength(2);
-});
-
-test("does not prepare again when the Supervisor runs the version that served the request", async () => {
-  for (const failing of [new Error("storage rejected a row"), unavailable]) {
-    const { asked } = await submitted(failing, ready, WORKER_VERSION);
-
-    expect(asked).toHaveLength(1);
-  }
 });

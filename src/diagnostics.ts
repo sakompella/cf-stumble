@@ -19,6 +19,20 @@ export function isRetryableFailure(cause: unknown): boolean {
   );
 }
 
+function retryableFlag(cause: unknown): string {
+  return cause instanceof Error && "retryable" in cause ? String(cause.retryable) : "absent";
+}
+
+function overloadedFlag(cause: unknown): string {
+  return cause instanceof Error && "overloaded" in cause ? String(cause.overloaded) : "absent";
+}
+
+export function logInterruption(context: string, cause: unknown): void {
+  const flags = `retryable=${retryableFlag(cause)} overloaded=${overloadedFlag(cause)}`;
+
+  console.error(`${context}: ${redactedCause(cause)} [${flags}]`);
+}
+
 const JWT_PATTERN = /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]*/gu;
 
 export function redactLogText(text: string, knownToken?: string): string {

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import * as Option from "effect/Option";
-import { isRetryableFailure, logEvent, logRedactedCause } from "../diagnostics.js";
+import { logInterruption } from "../diagnostics.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import * as Schema from "effect/Schema";
 import {
@@ -20,7 +19,6 @@ import {
   answer,
   callSupervisor,
   decodeRequestBody,
-  type Deployment,
   invalidRequestBody,
   jsonError,
   refusal,
@@ -55,7 +53,6 @@ const OwnerControlTarget = Schema.Struct({
 export type GenerationSubmissionSupervisor = {
   readonly submitGeneration: (harnessCommit: HarnessCommit) => Promise<Submission>;
   readonly prepareGeneration: (label: GenerationLabel) => Promise<StartupCheckResult>;
-  readonly scriptVersion: () => Promise<string | null>;
 };
 
 type ControlCommandKind = "activate" | "rollback";
@@ -90,79 +87,52 @@ const handleGenerationControl = Effect.fnUntraced(
     ),
 );
 
-function isReady(preparation: Result.Result<StartupCheckResult, unknown>): boolean {
-  return (
-    Result.isSuccess(preparation) &&
-    preparation.success.ok &&
-    preparation.success.report.stage === "ready"
-  );
-}
-
-type Prepared = Result.Result<StartupCheckResult, SupervisorCallFailed>;
-
-const prepareAfterDeploy = Effect.fnUntraced(function* (
-  failed: Prepared,
-  deployment: Deployment<GenerationSubmissionSupervisor>,
-  prepare: (stub: GenerationSubmissionSupervisor) => Effect.Effect<Prepared>,
-) {
-  const stub = deployment.stub();
-
-  if (Result.isFailure(failed) && isRetryableFailure(failed.failure.cause)) {
-    logEvent("warn", "api.preparation-after-deploy", { from: deployment.version, to: null });
-
-    return yield* prepare(stub);
-  }
-
-  const version = yield* callSupervisor(() => stub.scriptVersion()).pipe(Effect.option);
-
-  if (Option.isNone(version) || version.value === deployment.version) return failed;
-
-  logEvent("warn", "api.preparation-after-deploy", { from: deployment.version, to: version.value });
-
-  return yield* prepare(stub);
-});
+const INTERRUPTED = { ok: false, error: { code: "infrastructure-interrupted" } } as const;
 
 const handleGenerationSubmission = Effect.fnUntraced(function* (
   request: Request,
   supervisor: GenerationSubmissionSupervisor,
-  deployment: Deployment<GenerationSubmissionSupervisor>,
 ) {
   const { harnessCommit } = yield* decodeRequestBody(request, GenerationSubmissionRequest);
 
-  const submitted = yield* callSupervisor(() => supervisor.submitGeneration(harnessCommit));
+  const submitted = yield* callSupervisor(() => supervisor.submitGeneration(harnessCommit)).pipe(
+    Effect.result,
+  );
 
-  const prepare = (stub: GenerationSubmissionSupervisor) =>
-    callSupervisor(() => stub.prepareGeneration(submitted.generation.label)).pipe(Effect.result);
+  if (Result.isFailure(submitted)) {
+    logInterruption(
+      "api POST /api/generations/submit: submit-interrupted",
+      submitted.failure.cause,
+    );
 
-  const first = yield* prepare(supervisor);
+    return answer("POST /api/generations/submit", INTERRUPTED, 503);
+  }
 
-  const preparation = isReady(first)
-    ? first
-    : yield* prepareAfterDeploy(first, deployment, prepare);
+  const { generation } = submitted.success;
+
+  const preparation = yield* callSupervisor(() =>
+    supervisor.prepareGeneration(generation.label),
+  ).pipe(Effect.result);
 
   if (Result.isFailure(preparation)) {
-    logRedactedCause(
-      "api POST /api/generations/submit: preparation-failed",
+    logInterruption(
+      "api POST /api/generations/submit: preparation-interrupted",
       preparation.failure.cause,
     );
 
     return answer(
       "POST /api/generations/submit",
       {
-        ok: false,
-        error: { code: "preparation-failed" },
-        recorded: {
-          label: submitted.generation.label,
-          harnessCommit: submitted.generation.harnessCommit,
-        },
+        ...INTERRUPTED,
+        recorded: { label: generation.label, harnessCommit: generation.harnessCommit },
       },
-      500,
+      503,
     );
   }
 
   return answer("POST /api/generations/submit", {
     ok: true,
-    outcome: submitted,
+    outcome: submitted.success,
     preparation: preparation.success,
   });
 }, invalidRequestBody("invalid-submission-request"));

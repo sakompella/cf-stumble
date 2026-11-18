@@ -14,7 +14,6 @@ import {
   callSupervisor,
   jsonError,
   refusal,
-  type Deployment,
   type Handlers,
   type SupervisorCallFailed,
 } from "./json.js";
@@ -51,20 +50,20 @@ const HANDLERS: Handlers<ApiSupervisor, Endpoint> = {
 
 export function routeApiRequest(
   request: Request,
-  deployment: Deployment<ApiSupervisor>,
+  supervisor: ApiSupervisor,
 ): Effect.Effect<Response> {
-  return Effect.suspend(() => apiRoute(request, deployment)).pipe(answeringInternalErrors(request));
+  return Effect.suspend(() => apiRoute(request, supervisor)).pipe(answeringInternalErrors(request));
 }
 
 function apiRoute(
   request: Request,
-  deployment: Deployment<ApiSupervisor>,
+  supervisor: ApiSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   const match = matchEndpoint(request.method, new URL(request.url).pathname);
 
   if (match === undefined) return Effect.succeed(jsonError("not-found"));
 
   return match.kind === "fixed"
-    ? HANDLERS[match.endpoint](request, deployment.stub(), deployment)
-    : HANDLERS[match.endpoint](request, match.projectId, deployment.stub());
+    ? HANDLERS[match.endpoint](request, supervisor)
+    : HANDLERS[match.endpoint](request, match.projectId, supervisor);
 }
