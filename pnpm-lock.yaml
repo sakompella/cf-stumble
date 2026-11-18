@@ -24,8 +24,8 @@ importers:
         specifier: 1.5.0
         version: 1.5.0
       effect:
-        specifier: 4.1.2
-        version: 4.1.2
+        specifier: 4.1.4
+        version: 4.1.4
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
@@ -40,14 +40,14 @@ importers:
         specifier: ^5.20261104.1
         version: 5.20261104.1
       '@effect/platform-browser':
-        specifier: 4.1.2
-        version: 4.1.2(effect@4.1.2)
+        specifier: 4.1.4
+        version: 4.1.4(effect@4.1.4)
       '@effect/tsgo':
-        specifier: 0.69.0
-        version: 0.69.0
+        specifier: 0.70.0
+        version: 0.70.0
       '@foldkit/oxlint-plugin':
         specifier: 0.15.4
-        version: 0.15.4(effect@4.1.2)
+        version: 0.15.4(effect@4.1.4)
       '@hegeldev/hegel':
         specifier: 0.4.12
         version: 0.4.12
@@ -71,7 +71,7 @@ importers:
         version: 1.0.0-beta.27(@types/node@22.20.5)
       foldkit:
         specifier: 0.170.0
-        version: 0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2)
+        version: 0.170.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4)
       knip:
         specifier: 6.45.1
         version: 6.45.1
@@ -547,48 +547,48 @@ packages:
     resolution: {integrity: sha512-VW3tcVdnNfl/Vk8wHPTzZdKkxcsCOM12ppiO4DXnd9wMxUCmOfLt/wvUnWeKWbTVlVSRg0uqKtnnhE2UCsG2Bw==}
     engines: {node: '>=22.19.0'}
 
-  '@effect/platform-browser@4.1.2':
-    resolution: {integrity: sha512-O+C5hpnfdphBhSaOndFw8XA3dBG0x4SiF3m3QJzJwZZOlB4nGe+ghCZgknyaLcxigA8NqUtEj73rSsVVwshYFA==}
+  '@effect/platform-browser@4.1.4':
+    resolution: {integrity: sha512-oh6SxR62VaU8xzpVloHRJwK4ADBXCzlnjgcvV6zHc9h4PwmdhQvlfrXFu38tvqJTgK31Z1VnzbkLtymWHbEUSA==}
     peerDependencies:
-      effect: ^4.1.2
+      effect: ^4.1.4
 
-  '@effect/tsgo-darwin-arm64@0.69.0':
-    resolution: {integrity: sha512-XSkC5Ot7906NmN3tW0uQb+58DV7oVgyX7A20w3Zu7Y26kTve/YibhiDn8ZxhNRH/SiBouyA6IKR6THWjRs1cow==}
+  '@effect/tsgo-darwin-arm64@0.70.0':
+    resolution: {integrity: sha512-U4mT3LGxxFy6pgypLn8Syv7KKdFpbm5+RMNRimgPZkRyiuQRlk5K2REqKcHti3WtVmTLzdUrqWvd0X8xLIyC9A==}
     cpu: [arm64]
     os: [darwin]
 
-  '@effect/tsgo-darwin-x64@0.69.0':
-    resolution: {integrity: sha512-QXVmbe8l0gtkByP2yazqPR7Pw9ImJZ6mX+YqYRED6h39DRRgFF4LvzM6jJQ7PVQFQpk816YpOHztO7bJTjSW1A==}
+  '@effect/tsgo-darwin-x64@0.70.0':
+    resolution: {integrity: sha512-XUg35L9e1j1pw8dTV1gc18KVXoPUuhLUAxHCGE6XJrLLKjcQR1WnVJEd50kWgsrA79X0EQl0c9E7cS1jssMpmQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@effect/tsgo-linux-arm64@0.69.0':
-    resolution: {integrity: sha512-BWb3NxRnpYJikfgr2xD2U9DBM5gHm7rScdHYs8tAGXJytqQ6ioAOOYqDa1XZx2MwO2lG3BEAw2liI77mHMVRfQ==}
+  '@effect/tsgo-linux-arm64@0.70.0':
+    resolution: {integrity: sha512-uFb26cfAS565wSN3oJidcmFkEcCremn0OP3emctu1JwLSeEMPWNipIX2ne5d2LfXShnIxF9ZAYguS8L0tyoJ1w==}
     cpu: [arm64]
     os: [linux]
 
-  '@effect/tsgo-linux-arm@0.69.0':
-    resolution: {integrity: sha512-XewLmpBZC3CkaKCjhe2f2ZOGfdewZ0hgGIjiCUNiEmHl6Kwt8H8dzNAsYgWPPeahVTi09CSyo5f8iEwEIHt95g==}
+  '@effect/tsgo-linux-arm@0.70.0':
+    resolution: {integrity: sha512-gfirkmxqBCLcWBad3FbRetVIsL/1Zk4rb4mip3bPov+HtZHYCV6/XSmoIR7iRXPrj6j9D8Ee6XfiwcjvJRE5og==}
     cpu: [arm]
     os: [linux]
 
-  '@effect/tsgo-linux-x64@0.69.0':
-    resolution: {integrity: sha512-LZ3joeZ5D/Tv/tQN4r5uA7yoTQ5cHvCjICF3NcTX9ntlhQ51gJlhRcbOvP8v8AzTkOtrty7YXZW++iUOY0OKpw==}
+  '@effect/tsgo-linux-x64@0.70.0':
+    resolution: {integrity: sha512-UweXaMA6BX/5EceCnJuOtmqRBuul8IiD3d6Mf7qAVnNVcFAyVTqx1sdm/ofI+Xy7acDPBCFXJAltRrycCPWa0w==}
     cpu: [x64]
     os: [linux]
 
-  '@effect/tsgo-win32-arm64@0.69.0':
-    resolution: {integrity: sha512-ZlysvNK8BJa0WaQ8KVCUjpY0VgxiqzqchHCQj2+ECJcBwhn178OXcgl4+ZhmFbnr/T4b3ZtsOj0+UXtkr+fPbg==}
+  '@effect/tsgo-win32-arm64@0.70.0':
+    resolution: {integrity: sha512-68rjEm8YXg1kE6Qfue+hilRix2sFAI2kbJMP8DwUTtYEcIJlzy2VswOYvEykvZtjFxPjNZEjuIFTKLwaKwRdig==}
     cpu: [arm64]
     os: [win32]
 
-  '@effect/tsgo-win32-x64@0.69.0':
-    resolution: {integrity: sha512-EIxwudo6cSjandzmfputEmpTfdlAfTd2sWQ29vWh3F3qFb6MC9JDCAYHXQFWSGOPNhMBK6NXd/8humPW/WkpGA==}
+  '@effect/tsgo-win32-x64@0.70.0':
+    resolution: {integrity: sha512-ijk45EZNKAsDIzGYeZAEH1jOTy6WamP5mSJj4zujOY3qUYJLHrKQTZ9MOBUvekGZextSd9s8Gpwbi5FExNwiFA==}
     cpu: [x64]
     os: [win32]
 
-  '@effect/tsgo@0.69.0':
-    resolution: {integrity: sha512-ypgO19woAyrfAG0LzU2QwQnprMpV2G30nEo9ffd4Bc0ow0vXupcx0mcSLG1EfvmRGl0jhiQ3yAbsCuJhqwnRhg==}
+  '@effect/tsgo@0.70.0':
+    resolution: {integrity: sha512-kZwLZaAT4of8wu1sTRnk2IZpbjHGQSBKGvfw+nYw2iuvJlkIS0BNYcwA0ohoLPRffUKUP6PY7iBW5Ag4DUxh+Q==}
     hasBin: true
 
   '@emnapi/core@1.11.2':
@@ -2183,8 +2183,8 @@ packages:
     peerDependencies:
       effect: ^4.0.0
 
-  effect@4.1.2:
-    resolution: {integrity: sha512-d3Oah1WyKxFLFh19yWheS5IXIVaITzxZ71JkE1rkUozq/6EcJSU5nPk5bF2QrSygZ3SQoiNQB8TsxFriyMeMaQ==}
+  effect@4.1.4:
+    resolution: {integrity: sha512-Tgrv/9FN+TZYyOn8XSli+fVqAfwDrDAkiX5Uu9vztINb675VTQdhD0gWI5Kzvhlh9QqzjZvw72iugqw5pwoghQ==}
 
   electron-to-chromium@1.5.478:
     resolution: {integrity: sha512-pftG+ma5Lm8O6/p45bhYT6StBN5ziQymaRzmCZwFl8DwWHKPPD93FdOmP1aqftcepolQYvrcyTLa17kE8Yf+jg==}
@@ -3853,40 +3853,40 @@ snapshots:
 
   '@earendil-works/pi-telemetry@1.5.0': {}
 
-  '@effect/platform-browser@4.1.2(effect@4.1.2)':
+  '@effect/platform-browser@4.1.4(effect@4.1.4)':
     dependencies:
-      effect: 4.1.2
+      effect: 4.1.4
 
-  '@effect/tsgo-darwin-arm64@0.69.0':
+  '@effect/tsgo-darwin-arm64@0.70.0':
     optional: true
 
-  '@effect/tsgo-darwin-x64@0.69.0':
+  '@effect/tsgo-darwin-x64@0.70.0':
     optional: true
 
-  '@effect/tsgo-linux-arm64@0.69.0':
+  '@effect/tsgo-linux-arm64@0.70.0':
     optional: true
 
-  '@effect/tsgo-linux-arm@0.69.0':
+  '@effect/tsgo-linux-arm@0.70.0':
     optional: true
 
-  '@effect/tsgo-linux-x64@0.69.0':
+  '@effect/tsgo-linux-x64@0.70.0':
     optional: true
 
-  '@effect/tsgo-win32-arm64@0.69.0':
+  '@effect/tsgo-win32-arm64@0.70.0':
     optional: true
 
-  '@effect/tsgo-win32-x64@0.69.0':
+  '@effect/tsgo-win32-x64@0.70.0':
     optional: true
 
-  '@effect/tsgo@0.69.0':
+  '@effect/tsgo@0.70.0':
     optionalDependencies:
-      '@effect/tsgo-darwin-arm64': 0.69.0
-      '@effect/tsgo-darwin-x64': 0.69.0
-      '@effect/tsgo-linux-arm': 0.69.0
-      '@effect/tsgo-linux-arm64': 0.69.0
-      '@effect/tsgo-linux-x64': 0.69.0
-      '@effect/tsgo-win32-arm64': 0.69.0
-      '@effect/tsgo-win32-x64': 0.69.0
+      '@effect/tsgo-darwin-arm64': 0.70.0
+      '@effect/tsgo-darwin-x64': 0.70.0
+      '@effect/tsgo-linux-arm': 0.70.0
+      '@effect/tsgo-linux-arm64': 0.70.0
+      '@effect/tsgo-linux-x64': 0.70.0
+      '@effect/tsgo-win32-arm64': 0.70.0
+      '@effect/tsgo-win32-x64': 0.70.0
 
   '@emnapi/core@1.11.2':
     dependencies:
@@ -3987,9 +3987,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@foldkit/oxlint-plugin@0.15.4(effect@4.1.2)':
+  '@foldkit/oxlint-plugin@0.15.4(effect@4.1.4)':
     dependencies:
-      effect-oxlint: 0.4.0(effect@4.1.2)
+      effect-oxlint: 0.4.0(effect@4.1.4)
     transitivePeerDependencies:
       - effect
 
@@ -5017,12 +5017,12 @@ snapshots:
     dependencies:
       safe-buffer: 5.2.1
 
-  effect-oxlint@0.4.0(effect@4.1.2):
+  effect-oxlint@0.4.0(effect@4.1.4):
     dependencies:
       '@oxlint/plugins': 1.94.0
-      effect: 4.1.2
+      effect: 4.1.4
 
-  effect@4.1.2: {}
+  effect@4.1.4: {}
 
   electron-to-chromium@1.5.478: {}
 
@@ -5167,10 +5167,10 @@ snapshots:
 
   flru@1.0.2: {}
 
-  foldkit@0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2):
+  foldkit@0.170.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4):
     dependencies:
-      '@effect/platform-browser': 4.1.2(effect@4.1.2)
-      effect: 4.1.2
+      '@effect/platform-browser': 4.1.4(effect@4.1.4)
+      effect: 4.1.4
       parse5: 8.0.1
 
   formatly@0.11.4:
