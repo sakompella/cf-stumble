@@ -18,8 +18,12 @@ const STATE_COMMAND = [
   `elif [ -f "$f" ]; then echo "$f $(stat -c %a "$f") $(sha256sum < "$f")"; else echo "$f/"; fi; done' _`,
 ].join(" ");
 
-export function caseRoot(runId: string, id: number): string {
-  return `/workspace/fuzz/${runId}/c${id}`;
+export function runRoot(runId: string): string {
+  return `/workspace/fuzz/${runId}`;
+}
+
+function caseRoot(runId: string, id: number): string {
+  return `${runRoot(runId)}/c${id}`;
 }
 
 function setupCommand(item: Case, root: string, scratch: string): string {

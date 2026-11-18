@@ -135,6 +135,11 @@ class Session {
       }
     } finally {
       oracle.stop();
+      await runSteps(
+        this.#options.owner,
+        [bash("/workspace", `rm -rf ${directory}`, "container")],
+        this.#options.signal,
+      );
     }
   }
 
