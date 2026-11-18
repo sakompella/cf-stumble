@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { reset, runInDurableObject } from "cloudflare:test";
+import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import * as Result from "effect/Result";
 import { resultOf } from "../../effect-result.js";
@@ -40,20 +40,15 @@ function countingBucket() {
   };
 }
 
-function mounted(artifacts: HarnessArtifacts, harnessCommit: Commit): Promise<string> {
+async function loadOutcome(artifacts: HarnessArtifacts, harnessCommit: Commit): Promise<string> {
   const active = {
     generation: { label: generationLabel(1), harnessCommit, status: "ready" },
     epoch: 1,
   } as const;
 
-  return runInDurableObject(
-    env.SUPERVISOR.getByName("harness-artifacts-mount"),
-    async (_instance, state) => {
-      const facet = await resultOf(artifacts.mount(active, env.LOADER, state.facets));
+  const artifact = await resultOf(artifacts.load(active));
 
-      return Result.isSuccess(facet) ? "mounted" : facet.failure.code;
-    },
-  );
+  return Result.isSuccess(artifact) ? "loaded" : artifact.failure.code;
 }
 
 afterEach(async () => {
@@ -124,37 +119,37 @@ test("reports a failed build and stores nothing", async () => {
   expect(await env.MODULE_MAPS.get(`module-maps/${commits.failed}.json`)).toBeNull();
 });
 
-test("mounting one stored commit twice reads R2 once", async () => {
+test("loading one stored commit twice reads R2 once", async () => {
   await storeModuleMap(readyArtifact(commits.stored));
   const { bucket, reads } = countingBucket();
   const artifacts = new HarnessArtifacts(bucket, () => unreachableHost);
 
-  expect(await mounted(artifacts, commits.stored)).toBe("mounted");
-  expect(await mounted(artifacts, commits.stored)).toBe("mounted");
+  expect(await loadOutcome(artifacts, commits.stored)).toBe("loaded");
+  expect(await loadOutcome(artifacts, commits.stored)).toBe("loaded");
   expect(reads(commits.stored)).toBe(1);
 });
 
-test("an absent module map is read again on the next mount", async () => {
+test("an absent module map is read again on the next load", async () => {
   const { bucket, reads } = countingBucket();
   const artifacts = new HarnessArtifacts(bucket, () => unreachableHost);
 
-  expect(await mounted(artifacts, commits.absent)).toBe("stored-module-map-absent");
-  expect(await mounted(artifacts, commits.absent)).toBe("stored-module-map-absent");
+  expect(await loadOutcome(artifacts, commits.absent)).toBe("stored-module-map-absent");
+  expect(await loadOutcome(artifacts, commits.absent)).toBe("stored-module-map-absent");
 
   await storeModuleMap(readyArtifact(commits.absent));
 
-  expect(await mounted(artifacts, commits.absent)).toBe("mounted");
+  expect(await loadOutcome(artifacts, commits.absent)).toBe("loaded");
   expect(reads(commits.absent)).toBe(3);
 });
 
-test("a commit that prepare built mounts without reading R2 again", async () => {
+test("a commit that prepare built loads without reading R2 again", async () => {
   const { bucket, reads } = countingBucket();
   const artifacts = new HarnessArtifacts(bucket, () => new BuildHost());
 
   expect(Result.isSuccess(await resultOf(artifacts.prepare(commits.built)))).toBe(true);
   expect(reads(commits.built), "prepare reads once to find the map absent").toBe(1);
 
-  expect(await mounted(artifacts, commits.built)).toBe("mounted");
+  expect(await loadOutcome(artifacts, commits.built)).toBe("loaded");
   expect(reads(commits.built)).toBe(1);
 });
 
@@ -167,11 +162,11 @@ test("keeps the two most recently used module maps", async () => {
   const artifacts = new HarnessArtifacts(bucket, () => unreachableHost);
 
   for (const commit of [commits.a, commits.b, commits.a, commits.c, commits.a]) {
-    expect(await mounted(artifacts, commit)).toBe("mounted");
+    expect(await loadOutcome(artifacts, commit)).toBe("loaded");
   }
 
   expect(reads(commits.a)).toBe(1);
 
-  expect(await mounted(artifacts, commits.b)).toBe("mounted");
+  expect(await loadOutcome(artifacts, commits.b)).toBe("loaded");
   expect(reads(commits.b)).toBe(2);
 });

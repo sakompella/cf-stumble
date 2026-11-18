@@ -5,6 +5,7 @@ import {
   SERVING_FACET_NAME,
   type MainFacetModel,
   type MainFacetMountProblem,
+  type MainHarnessArtifact,
   type MountedFacet,
 } from "../artifacts/index.js";
 import { runAtEntryPoint } from "../../run-entry-point.js";
@@ -21,7 +22,8 @@ import { ConversationRuns, DeadlineAborts, type Settlement } from "./runs.js";
 
 type ServingPorts = Readonly<{
   ctx: DurableObjectState;
-  mount: () => Effect.Effect<MountedFacet, MainFacetMountProblem>;
+  load: () => Effect.Effect<MainHarnessArtifact, MainFacetMountProblem>;
+  start: (artifact: MainHarnessArtifact) => MountedFacet;
   model: (instance: number) => MainFacetModel;
   catalog: () => SelectableCatalog;
   resetting: () => boolean;
@@ -186,8 +188,7 @@ export class ServingConversations {
 
       for (const conversationId of expired()) this.#workspaces.end(conversationId);
 
-      const facet = yield* this.#facet();
-      const instance = this.#instance();
+      const { facet, instance } = yield* this.#mountNow();
 
       for (const conversationId of expired()) {
         logEvent("warn", "run.deadline-aborted", { generation: this.#generationLabel() });
@@ -248,11 +249,28 @@ export class ServingConversations {
   }
 
   #mountNow(): Effect.Effect<MountedOnInstance, ConversationProblem> {
+    return this.#started().pipe(Effect.tap((mounted) => this.#call(() => this.#attach(mounted))));
+  }
+
+  #started(): Effect.Effect<MountedOnInstance, ConversationProblem> {
     return Effect.suspend(() => {
       const instance = this.#instance();
 
-      return this.#facet().pipe(Effect.map((facet) => ({ facet, instance })));
+      return this.#ports.load().pipe(
+        Effect.mapError((problem): ConversationProblem => ({
+          code: problem.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
+        })),
+        Effect.flatMap((artifact) =>
+          this.serves(instance) ? Effect.succeed(this.#start(artifact, instance)) : this.#started(),
+        ),
+      );
     });
+  }
+
+  #start(artifact: MainHarnessArtifact, instance: number): MountedOnInstance {
+    this.#workspaces.flushRetirement();
+
+    return { facet: this.#ports.start(artifact), instance };
   }
 
   #use<T>(
@@ -268,25 +286,11 @@ export class ServingConversations {
     );
   }
 
-  #facet(): Effect.Effect<MountedFacet, ConversationProblem> {
-    return Effect.suspend(() => {
-      this.#workspaces.flushRetirement();
-
-      return this.#ports.mount();
-    }).pipe(
-      Effect.mapError((problem): ConversationProblem => ({
-        code: problem.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
-      })),
-      Effect.tap((mounted) => this.#call(() => this.#attach(mounted))),
-    );
-  }
-
-  #attach(mounted: MountedFacet): Promise<void> {
-    const instance = this.#instance();
+  #attach({ facet, instance }: MountedOnInstance): Promise<void> {
     const existing = this.#hosts?.instance === instance ? this.#hosts : undefined;
 
     if (existing !== undefined) {
-      return mounted.attach(existing.host, existing.model, existing.generations);
+      return facet.attach(existing.host, existing.model, existing.generations);
     }
 
     const targets = servingHosts(
@@ -310,7 +314,7 @@ export class ServingConversations {
 
     this.#hosts = { ...targets, instance, model };
 
-    return mounted.attach(targets.host, model, targets.generations);
+    return facet.attach(targets.host, model, targets.generations);
   }
 
   #settle(settlements: readonly Settlement[]): Promise<void> {
