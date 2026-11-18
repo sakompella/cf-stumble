@@ -9,6 +9,7 @@ import {
 } from "../../github/index.js";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as Semaphore from "effect/Semaphore";
 import {
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
@@ -63,6 +64,7 @@ export class GitHubConnection {
   private readonly fetcher: GitHubFetch;
   private readonly clientId: GitHubClientId | undefined;
   private readonly fallbackToken: GitHubToken | undefined;
+  private readonly credentialWork = Semaphore.makeUnsafe(1);
 
   constructor(input: GitHubConnectionInput) {
     this.store = input.store;
@@ -82,7 +84,7 @@ export class GitHubConnection {
       const awaiting = awaitingStatus(this.store.authorization(now));
 
       return awaiting === null
-        ? this.observed(this.store.revision(), now).pipe(Effect.map(checkedStatus))
+        ? this.credentialWork.withPermit(this.observed(now)).pipe(Effect.map(checkedStatus))
         : Effect.succeed(awaiting);
     });
   }
@@ -114,8 +116,8 @@ export class GitHubConnection {
   ensureCredential(
     now: number,
   ): Effect.Effect<GitHubConnectionStatus, CredentialWorkspaceUnavailable> {
-    return Effect.gen({ self: this }, function* () {
-      const credential = yield* this.observed(this.store.revision(), now);
+    const ensuring = Effect.gen({ self: this }, function* () {
+      const credential = yield* this.observed(now);
       const current = checkedStatus(credential);
 
       if (!needsRepair(credential)) return current;
@@ -134,6 +136,8 @@ export class GitHubConnection {
 
       return repaired;
     });
+
+    return this.credentialWork.withPermit(ensuring);
   }
 
   installConfiguredCredential(now: number): Effect.Effect<void> {
@@ -217,7 +221,9 @@ export class GitHubConnection {
       }
 
       if (redeemed.kind === "authorized") {
-        return this.answered(yield* this.install(redeemed.token, "device-authorization", now));
+        const installing = this.install(redeemed.token, "device-authorization", now);
+
+        return this.answered(yield* this.credentialWork.withPermit(installing));
       }
 
       const unredeemed = unredeemedOutcome(redeemed.kind);
@@ -269,18 +275,19 @@ export class GitHubConnection {
     });
   }
 
-  private observed(
-    revision: number,
-    now: number,
-  ): Effect.Effect<GitHubCredential, CredentialWorkspaceUnavailable> {
-    return readWorkspaceCredentialStatus({
-      workspaceName: this.workspaceName,
-      namespace: this.namespace,
-    }).pipe(
-      Effect.map((answer) =>
-        this.record(revision, CredentialEvent.Observed({ answer, installedBy: undefined, now })),
-      ),
-    );
+  private observed(now: number): Effect.Effect<GitHubCredential, CredentialWorkspaceUnavailable> {
+    return Effect.suspend(() => {
+      const revision = this.store.revision();
+
+      return readWorkspaceCredentialStatus({
+        workspaceName: this.workspaceName,
+        namespace: this.namespace,
+      }).pipe(
+        Effect.map((answer) =>
+          this.record(revision, CredentialEvent.Observed({ answer, installedBy: undefined, now })),
+        ),
+      );
+    });
   }
 
   private record(revision: number, event: CredentialEvent): GitHubCredential {
