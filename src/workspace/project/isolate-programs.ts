@@ -101,6 +101,8 @@ const PROGRAMS = {
   yq: inIsolate(yqWrites),
   xan: inIsolate(xanWrites),
   sqlite3: { runs: "container" },
+  mktemp: { runs: "container" },
+  yes: inIsolate(writesNever),
   cd: inIsolate(writesNever),
   test: inIsolate(writesNever),
   curl: inIsolate(curlWrites),
