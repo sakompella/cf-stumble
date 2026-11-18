@@ -139,9 +139,9 @@ test.each([
         const check = workspace.holdNext("gh auth token");
         const refreshing = Effect.runPromise(github.refresh(NOW + 1_000));
         await check.reached;
-        await Effect.runPromise(github.completeAuthorization(NOW + 2_000));
+        const completing = Effect.runPromise(github.completeAuthorization(NOW + 2_000));
         check.release();
-        await refreshing;
+        await Promise.all([refreshing, completing]);
 
         expect(github.lastKnown(NOW + 3_000)).toEqual({
           github: { state: "connected", login: "new-owner", source: "device-authorization" },

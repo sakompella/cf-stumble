@@ -8,7 +8,7 @@ import {
   GitHubCredential,
   recordedOf,
   AuthorizationEvent,
-  CredentialEvent,
+  type CredentialEvent,
 } from "./github-connection-machine.js";
 
 type PendingRow = {
@@ -56,12 +56,6 @@ const reasonOf = (stored: string | null): ReconnectReason =>
   isReason(stored) ? stored : UNKNOWN_REASON;
 
 const sameAuthorization = Schema.toEquivalence(GitHubAuthorization);
-
-const installs = (event: CredentialEvent): boolean =>
-  CredentialEvent.$match(event, {
-    Observed: ({ installedBy }) => installedBy !== undefined,
-    InstallRefused: () => true,
-  });
 
 function recordedFromRow(connection: ConnectionRow | undefined) {
   return connection === undefined
@@ -198,8 +192,6 @@ export class GitHubConnectionStore {
       const next = credentialTransition(this.credential(), event);
 
       this.writeCredential(next);
-
-      if (installs(event)) this.advanceRevision();
 
       return next;
     });
