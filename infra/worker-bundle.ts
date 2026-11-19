@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Artifacts, createArtifactStore, makeScopedArtifacts } from "alchemy/Artifacts";
@@ -6,6 +7,7 @@ import {
   compatibility,
   PRODUCTION_STAGE,
   STACK_NAME,
+  workerAssets,
   workerEntrypoint,
   workerName,
 } from "./worker-settings.js";
@@ -43,5 +45,14 @@ export function buildWorkerBundle() {
       Effect.provideService(Artifacts, makeScopedArtifacts(createArtifactStore(), WORKER_ID)),
       Effect.provide(NodeServices.layer),
     ),
+  );
+}
+
+export function readUploadedAssets() {
+  return Effect.runPromise(
+    Cloudflare.Workers.readAssets({
+      ...workerAssets,
+      directory: join(import.meta.dirname, "workspace-image"),
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 }
