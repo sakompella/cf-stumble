@@ -237,7 +237,7 @@ The image also carries the packages your harness build needs, fetched from the l
 
 ## Isolate backend
 
-The workspace also has an isolate backend, which runs shell commands in a Dynamic Worker with no container. The model picks the backend for each `bash` call through the tool's optional `backend` parameter (`isolate` or `container`); a call that names none runs in the container. The isolate has no Node, pnpm, `gh` or network, so those commands need the container. `pnpm run deploy` ships the isolate's shell modules as a static asset (the `ASSETS` binding).
+The workspace also has an isolate backend, which runs shell commands in a Dynamic Worker with no container. The model picks the backend for each `bash` call through the tool's optional `backend` parameter (`isolate` or `container`); a call that names none runs in the isolate when every program in it is one the isolate has and it touches no absolute path outside `/workspace`, and in the container otherwise (`routedBackend` in `src/workspace/project/exec-routing.ts`). The isolate has no Node, pnpm, `gh` or Git, and its only network use is `curl`, so those commands run in the container. `pnpm run deploy` ships the isolate's shell modules as a static asset (the `ASSETS` binding).
 
 ## What to expect the first time
 
