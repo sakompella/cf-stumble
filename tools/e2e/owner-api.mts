@@ -94,6 +94,17 @@ export class Owner {
     return Schema.decodeSync(Schema.fromJsonString(schema))(text);
   }
 
+  async anonymousStatus(path: string): Promise<number> {
+    const response = await fetch(`${this.url}${path}`, {
+      headers: { "user-agent": "cf-stumble-e2e" },
+      signal: currentSignal(),
+    });
+
+    await response.body?.cancel();
+
+    return response.status;
+  }
+
   async waitHealthy(limitMs: number): Promise<void> {
     const deadline = Date.now() + limitMs;
 

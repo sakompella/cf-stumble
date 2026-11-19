@@ -1,4 +1,4 @@
-import { workerName } from "../../infra/worker-settings.ts";
+import { SHELL_MODULES_FILE, workerName } from "../../infra/worker-settings.ts";
 import {
   accountFrom,
   deployEnv,
@@ -70,6 +70,12 @@ export class Target {
     const owner = await this.#owner();
 
     await owner.waitHealthy(3 * MINUTE_MS);
+
+    const anonymous = await owner.anonymousStatus(`/${SHELL_MODULES_FILE}`);
+
+    if (anonymous !== 401) {
+      throw new Error(`/${SHELL_MODULES_FILE} answered ${anonymous} without credentials, not 401`);
+    }
 
     const active = (await owner.status()).generation;
 

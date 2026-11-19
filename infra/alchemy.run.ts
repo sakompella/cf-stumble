@@ -3,7 +3,6 @@ import * as Alchemy from "alchemy";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import {
-  assetsConfig,
   cache,
   compatibility,
   durableObjectClasses,
@@ -15,7 +14,7 @@ import {
   STACK_NAME,
   workerEntrypoint,
   workerName,
-  shellModulesAssetDirectory,
+  workerAssets,
 } from "./worker-settings.js";
 import { workspaceImage } from "./workspace-image/image.js";
 
@@ -39,7 +38,7 @@ export default Alchemy.Stack(
       routes: isProduction
         ? [{ pattern: productionRoute.pattern, zoneName: productionRoute.zone }]
         : [],
-      assets: { directory: shellModulesAssetDirectory, config: assetsConfig },
+      assets: workerAssets,
       cache,
       codeUpdateStrategy: { mode: "immediate" },
       observability: observability(isProduction),

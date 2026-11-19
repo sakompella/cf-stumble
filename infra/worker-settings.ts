@@ -42,6 +42,8 @@ export function plainTextBindings(stage: string) {
 
 export const shellModulesAssetDirectory = "build/shell-assets";
 
+export const workerAssets = { directory: shellModulesAssetDirectory, runWorkerFirst: true };
+
 export const SHELL_MODULES_FILE = "shell-modules.json";
 
 export const WORKSPACE_CONTAINER_INSTANCE = "standard-3";
@@ -62,8 +64,6 @@ export const WORKSPACE_OUTPUT_OPTIONS = {
 } as const;
 
 export const WORKSPACE_CONTAINER_MEMORY_MIB = 8192;
-
-export const assetsConfig = { runWorkerFirst: true };
 
 export const cache = { enabled: false };
 

@@ -237,7 +237,7 @@ The image also carries the packages your harness build needs, fetched from the l
 
 ## Isolate backend
 
-The workspace also has an isolate backend, which runs shell commands in a Dynamic Worker with no container. The model picks the backend for each `bash` call through the tool's optional `backend` parameter (`isolate` or `container`); a call that names none runs in the container. The isolate has no Node, pnpm, `gh` or network, so those commands need the container. `pnpm run deploy` ships the isolate's shell modules as a static asset (the `ASSETS` binding).
+The workspace also has an isolate backend, which runs shell commands in a Dynamic Worker with no container. The model picks the backend for each `bash` call through the tool's optional `backend` parameter (`isolate` or `container`); a call that names none runs in the isolate when every program in it is one the isolate has and it touches no absolute path outside `/workspace`, and in the container otherwise (`routedBackend` in `src/workspace/project/exec-routing.ts`). The isolate has no Node, pnpm, `gh` or Git, and its only network use is `curl`, so those commands run in the container. `pnpm run deploy` ships the isolate's shell modules as a static asset (the `ASSETS` binding). The Worker serves that asset behind the owner check: `workerAssets` sets `runWorkerFirst` at the top level of Alchemy's `assets` option, where Alchemy reads it (under `config`, as the stack once had it, Cloudflare received no worker-first setting, and the asset layer answered `/shell-modules.json` without credentials). `tools/worker-assets.test.ts` reads the option through Alchemy to keep it so.
 
 ## What to expect the first time
 
@@ -416,7 +416,8 @@ tip of `main`. It sets `OWNER_PASSWORD` last and then deploys the stage again wi
 `--force`: the first deploy starts the Durable Objects without the secrets, and the Supervisor did
 not see `GH_TOKEN` until a new version replaced it, so every push answered 401. Harness provisioning
 fetches a commit the checkout lacks by its ID, so a pushed branch's commit can be prepared as a
-generation. Then it runs three workflows and the ChatGPT turn, each with a time
+generation. Right after the stage answers `/api/status`, the script requests `/shell-modules.json`
+without credentials and fails the deploy step unless the answer is 401. Then it runs three workflows and the ChatGPT turn, each with a time
 limit:
 
 1. Page: a Playwright spec opens the owner page, sends a message, waits for the streamed answer,

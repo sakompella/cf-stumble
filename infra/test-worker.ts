@@ -1,12 +1,11 @@
 import { resolve } from "node:path";
 import {
-  assetsConfig,
   compatibility,
   durableObjectClasses,
   MODULE_MAPS_BINDING,
   plainTextBindings,
   PRODUCTION_STAGE,
-  shellModulesAssetDirectory,
+  workerAssets,
   workerEntrypoint,
 } from "./worker-settings.js";
 
@@ -51,10 +50,10 @@ export const testWorker = {
     },
     versionMetadata: "CF_VERSION_METADATA",
     assets: {
-      directory: resolve(import.meta.dirname, "..", shellModulesAssetDirectory),
+      directory: resolve(import.meta.dirname, "..", workerAssets.directory),
       binding: "ASSETS",
       routerConfig: { has_user_worker: true },
-      run_worker_first: assetsConfig.runWorkerFirst,
+      run_worker_first: workerAssets.runWorkerFirst,
     },
   },
 };
