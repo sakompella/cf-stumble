@@ -93,7 +93,6 @@ export default defineConfig({
     "import-x/no-namespace": "off",
     "import/consistent-type-specifier-style": "off",
     "no-empty": "off",
-    "no-regex-spaces": "off",
     "oxc/no-accumulating-spread": "off",
     "promise/always-return": "off",
     "promise/no-promise-in-callback": "off",
