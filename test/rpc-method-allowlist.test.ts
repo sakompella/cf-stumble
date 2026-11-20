@@ -9,18 +9,18 @@ import {
 
 type Prototype = NonNullable<ReturnType<typeof Reflect.getPrototypeOf>>;
 
-const BASE_PROTOTYPES: readonly Prototype[] = [
+const BASE_PROTOTYPES: ReadonlySet<Prototype> = new Set([
   Object.prototype,
   RpcTarget.prototype,
   WorkerEntrypoint.prototype,
-];
+]);
 
 function rpcMemberNames(prototype: Prototype): string[] {
   const names = new Set<string>();
 
   for (
     let current: Prototype | null = prototype;
-    current !== null && !BASE_PROTOTYPES.includes(current);
+    current !== null && !BASE_PROTOTYPES.has(current);
     current = Reflect.getPrototypeOf(current)
   ) {
     for (const name of Object.getOwnPropertyNames(current)) names.add(name);

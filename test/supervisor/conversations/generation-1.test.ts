@@ -35,7 +35,7 @@ test("a run cut off by a Supervisor reset resumes from the Supervisor's alarm an
     runInDurableObject(lost, (_instance, state) => {
       state.abort("the platform reset the Supervisor");
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow("the platform reset the Supervisor");
   interrupted.release(says("an answer nobody reads"));
 
   const control = env.SUPERVISOR.getByName("generation-1-resume");

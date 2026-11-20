@@ -8,7 +8,7 @@ const API = "https://api.cloudflare.com/client/v4";
 
 const EVENTS_PREFIX = "history/events/";
 
-const SWITCH_KINDS: readonly string[] = ["activated", "rolled-back"];
+const SWITCH_KINDS: ReadonlySet<string> = new Set(["activated", "rolled-back"]);
 
 export interface EventKey {
   readonly key: string;
@@ -89,9 +89,7 @@ export function parseEventKeys(response: JsonValue): EventKeyPage {
 }
 
 export function latestSwitch(keys: readonly EventKey[]): EventKey | undefined {
-  return keys
-    .filter((key) => SWITCH_KINDS.includes(key.kind))
-    .toSorted((a, b) => b.epoch - a.epoch)[0];
+  return keys.filter((key) => SWITCH_KINDS.has(key.kind)).toSorted((a, b) => b.epoch - a.epoch)[0];
 }
 
 export function parseEvent(response: JsonValue): HistoryEvent {

@@ -2,7 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
 
-const LOOKED_AT = ["auditProblems", "problems", "uncaughtExceptions", "consoleErrors", "sending"];
+const LOOKED_AT = new Set([
+  "auditProblems",
+  "problems",
+  "uncaughtExceptions",
+  "consoleErrors",
+  "sending",
+]);
 
 const Trace = Schema.Struct({
   violations: Schema.Array(Schema.Struct({ name: Schema.String })),
@@ -31,7 +37,7 @@ function violatingEntries(outputPath: string): readonly Trace[] {
 
 function describe(entry: Trace): string {
   return entry.snapshots
-    .filter(({ name, value }) => LOOKED_AT.includes(name ?? "") && JSON.stringify(value) !== "[]")
+    .filter(({ name, value }) => LOOKED_AT.has(name ?? "") && JSON.stringify(value) !== "[]")
     .map(({ name, value }) => `${name ?? ""}=${JSON.stringify(value)}`)
     .join("; ")
     .slice(0, 1200);

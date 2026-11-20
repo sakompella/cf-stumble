@@ -81,7 +81,7 @@ type Parsed<T> = Result.Result<T, string>;
 
 const decodeRequest = Schema.decodeUnknownResult(RequestSchema);
 
-const AT_PATH = /\n  at (.+)$/u;
+const AT_PATH = /\n {2}at (.+)$/u;
 
 const QUOTED_KEY = /\["([^"]+)"\]/gu;
 

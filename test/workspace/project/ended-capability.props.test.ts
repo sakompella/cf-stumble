@@ -14,10 +14,10 @@ type Call = Readonly<{ method: string; command: string }>;
 
 type Answer = ProjectResult<unknown>;
 
-const CLEANUP_METHODS = ["kill", "endTurn"];
+const CLEANUP_METHODS = new Set(["kill", "endTurn"]);
 
 const CAPABILITY_METHODS = Object.getOwnPropertyNames(ProjectRpcTarget.prototype).filter(
-  (name) => name !== "constructor" && !CLEANUP_METHODS.includes(name),
+  (name) => name !== "constructor" && !CLEANUP_METHODS.has(name),
 );
 
 const call: gs.PrintableGenerator<Call> = gs

@@ -43,7 +43,7 @@ export const CONTAINER_ONLY = [
   "echo hi > /tmp/@T && cat /tmp/@T",
   "ls /tmp | head -n 1",
   "cat /etc/hostname | wc -c",
-  "printf 'é\\n' > /tmp/@T; cat /tmp/@T",
+  String.raw`printf 'é\n' > /tmp/@T; cat /tmp/@T`,
   "stat -c %s a.txt",
   "du -sb . | cut -f1",
   "readlink -f .",
@@ -58,13 +58,13 @@ export const BIG = [
   (rng: Rng) => `yes ${rng.pick(["y", "é✓", "line"])} | head -n ${rng.pick([2000, 2001, 30000])}`,
   (rng: Rng) => `seq 1 ${rng.pick([3000, 40000])} 1>&2`,
   (rng: Rng) => `seq 1 ${rng.pick([2500, 9000])}; seq 1 ${rng.pick([2500, 9000])} 1>&2`,
-  () => "head -c 70000 /dev/zero | tr '\\0' '\\n'",
+  () => String.raw`head -c 70000 /dev/zero | tr '\0' '\n'`,
   () => "printf 'x%.0s' $(seq 1 100000)",
-  () => "awk 'BEGIN{for(i=0;i<100000;i++)printf \"%d\\n\",i}'",
+  () => String.raw`awk 'BEGIN{for(i=0;i<100000;i++)printf "%d\n",i}'`,
   () => "awk 'BEGIN{for(i=0;i<70000;i++)printf \"é\"}'",
-  () => "printf '\\xff\\xfe\\x00abc\\x80\\n'",
+  () => String.raw`printf '\xff\xfe\x00abc\x80\n'`,
   () => "head -c 3000 /dev/urandom | base64 | head -c 2000 | wc -c",
-  () => "printf '\\r\\n\\t\\033[31mred\\033[0m\\n'",
+  () => String.raw`printf '\r\n\t\033[31mred\033[0m\n'`,
 ];
 
 export const LIMITS = [

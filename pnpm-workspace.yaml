@@ -15,6 +15,7 @@ allowBuilds:
 # Cloudflare ships the Workers toolchain on a near-daily cadence pinned to a
 # compatibility date, so the release-age gate would block every routine update.
 minimumReleaseAgeExclude:
+  - "@cloudflare/oxlint-config@0.1.0"
   - "@cloudflare/vitest-plugin"
   - "@cloudflare/workers-types"
   - miniflare

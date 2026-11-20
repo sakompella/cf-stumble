@@ -61,8 +61,8 @@ const UNREADABLE = [
   ")",
   "{",
   "}",
-  "a\\ b",
-  '"\\"',
+  String.raw`a\ b`,
+  String.raw`"\"`,
   "<<EOF",
 ];
 
@@ -270,7 +270,7 @@ test.each([
 });
 
 test.each([
-  "awk 'BEGIN{for(i=0;i<100000;i++)printf \"%d\\n\",i}' | wc -l",
+  String.raw`awk 'BEGIN{for(i=0;i<100000;i++)printf "%d\n",i}' | wc -l`,
   "awk '{while(i<3)i++}' a.txt",
 ])("an awk loop goes to the container because it froze the isolate (40a150b2): %j", (command) => {
   expect(routedBackend(command)).toBe("container");

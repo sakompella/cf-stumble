@@ -39,7 +39,7 @@ function harnessSource(configuration: HarnessBuildConfiguration, commit: Harness
     'branch="$(git symbolic-ref --quiet --short HEAD)" || stuck',
     'upstream="refs/remotes/origin/$branch"',
     'if ! git fetch --quiet origin "+refs/heads/$branch:$upstream" 2>/dev/null; then',
-    "  printf 'harness checkout not updated: fetch failed\\n' >&2",
+    String.raw`  printf 'harness checkout not updated: fetch failed\n' >&2`,
     "  exit 0",
     "fi",
     "if ! git diff --quiet HEAD --; then",

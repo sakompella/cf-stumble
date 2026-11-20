@@ -6,7 +6,7 @@ import type { WorkspaceHostRpc } from "../../src/workspace/host-rpc.js";
 export function fakeWorkspace(resetResult: WorkspaceResetResult) {
   let credentialState: "connected" | "missing" = "connected";
 
-  const credentialStatus = vi.fn((): Promise<CredentialStatusResult> =>
+  const credentialStatus = vi.fn<() => Promise<CredentialStatusResult>>(() =>
     Promise.resolve({
       ok: true,
       status:
@@ -16,7 +16,7 @@ export function fakeWorkspace(resetResult: WorkspaceResetResult) {
     }),
   );
 
-  const resetWorkspace = vi.fn(() => {
+  const resetWorkspace = vi.fn<() => Promise<WorkspaceResetResult>>(() => {
     if (resetResult.ok) credentialState = "missing";
 
     return Promise.resolve(resetResult);
@@ -42,7 +42,9 @@ export function heldWorkspace() {
   });
 
   const resetWorkspace = vi
-    .fn(() => Promise.resolve<WorkspaceResetResult>({ ok: true, reset: "workspace" }))
+    .fn<() => Promise<WorkspaceResetResult>>(() =>
+      Promise.resolve({ ok: true, reset: "workspace" }),
+    )
     .mockImplementationOnce(() => {
       held.started();
 

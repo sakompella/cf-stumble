@@ -67,7 +67,7 @@ const WORDS = [
   'd"q',
   "$HOME",
   "*",
-  "a\\b",
+  String.raw`a\b`,
 ];
 
 const FILES = [
@@ -161,7 +161,7 @@ const SOURCES = [
   (rng: Rng) => `cat ${file(rng)}`,
   (rng: Rng) => `cat ${file(rng)} ${file(rng)}`,
   (rng: Rng) =>
-    `printf ${quoted(rng, rng.pick(["%s\\n", "%5s|%-5s|\\n", "%d\\n", "a\\tb\\n", "%x\\n", "\\u00e9\\n", "%s %s\\n"]))} ${rng.pick(["1", "two", "é", "'a b'", "255"])} ${rng.pick(["", "x", "3"])}`,
+    `printf ${quoted(rng, rng.pick([String.raw`%s\n`, String.raw`%5s|%-5s|\n`, String.raw`%d\n`, String.raw`a\tb\n`, String.raw`%x\n`, String.raw`\u00e9\n`, String.raw`%s %s\n`]))} ${rng.pick(["1", "two", "é", "'a b'", "255"])} ${rng.pick(["", "x", "3"])}`,
   (rng: Rng) =>
     `echo ${rng.pick(["-n", ""])} ${quoted(rng, rng.pick(WORDS))} ${quoted(rng, rng.pick(WORDS))}`,
   (rng: Rng) => `seq ${1 + rng.int(3)} ${rng.pick([1, 5, 20, 100])}`,

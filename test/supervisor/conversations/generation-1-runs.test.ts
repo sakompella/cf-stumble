@@ -116,7 +116,7 @@ test("an alarm after a Supervisor reset aborts only the run past its own deadlin
     runInDurableObject(lost, (_instance, state) => {
       state.abort("the platform reset the Supervisor");
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow("the platform reset the Supervisor");
 
   const control = env.SUPERVISOR.getByName("generation-1-deadline-after-reset");
   advanceSupervisorClock(PROJECT_RUN_DEADLINE_MS - 5 * MINUTE_MS + 1_000);

@@ -157,7 +157,7 @@ const RAN: ReadonlyArray<readonly [string, readonly BackendExecEvent[], readonly
   ],
   ["a failing command", [exit(1)], ['"exitCode":1']],
   ["exit 129 after output", [out("a\n"), err("usage\n"), exit(129)], ["usage"]],
-  ["a stream end after output", [out("a\n")], ["a\\n", "backend-unavailable"]],
+  ["a stream end after output", [out("a\n")], [String.raw`a\n`, "backend-unavailable"]],
 ];
 
 test.each(RAN)("an isolate run with %s is returned as it is", async (_case, events, shown) => {

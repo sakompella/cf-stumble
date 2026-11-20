@@ -67,7 +67,7 @@ const WRITE_FORMS = new Map<string, readonly string[]>(
 
 const WRITE_REDIRECTS = [">", ">>", ">&", "2>", "1> "];
 
-const UNREADABLE = ["$(id)", "`id`", "(", "{", "a\\ b", "<<EOF", "'open"];
+const UNREADABLE = ["$(id)", "`id`", "(", "{", String.raw`a\ b`, "<<EOF", "'open"];
 
 const SEPARATORS = [" | ", ";", " && ", " || ", " & ", "\n"];
 

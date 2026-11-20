@@ -60,7 +60,7 @@ function githubReplying(): GitHubFetch {
 function storedText(storage: DurableObjectStorage): string {
   const tables = storage.sql
     .exec<{ readonly name: string }>(
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'",
+      String.raw`SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE '\_cf\_%' ESCAPE '\'`,
     )
     .toArray();
 

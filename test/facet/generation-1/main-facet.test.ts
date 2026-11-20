@@ -131,7 +131,7 @@ test("a session that failed on a storage error is reopened by the next attach an
       expect(opened).toBe(1);
 
       broken = true;
-      await expect(facet.createConversation("/workspace")).rejects.toThrow();
+      await expect(facet.createConversation("/workspace")).rejects.toThrow("storage reset");
       await eventually(() => {
         expect(faults.length).toBe(1);
       });

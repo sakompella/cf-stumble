@@ -1,7 +1,10 @@
+import cloudflare from "@cloudflare/oxlint-config";
 import { defineConfig } from "oxlint";
 
 export default defineConfig({
+  ...cloudflare,
   ignorePatterns: [
+    ...(cloudflare.ignorePatterns ?? []),
     "node_modules",
     "dist",
     ".wrangler",
@@ -10,18 +13,19 @@ export default defineConfig({
     "tools/oxlint/anti-slop/**",
   ],
   jsPlugins: [
+    ...(cloudflare.jsPlugins ?? []),
     { name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" },
     { name: "foldkit", specifier: "@foldkit/oxlint-plugin" },
     { name: "anti-slop-effect", specifier: "./tools/oxlint/anti-slop/effect/index.ts" },
     { name: "cf-stumble", specifier: "./tools/oxlint/cf-stumble/index.ts" },
   ],
-  plugins: ["typescript", "unicorn", "oxc", "import"],
   categories: {
     correctness: "error",
     suspicious: "error",
     pedantic: "warn",
   },
   rules: {
+    ...cloudflare.rules,
     "typescript/no-explicit-any": "error",
     "typescript/consistent-type-imports": "error",
     "typescript/switch-exhaustiveness-check": "error",
@@ -82,9 +86,43 @@ export default defineConfig({
 
     "cf-stumble/no-comments": "error",
     "cf-stumble/no-typescript-private-rpc-member": "error",
+
+    "@nkzw/no-instanceof": "off",
+    "@typescript-eslint/array-type": "off",
+    curly: "off",
+    "import-x/no-namespace": "off",
+    "import/consistent-type-specifier-style": "off",
+    "no-empty": "off",
+    "oxc/no-accumulating-spread": "off",
+    "promise/always-return": "off",
+    "promise/no-promise-in-callback": "off",
+    "promise/valid-params": "off",
+    "react/rules-of-hooks": "off",
+    "unicorn/catch-error-name": "off",
+    "unicorn/numeric-separators-style": "off",
+    "unicorn/prefer-structured-clone": "off",
+    "vitest/expect-expect": "off",
+    "vitest/no-conditional-expect": "off",
+    "vitest/no-conditional-in-test": "off",
+    "vitest/valid-expect": "off",
+    "vitest/valid-title": "off",
   },
 
   overrides: [
+    ...(cloudflare.overrides ?? []),
+    {
+      files: ["**/*.{ts,tsx,mts,cts}"],
+      rules: {
+        "@typescript-eslint/no-floating-promises": [
+          "error",
+          {
+            allowForKnownSafeCalls: [
+              { from: "package", package: "node:test", name: ["describe", "it", "test"] },
+            ],
+          },
+        ],
+      },
+    },
     {
       files: ["src/**"],
       rules: {

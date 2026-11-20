@@ -69,7 +69,9 @@ test("a project is parsed from any text exactly when the text names a project id
       gs.oneOf(
         gs.text({ maxSize: 40 }),
         gs.urls(),
-        gs.fromRegex("https://github\\.com/[A-Za-z0-9-]{1,10}/[A-Za-z0-9._-]{1,10}(\\.git)?/?"),
+        gs.fromRegex(
+          String.raw`https://github\.com/[A-Za-z0-9-]{1,10}/[A-Za-z0-9._-]{1,10}(\.git)?/?`,
+        ),
       ),
     );
 
