@@ -12,7 +12,9 @@ afterEach(async () => {
 });
 
 function workspaceAnswering(answer: CredentialStatusResult) {
-  const credentialStatus = vi.fn(() => Promise.resolve(answer));
+  const credentialStatus = vi.fn<() => Promise<CredentialStatusResult>>(() =>
+    Promise.resolve(answer),
+  );
 
   const getByName = replaceWorkspaceHost<WorkspaceHostRpc<"credentialStatus">>(env.WORKSPACE_HOST, {
     credentialStatus,
@@ -87,7 +89,7 @@ function heldCheckWorkspace(resetAnswer: WorkspaceResetResult) {
     held.answer = resolve;
   });
 
-  const credentialStatus = vi.fn(() => {
+  const credentialStatus = vi.fn<() => Promise<CredentialStatusResult>>(() => {
     held.started();
 
     return answer;
