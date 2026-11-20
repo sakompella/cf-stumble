@@ -100,7 +100,6 @@ export default defineConfig({
     "react/rules-of-hooks": "off",
     "unicorn/catch-error-name": "off",
     "unicorn/numeric-separators-style": "off",
-    "unicorn/prefer-set-has": "off",
     "unicorn/prefer-string-raw": "off",
     "unicorn/prefer-structured-clone": "off",
     "vitest/expect-expect": "off",
