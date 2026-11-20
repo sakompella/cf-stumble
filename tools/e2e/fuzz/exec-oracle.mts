@@ -13,7 +13,7 @@ export type CaseSteps = Readonly<{
 }>;
 
 const STATE_COMMAND = [
-  "find . -mindepth 1 | sort | xargs -d '\\n' -r sh -c",
+  String.raw`find . -mindepth 1 | sort | xargs -d '\n' -r sh -c`,
   `'for f; do if [ -L "$f" ]; then echo "$f -> $(readlink "$f")";`,
   `elif [ -f "$f" ]; then echo "$f $(stat -c %a "$f") $(sha256sum < "$f")"; else echo "$f/"; fi; done' _`,
 ].join(" ");

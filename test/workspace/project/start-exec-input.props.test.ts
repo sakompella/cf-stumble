@@ -30,7 +30,7 @@ const BROKEN_PATHS = [
   "/a/./b",
   "/a/../b",
   "/..",
-  "/a\\b",
+  String.raw`/a\b`,
   "/a\u0000b",
 ];
 

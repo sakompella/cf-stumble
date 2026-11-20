@@ -48,7 +48,7 @@ export class Generator {
     const seed: readonly Case[] = seeded
       ? [
           setup(
-            "mkdir -p src docs && printf 'alpha\\n' > a.txt && printf 'beta\\n' > src/x.ts && printf 'gamma\\n' > docs/readme.md",
+            String.raw`mkdir -p src docs && printf 'alpha\n' > a.txt && printf 'beta\n' > src/x.ts && printf 'gamma\n' > docs/readme.md`,
           ),
           setup("git add -A"),
           setup("git commit -q -m init"),
@@ -124,8 +124,8 @@ export class Generator {
     const lines = Array.from({ length: 1 + r.int(4) }, () => r.pick(LINES));
 
     const body = r.pick([
-      `printf ${shellQuote(`${lines.join("\\n")}\\n`)} > ${target}`,
-      `printf ${shellQuote(lines.join("\\r\\n"))} > ${target}`,
+      `printf ${shellQuote(`${lines.join(String.raw`\n`)}\\n`)} > ${target}`,
+      `printf ${shellQuote(lines.join(String.raw`\r\n`))} > ${target}`,
       `printf 'x\\n' >> ${target}`,
       `: > ${target}`,
       `seq 1 ${100 + r.int(2000)} > ${target}`,

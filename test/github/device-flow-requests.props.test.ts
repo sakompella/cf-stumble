@@ -108,7 +108,7 @@ const timing = gs.oneOf<Timing>(
 
 const codeText = gs.text({ minSize: 1, maxSize: 20 });
 
-const page = gs.fromRegex("https://github\\.com/[a-z]{1,10}");
+const page = gs.fromRegex(String.raw`https://github\.com/[a-z]{1,10}`);
 
 test("a device authorization carries the codes and page it was given, with a default expiry", () =>
   hegel.testAsync(async (tc) => {

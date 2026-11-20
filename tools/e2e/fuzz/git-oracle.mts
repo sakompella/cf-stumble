@@ -32,7 +32,7 @@ export const PROBE = [
   "echo --refs",
   "git for-each-ref --format='%(refname) %(tree)'",
   "echo --files",
-  "find . -name .git -prune -o -type f -printf '%m %p\\n' | LC_ALL=C sort",
+  String.raw`find . -name .git -prune -o -type f -printf '%m %p\n' | LC_ALL=C sort`,
   "find . -name .git -prune -o -type f -exec cksum {} + | LC_ALL=C sort -k3",
   "echo --fsck",
   "git fsck --no-dangling 2>&1 | grep -iE 'error|missing|corrupt|broken|invalid|bad|fatal'; true",
