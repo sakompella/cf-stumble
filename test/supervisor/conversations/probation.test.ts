@@ -201,7 +201,7 @@ test("an owner cancel survives a Supervisor restart, so the run's end does not r
     runInDurableObject(control, (_instance, state) => {
       state.abort("the platform reset the Supervisor");
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow("the platform reset the Supervisor");
 
   const restarted = env.SUPERVISOR.getByName(name);
   await send(restarted, "r3", "end");
@@ -271,7 +271,7 @@ test("a run cut off by a Supervisor restart before it asked the model does not f
     runInDurableObject(control, (_instance, state) => {
       state.abort("the platform reset the Supervisor");
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow("the platform reset the Supervisor");
 
   const restarted = env.SUPERVISOR.getByName(name);
   await pastDeadline(restarted);

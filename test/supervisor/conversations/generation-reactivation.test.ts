@@ -109,7 +109,7 @@ test("a turn cut off by a Supervisor restart resumes with the restarted Supervis
     runInDurableObject(control, (_instance, state) => {
       state.abort("the platform reset the Supervisor");
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow("the platform reset the Supervisor");
   cutOff.release(says("before the restart"));
 
   const restarted = env.SUPERVISOR.getByName(name);

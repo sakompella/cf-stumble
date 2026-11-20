@@ -203,7 +203,9 @@ test("an alarm whose attach fails throws, so the platform retries it, and the re
 
   await control.submitProjectMessage("harness", "refuse the next attach", "r1", 30);
 
-  await expect(runInDurableObject(control, (instance) => instance.alarm())).rejects.toThrow();
+  await expect(runInDurableObject(control, (instance) => instance.alarm())).rejects.toMatchObject({
+    code: "generation-failed",
+  });
   await expect(
     runInDurableObject(control, (instance) => instance.alarm()),
   ).resolves.toBeUndefined();

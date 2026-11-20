@@ -106,7 +106,6 @@ export default defineConfig({
     "vitest/no-conditional-expect": "off",
     "vitest/no-conditional-in-test": "off",
     "vitest/require-mock-type-parameters": "off",
-    "vitest/require-to-throw-message": "off",
     "vitest/valid-expect": "off",
     "vitest/valid-title": "off",
   },

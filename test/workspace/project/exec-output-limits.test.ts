@@ -8,7 +8,19 @@ import { unscriptedGenerations } from "../../facet/generation-1/generation-contr
 import { withDecodedEvents, type ExecEvent } from "./decoded-events.js";
 import { chunkLines, inWorkspace } from "./echoing-container.js";
 
-type Run = Readonly<{ events: ExecEvent[]; workspace: Workspace }>;
+type Run = Readonly<{ events: ExecEvent[]; saved: string }>;
+
+async function readdirOutcome(workspace: Workspace): Promise<string> {
+  try {
+    await workspace.fs.readdir(WORKSPACE_OUTPUT_OPTIONS.dir);
+
+    return "lists";
+  } catch (error) {
+    return error instanceof Error && "code" in error
+      ? `${error.name} ${String(error.code)}`
+      : "unexpected";
+  }
+}
 
 function runEcho(stdout: readonly string[]): Promise<Run> {
   return inWorkspace(stdout, async (workspace, target) => {
@@ -20,7 +32,7 @@ function runEcho(stdout: readonly string[]): Promise<Run> {
 
     for await (const event of started.value.events) events.push(event);
 
-    return { events, workspace };
+    return { events, saved: await readdirOutcome(workspace) };
   });
 }
 
@@ -58,7 +70,7 @@ test("a long command's full output is kept once, in the env's spill file", async
       await computerEnv.readTextFile(result.spillPath ?? "", BACKGROUND_CONTEXT),
     );
 
-    const saved = await workspace.fs.readdir(WORKSPACE_OUTPUT_OPTIONS.dir).catch(() => []);
+    const saved = await readdirOutcome(workspace);
 
     return {
       streamed: seen.join(""),
@@ -71,14 +83,14 @@ test("a long command's full output is kept once, in the env's spill file", async
   expect(kept.streamed).toBe(text);
   expect(kept.spillPath).toMatch(/^\/workspace\/\.cf-stumble\/tmp\/pi-output-/u);
   expect(kept.spilledText).toBe(text);
-  expect(kept.saved).toEqual([]);
+  expect(kept.saved).toBe("WorkspaceFsError ENOENT");
 });
 
 test("output that fits the limits is delivered whole and saves nothing", async () => {
-  const { events, workspace } = await runEcho(["hello\n", "world\n"]);
+  const { events, saved } = await runEcho(["hello\n", "world\n"]);
 
   expect(events.at(-1)).toMatchObject({ kind: "terminal", outcome: "exited", exitCode: 0 });
   expect(stdoutOf(events)).toBe("hello\nworld\n");
 
-  await expect(workspace.fs.readdir(WORKSPACE_OUTPUT_OPTIONS.dir)).rejects.toThrow();
+  expect(saved).toBe("WorkspaceFsError ENOENT");
 });
