@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { REDACTED } from "../../src/github/redaction.js";
+import { capturedEvents, everythingLogged } from "../log-capture.js";
 import {
   checkGitHubRepositoryAccess,
   installGitHubCredential,
@@ -217,3 +218,38 @@ test("refuses an install token or repository URL that does not parse, and runs n
 
   expect(operations.sources).toEqual([]);
 });
+
+test.each([
+  [
+    "install",
+    "github-credential.install",
+    (operations: FilesystemlessOperations) => install(operations),
+  ],
+  [
+    "status",
+    "github-credential.status",
+    (operations: FilesystemlessOperations) => status(operations),
+  ],
+  [
+    "verify-repository",
+    "github-credential.verify-repository",
+    (operations: FilesystemlessOperations) => verify(operations, "https://github.com/owner/repo"),
+  ],
+])(
+  "a thrown %s command is workspace-unavailable without its cause, and its log is redacted",
+  async (_handler, label, run) => {
+    const operations = new FilesystemlessOperations();
+    operations.commandFailure = new Error(`socket hang up while sending ${FAKE_TOKEN}`);
+    capturedEvents();
+
+    await expect(run(operations)).resolves.toEqual({
+      ok: false,
+      error: { code: "workspace-unavailable", detail: "" },
+    });
+
+    const logged = everythingLogged();
+
+    expect(logged).toContain(label);
+    expect(logged).not.toContain(FAKE_TOKEN);
+  },
+);

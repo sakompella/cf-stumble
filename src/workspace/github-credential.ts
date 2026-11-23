@@ -48,6 +48,12 @@ function failureLabel(cause: unknown): string {
   return cause instanceof WorkspaceSyncIncomplete ? "sync-incomplete" : "workspace-unavailable";
 }
 
+function workspaceUnavailable(operation: string, cause: unknown, knownToken?: string) {
+  logRedactedCause(`github-credential.${operation}: ${failureLabel(cause)}`, cause, knownToken);
+
+  return refused("workspace-unavailable");
+}
+
 function observedStatus(stdout: string): Effect.Effect<GitHubCredentialStatus, WorkspaceFault> {
   const status = parseCredentialStatus(stdout);
 
@@ -94,11 +100,9 @@ export function installGitHubCredential(
             refused("credential-command-failed", output.stderr, token),
           ),
     ),
-    answerFailures((cause): CredentialInstallResult => {
-      logRedactedCause(`github-credential.install: ${failureLabel(cause)}`, cause, token);
-
-      return refused("workspace-unavailable");
-    }),
+    answerFailures((cause): CredentialInstallResult =>
+      workspaceUnavailable("install", cause, token),
+    ),
   );
 }
 
@@ -110,11 +114,7 @@ export function readGitHubCredentialStatus(
     .pipe(
       Effect.flatMap((output) => observedStatus(output.stdout)),
       Effect.map((status): CredentialStatusResult => ({ ok: true, status })),
-      answerFailures((cause): CredentialStatusResult => {
-        logRedactedCause(`github-credential.status: ${failureLabel(cause)}`, cause);
-
-        return refused("workspace-unavailable");
-      }),
+      answerFailures((cause): CredentialStatusResult => workspaceUnavailable("status", cause)),
     );
 }
 
@@ -139,10 +139,8 @@ export function checkGitHubRepositoryAccess(
             : { granted: false, detail: redactedExcerpt(access.detail) },
         };
       }),
-      answerFailures((cause): RepositoryAccessResult => {
-        logRedactedCause(`github-credential.verify-repository: ${failureLabel(cause)}`, cause);
-
-        return refused("workspace-unavailable");
-      }),
+      answerFailures((cause): RepositoryAccessResult =>
+        workspaceUnavailable("verify-repository", cause),
+      ),
     );
 }
