@@ -4,6 +4,8 @@ import { join, resolve } from "node:path";
 
 const PIN = "5a8acc221f93dc09a1f62b8ab7093153dafe57fa";
 
+const FALLBACK_ROOTS = "golang.org/x/crypto/x509roots/fallback@v0.0.0-20261115193255-739070949446";
+
 const root = resolve(import.meta.dirname, "..");
 
 const output = join(root, "build", "tailnet");
@@ -39,13 +41,21 @@ const transport =
 
 if (!original.includes(transport)) throw new Error("tailnet-do HTTP client changed");
 
+const imports = 'import (\n\t"bytes"\n';
+
+if (!original.includes(imports)) throw new Error("tailnet-do imports changed");
+
 await writeFile(
   main,
-  original.replace(
-    transport,
-    "n.httpc = &http.Client{Transport: &http.Transport{DialContext: dialer.UserDial}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}",
-  ),
+  original
+    .replace(
+      transport,
+      "n.httpc = &http.Client{Transport: &http.Transport{DialContext: dialer.UserDial}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}",
+    )
+    .replace(imports, `${imports}\t_ "golang.org/x/crypto/x509roots/fallback"\n`),
 );
+
+run("go", ["get", FALLBACK_ROOTS], join(source, "go"));
 
 const version = run("go", ["version"]);
 
