@@ -2,7 +2,11 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { createHtmlRenderer } from "@pierre/words/html";
 import { expect, test } from "vitest";
-import { MARKDOWN_OPTIONS } from "../../../src/page/client/pierre/markdown-options.js";
+import {
+  MARKDOWN_OPTIONS,
+  markdownSource,
+  withoutTagBreaks,
+} from "../../../src/page/client/pierre/markdown-options.js";
 
 const ELEMENTS = new Set(
   "p a em strong del code pre span div br hr blockquote ul ol li input h1 h2 h3 h4 h5 h6 table thead tbody tr th td sup section".split(
@@ -46,11 +50,11 @@ const FRAGMENTS = [
 
 function render(text: string, isStreaming: boolean): string {
   const renderer = createHtmlRenderer(MARKDOWN_OPTIONS);
-  const { html } = renderer.render(text, isStreaming);
+  const { html } = renderer.render(markdownSource(text), isStreaming);
 
   renderer.dispose();
 
-  return html;
+  return withoutTagBreaks(html);
 }
 
 function attributeProblems(attributes: string): readonly string[] {
@@ -77,13 +81,17 @@ function problems(html: string): readonly string[] {
 
 const CODE_HEADER = /<div data-markdown="code-header">.*?<\/div>/gu;
 
-function plainWords(html: string): readonly string[] {
-  return html
-    .replaceAll(CODE_HEADER, " ")
-    .replaceAll(TAG, " ")
+function decoded(text: string): string {
+  return text
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
     .replaceAll("&quot;", '"')
     .replaceAll("&#39;", "'")
-    .replaceAll("&amp;", "&")
+    .replaceAll("&amp;", "&");
+}
+
+function plainWords(html: string): readonly string[] {
+  return decoded(html.replaceAll(CODE_HEADER, " ").replaceAll(TAG, " "))
     .split(/\s+/u)
     .filter((word) => word !== "");
 }
@@ -107,11 +115,22 @@ test("raw HTML, javascript: links and event attributes never reach the output", 
   );
 
   expect(problems(html)).toStrictEqual([]);
-  expect(html).not.toMatch(/<script|<img|onerror|onclick|javascript:/u);
+  expect(html).not.toMatch(/<script|<img|<a href="javascript|onclick="/u);
+});
+
+function shownText(html: string): string {
+  return decoded(html.replaceAll(CODE_HEADER, "").replaceAll(TAG, "")).trim();
+}
+
+test("raw HTML in a reply shows as its literal text, in prose and in code", () => {
+  expect(shownText(render("Use <b>x</b> here.", false))).toBe("Use <b>x</b> here.");
+  expect(shownText(render("`<div>` and\n\n```html\n<div id=a></div>\n```", false))).toBe(
+    "<div> and\n<div id=a></div>",
+  );
 });
 
 test("text without markup comes out as the same words in the same order", () => {
-  const plain = "abc /\"&'\n".split("");
+  const plain = "abc </\"&'\n".split("");
 
   hegel.test(
     (tc) => {

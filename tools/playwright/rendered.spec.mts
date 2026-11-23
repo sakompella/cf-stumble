@@ -45,6 +45,8 @@ test("a streamed reply renders its table and highlighted code, patching one elem
 
   const reply = transcriptTexts(owner, "assistant").filter({ has: owner.locator("table") });
 
+  await expect(reply).toContainText("the heading was <b>Repositories</b>:");
+  await expect(reply.locator("b")).toHaveCount(0);
   await expect(reply.locator("td").first()).toHaveText("src/sidebar.ts");
   await expect(reply.locator("pre code")).toHaveText('const heading = "Projects";');
 

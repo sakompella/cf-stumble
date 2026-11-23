@@ -7,7 +7,7 @@ import type { HarnessScenario } from "./fixtures.mjs";
 export const TOOL_OUTPUT = ["tests: 12 passed\n", "lint: clean\n"] as const;
 
 export const RENDERED_REPLY = [
-  "Here is what changes:",
+  "Here is what changes; the heading was <b>Repositories</b>:",
   "",
   "| file | change |",
   "| --- | --- |",
