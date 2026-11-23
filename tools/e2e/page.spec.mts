@@ -22,10 +22,9 @@ test("a turn streams, survives a reload, and a second turn can be cancelled", as
   await expect(transcriptTexts(page, "user").last()).toHaveText(ANSWER_PROMPT);
   await expect(turnState(page)).toHaveText("answered");
   await expect(transcriptTexts(page, "assistant")).toHaveCount(answersBefore + 1);
+  await expect(transcriptTexts(page, "assistant").last()).not.toHaveText("");
 
   const answer = await transcriptTexts(page, "assistant").last().innerText();
-
-  expect(answer.trim()).not.toBe("");
 
   await page.reload();
   await expect(page.locator(`#${ID.conversationState}`)).toHaveText("live");
