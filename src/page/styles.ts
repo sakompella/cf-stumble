@@ -106,24 +106,12 @@ export const OWNER_PAGE_STYLES = `
     word-break: break-word;
   }
   .message .text { background: none; font: inherit; padding: 0; }
-  .markdown { overflow-wrap: anywhere; }
-  .markdown > * { margin: 0.35rem 0; }
-  .markdown p { white-space: pre-wrap; }
-  .markdown h3, .markdown h4, .markdown h5, .markdown h6 { font-size: 1rem; text-transform: none; }
-  .markdown ul, .markdown ol { padding-left: 1.4rem; }
-  .markdown ul { list-style: disc; }
-  .markdown ol { list-style: decimal; }
-  .markdown code { font-family: ui-monospace, monospace; background: rgba(128, 128, 128, 0.18); border-radius: 3px; font-size: 0.9em; padding: 0 0.2rem; }
-  .markdown pre { background: rgba(128, 128, 128, 0.12); border-radius: 4px; font-size: 0.85rem; overflow: auto; padding: 0.4rem; white-space: pre; }
-  .markdown pre code { background: none; padding: 0; }
+  .markdown { display: block; overflow-wrap: anywhere; }
   .tool-call { margin: 0.4rem 0; }
   .tool-call summary { cursor: pointer; font-family: ui-monospace, monospace; font-size: 0.85rem; }
   .tool-call.failed summary { color: rgba(200, 60, 60, 1); }
   .tool-output { font-family: ui-monospace, monospace; font-size: 0.8rem; }
-  .diff-line { display: block; }
-  .diff-line.added { background: rgba(80, 180, 80, 0.18); }
-  .diff-line.removed { background: rgba(200, 60, 60, 0.18); }
-  .diff-line.hunk { color: rgba(90, 120, 200, 1); }
+  stumble-diff { display: block; }
   .composer { margin-top: 0.5rem; }
   .note { color: rgba(90, 90, 90, 1); font-size: 0.8rem; margin: 0.3rem 0; }
   .note:empty { display: none; }

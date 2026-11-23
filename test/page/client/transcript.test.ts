@@ -191,3 +191,31 @@ test("output is bounded to what the page lays out", () => {
   expect(boundedLines(many).lines).toHaveLength(400);
   expect(boundedLines("a\nb")).toEqual({ lines: ["a", "b"], isShortened: false });
 });
+
+test("a file edit's patch from its result details reaches its tool row", () => {
+  const patch = "--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n";
+
+  const conversation = conversationOf(answer([toolCall], "toolUse"), {
+    ...toolResult,
+    details: { patch },
+  });
+
+  expect(transcriptOf(conversation, [], "repo")).toMatchObject([
+    { _tag: "Tool", maybePatch: Option.some(patch) },
+  ]);
+  expect(
+    transcriptOf(conversationOf(answer([toolCall], "toolUse"), toolResult), [], "repo"),
+  ).toMatchObject([{ _tag: "Tool", maybePatch: Option.none() }]);
+});
+
+test("only the reply still streaming is marked as streaming", () => {
+  const conversation: Conversation = {
+    ...conversationOf(answer([{ type: "text", text: "done" }])),
+    maybePartial: Option.some(answer([{ type: "text", text: "still go" }], "")),
+  };
+
+  expect(transcriptOf(conversation, [], "repo")).toMatchObject([
+    { _tag: "Text", text: "done", isStreaming: false },
+    { _tag: "Text", text: "still go", isStreaming: true },
+  ]);
+});

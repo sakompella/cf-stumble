@@ -165,13 +165,13 @@ function modelShowingToolOutput(output: string): Model {
   );
 }
 
-function diffLinesRendered(output: string): readonly (readonly [string, readonly string[]])[] {
-  const collect = (node: Rendered | string): readonly (readonly [string, readonly string[]])[] =>
+function diffViewsRendered(output: string): readonly (readonly [unknown, string])[] {
+  const collect = (node: Rendered | string): readonly (readonly [unknown, string])[] =>
     Predicate.isString(node)
       ? []
       : [
-          ...(classesOf(node).includes("diff-line")
-            ? [[textOf(node).trimEnd(), classesOf(node)] as const]
+          ...(node.sel === "stumble-diff"
+            ? [[node.data?.props?.["patch"], textOf(node)] as const]
             : []),
           ...(node.children ?? []).flatMap((child) => collect(child)),
         ];
@@ -179,18 +179,12 @@ function diffLinesRendered(output: string): readonly (readonly [string, readonly
   return collect(htmlOf(modelShowingToolOutput(output)));
 }
 
-test("a tool's unified diff output shows headers, additions and removals in their own styles", () => {
-  const rendered = diffLinesRendered("diff --git a/f b/f\n@@ -1,2 +1,2 @@\n same\n-old\n+new");
-  const kindOf = (line: string) => rendered.find(([text]) => text === line)?.[1] ?? [];
+test("a tool's unified diff output goes to the diff view, with the output as its text", () => {
+  const output = "diff --git a/f b/f\n@@ -1,2 +1,2 @@\n same\n-old\n+new";
 
-  expect(kindOf("@@ -1,2 +1,2 @@")).toContain("hunk");
-  expect(kindOf("-old")).toContain("removed");
-  expect(kindOf("+new")).toContain("added");
-  expect(kindOf(" same")).not.toContain("hunk");
-  expect(kindOf(" same")).not.toContain("added");
-  expect(kindOf(" same")).not.toContain("removed");
+  expect(diffViewsRendered(output)).toEqual([[output, output]]);
 });
 
-test("output that is not a diff renders as plain text, without diff lines", () => {
-  expect(diffLinesRendered("-just a list\n+of things")).toEqual([]);
+test("output that is not a diff renders as plain text, without a diff view", () => {
+  expect(diffViewsRendered("-just a list\n+of things")).toEqual([]);
 });

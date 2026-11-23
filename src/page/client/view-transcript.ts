@@ -2,27 +2,40 @@ import * as Option from "effect/Option";
 import { createKeyedLazy, type Html, type HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_CLASSES as CLASS } from "../element-ids.js";
 import { Message } from "./message.js";
-import { markdownBlocks } from "./markdown.js";
 import { FollowTranscript } from "./mount.js";
-import { boundedLines, diffLineKind, looksLikeDiff, TranscriptEntry } from "./transcript.js";
+import { DiffView, MarkdownView } from "./pierre-views.js";
+import { boundedLines, looksLikeDiff, TranscriptEntry } from "./transcript.js";
 
 function note(text: string, h: HtmlBuilder<Message>): Html {
   return h.span([h.Class("note")], [text]);
 }
 
-function outputChildren(content: string, h: HtmlBuilder<Message>): readonly (Html | string)[] {
-  const bounded = boundedLines(content);
+function toolOutput(
+  output: string | undefined,
+  patch: string | undefined,
+  h: HtmlBuilder<Message>,
+): Html {
+  if (output === undefined) {
+    return h.pre([h.Class(CLASS.toolOutput)], ["running…"]);
+  }
 
-  const body = looksLikeDiff(content)
-    ? bounded.lines.map((line) => {
-        const kind = diffLineKind(line);
-        const className = kind === "plain" ? CLASS.diffLine : `${CLASS.diffLine} ${kind}`;
+  const bounded = boundedLines(output);
+  const text = bounded.lines.join("\n");
 
-        return h.span([h.Class(className)], [`${line}\n`]);
-      })
-    : [bounded.lines.join("\n")];
+  const shown = h.pre(
+    [h.Class(CLASS.toolOutput)],
+    bounded.isShortened ? [text, note("\n… shortened for display", h)] : [text],
+  );
 
-  return bounded.isShortened ? [...body, note("\n… shortened for display", h)] : body;
+  const diffPatch = patch ?? (looksLikeDiff(output) ? text : undefined);
+
+  if (diffPatch === undefined) {
+    return shown;
+  }
+
+  const diff = DiffView.withMessage(h);
+
+  return diff([diff.Patch(diffPatch)], [shown]);
 }
 
 function entry(
@@ -42,6 +55,7 @@ function toolRow(
   summary: string,
   isFailed: boolean,
   output: string | undefined,
+  patch: string | undefined,
   key: string,
   h: HtmlBuilder<Message>,
 ): Html {
@@ -54,13 +68,7 @@ function toolRow(
           h.Class(isFailed ? `${CLASS.toolCall} failed` : CLASS.toolCall),
           ...(isFailed ? [h.Attribute("open", "")] : []),
         ],
-        [
-          h.summary([], [summary]),
-          h.pre(
-            [h.Class(CLASS.toolOutput)],
-            output === undefined ? ["running…"] : outputChildren(output, h),
-          ),
-        ],
+        [h.summary([], [summary]), toolOutput(output, patch, h)],
       ),
     ],
     key,
@@ -72,12 +80,15 @@ function textRow(
   role: string,
   who: string,
   text: string,
+  isStreaming: boolean,
   key: string,
   h: HtmlBuilder<Message>,
 ): Html {
+  const markdown = MarkdownView.withMessage(h);
+
   const body =
     role === "assistant"
-      ? h.div([h.Class("text markdown")], markdownBlocks(text, h))
+      ? markdown([h.Class("text markdown"), markdown.Source(text), markdown.Streaming(isStreaming)])
       : h.pre([h.Class("text")], [text]);
 
   return entry(role, who, [body], key, h);
@@ -129,9 +140,17 @@ function entryView(item: TranscriptEntry, index: number, h: HtmlBuilder<Message>
   const key = String(index);
 
   return TranscriptEntry.match<Html>(item, {
-    Text: ({ role, who, text }) => lazyRow(key, textRow, [role, who, text, key, h]),
-    Tool: ({ summary, isFailed, maybeOutput }) =>
-      lazyRow(key, toolRow, [summary, isFailed, Option.getOrUndefined(maybeOutput), key, h]),
+    Text: ({ role, who, text, isStreaming }) =>
+      lazyRow(key, textRow, [role, who, text, isStreaming, key, h]),
+    Tool: ({ summary, isFailed, maybeOutput, maybePatch }) =>
+      lazyRow(key, toolRow, [
+        summary,
+        isFailed,
+        Option.getOrUndefined(maybeOutput),
+        Option.getOrUndefined(maybePatch),
+        key,
+        h,
+      ]),
     Unconfirmed: ({ requestId, text }) => lazyRow(key, unconfirmedRow, [requestId, text, key, h]),
     Terminal: ({ wording, isProblem }) => lazyRow(key, terminalRow, [wording, isProblem, key, h]),
     Earlier: () => loadRow("Load earlier messages", Message.ClickedLoadEarlier(), key, h),

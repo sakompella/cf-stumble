@@ -42,6 +42,7 @@ const PiMessage = Schema.Union([
     toolName: Schema.String,
     content: Schema.Array(Block),
     isError: Schema.Boolean,
+    details: Schema.optionalKey(Schema.Unknown),
   }),
   Schema.Struct({ role: Schema.String }),
 ]);

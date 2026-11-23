@@ -1,132 +1,126 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import * as Predicate from "effect/Predicate";
-import { inertHtml, type Html } from "foldkit/html";
+import { createHtmlRenderer } from "@pierre/words/html";
 import { expect, test } from "vitest";
-import { markdownBlocks } from "../../../src/page/client/markdown.js";
+import { MARKDOWN_OPTIONS } from "../../../src/page/client/pierre/markdown-options.js";
 
-const ALLOWED = new Set([
-  "p",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "ul",
-  "ol",
-  "li",
-  "pre",
-  "code",
-  "em",
-  "strong",
-  "a",
-]);
+const ELEMENTS = new Set(
+  "p a em strong del code pre span div br hr blockquote ul ol li input h1 h2 h3 h4 h5 h6 table thead tbody tr th td sup section".split(
+    " ",
+  ),
+);
 
-type Rendered = NonNullable<Html>;
+const ATTRIBUTES = new Set(
+  "data-markdown data-markdown-incomplete data-language data-meta dir class href target rel id type disabled readonly checked start style aria-label aria-hidden data-footnote-ref data-footnote-backref data-footnote-backref-idx data-footnotes".split(
+    " ",
+  ),
+);
 
-function render(text: string): readonly Rendered[] {
-  return markdownBlocks(text, inertHtml).filter(Predicate.isNotNull);
+const TAG = /<\/?([a-z][a-z0-9]*)((?:\s+[a-z][a-z-]*(?:="[^"<>]*")?)*)\s*>/gu;
+
+const ATTRIBUTE = /\s([a-z][a-z-]*)(?:="([^"]*)")?/gu;
+
+const STYLE = /^(?:color:[^;"]+;|text-align:(?:left|center|right))$/u;
+
+const FRAGMENTS = [
+  ..."*_`#-+[]()<>!\\\n 1.a/:h|~&=\"'".split(""),
+  "```",
+  "~~~",
+  "\n\n",
+  "- [ ] ",
+  "|---|",
+  "[^1]",
+  "    ",
+  "ts\n",
+  "<script>",
+  "</script>",
+  "<img src=x onerror=alert(1)>",
+  '<a href="javascript:alert(1)">',
+  " onclick=",
+  "style=",
+  "javascript:alert(1)",
+  "data:text/html,x",
+  "https://a.b/c",
+  "www.x.com",
+];
+
+function render(text: string, isStreaming: boolean): string {
+  const renderer = createHtmlRenderer(MARKDOWN_OPTIONS);
+  const { html } = renderer.render(text, isStreaming);
+
+  renderer.dispose();
+
+  return html;
 }
 
-function children(node: Rendered): readonly Rendered[] {
-  return (node.children ?? []).flatMap((child) => (Predicate.isString(child) ? [] : [child]));
+function attributeProblems(attributes: string): readonly string[] {
+  return [...attributes.matchAll(ATTRIBUTE)].flatMap(([, name = "", value = ""]) => [
+    ...(ATTRIBUTES.has(name) ? [] : [`attribute ${name}`]),
+    ...(name === "href" && !/^https?:\/\//u.test(value) ? [`href ${value}`] : []),
+    ...(name === "style" && !STYLE.test(value) ? [`style ${value}`] : []),
+    ...(name === "type" && value !== "checkbox" ? [`type ${value}`] : []),
+  ]);
 }
 
-function elements(node: Rendered): readonly Rendered[] {
-  return node.sel === undefined ? [] : [node, ...children(node).flatMap(elements)];
+function problems(html: string): readonly string[] {
+  const tags = [...html.matchAll(TAG)];
+  const outsideTags = html.replaceAll(TAG, "");
+
+  return [
+    ...tags.flatMap(([, name = "", attributes = ""]) => [
+      ...(ELEMENTS.has(name) ? [] : [`element ${name}`]),
+      ...attributeProblems(attributes),
+    ]),
+    ...(/[<>]/u.test(outsideTags) ? [`raw markup in ${outsideTags}`] : []),
+  ];
 }
 
-function textOf(node: Rendered): string {
-  return node.text ?? children(node).map(textOf).join("");
+const CODE_HEADER = /<div data-markdown="code-header">.*?<\/div>/gu;
+
+function plainWords(html: string): readonly string[] {
+  return html
+    .replaceAll(CODE_HEADER, " ")
+    .replaceAll(TAG, " ")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&amp;", "&")
+    .split(/\s+/u)
+    .filter((word) => word !== "");
 }
 
-function words(value: string): readonly string[] {
-  return value.split(/\s+/u).filter((word) => word !== "");
-}
-
-const MARKUP_HEAVY = "*_`#-+[]()<>!\\\n 1.a/:h".split("");
-
-test("input of any shape renders only allowed elements, and links only to http(s)", () => {
+test("input of any shape renders only allowed elements and attributes, and links only to http(s)", () => {
   hegel.test(
     (tc) => {
-      const characters = tc.draw(gs.arrays(gs.sampledFrom(MARKUP_HEAVY), { maxSize: 60 }));
-      const urls = tc.draw(gs.booleans()) ? "[x](https://a.b/c)[y](javascript:alert(1))" : "";
-      const found = render(characters.join("") + urls).flatMap(elements);
+      const text = tc.draw(gs.arrays(gs.sampledFrom(FRAGMENTS), { maxSize: 60 })).join("");
+      const html = render(text, tc.draw(gs.booleans()));
 
-      for (const node of found) {
-        const tag = String(node.sel).split(/[.#]/u)[0] ?? "";
-
-        expect(ALLOWED.has(tag), tag).toBe(true);
-
-        if (tag === "a") {
-          expect(String(node.data?.props?.["href"])).toMatch(/^https?:\/\//u);
-        }
-      }
+      expect(problems(html), html).toStrictEqual([]);
     },
     { testCases: 300 },
   );
 });
 
+test("raw HTML, javascript: links and event attributes never reach the output", () => {
+  const html = render(
+    '<script>alert(1)</script>\n\n<img src=x onerror=alert(1)> [x](javascript:alert(1)) <a href="javascript:alert(2)" onclick="alert(3)">y</a>',
+    false,
+  );
+
+  expect(problems(html)).toStrictEqual([]);
+  expect(html).not.toMatch(/<script|<img|onerror|onclick|javascript:/u);
+});
+
 test("text without markup comes out as the same words in the same order", () => {
-  const plain = "abc <>/\"&'=\n".split("");
+  const plain = "abc /\"&'\n".split("");
 
   hegel.test(
     (tc) => {
       const text = tc.draw(gs.arrays(gs.sampledFrom(plain), { maxSize: 60 })).join("");
-      expect(words(render(text).map(textOf).join(" "))).toStrictEqual(words(text));
-    },
-    { testCases: 300 },
-  );
-});
 
-test("brackets that form no link stay in the text as written", () => {
-  const bracketHeavy = "[]() ab\n".split("");
-
-  hegel.test(
-    (tc) => {
-      const text = tc.draw(gs.arrays(gs.sampledFrom(bracketHeavy), { maxSize: 60 })).join("");
-
-      expect(words(render(text).map(textOf).join(" "))).toStrictEqual(words(text));
-    },
-    { testCases: 300 },
-  );
-});
-
-test("a long run of unmatched brackets renders in linear time", () => {
-  const text = "[".repeat(250_000);
-
-  expect(render(text).map(textOf)).toStrictEqual([text]);
-}, 15_000);
-
-test("fenced and inline code keep their content exactly", () => {
-  hegel.test(
-    (tc) => {
-      const fence = "`".repeat(tc.draw(gs.integers({ minValue: 3, maxValue: 6 })));
-
-      const closes = (line: string) =>
-        /^`+\s*$/u.test(line) && line.trimEnd().length >= fence.length;
-
-      const lines = Array.from({ length: tc.draw(gs.integers({ minValue: 1, maxValue: 5 })) }, () =>
-        tc.draw(gs.booleans())
-          ? "`".repeat(tc.draw(gs.integers({ minValue: 1, maxValue: 8 }))) +
-            tc.draw(gs.text({ alphabet: "js ", maxSize: 4 }))
-          : tc.draw(gs.text({ maxSize: 12 })),
+      expect(plainWords(render(text, false))).toStrictEqual(
+        text.split(/\s+/u).filter((word) => word !== ""),
       );
-
-      const body = lines.filter((line) => !line.includes("\n") && !closes(line));
-      const closing = fence + tc.draw(gs.sampledFrom(["", "`", " ", "`` "]));
-      const fenced = render(`${fence}ts\n${body.join("\n")}\n${closing}`);
-
-      expect(fenced.map((node) => node.sel)).toStrictEqual(["pre"]);
-      expect(fenced.map(textOf)).toStrictEqual([body.join("\n")]);
     },
     { testCases: 300 },
   );
-});
-
-test("a paragraph with thousands of inline spans renders instead of overflowing the stack", () => {
-  const spans = Array.from({ length: 20_000 }, (_, index) => `\`a${index}\``).join(" ");
-  const blocks = render(spans);
-
-  expect(blocks.map((node) => node.sel)).toStrictEqual(["p"]);
-  expect(blocks.flatMap(elements).filter((node) => node.sel === "code")).toHaveLength(20_000);
 });

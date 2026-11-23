@@ -2,6 +2,7 @@ import { Runtime } from "foldkit";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import { Model } from "./model.js";
+import { defineRendererElements } from "./pierre-elements.js";
 import { subscriptions } from "./subscriptions.js";
 import { managedResources } from "./transcript-store.js";
 import { init, update } from "./update.js";
@@ -17,6 +18,8 @@ function crashView({ error }: Readonly<{ error: Error }>, h: HtmlBuilder<never>)
     ],
   );
 }
+
+defineRendererElements();
 
 Runtime.run(
   Runtime.makeElement({

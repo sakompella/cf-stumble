@@ -9,6 +9,7 @@ export type HarnessScenario =
   | "preparing-paused"
   | "model-error"
   | "cut-off"
+  | "rendered"
   | "github-disconnected"
   | "github-awaiting-authorization"
   | "chatgpt-connected";

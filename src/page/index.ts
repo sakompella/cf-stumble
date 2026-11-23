@@ -1,10 +1,16 @@
 import { OWNER_PAGE_IDS } from "./element-ids.js";
-import { OWNER_PAGE_SCRIPT_PATH, OWNER_PAGE_SCRIPT_SOURCE } from "./owner-script.generated.js";
+import { OWNER_SCRIPT_PATH, OWNER_SCRIPT_SOURCE } from "./owner-script.generated.js";
+import { PIERRE_SCRIPT_PATH, PIERRE_SCRIPT_SOURCE } from "./pierre-script.generated.js";
 import { OWNER_PAGE_STYLES } from "./styles.js";
 
 export const OWNER_PAGE_SCRIPT_FILE = {
-  path: OWNER_PAGE_SCRIPT_PATH,
-  source: OWNER_PAGE_SCRIPT_SOURCE,
+  path: OWNER_SCRIPT_PATH,
+  source: OWNER_SCRIPT_SOURCE,
+} as const;
+
+export const PIERRE_SCRIPT_FILE = {
+  path: PIERRE_SCRIPT_PATH,
+  source: PIERRE_SCRIPT_SOURCE,
 } as const;
 
 export const OWNER_PAGE_FAVICON = {
@@ -22,7 +28,8 @@ export function ownerPagePolicy(nonce: string): string {
     "connect-src 'self'",
     "img-src 'self'",
     `style-src 'nonce-${nonce}'`,
-    `script-src 'self' 'nonce-${nonce}' https://static.cloudflareinsights.com/beacon.min.js/`,
+    "style-src-attr 'unsafe-inline'",
+    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://static.cloudflareinsights.com/beacon.min.js/`,
     "form-action 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",

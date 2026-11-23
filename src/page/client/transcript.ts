@@ -14,11 +14,17 @@ import {
 } from "../../conversation-view/pi-message.js";
 
 export const TranscriptEntry = defineTaggedUnion({
-  Text: { role: Schema.String, who: Schema.String, text: Schema.String },
+  Text: {
+    role: Schema.String,
+    who: Schema.String,
+    text: Schema.String,
+    isStreaming: Schema.Boolean,
+  },
   Tool: {
     toolCallId: Schema.String,
     summary: Schema.String,
     maybeOutput: Schema.Option(Schema.String),
+    maybePatch: Schema.Option(Schema.String),
     isFailed: Schema.Boolean,
   },
   Unconfirmed: { requestId: Schema.String, text: Schema.String },
@@ -52,20 +58,8 @@ export function looksLikeDiff(value: string): boolean {
   return /^(diff --git |@@ |\+\+\+ |--- )/mu.test(value);
 }
 
-export function diffLineKind(line: string): "hunk" | "added" | "removed" | "plain" {
-  if (line.startsWith("@@") || line.startsWith("+++") || line.startsWith("---")) {
-    return "hunk";
-  }
-
-  if (line.startsWith("+")) {
-    return "added";
-  }
-
-  return line.startsWith("-") ? "removed" : "plain";
-}
-
-function textEntry(role: string, who: string, text: string): TranscriptEntry {
-  return TranscriptEntry.Text({ role, who, text });
+function textEntry(role: string, who: string, text: string, isStreaming = false): TranscriptEntry {
+  return TranscriptEntry.Text({ role, who, text, isStreaming });
 }
 
 function toolStartEntry(toolCallId: string, summary: string): ToolEntry {
@@ -73,18 +67,20 @@ function toolStartEntry(toolCallId: string, summary: string): ToolEntry {
     toolCallId,
     summary,
     maybeOutput: Option.none(),
+    maybePatch: Option.none(),
     isFailed: false,
   });
 }
 
 function finishedTool(
   tool: ToolEntry,
-  result: Readonly<{ toolName: string; text: string; isError: boolean }>,
+  result: Readonly<{ toolName: string; text: string; patch: unknown; isError: boolean }>,
 ): ToolEntry {
   return TranscriptEntry.Tool({
     toolCallId: tool.toolCallId,
     summary: `${result.toolName}${result.isError ? " — failed" : " — done"}`,
     maybeOutput: Option.some(result.text),
+    maybePatch: Predicate.isString(result.patch) ? Option.some(result.patch) : Option.none(),
     isFailed: result.isError,
   });
 }
@@ -99,14 +95,17 @@ function isUsageLimitFallback(message: AssistantMessage): boolean {
   );
 }
 
-function assistantEntries(message: AssistantMessage): readonly TranscriptEntry[] {
+function assistantEntries(
+  message: AssistantMessage,
+  isStreaming: boolean,
+): readonly TranscriptEntry[] {
   const text = blocksText(message.content);
 
   return [
     ...(isUsageLimitFallback(message)
       ? [textEntry("system", "notice", "ChatGPT usage limit reached; answered with Workers AI")]
       : []),
-    ...(text === "" ? [] : [textEntry("assistant", "assistant", text)]),
+    ...(text === "" ? [] : [textEntry("assistant", "assistant", text, isStreaming)]),
     ...message.content.flatMap((block) =>
       block.type === "toolCall" && "id" in block
         ? [toolStartEntry(block.id, toolSummaryText(block.name, block.arguments))]
@@ -153,9 +152,10 @@ function addMessage(
   entries: TranscriptEntry[],
   toolBlocks: Map<string, number>,
   message: PiMessage,
+  isStreaming: boolean,
 ): void {
   if ("stopReason" in message) {
-    for (const entry of assistantEntries(message)) {
+    for (const entry of assistantEntries(message, isStreaming)) {
       if (Predicate.isTagged(entry, "Tool")) {
         toolBlocks.set(entry.toolCallId, entries.length);
       }
@@ -173,6 +173,7 @@ function addMessage(
     entries[index] = finishedTool(start, {
       toolName: message.toolName,
       text: blocksText(message.content),
+      patch: Predicate.hasProperty(message.details, "patch") ? message.details.patch : undefined,
       isError: message.isError,
     });
     toolBlocks.set(message.toolCallId, index);
@@ -217,7 +218,7 @@ export function transcriptOf(
   const toolBlocks = new Map<string, number>();
 
   const add = (message: PiMessage) => {
-    addMessage(entries, toolBlocks, message);
+    addMessage(entries, toolBlocks, message, false);
   };
 
   for (const [itemIndex, item] of conversation.items.entries()) {
@@ -232,7 +233,9 @@ export function transcriptOf(
     }
   }
 
-  Option.map(conversation.maybePartial, add);
+  Option.map(conversation.maybePartial, (message) => {
+    addMessage(entries, toolBlocks, message, true);
+  });
 
   return [
     ...entries.map((entry) => withLiveOutput(entry, conversation)),

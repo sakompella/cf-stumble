@@ -86,7 +86,6 @@ export const OWNER_PAGE_CLASSES = {
   message: "message",
   toolCall: "tool-call",
   toolOutput: "tool-output",
-  diffLine: "diff-line",
   projectButton: "project-button",
   selectedProject: "selected",
 } as const;

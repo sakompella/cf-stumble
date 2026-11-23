@@ -3,6 +3,7 @@
   "entry": [
     "src/worker.ts!",
     "src/page/client/entry.ts!",
+    "src/page/client/pierre/entry.ts!",
     "src/facet/generation-1/main-facet.ts!",
     "src/stumble-cli/orb/main.ts!",
     "tools/*.mts!",

@@ -61,3 +61,47 @@ the test measured an esbuild bundle of `src/worker.ts`, which was 13 percent lar
 download on every load. Cloudflare static assets would need routing configuration
 in the Worker configuration. Typed DOM modules without a framework need
 fewer dependencies, but the owner chose Foldkit.
+
+**Amendment (2026-11-23): the Pierre renderer script and its policy.** Aditya chose Pierre's
+libraries for the transcript. Assistant replies render with `@pierre/words` 0.3.0, whose
+`@pierre/highlights` 0.5.2 plugin colours code blocks. A tool output that looks like a unified
+diff, and the patch that the edit tool puts in its result details, render with `@pierre/diffs`
+1.7.0-beta.5 (`DiffHunksRenderer`, the Highlights backend, word-level line diffs). The
+hand-written Markdown parser is gone.
+
+- `pnpm build:page` first builds `src/page/client/pierre/entry.ts` as one ES module into the
+  ignored `src/page/pierre-script.generated.ts`, path `/assets/pierre-<hash>.js`, and the Worker
+  serves it with the page script's headers. The page script imports it with `import()` when the
+  first `stumble-markdown` or `stumble-diff` element connects. Both elements are defined in the page
+  script; Foldkit sets their properties, so a row keeps its element and the reply in progress is
+  patched in place. The diff element keeps the output text as its children and covers them with a
+  shadow root only when the text parses as a patch.
+- The build replaces the Shiki backend, Shiki's catalogs, and the theme catalogs of
+  `@pierre/theming` and `@pierre/highlights` with an empty module, and resolves `@pierre/words`
+  to `@pierre/words/no-math`. The page selects the Highlights backend and registers Pierre Light and
+  Pierre Dark itself, so those dynamic imports never run; without the replacement esbuild inlines
+  them and the file grows from 341 KB to 583 KB gzip.
+- Policy, tested in Chromium 158 against the libraries' real output:
+
+  | Policy                                   | Result                                                                                                                    |
+  | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+  | before                                   | `@pierre/words` throws at import: compiling WebAssembly needs `'wasm-unsafe-eval'`                                        |
+  | `script-src` + `'wasm-unsafe-eval'`      | renders; token colours and table alignment (`style` attributes) and the theme `<style>` element of `FileDiff` are blocked |
+  | stylesheets through `adoptedStyleSheets` | not blocked: Words' stylesheet, the diff core and theme CSS load this way, so `style-src` keeps only its nonce            |
+  | a nonce                                  | cannot apply: nonces admit elements, and the colours are `style` attributes, which neither library can emit as classes    |
+  | + `style-src-attr 'unsafe-inline'`       | renders with colours, no violation                                                                                        |
+
+  The policy therefore adds `'wasm-unsafe-eval'` to `script-src` and `style-src-attr
+  'unsafe-inline'`. The first admits compiling WebAssembly, not `eval` of script. The second admits
+  `style` attributes only: no `<style>` element and no stylesheet, so injected markup could not add
+  selectors. `FileDiff` is not used because its theme `<style>` element would need
+  `style-src-elem 'unsafe-inline'`.
+
+- The page now writes HTML that Words built from model text. Words omits raw HTML and checks URL
+  schemes; the page's options also keep only `http(s)` links and drop images, which `img-src` would
+  block. `test/page/client/markdown.props.test.ts` checks the output for allowed elements and
+  attributes and `http(s)` links. The page still creates no script element; `import()` loads only
+  the fixed path.
+- Budgets: the page script is 252,126 bytes gzip (limit 256 KiB), the Pierre script 340,672
+  (limit 383 KiB, `tools/bundle-budgets.test.ts`). The Worker embeds the Pierre script, so its upload
+  grew to 793,906 bytes gzip and its limit to 1,024 KiB.

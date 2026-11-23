@@ -3,7 +3,12 @@ import {
   OWNER_PAGE_SCRIPT_FILE,
   ownerPageHtml,
   ownerPagePolicy,
+  PIERRE_SCRIPT_FILE,
 } from "../page/index.js";
+
+const SCRIPT_FILES: ReadonlyMap<string, string> = new Map(
+  [OWNER_PAGE_SCRIPT_FILE, PIERRE_SCRIPT_FILE].map(({ path, source }) => [path, source]),
+);
 
 function ownerPage(nonce: string): Response {
   return new Response(ownerPageHtml(nonce), {
@@ -18,8 +23,8 @@ function ownerPage(nonce: string): Response {
   });
 }
 
-function ownerPageScript(): Response {
-  return new Response(OWNER_PAGE_SCRIPT_FILE.source, {
+function scriptFile(source: string): Response {
+  return new Response(source, {
     status: 200,
     headers: {
       "content-type": "text/javascript; charset=utf-8",
@@ -43,20 +48,19 @@ function ownerPageFavicon(): Response {
   });
 }
 
-function isOwnerPageScriptRequest(request: Request): boolean {
-  return request.method === "GET" && new URL(request.url).pathname === OWNER_PAGE_SCRIPT_FILE.path;
-}
-
 export function ownerPageResponse(request: Request): Response | undefined {
-  if (isOwnerPageScriptRequest(request)) {
-    return ownerPageScript();
-  }
-
   if (request.method !== "GET") {
     return undefined;
   }
 
-  switch (new URL(request.url).pathname) {
+  const { pathname } = new URL(request.url);
+  const script = SCRIPT_FILES.get(pathname);
+
+  if (script !== undefined) {
+    return scriptFile(script);
+  }
+
+  switch (pathname) {
     case "/":
       return ownerPage(crypto.randomUUID());
     case OWNER_PAGE_FAVICON.path:

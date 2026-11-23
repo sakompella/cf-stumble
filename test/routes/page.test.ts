@@ -1,6 +1,10 @@
 import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
-import { OWNER_PAGE_FAVICON, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
+import {
+  OWNER_PAGE_FAVICON,
+  OWNER_PAGE_SCRIPT_FILE,
+  PIERRE_SCRIPT_FILE,
+} from "../../src/page/index.js";
 import { OWNER_PAGE_IDS } from "../../src/page/element-ids.js";
 import worker from "../../src/worker.js";
 import { ownerRequest } from "../owner-credentials.js";
@@ -39,7 +43,7 @@ function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   );
 }
 
-test("the page policy admits its own style and scripts, Cloudflare's beacon, and no unsafe code", async () => {
+test("the page policy admits its own style and scripts, Cloudflare's beacon, WebAssembly and style attributes, and no other unsafe source", async () => {
   const response = await pageFetch("/", BROWSER_ACCEPT);
   const policy = directivesOf(response.headers.get("content-security-policy") ?? "");
   const body = await response.text();
@@ -51,33 +55,46 @@ test("the page policy admits its own style and scripts, Cloudflare's beacon, and
   expect(policy.get("script-src")).toEqual([
     "'self'",
     `'nonce-${nonce ?? ""}'`,
+    "'wasm-unsafe-eval'",
     "https://static.cloudflareinsights.com/beacon.min.js/",
   ]);
-  expect([...policy.values()].flat().filter((source) => source.includes("unsafe-"))).toEqual([]);
+  expect(policy.get("style-src")).toEqual([`'nonce-${nonce ?? ""}'`]);
+  expect(policy.get("style-src-attr")).toEqual(["'unsafe-inline'"]);
+  expect(
+    [...policy.entries()].flatMap(([name, sources]) =>
+      sources.filter((source) => source.includes("unsafe-")).map((source) => `${name} ${source}`),
+    ),
+  ).toEqual(["style-src-attr 'unsafe-inline'", "script-src 'wasm-unsafe-eval'"]);
   expect(nonce).toBeDefined();
   expect(body).toContain(`<style nonce="${nonce ?? ""}">`);
   expect(body).toContain(`<script src="${OWNER_PAGE_SCRIPT_FILE.path}"></script>`);
 });
 
-test("the page's script is kept by the browser only because its path derives from its content", async () => {
-  const response = await pageFetch(OWNER_PAGE_SCRIPT_FILE.path, "*/*");
-  const source = await response.text();
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
+test.each([
+  ["page's script", OWNER_PAGE_SCRIPT_FILE],
+  ["Pierre renderer script", PIERRE_SCRIPT_FILE],
+])(
+  "the %s is kept by the browser only because its path derives from its content",
+  async (_name, file) => {
+    const response = await pageFetch(file.path, "*/*");
+    const source = await response.text();
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
 
-  const digestHex = Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+    const digestHex = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
 
-  const pathHash = /\/owner-([0-9a-f]+)\.js$/u.exec(OWNER_PAGE_SCRIPT_FILE.path)?.[1] ?? "";
+    const pathHash = /\/(?:owner|pierre)-([0-9a-f]+)\.js$/u.exec(file.path)?.[1] ?? "";
 
-  expect(response.status).toBe(200);
-  expect(response.headers.get("content-type")).toContain("text/javascript");
-  expect(response.headers.get("cache-control")).toContain("immutable");
-  expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-  expect(source).toBe(OWNER_PAGE_SCRIPT_FILE.source);
-  expect(pathHash).not.toBe("");
-  expect(digestHex.startsWith(pathHash)).toBe(true);
-});
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/javascript");
+    expect(response.headers.get("cache-control")).toContain("immutable");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(source).toBe(file.source);
+    expect(pathHash).not.toBe("");
+    expect(digestHex.startsWith(pathHash)).toBe(true);
+  },
+);
 
 test("the favicon is served from the page's own origin, which its image policy admits", async () => {
   const page = await pageFetch("/", BROWSER_ACCEPT);

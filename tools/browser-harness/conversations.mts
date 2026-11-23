@@ -25,6 +25,13 @@ import type { EntriesRequest } from "../../src/entries-request.js";
 import { entriesQuery, entryId } from "../../src/facet/entries-query.js";
 import { RunNotices } from "../../src/facet/generation-1/run-notices.js";
 import { HARNESS_SELF_PROJECT_ID, projectLocation, type HarnessScenario } from "./fixtures.mjs";
+import {
+  DIFF_COMMAND,
+  DIFF_OUTPUT,
+  EDIT_ARGUMENTS,
+  editStub,
+  RENDERED_REPLY,
+} from "./rendered.mjs";
 
 export const OPENING_TEXT = "I will run the checks before I change anything.";
 
@@ -87,6 +94,17 @@ function answer(scenario: HarnessScenario, messages: readonly Message[]): Assist
     return fauxAssistantMessage(CUT_OFF_TEXT, { stopReason: "length" });
   }
 
+  if (scenario === "rendered") {
+    return fauxAssistantMessage(
+      [
+        fauxText(RENDERED_REPLY),
+        fauxToolCall("bash", { command: DIFF_COMMAND }),
+        fauxToolCall("edit", EDIT_ARGUMENTS),
+      ],
+      { stopReason: "toolUse" },
+    );
+  }
+
   return fauxAssistantMessage(
     [fauxText(OPENING_TEXT), fauxToolCall("bash", { command: TOOL_COMMAND })],
     { stopReason: "toolUse" },
@@ -128,7 +146,7 @@ function stubTools(scenario: HarnessScenario, barrier: Barrier): Extension {
     description: "Run a shell command in the project",
     parameters: obj({ command: str() }),
     execute: async (_args, api, toolContext) => {
-      const [first, second] = TOOL_OUTPUT;
+      const [first, second] = scenario === "rendered" ? [DIFF_OUTPUT, ""] : TOOL_OUTPUT;
       api.output(first);
 
       if (scenario === "ready-paused") {
@@ -144,7 +162,7 @@ function stubTools(scenario: HarnessScenario, barrier: Barrier): Extension {
     },
   });
 
-  return defineExtension({ name: "stub", tools: [bash] });
+  return defineExtension({ name: "stub", tools: [bash, editStub] });
 }
 
 export type Conversations = Readonly<{
