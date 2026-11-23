@@ -20,7 +20,7 @@ const TAG = /<\/?([a-z][a-z0-9]*)((?:\s+[a-z][a-z-]*(?:="[^"<>]*")?)*)\s*>/gu;
 
 const ATTRIBUTE = /\s([a-z][a-z-]*)(?:="([^"]*)")?/gu;
 
-const STYLE = /^(?:color:[^;"]+;|text-align:(?:left|center|right))$/u;
+const STYLE = /^(?:color:[^;"]+;?|text-align:(?:left|center|right))$/u;
 
 const FRAGMENTS = [
   ..."*_`#-+[]()<>!\\\n 1.a/:h|~&=\"'".split(""),
