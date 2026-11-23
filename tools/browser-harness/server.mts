@@ -4,6 +4,7 @@ import { HARNESS_CREDENTIALS, type HarnessScenario } from "./fixtures.mjs";
 import { openConversations, type Conversations } from "./conversations.mjs";
 import { parseJsonRecordText, type JsonValue } from "../json.mjs";
 import { ownerPageResponse } from "../../src/routes/page.js";
+import { diskAssets } from "./disk-assets.mjs";
 import { sendJson, sendResponse, serveJsonRoute } from "./server-routes.mjs";
 import { conversationRoute, serveConversation } from "./server-conversation.mjs";
 import {
@@ -82,9 +83,10 @@ async function handle(
     return;
   }
 
-  const page = ownerPageResponse(new Request(url, { method: req.method ?? "GET" }));
+  const answered = ownerPageResponse(new Request(url, { method: req.method ?? "GET" }), diskAssets);
 
-  if (page !== undefined) {
+  if (answered !== undefined) {
+    const page = await answered;
     record.status = page.status;
     await sendResponse(res, page);
 

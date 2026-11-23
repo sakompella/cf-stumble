@@ -9,7 +9,7 @@ const OWNER_AUTHORIZATION = `Basic ${btoa(`aditya:${testWorker.miniflare.binding
 
 const KIB = 1024;
 
-const WORKER_UPLOAD_GZIP_LIMIT = 1024 * KIB;
+const WORKER_UPLOAD_GZIP_LIMIT = 700 * KIB;
 
 type Files = Awaited<ReturnType<typeof buildWorkerBundle>>;
 

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build, type BuildOptions, type Plugin } from "esbuild";
+import { workerAssetDirectory } from "../infra/worker-settings.ts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
@@ -64,16 +65,18 @@ async function bundle(entryPath: string, options: BuildOptions): Promise<string>
   return output.text;
 }
 
-async function writeScriptModule(outputPath: string, name: string, script: string): Promise<void> {
+function scriptPath(name: string, script: string): string {
   const hash = createHash("sha256").update(script).digest("hex").slice(0, HASH_LENGTH);
-  const scriptPath = `/assets/${name.toLowerCase()}-${hash}.js`;
 
-  await writeFile(
-    resolve(repoRoot, outputPath),
-    `export const ${name}_SCRIPT_PATH = ${JSON.stringify(scriptPath)};\n` +
-      `export const ${name}_SCRIPT_SOURCE = ${JSON.stringify(script)};\n`,
+  return `/assets/${name}-${hash}.js`;
+}
+
+async function writePathModule(outputPath: string, exports: Readonly<Record<string, string>>) {
+  const lines = Object.entries(exports).map(
+    ([name, value]) => `export const ${name} = ${JSON.stringify(value)};\n`,
   );
-  console.log(`Wrote ${outputPath}: ${scriptPath}, ${script.length} bytes`);
+
+  await writeFile(resolve(repoRoot, outputPath), lines.join(""));
 }
 
 const pierre = await bundle("src/page/client/pierre/entry.ts", {
@@ -82,11 +85,30 @@ const pierre = await bundle("src/page/client/pierre/entry.ts", {
   plugins: [pierreModules],
 });
 
-await writeScriptModule("src/page/pierre-script.generated.ts", "PIERRE", pierre);
+const pierrePath = scriptPath("pierre", pierre);
+
+const pageAssets = resolve(repoRoot, workerAssetDirectory, "assets");
+
+await rm(pageAssets, { recursive: true, force: true });
+
+await mkdir(pageAssets, { recursive: true });
+
+await writeFile(resolve(repoRoot, workerAssetDirectory, `.${pierrePath}`), pierre);
+
+await writePathModule("src/page/pierre-script.generated.ts", { PIERRE_SCRIPT_PATH: pierrePath });
+
+console.log(`Wrote ${workerAssetDirectory}${pierrePath}: ${pierre.length} bytes`);
 
 const owner = await bundle("src/page/client/entry.ts", {
   format: "iife",
   define: { "import.meta.hot": "undefined" },
 });
 
-await writeScriptModule("src/page/owner-script.generated.ts", "OWNER", owner);
+const ownerPath = scriptPath("owner", owner);
+
+await writePathModule("src/page/owner-script.generated.ts", {
+  OWNER_SCRIPT_PATH: ownerPath,
+  OWNER_SCRIPT_SOURCE: owner,
+});
+
+console.log(`Wrote src/page/owner-script.generated.ts: ${ownerPath}, ${owner.length} bytes`);

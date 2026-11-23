@@ -2,11 +2,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
-import { SHELL_MODULES_FILE, shellModulesAssetDirectory } from "../infra/worker-settings.ts";
+import { SHELL_MODULES_FILE, workerAssetDirectory } from "../infra/worker-settings.ts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
-const outputFile = join(resolve(repoRoot, shellModulesAssetDirectory), SHELL_MODULES_FILE);
+const outputFile = join(resolve(repoRoot, workerAssetDirectory), SHELL_MODULES_FILE);
 
 const EGRESS_SHELL_MODULE = `
 import { ShellWorker as BaseShellWorker } from "./shell.js";

@@ -37,10 +37,10 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
     return orb;
   }
 
-  const page = ownerPageResponse(request);
+  const page = ownerPageResponse(request, env.ASSETS);
 
   if (page !== undefined) {
-    return Effect.succeed(page);
+    return Effect.promise(() => page);
   }
 
   return routeApiRequest(request, env.SUPERVISOR.getByName(SUPERVISOR_NAME)).pipe(

@@ -40,9 +40,9 @@ export function plainTextBindings(stage: string) {
   return { CHATGPT_MODEL: stage === PRODUCTION_STAGE ? "gpt-6.1-sol" : "gpt-6.1-terra" };
 }
 
-export const shellModulesAssetDirectory = "build/shell-assets";
+export const workerAssetDirectory = "build/shell-assets";
 
-export const workerAssets = { directory: shellModulesAssetDirectory, runWorkerFirst: true };
+export const workerAssets = { directory: workerAssetDirectory, runWorkerFirst: true };
 
 export const SHELL_MODULES_FILE = "shell-modules.json";
 

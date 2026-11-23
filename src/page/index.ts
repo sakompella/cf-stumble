@@ -1,6 +1,5 @@
 import { OWNER_PAGE_IDS } from "./element-ids.js";
 import { OWNER_SCRIPT_PATH, OWNER_SCRIPT_SOURCE } from "./owner-script.generated.js";
-import { PIERRE_SCRIPT_PATH, PIERRE_SCRIPT_SOURCE } from "./pierre-script.generated.js";
 import { OWNER_PAGE_STYLES } from "./styles.js";
 
 export const OWNER_PAGE_SCRIPT_FILE = {
@@ -8,10 +7,7 @@ export const OWNER_PAGE_SCRIPT_FILE = {
   source: OWNER_SCRIPT_SOURCE,
 } as const;
 
-export const PIERRE_SCRIPT_FILE = {
-  path: PIERRE_SCRIPT_PATH,
-  source: PIERRE_SCRIPT_SOURCE,
-} as const;
+export { PIERRE_SCRIPT_PATH } from "./pierre-script.generated.js";
 
 export const OWNER_PAGE_FAVICON = {
   path: "/favicon.svg",

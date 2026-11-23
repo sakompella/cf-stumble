@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import {
   OWNER_PAGE_FAVICON,
   OWNER_PAGE_SCRIPT_FILE,
-  PIERRE_SCRIPT_FILE,
+  PIERRE_SCRIPT_PATH,
 } from "../../src/page/index.js";
 import { OWNER_PAGE_IDS } from "../../src/page/element-ids.js";
 import worker from "../../src/worker.js";
@@ -70,13 +70,10 @@ test("the page policy admits its own style and scripts, Cloudflare's beacon, Web
   expect(body).toContain(`<script src="${OWNER_PAGE_SCRIPT_FILE.path}"></script>`);
 });
 
-test.each([
-  ["page's script", OWNER_PAGE_SCRIPT_FILE],
-  ["Pierre renderer script", PIERRE_SCRIPT_FILE],
-])(
-  "the %s is kept by the browser only because its path derives from its content",
-  async (_name, file) => {
-    const response = await pageFetch(file.path, "*/*");
+test.each([OWNER_PAGE_SCRIPT_FILE.path, PIERRE_SCRIPT_PATH])(
+  "the script %s is kept by the browser only because its path derives from its content",
+  async (path) => {
+    const response = await pageFetch(path, "*/*");
     const source = await response.text();
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
 
@@ -84,17 +81,25 @@ test.each([
       byte.toString(16).padStart(2, "0"),
     ).join("");
 
-    const pathHash = /\/(?:owner|pierre)-([0-9a-f]+)\.js$/u.exec(file.path)?.[1] ?? "";
+    const pathHash = /\/(?:owner|pierre)-([0-9a-f]+)\.js$/u.exec(path)?.[1] ?? "";
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/javascript");
     expect(response.headers.get("cache-control")).toContain("immutable");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(source).toBe(file.source);
     expect(pathHash).not.toBe("");
     expect(digestHex.startsWith(pathHash)).toBe(true);
   },
 );
+
+test("the Pierre script, a static asset, is refused without the owner's credentials", async () => {
+  const response = await worker.fetch(
+    new Request(`https://cf-stumble.test${PIERRE_SCRIPT_PATH}`),
+    env,
+  );
+
+  expect(response.status).toBe(401);
+});
 
 test("the favicon is served from the page's own origin, which its image policy admits", async () => {
   const page = await pageFetch("/", BROWSER_ACCEPT);

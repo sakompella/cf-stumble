@@ -69,13 +69,18 @@ diff, and the patch that the edit tool puts in its result details, render with `
 1.7.0-beta.5 (`DiffHunksRenderer`, the Highlights backend, word-level line diffs). The
 hand-written Markdown parser is gone.
 
-- `pnpm build:page` first builds `src/page/client/pierre/entry.ts` as one ES module into the
-  ignored `src/page/pierre-script.generated.ts`, path `/assets/pierre-<hash>.js`, and the Worker
-  serves it with the page script's headers. The page script imports it with `import()` when the
-  first `stumble-markdown` or `stumble-diff` element connects. Both elements are defined in the page
-  script; Foldkit sets their properties, so a row keeps its element and the reply in progress is
-  patched in place. The diff element keeps the output text as its children and covers them with a
-  shadow root only when the text parses as a patch.
+- `pnpm build:page` first builds `src/page/client/pierre/entry.ts` as one ES module and writes it
+  as a static asset, `build/shell-assets/assets/pierre-<hash>.js` (the hash rule above), and its
+  path into the ignored `src/page/pierre-script.generated.ts`. The Worker does not embed it: for
+  that one path it reads the file through the `ASSETS` binding and answers with the page script's
+  headers (`immutable`, `nosniff`, the asset policy). Assets run behind the Worker
+  (`runWorkerFirst`), so the owner gate covers the file, and no other asset path is answered.
+- The page script imports it with `import()` when the first `stumble-markdown` or `stumble-diff`
+  element connects. Both elements are defined in the page script; Foldkit sets their properties, so
+  a row keeps its element and the reply in progress is patched in place. Until the script arrives,
+  a reply shows its source as plain text. The diff element keeps the output text as its children
+  and covers them with a shadow root only when the text parses as a patch; text before the patch,
+  such as the commit header of `git show`, stays above the diff.
 - The build replaces the Shiki backend, Shiki's catalogs, and the theme catalogs of
   `@pierre/theming` and `@pierre/highlights` with an empty module, and resolves `@pierre/words`
   to `@pierre/words/no-math`. The page selects the Highlights backend and registers Pierre Light and
@@ -97,11 +102,15 @@ hand-written Markdown parser is gone.
   selectors. `FileDiff` is not used because its theme `<style>` element would need
   `style-src-elem 'unsafe-inline'`.
 
-- The page now writes HTML that Words built from model text. Words omits raw HTML and checks URL
-  schemes; the page's options also keep only `http(s)` links and drop images, which `img-src` would
-  block. `test/page/client/markdown.props.test.ts` checks the output for allowed elements and
-  attributes and `http(s)` links. The page still creates no script element; `import()` loads only
-  the fixed path.
-- Budgets: the page script is 252,126 bytes gzip (limit 256 KiB), the Pierre script 340,672
-  (limit 383 KiB, `tools/bundle-budgets.test.ts`). The Worker embeds the Pierre script, so its upload
-  grew to 793,906 bytes gzip and its limit to 1,024 KiB.
+- The page now writes HTML that Words built from model text. Words has no mode that escapes raw
+  HTML, only one that drops it, so the page puts a word joiner (U+2060) after every `<` that could
+  open a tag before Words parses the text, and removes it again from the rendered text and from the
+  code it highlights. Raw HTML therefore shows as its literal text, as with the earlier parser, and
+  Words still omits any that reaches it. Words checks URL schemes; the page's options also keep
+  only `http(s)` links and drop images, which `img-src` would block.
+  `test/page/client/markdown.props.test.ts` checks the output for allowed elements and attributes
+  and `http(s)` links, and that `<b>x</b>` shows as text. The page still creates no script element;
+  `import()` loads only the fixed path.
+- Budgets: the page script is 251,936 bytes gzip (limit 256 KiB), the Pierre asset 341,081
+  (limit 383 KiB, `tools/bundle-budgets.test.ts`), and the Worker upload 453,155 (limit 700 KiB,
+  unchanged).
