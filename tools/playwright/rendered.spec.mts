@@ -4,33 +4,41 @@ test.use({ scenario: "rendered" });
 
 const PROMPT = "Rename the sidebar heading to Projects";
 
+const WATCH_MARKDOWN = `
+  window.markdownAdded = [];
+  window.markdownUpdates = new Map();
+  new MutationObserver((records) => {
+    for (const record of records) {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      const markdown = target?.closest("stumble-markdown");
+      if (markdown) {
+        window.markdownUpdates.set(markdown, (window.markdownUpdates.get(markdown) ?? 0) + 1);
+      }
+      for (const node of record.addedNodes) {
+        if (node instanceof Element) {
+          window.markdownAdded.push(...node.querySelectorAll("stumble-markdown"));
+        }
+      }
+    }
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+`;
+
+const REPLY_GROWTH = `(() => {
+  const created = window.markdownAdded.filter((added) => added.querySelector("table") !== null);
+  const [reply] = created;
+  return {
+    created: created.length,
+    isShown: reply !== undefined && reply.isConnected,
+    updates: reply === undefined ? 0 : (window.markdownUpdates.get(reply) ?? 0),
+  };
+})()`;
+
+const COLOURS = `new Set([...document.querySelectorAll("stumble-markdown pre code span")].map((span) => getComputedStyle(span).color)).size`;
+
 test("a streamed reply renders its table and highlighted code, patching one element as it grows", async ({
   owner,
 }) => {
-  await owner.evaluate(() => {
-    const added: Element[] = [];
-    const updates = new Map<Element, number>();
-
-    new MutationObserver((records) => {
-      for (const record of records) {
-        const element =
-          record.target instanceof Element ? record.target : record.target.parentElement;
-        const markdown = element?.closest("stumble-markdown");
-
-        if (markdown === null || markdown === undefined) {
-          added.push(
-            ...[...record.addedNodes]
-              .filter((node) => node instanceof Element && node.matches("li"))
-              .flatMap((node) => [...(node as Element).querySelectorAll("stumble-markdown")]),
-          );
-        } else {
-          updates.set(markdown, (updates.get(markdown) ?? 0) + 1);
-        }
-      }
-    }).observe(document.body, { childList: true, subtree: true, characterData: true });
-
-    Object.assign(window, { markdownAdded: added, markdownUpdates: updates });
-  });
+  await owner.evaluate(WATCH_MARKDOWN);
 
   await sendMessage(owner, PROMPT);
   await expect(turnState(owner)).toHaveText("answered");
@@ -40,27 +48,14 @@ test("a streamed reply renders its table and highlighted code, patching one elem
   await expect(reply.locator("td").first()).toHaveText("src/sidebar.ts");
   await expect(reply.locator("pre code")).toHaveText('const heading = "Projects";');
 
-  const colours = await reply
-    .locator("pre code span")
-    .evaluateAll((spans) => new Set(spans.map((span) => getComputedStyle(span).color)).size);
+  expect(await owner.evaluate<number>(COLOURS)).toBeGreaterThan(1);
 
-  expect(colours).toBeGreaterThan(1);
-
-  const growth = await reply.evaluate((element) => {
-    const { markdownAdded, markdownUpdates } = window as unknown as {
-      markdownAdded: Element[];
-      markdownUpdates: Map<Element, number>;
-    };
-
-    return {
-      created: markdownAdded.filter((added) => added.querySelector("table") !== null).length,
-      isSame: markdownAdded.includes(element),
-      updates: markdownUpdates.get(element) ?? 0,
-    };
-  });
+  const growth = await owner.evaluate<{ created: number; isShown: boolean; updates: number }>(
+    REPLY_GROWTH,
+  );
 
   expect(growth.created).toBe(1);
-  expect(growth.isSame).toBe(true);
+  expect(growth.isShown).toBe(true);
   expect(growth.updates).toBeGreaterThan(1);
 });
 

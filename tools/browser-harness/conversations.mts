@@ -1,6 +1,5 @@
-import { awaitWithContext, BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import { createModels, type AssistantMessage, type Message } from "@earendil-works/pi-ai";
-import { obj, str } from "@earendil-works/pi-schema";
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -11,27 +10,26 @@ import {
 import {
   configure,
   createRegistry,
-  defineExtension,
-  defineTool,
   Harness,
   MemoryStorage,
   type Conversation,
   type ConversationWatch,
   type EntryRecord,
-  type Extension,
 } from "@earendil-works/pi-durable";
-import { setTimeout as sleep } from "node:timers/promises";
 import type { EntriesRequest } from "../../src/entries-request.js";
 import { entriesQuery, entryId } from "../../src/facet/entries-query.js";
 import { RunNotices } from "../../src/facet/generation-1/run-notices.js";
 import { HARNESS_SELF_PROJECT_ID, projectLocation, type HarnessScenario } from "./fixtures.mjs";
 import {
   DIFF_COMMAND,
-  DIFF_OUTPUT,
   EDIT_ARGUMENTS,
-  editStub,
+  freshBarrier,
+  preparing,
   RENDERED_REPLY,
-} from "./rendered.mjs";
+  stubTools,
+  TOOL_OUTPUT,
+  type Barrier,
+} from "./stub-tools.mjs";
 
 export const OPENING_TEXT = "I will run the checks before I change anything.";
 
@@ -39,7 +37,7 @@ export const ANSWER_TEXT = "Verification passed, and EARLIER-EDIT-KEPT is still 
 
 export const TOOL_COMMAND = "pnpm verify";
 
-export const TOOL_OUTPUT = ["tests: 12 passed\n", "lint: clean\n"] as const;
+export { TOOL_OUTPUT };
 
 export const MODEL_ERROR = "model-error";
 
@@ -109,60 +107,6 @@ function answer(scenario: HarnessScenario, messages: readonly Message[]): Assist
     [fauxText(OPENING_TEXT), fauxToolCall("bash", { command: TOOL_COMMAND })],
     { stopReason: "toolUse" },
   );
-}
-
-export type Barrier = {
-  reached: boolean;
-  held: boolean;
-  release: () => void;
-  released: Promise<void>;
-};
-
-function freshBarrier(): Barrier {
-  const barrier = { reached: false, held: false, release: (): void => undefined };
-
-  const released = new Promise<void>((resolve) => {
-    barrier.release = () => {
-      barrier.held = false;
-      resolve();
-    };
-  });
-
-  return Object.assign(barrier, { released });
-}
-
-async function preparing(barrier: Barrier): Promise<undefined> {
-  if (barrier.held) {
-    barrier.reached = true;
-    await barrier.released;
-  }
-
-  return undefined;
-}
-
-function stubTools(scenario: HarnessScenario, barrier: Barrier): Extension {
-  const bash = defineTool({
-    name: "bash",
-    description: "Run a shell command in the project",
-    parameters: obj({ command: str() }),
-    execute: async (_args, api, toolContext) => {
-      const [first, second] = scenario === "rendered" ? [DIFF_OUTPUT, ""] : TOOL_OUTPUT;
-      api.output(first);
-
-      if (scenario === "ready-paused") {
-        barrier.reached = true;
-        barrier.held = true;
-        await awaitWithContext(barrier.released, toolContext);
-      }
-
-      await sleep(150);
-      api.output(second);
-
-      return {};
-    },
-  });
-
-  return defineExtension({ name: "stub", tools: [bash, editStub] });
 }
 
 export type Conversations = Readonly<{

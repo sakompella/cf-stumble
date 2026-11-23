@@ -142,14 +142,6 @@ test("a new submission or refused activation does not keep an earlier attempt's 
   ).toEqual(["rejected: stale-epoch", "3", ""]);
 });
 
-function classesOf(node: Rendered | string): readonly string[] {
-  if (Predicate.isString(node)) {
-    return [];
-  }
-
-  return Object.keys(node.data?.class ?? {}).flatMap((name) => name.split(" "));
-}
-
 function modelShowingToolOutput(output: string): Model {
   return pageShowing(
     running({

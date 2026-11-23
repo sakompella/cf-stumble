@@ -110,6 +110,22 @@ test("the favicon is served from the page's own origin, which its image policy a
   expect(await response.text()).toBe(OWNER_PAGE_FAVICON.source);
 });
 
+test.each([
+  ["script", OWNER_PAGE_SCRIPT_FILE.path, "*/*"],
+  ["favicon", OWNER_PAGE_FAVICON.path, "image/svg+xml,*/*"],
+])(
+  "the %s is served with a locked-down policy and no content sniffing",
+  async (_name, path, accept) => {
+    const response = await pageFetch(path, accept);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'none'; frame-ancestors 'none'",
+    );
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  },
+);
+
 test("a path or method the Worker does not own answers 404", async () => {
   const stale = OWNER_PAGE_SCRIPT_FILE.path.replace(/owner-[0-9a-f]+/u, "owner-0000000000000000");
 
