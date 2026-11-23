@@ -5,6 +5,11 @@ import {
   ownerPagePolicy,
 } from "../page/index.js";
 
+const STATIC_ASSET_SECURITY_HEADERS = {
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+  "x-content-type-options": "nosniff",
+} as const;
+
 function ownerPage(nonce: string): Response {
   return new Response(ownerPageHtml(nonce), {
     status: 200,
@@ -24,9 +29,8 @@ function ownerPageScript(): Response {
     headers: {
       "content-type": "text/javascript; charset=utf-8",
       "cache-control": "public, max-age=31536000, immutable",
-      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
       "referrer-policy": "no-referrer",
-      "x-content-type-options": "nosniff",
+      ...STATIC_ASSET_SECURITY_HEADERS,
     },
   });
 }
@@ -37,8 +41,7 @@ function ownerPageFavicon(): Response {
     headers: {
       "content-type": "image/svg+xml",
       "cache-control": "public, max-age=86400",
-      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
-      "x-content-type-options": "nosniff",
+      ...STATIC_ASSET_SECURITY_HEADERS,
     },
   });
 }
