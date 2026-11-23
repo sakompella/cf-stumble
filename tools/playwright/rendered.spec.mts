@@ -1,6 +1,7 @@
 import type { Route } from "@playwright/test";
 import { seedExchange } from "../browser-harness/conversations.mjs";
 import { HARNESS_PROJECT_ID } from "../browser-harness/fixtures.mjs";
+import { COMMIT_LINE } from "../browser-harness/stub-tools.mjs";
 import { expect, sendMessage, test, toolCalls, transcriptTexts, turnState } from "./fixtures.mjs";
 
 test.use({ scenario: "rendered" });
@@ -76,6 +77,8 @@ test("a diff in tool output and a file edit render as word-level diffs", async (
 
   await expect(bash.locator("[data-line]")).toHaveCount(4);
   await expect(bash.locator("[data-diff-span]")).toHaveText(["Repositories", "Projects"]);
+  await expect(bash.locator("[data-patch-text]")).toContainText(COMMIT_LINE);
+  await expect(bash.locator("[data-patch-text]")).toContainText("Rename the sidebar heading");
   await expect(bash.locator("bdi")).toHaveText("src/sidebar.ts");
   await expect(bash.locator(".tool-output")).toBeHidden();
   await expect(edit.locator("bdi")).toHaveText("src/footer.ts");

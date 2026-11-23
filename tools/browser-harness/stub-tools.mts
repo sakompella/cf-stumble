@@ -20,7 +20,14 @@ export const RENDERED_REPLY = [
 
 export const DIFF_COMMAND = "git diff";
 
+export const COMMIT_LINE = "commit 9f1c2d3e4b5a69788796a5b4c3d2e1f0a9b8c7d6";
+
 export const DIFF_OUTPUT = [
+  COMMIT_LINE,
+  "Author: Octo Cat <octocat@example.com>",
+  "",
+  "    Rename the sidebar heading",
+  "",
   "diff --git a/src/sidebar.ts b/src/sidebar.ts",
   "index 3b18e51..a9c2f47 100644",
   "--- a/src/sidebar.ts",
