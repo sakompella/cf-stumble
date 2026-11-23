@@ -9,7 +9,8 @@ function pierre(): Promise<typeof Pierre> {
 class MarkdownElement extends HTMLElement {
   #source = "";
   #isStreaming = false;
-  #view: Promise<Pierre.MarkdownView> | undefined;
+  #view: Pierre.MarkdownView | undefined;
+  #isLoading = false;
 
   get source(): string {
     return this.#source;
@@ -38,9 +39,22 @@ class MarkdownElement extends HTMLElement {
       return;
     }
 
-    this.#view ??= pierre().then(({ mountMarkdown }) => mountMarkdown(this));
-    void this.#view.then((view) => {
-      view.update(this.#source, this.#isStreaming);
+    if (this.#view !== undefined) {
+      this.#view.update(this.#source, this.#isStreaming);
+
+      return;
+    }
+
+    this.textContent = this.#source;
+
+    if (this.#isLoading) {
+      return;
+    }
+
+    this.#isLoading = true;
+    void pierre().then(({ mountMarkdown }) => {
+      this.#view = mountMarkdown(this);
+      this.#render();
     });
   }
 }

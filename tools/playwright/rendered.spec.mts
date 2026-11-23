@@ -1,3 +1,6 @@
+import type { Route } from "@playwright/test";
+import { seedExchange } from "../browser-harness/conversations.mjs";
+import { HARNESS_PROJECT_ID } from "../browser-harness/fixtures.mjs";
 import { expect, sendMessage, test, toolCalls, transcriptTexts, turnState } from "./fixtures.mjs";
 
 test.use({ scenario: "rendered" });
@@ -77,4 +80,30 @@ test("a diff in tool output and a file edit render as word-level diffs", async (
   await expect(bash.locator(".tool-output")).toBeHidden();
   await expect(edit.locator("bdi")).toHaveText("src/footer.ts");
   await expect(edit.locator("[data-diff-span]")).toHaveText(["old", "new"]);
+});
+
+const MARK_REPLY = `document.querySelector("stumble-markdown").dataset.before = "plain"`;
+
+test("before the Pierre script arrives a reply shows its plain text, and the same element renders it after", async ({
+  page,
+  server,
+}) => {
+  const held: Route[] = [];
+
+  await page.route("**/assets/pierre-*.js", (route) => {
+    held.push(route);
+  });
+  await page.goto(`${server.url}/`);
+
+  const reply = transcriptTexts(page, "assistant").first();
+
+  await expect(reply).toHaveText(seedExchange(HARNESS_PROJECT_ID).reply);
+  await expect(reply.locator("a")).toHaveCount(0);
+  await page.evaluate(MARK_REPLY);
+
+  await Promise.all(held.map((route) => route.continue()));
+
+  await expect(reply).toHaveAttribute("data-markdown", "root");
+  await expect(reply).toHaveAttribute("data-before", "plain");
+  await expect(reply.locator("a")).toHaveAttribute("href", /^https:\/\/github\.com\//u);
 });

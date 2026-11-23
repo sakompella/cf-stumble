@@ -21,6 +21,8 @@ function removeTagBreaks(root: HTMLElement): void {
 }
 
 export function mountMarkdown(root: HTMLElement): MarkdownView {
+  root.replaceChildren();
+
   const renderer = createDomRenderer(root, MARKDOWN_OPTIONS);
 
   return {

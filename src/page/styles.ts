@@ -107,6 +107,7 @@ export const OWNER_PAGE_STYLES = `
   }
   .message .text { background: none; font: inherit; padding: 0; }
   .markdown { display: block; overflow-wrap: anywhere; }
+  .markdown:not([data-markdown]) { white-space: pre-wrap; }
   .tool-call { margin: 0.4rem 0; }
   .tool-call summary { cursor: pointer; font-family: ui-monospace, monospace; font-size: 0.85rem; }
   .tool-call.failed summary { color: rgba(200, 60, 60, 1); }
