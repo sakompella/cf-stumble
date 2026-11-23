@@ -45,14 +45,22 @@ const imports = 'import (\n\t"bytes"\n';
 
 if (!original.includes(imports)) throw new Error("tailnet-do imports changed");
 
+const logout = "return js.Undefined(), n.lb.Logout(ctx, nil)";
+
+if (!original.includes(logout)) throw new Error("tailnet-do logout changed");
+
 await writeFile(
   main,
-  original
+  `${original
     .replace(
       transport,
       "n.httpc = &http.Client{Transport: &http.Transport{DialContext: dialer.UserDial}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}",
     )
-    .replace(imports, `${imports}\t_ "golang.org/x/crypto/x509roots/fallback"\n`),
+    .replace(logout, "return js.Undefined(), n.logout(ctx)")
+    .replace(
+      imports,
+      `${imports}\t_ "golang.org/x/crypto/x509roots/fallback"\n\t"tailscale.com/ipn/ipnauth"\n`,
+    )}\nfunc (n *node) logout(ctx context.Context) error {\n\treturn n.lb.Logout(ctx, ipnauth.Self)\n}\n`,
 );
 
 run("go", ["get", FALLBACK_ROOTS], join(source, "go"));

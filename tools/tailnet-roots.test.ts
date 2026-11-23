@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { it } from "node:test";
 
@@ -11,12 +11,16 @@ const engine = join(root, "build", "tailnet", "source", "go");
 const fixtures = join(root, "tools", "tailnet-roots");
 
 function goTest() {
-  const overlay = join(root, "build", "tailnet", "roots-overlay.json");
+  const overlay = join(root, "build", "tailnet", "engine-overlay.json");
 
   writeFileSync(
     overlay,
     JSON.stringify({
-      Replace: { [join(engine, "roots_test.go")]: join(fixtures, "roots_test.go") },
+      Replace: Object.fromEntries(
+        readdirSync(fixtures)
+          .filter((name) => name.endsWith("_test.go"))
+          .map((name) => [join(engine, name), join(fixtures, name)]),
+      ),
     }),
   );
 
@@ -54,7 +58,7 @@ function goTest() {
   );
 }
 
-it("the tailnet engine verifies a public certificate chain with its own roots", () => {
+it("the tailnet engine verifies public certificates with its own roots and logs out a signed-in node", () => {
   const result = goTest();
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
