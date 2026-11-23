@@ -18,6 +18,25 @@ export function stumbleArguments(
   return PLAIN_STUMBLE_COMMAND.test(command) ? command.trim().split(/\s+/u).slice(1) : undefined;
 }
 
+const STUMBLE_IN_COMMAND_LIST =
+  /(?:^|[;&|(){}`\n]|\$\()\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*stumble(?=\s|$|[;&|()])/u;
+
+const STUMBLE_ALONE_MESSAGE =
+  "stumble runs only as a command on its own, without cd, pipes, redirects or other shell syntax: run `stumble ...` as a separate command.\n";
+
+export function refusesStumbleInCommandList(command: string | readonly string[]): boolean {
+  return !isArgv(command) && STUMBLE_IN_COMMAND_LIST.test(command);
+}
+
+export function refuseStumbleInCommandList(
+  options: ShellExecOptions | undefined,
+  context: Context,
+): Result<ShellExecResult, ExecutionError> {
+  options?.onOutput?.(STUMBLE_ALONE_MESSAGE, context, { stream: "stderr" });
+
+  return { ok: true, value: { exitCode: 2 } };
+}
+
 export async function runStumbleCommand(
   args: readonly string[],
   ports: StumblePorts,
