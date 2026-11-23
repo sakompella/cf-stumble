@@ -9,6 +9,7 @@ export function tailnetWorker(stage: string) {
     main: "src/tailnet-worker.ts",
     compatibility: { date: compatibility.date, flags: [...compatibility.flags] },
     workersDev: false,
+    codeUpdateStrategy: { mode: "immediate" },
     observability: observability(isProduction),
     env: {
       NODE: Cloudflare.DurableObject("TailnetObject"),
