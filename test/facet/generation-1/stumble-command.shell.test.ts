@@ -92,12 +92,6 @@ test("a command that only resembles stumble runs in the workspace exactly as it 
     "stumbles gen status",
     "./stumble gen status",
     "echo stumble gen status",
-    "stumble gen status | cat",
-    "stumble gen status; echo after",
-    "stumble gen status && echo after",
-    'stumble "gen" status',
-    "stumble $(echo gen) status",
-    "STUMBLE=1 stumble gen status",
     ["echo", "stumble"],
     ["./stumble", "gen"],
   ];
@@ -118,6 +112,35 @@ test("a command that only resembles stumble runs in the workspace exactly as it 
     expect(linesInAnyOrder(withStumble), String(command)).toStrictEqual(
       linesInAnyOrder(withoutStumble),
     );
+  }
+
+  expect(reached).toStrictEqual([]);
+});
+
+test("stumble inside a command list is refused with a message to run it on its own", async () => {
+  const compounds = [
+    "cd /workspace/harness && stumble gen prepare abc123",
+    "stumble gen status | cat",
+    "stumble gen status; echo after",
+    "echo before\nstumble gen status",
+    "false || stumble gen status",
+    "(stumble gen status)",
+    'stumble "gen" status',
+    "stumble $(echo gen) status",
+    "STUMBLE=1 stumble gen status",
+  ];
+
+  const { reached, generations } = recordingControl();
+
+  for (const command of compounds) {
+    await withHostWorkspace(async (env) => {
+      const run = await ran(env, command);
+
+      expect(run.exitCode, command).toBe(2);
+      expect(run.output, command).toBe(
+        "stumble runs only as a command on its own, without cd, pipes, redirects or other shell syntax: run `stumble ...` as a separate command.\n",
+      );
+    }, generations);
   }
 
   expect(reached).toStrictEqual([]);

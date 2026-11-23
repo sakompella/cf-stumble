@@ -16,7 +16,12 @@ import {
 } from "./execution-env-files.js";
 import { joinPath, type ComputerWorkspace } from "./execution-env-paths.js";
 import { openBinaryReader } from "./execution-env-readers.js";
-import { runStumbleCommand, stumbleArguments } from "./stumble-command.js";
+import {
+  refuseStumbleInCommandList,
+  refusesStumbleInCommandList,
+  runStumbleCommand,
+  stumbleArguments,
+} from "./stumble-command.js";
 
 const COMPUTER_ENV_ID = "cf-stumble:computer-workspace";
 
@@ -72,9 +77,13 @@ export function createComputerEnv(options: ComputerEnvOptions): ComputerEnv {
     exec: (command, execOptions, context) => {
       const stumble = stumbleArguments(command);
 
-      return stumble === undefined
-        ? execInWorkspace(workspace, running, command, execOptions, context)
-        : runStumbleCommand(stumble, { generations }, execOptions, context);
+      if (stumble !== undefined) {
+        return runStumbleCommand(stumble, { generations }, execOptions, context);
+      }
+
+      return refusesStumbleInCommandList(command)
+        ? Promise.resolve(refuseStumbleInCommandList(execOptions, context))
+        : execInWorkspace(workspace, running, command, execOptions, context);
     },
     cleanup: () => killAll(workspace, running),
     onBackend: (backend) => envFor({ ...workspace, backend }),
