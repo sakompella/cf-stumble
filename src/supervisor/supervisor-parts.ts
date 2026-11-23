@@ -10,7 +10,7 @@ import { FACET_COMPATIBILITY } from "../facet/index.js";
 import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, MainLineage } from "./artifacts/index.js";
-import { ServingConversations } from "./conversations/index.js";
+import { ServingConversations, tailnetFetchOf } from "./conversations/index.js";
 import { ProvisionFence, WorkspaceReadiness } from "./readiness/index.js";
 import { supervisorNames, type SupervisorEnv } from "./supervisor-env.js";
 
@@ -110,6 +110,7 @@ export function supervisorParts(
     resetting,
     obtainWorkspace: (project, remainingMs) => projects.readiness.obtain(project, remainingMs),
     generations: generationOperations,
+    tailnetFetch: tailnetFetchOf(env.TAILNET),
     selection: generations,
   });
 

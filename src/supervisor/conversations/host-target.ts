@@ -9,6 +9,7 @@ import type {
   FacetLogLevel,
   RunFailures,
   RunningConversation,
+  TailnetFetch,
 } from "../../facet/index.js";
 import {
   GenerationControlRequest,
@@ -36,6 +37,7 @@ type HostPorts = Readonly<{
   log: (level: FacetLogLevel, event: string, fields: FacetLogFields) => void;
   running: (report: RunReport) => Promise<void>;
   workspace: (conversationId: string) => Promise<ProjectRpcTargetContract & Disposable>;
+  tailnetFetch: TailnetFetch;
 }>;
 
 const WakeFields = Schema.Struct({
@@ -48,6 +50,8 @@ const readWakeFields = Schema.decodeUnknownOption(WakeFields);
 const isFiniteNumber = Schema.is(Schema.Finite);
 
 const isString = Schema.is(Schema.String);
+
+const isRequestInit = Schema.is(Schema.UndefinedOr(Schema.ObjectKeyword));
 
 const isLogLevel = Schema.is(Schema.Literals(["info", "error"]));
 
@@ -109,6 +113,14 @@ export class ConversationHostTarget extends RpcTarget implements ConversationHos
     }
 
     return this.#ports.workspace(conversationId);
+  }
+
+  tailnetFetch(url: string, init?: RequestInit): Promise<Response> {
+    if (!isString(url) || !isRequestInit(init)) {
+      return Promise.reject(new Error("a tailnet fetch must be a url and request options"));
+    }
+
+    return this.#ports.tailnetFetch(url, init);
   }
 }
 
@@ -188,6 +200,7 @@ export function servingHosts(
       arm: (wake) => whileServing(serves, () => ports.arm(wake)),
       running: (report) => whileServing(serves, () => ports.running(report)),
       workspace: (conversationId) => whileServing(serves, () => ports.workspace(conversationId)),
+      tailnetFetch: (url, init) => whileServing(serves, () => ports.tailnetFetch(url, init)),
     }),
     generations: new GenerationHostTarget(generations, serves),
   };

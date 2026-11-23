@@ -29,6 +29,7 @@ type ServingPorts = Readonly<{
   resetting: () => boolean;
   obtainWorkspace: ObtainWorkspace;
   generations: Parameters<typeof servingHosts>[1];
+  tailnetFetch: Parameters<typeof servingHosts>[0]["tailnetFetch"];
   selection: Readonly<{
     active: () => Readonly<{ generation: Readonly<{ label: number }> | undefined }>;
     settled: (settlement: Settlement) => void;
@@ -317,6 +318,7 @@ export class ServingConversations {
         running: (report) =>
           this.#settle(this.#runs.reconcile(report, Date.now(), instance, this.#generationLabel())),
         workspace: (conversationId) => this.#workspace(conversationId),
+        tailnetFetch: this.#ports.tailnetFetch,
       },
       this.#ports.generations,
       () => this.serves(instance),

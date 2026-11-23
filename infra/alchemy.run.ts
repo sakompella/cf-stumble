@@ -16,6 +16,7 @@ import {
   workerName,
   workerAssets,
 } from "./worker-settings.js";
+import { tailnetWorker } from "./tailnet.js";
 import { workspaceImage } from "./workspace-image/image.js";
 
 export default Alchemy.Stack(
@@ -26,6 +27,8 @@ export default Alchemy.Stack(
     const isProduction = stage === PRODUCTION_STAGE;
     const name = workerName(stage);
     const moduleMaps = yield* Cloudflare.R2.Bucket("ModuleMaps", { forceDestroy: !isProduction });
+
+    const tailnet = yield* tailnetWorker(stage);
 
     const worker = yield* Cloudflare.Worker("Worker", {
       name,
@@ -44,6 +47,8 @@ export default Alchemy.Stack(
       observability: observability(isProduction),
       env: {
         ...plainTextBindings(stage),
+        TAILNET: tailnet,
+        TAILNET_ADMIN: Cloudflare.WorkerEntrypoint(tailnet, "TailnetAdmin"),
         SUPERVISOR: Cloudflare.DurableObject(durableObjectClasses.SUPERVISOR),
         WORKSPACE_HOST: Cloudflare.DurableObject(durableObjectClasses.WORKSPACE_HOST, {
           containers: [

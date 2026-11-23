@@ -7,3 +7,5 @@ export { ownerPageResponse } from "./page.js";
 export { routeApiRequest } from "./api.js";
 
 export { routeOrbRequest } from "./orb.js";
+
+export { routeTailnetRequest } from "./tailnet.js";

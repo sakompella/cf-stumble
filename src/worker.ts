@@ -1,5 +1,10 @@
 import * as Effect from "effect/Effect";
-import { ownerPageResponse, routeOrbRequest, routeApiRequest } from "./routes/index.js";
+import {
+  ownerPageResponse,
+  routeOrbRequest,
+  routeApiRequest,
+  routeTailnetRequest,
+} from "./routes/index.js";
 import { runAtEntryPoint } from "./run-entry-point.js";
 import { ownerGateRefusal } from "./owner-gate.js";
 import { Supervisor } from "./supervisor/supervisor.js";
@@ -28,6 +33,10 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
   if (request.method === "GET" && pathname === "/health") {
     return Effect.succeed(noStore(Response.json({ ok: true })));
   }
+
+  const tailnet = routeTailnetRequest(request, env.TAILNET_ADMIN);
+
+  if (tailnet !== undefined) return tailnet.pipe(Effect.map(noStore));
 
   const orb = routeOrbRequest(request, () =>
     env.WORKSPACE_HOST.getByName(tenantWorkspaceName(SUPERVISOR_NAME)),

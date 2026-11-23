@@ -1,6 +1,6 @@
 import { FileError, type ExecutionEnv, type Result } from "@earendil-works/pi-durable/env";
 import type { GenerationControl } from "../../generation-requests.js";
-import type { FacetLog } from "../conversation-protocol.js";
+import type { FacetLog, TailnetFetch } from "../conversation-protocol.js";
 import type {
   ExecBackendChoice,
   ProjectRpcTargetContract,
@@ -25,6 +25,7 @@ export interface ComputerEnvOptions {
   readonly target: ProjectRpcTargetContract;
   readonly generations: GenerationControl;
   readonly log?: FacetLog | undefined;
+  readonly tailnetFetch?: TailnetFetch | undefined;
 }
 
 function unsupported(member: string): () => Promise<Result<never, FileError>> {
@@ -36,6 +37,7 @@ function unsupported(member: string): () => Promise<Result<never, FileError>> {
 export interface ComputerEnv extends ExecutionEnv {
   onBackend(backend: ExecBackendChoice): ExecutionEnv;
   log: FacetLog;
+  tailnetFetch?: TailnetFetch | undefined;
 }
 
 export function createComputerEnv(options: ComputerEnvOptions): ComputerEnv {
@@ -79,6 +81,7 @@ export function createComputerEnv(options: ComputerEnvOptions): ComputerEnv {
     cleanup: () => killAll(workspace, running),
     onBackend: (backend) => envFor({ ...workspace, backend }),
     log: options.log ?? (() => {}),
+    tailnetFetch: options.tailnetFetch,
   });
 
   return envFor({ cwd: options.cwd, target: options.target });

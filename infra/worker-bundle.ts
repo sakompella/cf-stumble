@@ -20,10 +20,10 @@ const props = {
   isExternal: true,
 };
 
-export function buildWorkerBundle() {
+export function buildWorkerBundle(main = workerEntrypoint) {
   return Effect.runPromise(
     Effect.gen(function* () {
-      const source = yield* Cloudflare.Workers.resolveSource(props);
+      const source = yield* Cloudflare.Workers.resolveSource({ ...props, main });
 
       const { bundle } = yield* source.build(
         Cloudflare.Workers.makeSourceContext({

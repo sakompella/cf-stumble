@@ -2,9 +2,10 @@
   description = "cf-stumble development and verification environment";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.tailnet-nixpkgs.url = "github:NixOS/nixpkgs/680275f0bb6afce84fbac3e75fc47c5f2272400b";
 
   outputs =
-    { nixpkgs, ... }:
+    { nixpkgs, tailnet-nixpkgs, ... }:
     let
       systems = [
         "x86_64-linux"
@@ -18,6 +19,7 @@
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShellNoCC {
           packages = with pkgs; [
+            tailnet-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.go
             nodejs_22
             pnpm_11
             bash

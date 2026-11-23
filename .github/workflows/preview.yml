@@ -60,7 +60,8 @@ jobs:
             infra/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm run deploy preview --yes
+      - uses: cachix/install-nix-action@v31
+      - run: nix develop -c pnpm run deploy preview --yes
       - name: Find the preview Worker's workers.dev URL
         run: |
           subdomain="$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" | jq -r '.result.subdomain')"

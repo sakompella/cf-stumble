@@ -53,6 +53,7 @@ test("the host a serving facet holds exposes exactly the allowlisted RPC members
     "arm",
     "log",
     "running",
+    "tailnetFetch",
     "workspace",
   ]);
 });

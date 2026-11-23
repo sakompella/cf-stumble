@@ -91,7 +91,7 @@ test("a replaced serving instance's run reports and wakes are refused without re
   const reached = vi.fn<() => never>();
 
   const { host } = servingHosts(
-    { arm: reached, log: reached, running: reached, workspace: reached },
+    { arm: reached, log: reached, running: reached, workspace: reached, tailnetFetch: reached },
     {
       getActiveGeneration: reached,
       submitGeneration: reached,

@@ -41,4 +41,5 @@ export type {
   FacetLogLevel,
   RunFailures,
   RunningConversation,
+  TailnetFetch,
 } from "./conversation-protocol.js";

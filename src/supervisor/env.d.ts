@@ -1,3 +1,4 @@
+import type { TailnetStatus } from "../tailnet-status.js";
 import type * as WorkerModule from "../worker.js";
 import type { Supervisor } from "./supervisor.js";
 import type { WorkspaceHost } from "../workspace/index.js";
@@ -13,11 +14,16 @@ declare global {
       readonly ASSETS: Fetcher;
       readonly AI: Ai;
       readonly MODULE_MAPS: R2Bucket;
+      readonly TAILNET?: Pick<Fetcher, "fetch">;
       readonly SUPERVISOR: DurableObjectNamespace<Supervisor>;
       readonly WORKSPACE_HOST: DurableObjectNamespace<WorkspaceHost>;
       readonly GITHUB_OAUTH_CLIENT_ID?: string;
       readonly GH_TOKEN?: string;
       readonly OWNER_PASSWORD?: string;
+      readonly TAILNET_ADMIN?: Readonly<{
+        status: () => Promise<TailnetStatus>;
+        logout: () => Promise<void>;
+      }>;
       readonly CHATGPT_MODEL: string;
     }
   }

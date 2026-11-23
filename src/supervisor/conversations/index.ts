@@ -1,5 +1,7 @@
 export { ServingConversations } from "./serving.js";
 
+export { tailnetFetchOf } from "./tailnet-fetch.js";
+
 export { ConversationHostTarget, GenerationHostTarget } from "./host-target.js";
 
 export { heldWorkspace, type ScopedWorkspace } from "./held-workspaces.js";

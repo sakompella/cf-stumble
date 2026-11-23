@@ -82,7 +82,8 @@ jobs:
             pnpm-lock.yaml
             infra/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run deploy "$STAGE" --yes
+      - uses: cachix/install-nix-action@v31
+      - run: nix develop -c pnpm run deploy "$STAGE" --yes
         env:
           STAGE: ${{ inputs.stage || 'prod' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

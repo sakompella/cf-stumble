@@ -55,6 +55,26 @@ function onBackend<Api extends ToolExecutionApi>(api: Api, backend: "isolate" | 
   return isComputerEnv(env) ? { ...api, env: env.onBackend(backend) } : api;
 }
 
+const tailnetFetchTool = defineTool({
+  name: "tailnet_fetch",
+  description:
+    "Send one GET request to one exact URL on the owner's tailnet, such as http://100.64.0.7:8080/status or http://machine.example.ts.net/path. Returns the HTTP status line, the response headers and the body text. It sends no body and follows no redirect. The owner's tailnet worker decides which hosts are reachable and refuses the rest. It fails when this deployment has no tailnet.",
+  parameters: obj({ url: str({ description: "The exact http(s) URL to request" }) }),
+  execute: async ({ url }, { env }) => {
+    const tailnetFetch = isComputerEnv(env) ? env.tailnetFetch : undefined;
+
+    if (tailnetFetch === undefined)
+      throw new Error("tailnet_fetch is unavailable: no tailnet here");
+
+    const response = await tailnetFetch(url, { redirect: "manual" });
+    const headers = [...response.headers].map(([name, value]) => `${name}: ${value}`);
+    const status = `HTTP ${response.status} ${response.statusText}`.trim();
+    const text = [status, ...headers, "", await response.text()].join("\n");
+
+    return { output: [{ type: "text", text }] };
+  },
+});
+
 function timeoutMessage(timeout: number | undefined, elapsedMs: number): string {
   const elapsed = `${Math.round(elapsedMs / 1_000)} s`;
 
@@ -134,5 +154,7 @@ function logged(tool: ToolRegistration): ToolRegistration {
 
 export const CodingTools = defineExtension({
   name: "coding-tools",
-  tools: [createReadTool(), createWriteTool(), createEditTool(), backendBash].map(logged),
+  tools: [createReadTool(), createWriteTool(), createEditTool(), backendBash, tailnetFetchTool].map(
+    logged,
+  ),
 });

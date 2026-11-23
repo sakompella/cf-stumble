@@ -12,4 +12,5 @@ cd "$(dirname "$0")/.."
 pnpm run install:infra
 pnpm run build:page
 pnpm run build:shell-modules
+pnpm run build:tailnet
 exec pnpm alchemy deploy --config infra/alchemy.run.ts --stage "$stage" "$@"

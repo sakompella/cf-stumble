@@ -5,6 +5,7 @@ import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import {
   ConversationHostTarget,
   heldWorkspace,
+  tailnetFetchOf,
   type ScopedWorkspace,
 } from "../conversations/index.js";
 import {
@@ -53,6 +54,7 @@ export function checkConversation(
     log: () => {},
     running: () => Promise.resolve(),
     workspace: async () => (await held.capability()).dup(),
+    tailnetFetch: tailnetFetchOf(),
   });
 
   return Effect.gen(function* () {

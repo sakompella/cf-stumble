@@ -22,11 +22,14 @@ export type FacetLogFields = Readonly<Record<string, string | number | boolean |
 
 export type FacetLog = (level: FacetLogLevel, event: string, fields: FacetLogFields) => void;
 
+export type TailnetFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
 export interface ConversationHost {
   arm(wake: Wake): Promise<void>;
   log(level: FacetLogLevel, event: string, fields: FacetLogFields): Promise<void>;
   running(conversations: readonly RunningConversation[], failed?: RunFailures): Promise<void>;
   workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable>;
+  tailnetFetch?: TailnetFetch;
 }
 
 export type ModelCapability = Readonly<{
