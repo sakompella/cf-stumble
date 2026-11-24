@@ -8,18 +8,19 @@ import {
   durableObjectClasses,
   WORKSPACE_CONTAINER_MEMORY_MIB,
 } from "../../infra/worker-settings.ts";
-import type { JsonRecord, JsonValue } from "../json.mts";
-import { BUCKET_MS, type TimeWindow, type UsageBucket } from "./check.mts";
+import { BUCKET_MS, type Source, type TimeWindow, type UsageBucket } from "./check.mts";
 
 const API = "https://api.cloudflare.com/client/v4";
 
 const METRICS_ROW_LIMIT = 5000;
 
+export type Account = Readonly<{ token: string; id: string }>;
+
 export class ApiFailure extends Error {}
 
-export function decoded<S extends Schema.ConstraintDecoder<unknown>>(
+function decoded<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
-  value: JsonValue,
+  value: Schema.Json,
   message: string,
 ): S["Type"] {
   const parsed = Schema.decodeOption(schema)(value);
@@ -27,6 +28,18 @@ export function decoded<S extends Schema.ConstraintDecoder<unknown>>(
   if (Option.isNone(parsed)) throw new ApiFailure(message);
 
   return parsed.value;
+}
+
+export function settled<T>(work: Promise<T>): Promise<Source<T>> {
+  return work.then(
+    (data) => ({ status: "ok", data }) as const,
+    (cause: unknown) =>
+      ({
+        status: "unavailable",
+        reason:
+          cause instanceof ApiFailure ? cause.message : `unexpected failure: ${String(cause)}`,
+      }) as const,
+  );
 }
 
 const decodeJsonText = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
@@ -72,7 +85,7 @@ const CF_LOGIN_FILE = join(homedir(), ".config", "cloudflare", "config", "defaul
 
 const NO_LOGIN = `no CLOUDFLARE_API_TOKEN and no cf login in ${CF_LOGIN_FILE}`;
 
-export function readToken(env: NodeJS.ProcessEnv): string {
+function readToken(env: NodeJS.ProcessEnv): string {
   const fromEnv = env["CLOUDFLARE_API_TOKEN"]?.trim() ?? "";
 
   if (fromEnv !== "") return fromEnv;
@@ -97,7 +110,7 @@ export function readToken(env: NodeJS.ProcessEnv): string {
   return token;
 }
 
-export async function send(token: string, url: string, body?: JsonRecord): Promise<JsonValue> {
+async function send(token: string, url: string, body?: Schema.JsonObject): Promise<Schema.Json> {
   const response = await fetch(url, {
     method: body === undefined ? "GET" : "POST",
     body: body === undefined ? null : JSON.stringify(body),
@@ -111,10 +124,19 @@ export async function send(token: string, url: string, body?: JsonRecord): Promi
   return Option.getOrElse(decodeJsonText(await response.text().catch(() => "")), () => null);
 }
 
-export async function resolveAccount(token: string, env: NodeJS.ProcessEnv): Promise<string> {
+export function sendToAccount(
+  account: Account,
+  path: string,
+  body?: Schema.JsonObject,
+): Promise<Schema.Json> {
+  return send(account.token, `${API}/accounts/${account.id}${path}`, body);
+}
+
+export async function resolveAccount(env: NodeJS.ProcessEnv): Promise<Account> {
+  const token = readToken(env);
   const named = env["CLOUDFLARE_ACCOUNT_ID"]?.trim() ?? "";
 
-  if (named !== "") return named;
+  if (named !== "") return { token, id: named };
 
   const accounts = decoded(
     AccountsResponse,
@@ -128,10 +150,10 @@ export async function resolveAccount(token: string, env: NodeJS.ProcessEnv): Pro
     throw new ApiFailure(`token sees ${ids.length} accounts; set CLOUDFLARE_ACCOUNT_ID`);
   }
 
-  return ids[0];
+  return { token, id: ids[0] };
 }
 
-export function parseUsage(response: JsonValue, memoryBytes: number): readonly UsageBucket[] {
+export function parseUsage(response: Schema.Json, memoryBytes: number): readonly UsageBucket[] {
   const envelope = decoded(
     UsageEnvelope,
     response,
@@ -179,18 +201,16 @@ const USAGE_QUERY = `query($a:String!,$f:Time!,$t:Time!,$apps:[string!]){viewer{
   dimensions{datetimeFiveMinutes applicationId instanceId} sum{allocatedMemory}}}}}`;
 
 export async function fetchUsage(
-  token: string,
-  account: string,
+  account: Account,
   worker: string,
   window: TimeWindow,
 ): Promise<readonly UsageBucket[]> {
+  const missing = `no container application serves ${worker}'s ${durableObjectClasses.WORKSPACE_HOST} namespace`;
+
   const namespaces = decoded(
     NamespacesResponse,
-    await send(
-      token,
-      `${API}/accounts/${account}/workers/durable_objects/namespaces?per_page=1000`,
-    ),
-    `no container application serves ${worker}'s ${durableObjectClasses.WORKSPACE_HOST} namespace`,
+    await sendToAccount(account, "/workers/durable_objects/namespaces?per_page=1000"),
+    missing,
   );
 
   const namespace = namespaces.result.find(
@@ -199,24 +219,20 @@ export async function fetchUsage(
 
   const applications = decoded(
     ApplicationsResponse,
-    await send(token, `${API}/accounts/${account}/containers/applications`),
-    `no container application serves ${worker}'s ${durableObjectClasses.WORKSPACE_HOST} namespace`,
+    await sendToAccount(account, "/containers/applications"),
+    missing,
   );
 
   const application = applications.result.find(
     (app) => namespace !== undefined && app.durable_objects?.namespace_id === namespace.id,
   );
 
-  if (application === undefined) {
-    throw new ApiFailure(
-      `no container application serves ${worker}'s ${durableObjectClasses.WORKSPACE_HOST} namespace`,
-    );
-  }
+  if (application === undefined) throw new ApiFailure(missing);
 
-  const response = await send(token, `${API}/graphql`, {
+  const response = await send(account.token, `${API}/graphql`, {
     query: USAGE_QUERY,
     variables: {
-      a: account,
+      a: account.id,
       f: new Date(Math.floor(window.fromMs / BUCKET_MS) * BUCKET_MS).toISOString(),
       t: new Date(window.toMs).toISOString(),
       apps: [application.id],

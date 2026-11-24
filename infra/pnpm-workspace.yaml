@@ -1,3 +1,2 @@
-# workerd serves `alchemy dev`, which this project does not use.
 allowBuilds:
   workerd: false

@@ -13,7 +13,7 @@ import {
 } from "./e2e/cloudflare.mts";
 import { execute, succeed } from "./e2e/process.mts";
 import { MINUTE_MS, Steps } from "./e2e/steps.mts";
-import { readToken, resolveAccount } from "./ops-check/fetch.mts";
+import { resolveAccount } from "./ops-check/fetch.mts";
 
 const PREVIEW_STAGE = "preview";
 
@@ -48,13 +48,9 @@ async function withCloudflare(env: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv
 
   if (given === undefined) await succeed("pnpm", ["exec", "cf", "auth", "whoami"], { env: login });
 
-  const token = given ?? readToken(login);
+  const account = await resolveAccount({ ...login, CLOUDFLARE_API_TOKEN: given });
 
-  return {
-    ...login,
-    CLOUDFLARE_API_TOKEN: token,
-    CLOUDFLARE_ACCOUNT_ID: await resolveAccount(token, login),
-  };
+  return { ...login, CLOUDFLARE_API_TOKEN: account.token, CLOUDFLARE_ACCOUNT_ID: account.id };
 }
 
 async function previewPassword(): Promise<string> {

@@ -2,14 +2,17 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { gzipSync } from "node:zlib";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
-import { buildWorkerBundle } from "../infra/worker-bundle.ts";
+import { buildWorkerBundle, readUploadedAssets } from "../infra/worker-bundle.ts";
 import { testWorker } from "../infra/test-worker.ts";
+import { OWNER_PAGE_SCRIPT_SOURCE } from "../src/page/owner-script.generated.ts";
 
 const OWNER_AUTHORIZATION = `Basic ${btoa(`aditya:${testWorker.miniflare.bindings.OWNER_PASSWORD}`)}`;
 
 const KIB = 1024;
 
 const WORKER_UPLOAD_GZIP_LIMIT = 700 * KIB;
+
+const OWNER_SCRIPT_GZIP_LIMIT = 256 * KIB;
 
 type Files = Awaited<ReturnType<typeof buildWorkerBundle>>;
 
@@ -64,5 +67,21 @@ describe("the deploy bundle of the Worker", () => {
     });
 
     assert.equal(response.status, 200, await response.text());
+  });
+});
+
+describe("the static assets that Alchemy uploads with the Worker", () => {
+  it("run the Worker before the asset layer, so the owner gate covers every file", async () => {
+    const assets = await readUploadedAssets();
+
+    assert.equal(assets.config?.runWorkerFirst, true);
+  });
+});
+
+describe("the owner page script", () => {
+  it(`stays within ${OWNER_SCRIPT_GZIP_LIMIT / KIB} KiB gzip`, () => {
+    const size = gzipSync(OWNER_PAGE_SCRIPT_SOURCE).length;
+
+    assert.ok(size <= OWNER_SCRIPT_GZIP_LIMIT, `the owner page script is ${size} bytes gzip`);
   });
 });

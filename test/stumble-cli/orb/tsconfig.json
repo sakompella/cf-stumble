@@ -1,8 +1,8 @@
 {
-  "extends": "../../../tsconfig.base.json",
+  "extends": "../../../tsconfig.json",
   "compilerOptions": {
-    "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["./**/*.ts", "../../../src/stumble-cli/orb/**/*.ts"]
+  "include": ["./**/*.ts", "../../../src/stumble-cli/orb/**/*.ts"],
+  "exclude": []
 }

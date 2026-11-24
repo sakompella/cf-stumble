@@ -1,18 +1,15 @@
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { durableObjectClasses } from "../../infra/worker-settings.ts";
-import type { JsonValue } from "../json.mts";
 import { isoMinute, MINUTE_MS, type Finding, type Source, type TimeWindow } from "./check.mts";
-import { ApiFailure, readToken, resolveAccount, send } from "./fetch.mts";
-import { eventRows, TELEMETRY_ROW_LIMIT } from "./telemetry.mts";
+import { ApiFailure, sendToAccount, settled, type Account } from "./fetch.mts";
+import { eventRows, queryTelemetry } from "./telemetry.mts";
 
-export const DO_UPDATE_GRACE_MS = 5 * MINUTE_MS;
-
-const API = "https://api.cloudflare.com/client/v4";
+const DO_UPDATE_GRACE_MS = 5 * MINUTE_MS;
 
 const DurableObjectClassNames: readonly string[] = Object.values(durableObjectClasses);
 
-export interface Deployment {
+interface Deployment {
   readonly deployedAtMs: number;
   readonly versionIds: readonly string[];
 }
@@ -51,7 +48,7 @@ const StaleRow = Schema.Struct({
   }),
 });
 
-export function parseLatestDeployment(response: JsonValue): Deployment {
+export function parseLatestDeployment(response: Schema.Json): Deployment {
   const parsed = Schema.decodeUnknownOption(DeploymentsResponse)(response);
 
   const latest = Option.isSome(parsed)
@@ -71,7 +68,7 @@ export function parseLatestDeployment(response: JsonValue): Deployment {
   return latest;
 }
 
-export function parseStaleCalls(response: JsonValue): readonly StaleCall[] {
+export function parseStaleCalls(response: Schema.Json): readonly StaleCall[] {
   return eventRows(response).flatMap((row) => {
     const parsed = Schema.decodeUnknownOption(StaleRow)(row);
 
@@ -87,19 +84,14 @@ export function parseStaleCalls(response: JsonValue): readonly StaleCall[] {
   });
 }
 
-export async function fetchLatestDeployment(
-  token: string,
-  account: string,
-  worker: string,
-): Promise<Deployment> {
+async function fetchLatestDeployment(account: Account, worker: string): Promise<Deployment> {
   return parseLatestDeployment(
-    await send(token, `${API}/accounts/${account}/workers/scripts/${worker}/deployments`),
+    await sendToAccount(account, `/workers/scripts/${worker}/deployments`),
   );
 }
 
-export async function fetchStaleCalls(
-  token: string,
-  account: string,
+async function fetchStaleCalls(
+  account: Account,
   worker: string,
   window: TimeWindow,
   deployedVersions: readonly string[],
@@ -107,25 +99,14 @@ export async function fetchStaleCalls(
   const perClass = await Promise.all(
     DurableObjectClassNames.map(async (className) =>
       parseStaleCalls(
-        await send(token, `${API}/accounts/${account}/workers/observability/telemetry/query`, {
-          queryId: "adhoc",
-          view: "events",
-          dry: true,
-          limit: TELEMETRY_ROW_LIMIT,
-          timeframe: { from: window.fromMs, to: window.toMs },
-          parameters: {
-            filters: [
-              { key: "$metadata.service", operation: "eq", type: "string", value: worker },
-              { key: "$workers.entrypoint", operation: "eq", type: "string", value: className },
-              ...deployedVersions.map((id) => ({
-                key: "$workers.scriptVersion.id",
-                operation: "neq",
-                type: "string",
-                value: id,
-              })),
-            ],
-          },
-        }),
+        await queryTelemetry(account, worker, window, [
+          { key: "$workers.entrypoint", operation: "eq", value: className },
+          ...deployedVersions.map((id) => ({
+            key: "$workers.scriptVersion.id",
+            operation: "neq" as const,
+            value: id,
+          })),
+        ]),
       ),
     ),
   );
@@ -134,34 +115,24 @@ export async function fetchStaleCalls(
 }
 
 export async function gatherVersions(
+  account: Account,
   worker: string,
   nowMs: number,
-  env: NodeJS.ProcessEnv,
 ): Promise<VersionInput> {
-  try {
-    const token = readToken(env);
-    const account = await resolveAccount(token, env);
-    const deployment = await fetchLatestDeployment(token, account, worker);
-    const fromMs = deployment.deployedAtMs + DO_UPDATE_GRACE_MS;
+  const state = await settled(
+    fetchLatestDeployment(account, worker).then(async (deployment) => {
+      const fromMs = deployment.deployedAtMs + DO_UPDATE_GRACE_MS;
 
-    const staleCalls =
-      nowMs <= fromMs
-        ? []
-        : await fetchStaleCalls(
-            token,
-            account,
-            worker,
-            { fromMs, toMs: nowMs },
-            deployment.versionIds,
-          );
+      const staleCalls =
+        nowMs <= fromMs
+          ? []
+          : await fetchStaleCalls(account, worker, { fromMs, toMs: nowMs }, deployment.versionIds);
 
-    return { worker, nowMs, state: { status: "ok", data: { deployment, staleCalls } } };
-  } catch (cause) {
-    const reason =
-      cause instanceof ApiFailure ? cause.message : `unexpected failure: ${String(cause)}`;
+      return { deployment, staleCalls };
+    }),
+  );
 
-    return { worker, nowMs, state: { status: "unavailable", reason } };
-  }
+  return { worker, nowMs, state };
 }
 
 export function versionFindings(input: VersionInput): readonly Finding[] {

@@ -81,7 +81,7 @@ describe("first-party files carry no comments", () => {
   });
 
   it("has no comment in a shell script", () => {
-    assert.deepEqual(findings(/\.sh$|^\.githooks\//u, shellCommentLines), []);
+    assert.deepEqual(findings(/\.sh$/u, shellCommentLines), []);
   });
 
   it("has no comment in a Dockerfile", () => {

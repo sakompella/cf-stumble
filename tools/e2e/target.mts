@@ -1,3 +1,7 @@
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as Schema from "effect/Schema";
 import { SHELL_MODULES_FILE, workerName } from "../../infra/worker-settings.ts";
 import {
   accountFrom,
@@ -6,25 +10,48 @@ import {
   destroyAndCheck,
   stageUrl,
 } from "./cloudflare.mts";
-import { reportModelCalls } from "./cost.mts";
 import { GitHub } from "./github.mts";
 import { Owner } from "./owner-api.mts";
 import { execute } from "./process.mts";
-import { forgetRestoreState, loadRestoreState, saveRestoreState } from "./restore-state.mts";
 import { HARNESS_PROJECT, markerPath } from "./workflows.mts";
 
 const MINUTE_MS = 60_000;
 
 const METRICS_LAG_MS = 10 * MINUTE_MS;
 
-export type TargetOptions = Readonly<{
+type TargetOptions = Readonly<{
   runId: string;
   url: string | undefined;
   stage: string | undefined;
-  prefix?: string;
   password: string;
   env: NodeJS.ProcessEnv;
 }>;
+
+const SavedRestoreState = Schema.fromJsonString(
+  Schema.Struct({ label: Schema.optional(Schema.Number), project: Schema.optional(Schema.String) }),
+);
+
+type RestoreState = Readonly<{ label: number | undefined; project: string | undefined }>;
+
+function restoreStateFile(runId: string): string {
+  return join(tmpdir(), `cf-stumble-e2e-${runId}-restore.json`);
+}
+
+function loadRestoreState(runId: string): RestoreState {
+  if (!existsSync(restoreStateFile(runId))) return { label: undefined, project: undefined };
+
+  const saved = Schema.decodeSync(SavedRestoreState)(readFileSync(restoreStateFile(runId), "utf8"));
+
+  return { label: saved.label, project: saved.project };
+}
+
+function saveRestoreState(runId: string, state: RestoreState): void {
+  writeFileSync(restoreStateFile(runId), JSON.stringify(state), { mode: 0o600 });
+}
+
+function forgetRestoreState(runId: string): void {
+  rmSync(restoreStateFile(runId), { force: true });
+}
 
 export class Target {
   readonly runId: string;
@@ -45,8 +72,7 @@ export class Target {
     this.#restoreLabel = saved.label;
     this.#connectedProject = saved.project;
     this.fresh = options.url === undefined && options.stage === undefined;
-    this.stage =
-      options.stage ?? (this.fresh ? `${options.prefix ?? "e2e"}-${options.runId}` : undefined);
+    this.stage = options.stage ?? (this.fresh ? `e2e-${options.runId}` : undefined);
     this.github = new GitHub(options.env["GH_TOKEN"] ?? "");
   }
 
@@ -102,11 +128,6 @@ export class Target {
     );
 
     if (checked.code !== 0) throw new Error(`ops:check exited ${checked.code}`);
-
-    await reportModelCalls(accountFrom(this.#options.env), worker, {
-      fromMs: this.#startedMs,
-      toMs: Date.now(),
-    });
   }
 
   async #runBranches(): Promise<readonly string[]> {

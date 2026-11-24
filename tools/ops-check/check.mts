@@ -5,7 +5,7 @@ export const MINUTE_MS = 60_000;
 
 export const BUCKET_MS = 5 * MINUTE_MS;
 
-export const OVERRUN_SLACK_MS = 10 * MINUTE_MS;
+const OVERRUN_SLACK_MS = 10 * MINUTE_MS;
 
 export const METRICS_LAG_MS = 10 * MINUTE_MS;
 
@@ -37,7 +37,7 @@ export interface RunSettlement {
   readonly totalMs: number;
 }
 
-export interface ModelCall {
+interface ModelCall {
   readonly provider: string;
   readonly promptTokens: number;
   readonly cachedTokens: number;

@@ -5,7 +5,6 @@ import { after, describe, it } from "node:test";
 import * as Predicate from "effect/Predicate";
 import type { ANSWERS } from "../../src/api/answers.js";
 import { Owner } from "./owner-api.mts";
-import { forgetRestoreState, loadRestoreState, saveRestoreState } from "./restore-state.mts";
 import { Target } from "./target.mts";
 import { productLoop } from "./workflows.mts";
 
@@ -72,22 +71,23 @@ function listen(server: Server): Promise<string> {
   });
 }
 
-function cleanupTarget(url: string): Target {
-  const runId = randomBytes(4).toString("hex");
-
-  saveRestoreState(runId, { label: undefined, project: PROJECT });
-
+function target(url: string, runId = randomBytes(4).toString("hex")): Target {
   return new Target({ runId, url, stage: undefined, password: "pw", env: {} });
+}
+
+function connectedTarget(url: string): Target {
+  const connected = target(url);
+
+  connected.connectedProject = PROJECT;
+
+  return connected;
 }
 
 describe("restoring a target the e2e run connected a project to", () => {
   const servers: Server[] = [];
-  const runs: string[] = [];
 
   after(() => {
     for (const server of servers) server.close();
-
-    for (const runId of runs) forgetRestoreState(runId);
   });
 
   it("stops the project's run before it disconnects, so the disconnect is accepted", async () => {
@@ -96,13 +96,12 @@ describe("restoring a target the e2e run connected a project to", () => {
 
     servers.push(server);
 
-    const target = cleanupTarget(url);
+    const connected = connectedTarget(url);
 
-    runs.push(target.runId);
-    await target.restore();
+    await connected.restore();
 
     assert.equal(project.removed, true);
-    assert.equal(loadRestoreState(target.runId).project, undefined);
+    assert.equal(target(url, connected.runId).connectedProject, undefined);
   });
 
   it("fails and keeps the project in the restore record when the disconnect is refused", async () => {
@@ -111,13 +110,17 @@ describe("restoring a target the e2e run connected a project to", () => {
 
     servers.push(server);
 
-    const target = cleanupTarget(url);
+    const connected = connectedTarget(url);
 
-    runs.push(target.runId);
-    await assert.rejects(target.restore(), /run-active/u);
+    await assert.rejects(connected.restore(), /run-active/u);
 
     assert.equal(project.removed, false);
-    assert.equal(loadRestoreState(target.runId).project, PROJECT);
+    assert.equal(target(url, connected.runId).connectedProject, PROJECT);
+
+    project.refuses = false;
+    await target(url, connected.runId).restore();
+
+    assert.equal(project.removed, true);
   });
 });
 
@@ -142,34 +145,27 @@ describe("an e2e run against an instance where the owner connected the project b
 
     const url = await listen(server);
 
-    const target = new Target({
-      runId: randomBytes(4).toString("hex"),
-      url,
-      stage: undefined,
-      password: "pw",
-      env: {},
-    });
+    const runTarget = target(url);
 
     const run = {
-      id: target.runId,
+      id: runTarget.runId,
       owner: new Owner(url, "pw"),
-      github: target.github,
+      github: runTarget.github,
       password: "pw",
       signal: new AbortController().signal,
     };
 
     try {
       const failure = await productLoop(run, (projectId) => {
-        target.connectedProject = projectId;
+        runTarget.connectedProject = projectId;
       }).then(() => "", String);
 
-      await target.restore();
+      await runTarget.restore();
 
       assert.deepEqual(requests, ["POST /api/projects/connect"]);
       assert.match(failure, /already connected/u);
     } finally {
       server.close();
-      forgetRestoreState(target.runId);
     }
   });
 });
