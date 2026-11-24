@@ -8,11 +8,10 @@ import {
   runChecks,
   type Activity,
   type CheckInput,
+  type Finding,
   type TimeWindow,
 } from "./check.mts";
-import { fetchGitExecs, gitExecLine } from "./exec-commands.mts";
-import { gatherGenerationHistory, generationLine } from "./generations.mts";
-import { fetchUsage, readToken, resolveAccount, ApiFailure } from "./fetch.mts";
+import { fetchUsage, resolveAccount, settled, type Account } from "./fetch.mts";
 import {
   fetchInvocations,
   fetchModelCalls,
@@ -58,56 +57,18 @@ function parseOptions(argv: readonly string[], nowMs: number): Options {
   };
 }
 
-async function readActivity(options: Options): Promise<Activity> {
-  const { worker, window } = options;
-  const token = readToken(process.env);
-  const account = await resolveAccount(token, process.env);
-
+async function readActivity(account: Account, { worker, window }: Options): Promise<Activity> {
   const requestWindow = activityWindow(window, WORKSPACE_IDLE_STOP_MS);
 
   const [invocations, usage, sessionFailures, runStarts, runSettlements] = await Promise.all([
-    fetchInvocations(token, account, worker, requestWindow),
-    fetchUsage(token, account, worker, window),
-    fetchSessionFailures(token, account, worker, window),
-    fetchRunStarts(token, account, worker, requestWindow),
-    fetchRunSettlements(token, account, worker, requestWindow),
+    fetchInvocations(account, worker, requestWindow),
+    fetchUsage(account, worker, window),
+    fetchSessionFailures(account, worker, window),
+    fetchRunStarts(account, worker, requestWindow),
+    fetchRunSettlements(account, worker, requestWindow),
   ]);
 
   return { invocations, usage, sessionFailures, runStarts, runSettlements };
-}
-
-async function readOptional<T>(
-  options: Options,
-  fetch: (token: string, account: string, worker: string, window: TimeWindow) => Promise<T>,
-): Promise<T | null> {
-  try {
-    const token = readToken(process.env);
-    const account = await resolveAccount(token, process.env);
-
-    return await fetch(token, account, options.worker, options.window);
-  } catch {
-    return null;
-  }
-}
-
-async function gather(options: Options, nowMs: number): Promise<CheckInput> {
-  const { worker, window } = options;
-  const idleLimitMs = WORKSPACE_IDLE_STOP_MS;
-
-  try {
-    return {
-      worker,
-      nowMs,
-      window,
-      idleLimitMs,
-      activity: { status: "ok", data: await readActivity(options) },
-    };
-  } catch (cause) {
-    const reason =
-      cause instanceof ApiFailure ? cause.message : `unexpected failure: ${String(cause)}`;
-
-    return { worker, nowMs, window, idleLimitMs, activity: { status: "unavailable", reason } };
-  }
 }
 
 const nowMs = Date.now();
@@ -121,30 +82,28 @@ try {
   process.exit(2);
 }
 
-const input = await gather(options, nowMs);
+const account = await settled(resolveAccount(process.env));
 
-const findings = [
+const input: CheckInput = {
+  worker: options.worker,
+  nowMs,
+  window: options.window,
+  idleLimitMs: WORKSPACE_IDLE_STOP_MS,
+  activity: account.status === "ok" ? await settled(readActivity(account.data, options)) : account,
+};
+
+const findings: readonly Finding[] = [
   ...runChecks(input),
-  ...versionFindings(await gatherVersions(options.worker, nowMs, process.env)),
+  ...(account.status === "ok"
+    ? versionFindings(await gatherVersions(account.data, options.worker, nowMs))
+    : []),
 ];
 
-const activityOk = input.activity.status === "ok";
+const modelCalls =
+  account.status === "ok" && input.activity.status === "ok"
+    ? await fetchModelCalls(account.data, options.worker, options.window).catch(() => null)
+    : null;
 
-const [modelCalls, gitExecs] = activityOk
-  ? await Promise.all([
-      readOptional(options, fetchModelCalls),
-      readOptional(options, fetchGitExecs),
-    ])
-  : [null, null];
-
-const history = await gatherGenerationHistory(options.worker, options.window, process.env);
-
-console.log(
-  [
-    ...formatReport(input, findings, modelCalls),
-    ...(gitExecs === null ? [] : gitExecLine(gitExecs)),
-    ...generationLine(history),
-  ].join("\n"),
-);
+console.log(formatReport(input, findings, modelCalls).join("\n"));
 
 process.exitCode = findings.length === 0 ? 0 : 1;

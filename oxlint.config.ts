@@ -1,6 +1,8 @@
 import cloudflare from "@cloudflare/oxlint-config";
 import { defineConfig } from "oxlint";
 
+const EFFECT_BARREL = { name: "effect", message: "Import the module path, such as effect/Effect." };
+
 export default defineConfig({
   ...cloudflare,
   ignorePatterns: [
@@ -57,10 +59,7 @@ export default defineConfig({
     "unicorn/prefer-top-level-await": "off",
     "unicorn/no-null": "off",
 
-    "eslint/no-restricted-imports": [
-      "error",
-      { paths: [{ name: "effect", message: "Import the module path, such as effect/Effect." }] },
-    ],
+    "eslint/no-restricted-imports": ["error", { paths: [EFFECT_BARREL] }],
 
     "eslint/max-classes-per-file": ["warn", { max: 12 }],
 
@@ -130,6 +129,30 @@ export default defineConfig({
         "anti-slop-effect/no-manual-tag-comparison": "error",
         "anti-slop-effect/no-manual-tagged-construction": "error",
         "anti-slop-effect/prefer-effect-match": "error",
+      },
+    },
+    {
+      files: ["src/workspace/project/protocol.ts"],
+      rules: {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            paths: [EFFECT_BARREL],
+            patterns: [
+              {
+                group: [
+                  "node:*",
+                  "@cloudflare/computer",
+                  "@cloudflare/computer/*",
+                  "**/host.js",
+                  "**/computer-adapter.js",
+                ],
+                message:
+                  "The Worker bundles the project protocol; keep Worker-unsafe modules out of it.",
+              },
+            ],
+          },
+        ],
       },
     },
     {

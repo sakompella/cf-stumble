@@ -1,4 +1,4 @@
-export type ActiveCommit = Readonly<{ harnessCommit: string | undefined; epoch: number }>;
+type ActiveCommit = Readonly<{ harnessCommit: string | undefined; epoch: number }>;
 
 export type Submitted =
   | Readonly<{ kind: "ready"; label: number }>
@@ -24,13 +24,13 @@ export type ReleaseDeps = Readonly<{
 
 export const INTERRUPTION_DEADLINE_MS = 10 * 60_000;
 
-export const INTERRUPTION_BACKOFF_MS = 5_000;
+const INTERRUPTION_BACKOFF_MS = 5_000;
 
-export const INTERRUPTION_BACKOFF_MAX_MS = 60_000;
+const INTERRUPTION_BACKOFF_MAX_MS = 60_000;
 
-export const RUN_ACTIVE_RETRY_MS = 15 * 60_000;
+const RUN_ACTIVE_RETRY_MS = 15 * 60_000;
 
-export const RUN_ACTIVE_POLL_MS = 30_000;
+const RUN_ACTIVE_POLL_MS = 30_000;
 
 export class RequestInterrupted extends Error {}
 

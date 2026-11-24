@@ -1,7 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { appendFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
-import { execute } from "./e2e/process.mts";
 import { GENERATION_1_MODULE_MAP, moduleMapSourceFiles } from "./module-map-build.mts";
 import {
   releaseOwner,
@@ -57,7 +57,7 @@ const client: ApiClient = { get, post };
 async function facetChangedSince(harnessCommit: string): Promise<boolean> {
   const files = await moduleMapSourceFiles(GENERATION_1_MODULE_MAP);
 
-  const diff = await execute("git", [
+  const diff = spawnSync("git", [
     "diff",
     "--quiet",
     harnessCommit,
@@ -70,7 +70,9 @@ async function facetChangedSince(harnessCommit: string): Promise<boolean> {
     ...files,
   ]);
 
-  return diff.code !== 0;
+  if (diff.error !== undefined) throw diff.error;
+
+  return diff.status !== 0;
 }
 
 const summary = await releaseGeneration(target, {

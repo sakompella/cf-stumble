@@ -1,9 +1,9 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import * as Schema from "effect/Schema";
-import { pageRows, queryEvents } from "../ops-check/telemetry.mts";
-import type { JsonValue } from "../json.mts";
 import { plainTextBindings, workerName } from "../../infra/worker-settings.ts";
-import { accountFrom, type Account } from "./cloudflare.mts";
+import type { Account } from "../ops-check/fetch.mts";
+import { pageRows, queryEvents } from "../ops-check/telemetry.mts";
+import { accountFrom } from "./cloudflare.mts";
 import type { ConversationEntry } from "./owner-api.mts";
 import { Skip } from "./steps.mts";
 import { HARNESS_PROJECT, type Run } from "./workflows.mts";
@@ -42,19 +42,19 @@ const Served = Schema.Struct({
   diagnostics: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String }))),
 });
 
-export type AnsweredCall = (typeof AnsweredRow.Type)["source"];
+type AnsweredCall = (typeof AnsweredRow.Type)["source"];
 
-export type Answer = Readonly<{ provider: string; model: string; fellBack: boolean }>;
+type Answer = Readonly<{ provider: string; model: string; fellBack: boolean }>;
 
 type ChatGPTTarget = Readonly<{ account: Account; worker: string; model: string }>;
 
-export function answeredCalls(response: JsonValue): readonly AnsweredCall[] {
+function answeredCalls(response: Schema.Json): readonly AnsweredCall[] {
   return pageRows(response)
     .rows.filter(Schema.is(AnsweredRow))
     .map((row) => row.source);
 }
 
-export function answersOf(entries: readonly ConversationEntry[]): readonly Answer[] {
+function answersOf(entries: readonly ConversationEntry[]): readonly Answer[] {
   return entries.map((entry) => {
     const served = Schema.decodeUnknownSync(Served)(entry.model[0]);
 
@@ -77,7 +77,7 @@ function fingerprintFindings(
   return values.size > 1 ? [`${name} changed within the turn: ${[...values].join(", ")}`] : [];
 }
 
-export function turnFindings(
+function turnFindings(
   model: string,
   answers: readonly Answer[],
   calls: readonly AnsweredCall[],
@@ -105,7 +105,7 @@ export function turnFindings(
   ];
 }
 
-export function cachedShare(calls: readonly AnsweredCall[]): string {
+function cachedShare(calls: readonly AnsweredCall[]): string {
   const prompt = calls.reduce((sum, call) => sum + call.promptTokens, 0);
   const cached = calls.reduce((sum, call) => sum + call.cachedTokens, 0);
 
@@ -121,10 +121,13 @@ async function loggedCalls(
   const deadline = Date.now() + LOGS_LIMIT_MS;
 
   for (;;) {
-    const { token, id } = target.account;
-
     const calls = answeredCalls(
-      await queryEvents(token, id, target.worker, { fromMs, toMs: Date.now() }, MODEL_CALL_EVENT),
+      await queryEvents(
+        target.account,
+        target.worker,
+        { fromMs, toMs: Date.now() },
+        MODEL_CALL_EVENT,
+      ),
     );
 
     if (calls.length >= expected || Date.now() >= deadline) return calls;

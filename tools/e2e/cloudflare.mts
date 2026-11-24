@@ -3,11 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import { workerName } from "../../infra/worker-settings.ts";
-import { send } from "../ops-check/fetch.mts";
+import { sendToAccount, type Account } from "../ops-check/fetch.mts";
 import { HARNESS_REMOTE } from "./github.mts";
 import { execute, succeed } from "./process.mts";
-
-const API = "https://api.cloudflare.com/client/v4";
 
 const Named = Schema.Struct({ result: Schema.Array(Schema.Struct({ id: Schema.String })) });
 
@@ -29,8 +27,6 @@ const Images = Schema.fromJsonString(
   Schema.Array(Schema.Struct({ name: Schema.String, tags: Schema.Array(Schema.String) })),
 );
 
-export type Account = Readonly<{ token: string; id: string }>;
-
 function required(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name]?.trim() ?? "";
 
@@ -51,9 +47,7 @@ async function get<S extends Schema.ConstraintDecoder<unknown>>(
   path: string,
   schema: S,
 ) {
-  const body = await send(account.token, `${API}/accounts/${account.id}${path}`);
-
-  return Schema.decodeSync(schema)(body);
+  return Schema.decodeSync(schema)(await sendToAccount(account, path));
 }
 
 export async function stageUrl(account: Account, stage: string): Promise<string> {

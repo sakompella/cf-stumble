@@ -2,8 +2,6 @@
 # listed, and recursive `pnpm -r` commands include it.
 packages:
   - "."
-# esbuild and workerd ship prebuilt native binaries fetched by their postinstall.
-# koffi loads Hegel's native generation engine for the Node-only property project.
 allowBuilds:
   "@google/genai": false
   "@mongodb-js/zstd": false

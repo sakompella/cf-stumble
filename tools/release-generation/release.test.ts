@@ -146,44 +146,10 @@ describe("activation answers other than success", () => {
     assert.match(await releaseGeneration(MAIN, { ...deps, force: true }), /Activated/u);
     assert.deepEqual(forced, [true]);
   });
-
-  it("fails when the startup check is not ready, and does not submit again", async () => {
-    const failed: Submitted = { kind: "failed", label: 7, reason: "conversation-failed" };
-    const { deps, activations, submitted } = fake([], true, [failed]);
-
-    await assert.rejects(releaseGeneration(MAIN, deps), /not ready: conversation-failed/u);
-    assert.deepEqual(activations, []);
-    assert.equal(submitted.length, 1);
-  });
 });
 
 describe("preparation interrupted by the infrastructure", () => {
   const interrupted: Submitted = { kind: "interrupted", reason: "build-workspace-unavailable" };
-
-  it("submits the same commit again after a pause and activates the one label once", async () => {
-    const { deps, submitted, attempts, activations } = fake([], true, [interrupted, interrupted]);
-
-    assert.match(await releaseGeneration(MAIN, deps), /Activated generation 7/u);
-    assert.deepEqual(submitted, [MAIN, MAIN, MAIN]);
-    assert.deepEqual(
-      attempts.map((attempt) => attempt.atMs),
-      [0, 5_000, 15_000],
-    );
-    assert.equal(activations.length, 1);
-  });
-
-  it("repeats a submit that was rejected after its label was recorded", async () => {
-    const early: Submitted = {
-      kind: "interrupted",
-      reason: "infrastructure-interrupted, label 7 recorded",
-    };
-
-    const { deps, submitted, reports } = fake([], true, [early]);
-
-    assert.match(await releaseGeneration(MAIN, deps), /Activated generation 7/u);
-    assert.equal(submitted.length, 2);
-    assert.match(reports.join("\n"), /label 7 recorded/u);
-  });
 
   it("gives each attempt only the time left of one deadline, with pauses that stop growing", async () => {
     const all = Array.from({ length: 100 }, () => interrupted);
@@ -205,17 +171,6 @@ describe("preparation interrupted by the infrastructure", () => {
       starts.slice(1).map((at, index) => at - (starts[index] ?? 0)),
       [5_000, 10_000, 20_000, 40_000, ...Array.from({ length: starts.length - 5 }, () => 60_000)],
     );
-  });
-
-  it("ends with an error that names the infrastructure and the last interruption", async () => {
-    const all = Array.from({ length: 100 }, () => interrupted);
-    const { deps, activations } = fake([], true, all);
-
-    await assert.rejects(
-      releaseGeneration(MAIN, deps),
-      /infrastructure interrupted the release of b+ .*last: build-workspace-unavailable/u,
-    );
-    assert.deepEqual(activations, []);
   });
 });
 

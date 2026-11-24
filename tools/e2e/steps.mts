@@ -93,10 +93,6 @@ export class Steps {
     this.#cleaning = true;
   }
 
-  get interrupted(): AbortSignal {
-    return this.#interrupted.signal;
-  }
-
   async run(
     name: string,
     limitMs: number,

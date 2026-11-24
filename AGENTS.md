@@ -34,15 +34,14 @@ Earlier agents here built far past what Aditya asked (Oct 2026 forensics: `.audi
 
 Run every `pnpm` command that builds or tests inside `nix develop -c`: `flake.nix` pins Node, pnpm and the shell tools, and the shell tests refuse to run outside it.
 
-- `nix develop -c pnpm verify` is the gate. Run it before you claim anything works. CI (`.github/workflows/verify.yml`) and the tracked `.githooks/pre-commit` run the same command. Only formatting is auto-fixable: `pnpm format`.
+- `nix develop -c pnpm verify` is the gate. Run it before you claim anything works. CI (`.github/workflows/verify.yml`) runs the same command. Only formatting is auto-fixable: `pnpm format`.
 - On a fresh checkout, run `pnpm build:page` before `pnpm typecheck` or `pnpm test` on their own: it writes the ignored module that holds the owner page script.
 - Typechecking uses `tsrs`, the Rust port of the TypeScript compiler; the repo has no `typescript` package. `tsrs` exits 2 on a type error.
-- `pnpm lint:effect` runs the Effect language service (`effect-tsgo tsrs`) and fails on any Effect diagnostic. Its rules are under `plugins` in `tsconfig.base.json`. Fix a hit at its cause: the repo forbids comments, so `@effect-diagnostics` directives are not an option.
-- `knip --production` fails on any `src/` export or file that production code never reaches. A test import does not count. When a test exercises real logic through an export, add the file to `ignoreIssues` in `knip.json` with the issue type (`exports` or `types`); otherwise delete the export.
+- `pnpm lint:effect` runs the Effect language service (`effect-tsgo tsrs`) and fails on any Effect diagnostic. Its rules are under `plugins` in `tsconfig.json`. Fix a hit at its cause: the repo forbids comments, so `@effect-diagnostics` directives are not an option.
+- `knip --production` fails on any `src/` or `tools/` export or file that production code never reaches. A test import does not count. When a test exercises real logic through an export, add the file to `knip.ignoreIssues` in `package.json` with the issue type (`exports` or `types`); otherwise delete the export.
 - `tools/worker-startup.test.ts` builds the bundle Alchemy uploads and starts it in Miniflare, so a Worker that cannot start fails before merge.
 - `test/runtime-parity.test.ts` fails when the test Worker enables a compatibility feature that production lacks, usually after a `@cloudflare/vitest-plugin` upgrade. Add the flag to the production flags in `infra/worker-settings.ts`.
 - A busy machine can push a test past Vitest's 5 s timeout. Rerun that test alone before you suspect your change.
-- `pnpm test:mutation` (StrykerJS, not in `verify`) covers the modules under `mutate` in `stryker.config.json`. Run it after you change one of them or its tests, and read the surviving mutants; `--mutate <file>` checks one module. It runs only Node-project tests (`*.props.test.ts`, `*.shell.test.ts`), so a module you add must import under Node and have such a test.
 
 `verify` cannot see runtime faults, such as an idle container that keeps running:
 

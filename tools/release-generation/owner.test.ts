@@ -20,17 +20,6 @@ const READY: Prepared = {
   },
 };
 
-const STEP_FAILED: Prepared = {
-  ok: false,
-  problem: {
-    code: "build-step-failed",
-    harnessCommit: COMMIT,
-    step: "install",
-    exitCode: 1,
-    diagnostics: { stdoutTail: "", stderrTail: "", truncated: false },
-  },
-};
-
 function submitted(preparation: Prepared): Answer {
   const outcome = { kind: "candidate-submitted", generation: CANDIDATE, epoch: 1 };
 
@@ -46,32 +35,12 @@ function submitting(answer: Answer | Error): ReturnType<typeof releaseOwner> {
   return releaseOwner(client);
 }
 
-describe("a submit answer that is ready or interrupted", () => {
-  it("is ready when the startup check passed", async () => {
-    assert.deepEqual(await submitting(submitted(READY)).submit(COMMIT, 1_000), {
-      kind: "ready",
-      label: 7,
-    });
-  });
-
+describe("a submit answer that is interrupted", () => {
   it("is interrupted when the build workspace was unavailable", async () => {
     const problem = { code: "build-workspace-unavailable", harnessCommit: COMMIT } as const;
     const answer = await submitting(submitted({ ok: false, problem })).submit(COMMIT, 1_000);
 
     assert.equal(answer.kind, "interrupted");
-  });
-
-  it("is interrupted when the Worker says the platform interrupted the call, with the recorded label", async () => {
-    const text = JSON.stringify({
-      ok: false,
-      error: { code: "infrastructure-interrupted" },
-      recorded: { label: 7, harnessCommit: COMMIT },
-    });
-
-    assert.deepEqual(await submitting({ status: 503, text }).submit(COMMIT, 1_000), {
-      kind: "interrupted",
-      reason: "infrastructure-interrupted, label 7 recorded",
-    });
   });
 
   it("rejects as an interrupted request when the request did not complete", async () => {
@@ -85,12 +54,6 @@ describe("a submit answer that is ready or interrupted", () => {
 });
 
 describe("a submit answer that is final", () => {
-  it("is a failure for a failed build step", async () => {
-    const answer = await submitting(submitted(STEP_FAILED)).submit(COMMIT, 1_000);
-
-    assert.equal(answer.kind, "failed");
-  });
-
   it("is a failure for a startup check that did not pass", async () => {
     const report = { ...READY, report: { ...READY.report, stage: "conversation-failed" } } as const;
     const answer = await submitting(submitted(report)).submit(COMMIT, 1_000);

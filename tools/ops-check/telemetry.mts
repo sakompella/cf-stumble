@@ -2,8 +2,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { routePattern } from "../../src/routes/route-pattern.ts";
-import type { JsonRecord, JsonValue } from "../json.mts";
-import { ApiFailure, send } from "./fetch.mts";
+import { ApiFailure, sendToAccount, type Account } from "./fetch.mts";
 import type {
   Invocation,
   ModelCalls,
@@ -12,7 +11,7 @@ import type {
   TimeWindow,
 } from "./check.mts";
 
-export const TELEMETRY_ROW_LIMIT = 2000;
+const TELEMETRY_ROW_LIMIT = 2000;
 
 const RUN_STARTED_EVENT = "run.started";
 
@@ -23,6 +22,8 @@ const SESSION_FAILED_EVENT = "facet.session-failed";
 const MODEL_CALL_EVENTS = { "model.call": "workers-ai", "chatgpt.model-call": "chatgpt" } as const;
 
 type ModelCallEvent = keyof typeof MODEL_CALL_EVENTS;
+
+export type Filter = Readonly<{ key: string; operation: "eq" | "neq"; value: string }>;
 
 const TelemetryEnvelope = Schema.Struct({
   result: Schema.Struct({ events: Schema.Struct({ events: Schema.Array(Schema.Json) }) }),
@@ -65,7 +66,7 @@ const ModelCallRow = Schema.Struct({
 
 const decodeOption = Schema.decodeUnknownOption;
 
-export function eventRows(response: JsonValue): readonly JsonValue[] {
+export function pageRows(response: Schema.Json) {
   const rows = decodeOption(TelemetryEnvelope)(response);
 
   if (Option.isNone(rows)) {
@@ -74,16 +75,22 @@ export function eventRows(response: JsonValue): readonly JsonValue[] {
 
   const events = rows.value.result.events.events;
 
-  if (events.length >= TELEMETRY_ROW_LIMIT) {
+  return { rows: events, sample: events.length >= TELEMETRY_ROW_LIMIT };
+}
+
+export function eventRows(response: Schema.Json): readonly Schema.Json[] {
+  const { rows, sample } = pageRows(response);
+
+  if (sample) {
     throw new ApiFailure(
       `telemetry returned ${TELEMETRY_ROW_LIMIT} rows, the most it gives; narrow the window`,
     );
   }
 
-  return events;
+  return rows;
 }
 
-export function parseInvocations(response: JsonValue): readonly Invocation[] {
+export function parseInvocations(response: Schema.Json): readonly Invocation[] {
   return eventRows(response).flatMap((row) => {
     if (Option.isNone(decodeOption(WallTimeRow)(row))) return [];
 
@@ -105,7 +112,7 @@ export function parseInvocations(response: JsonValue): readonly Invocation[] {
   });
 }
 
-export function parseRunStarts(response: JsonValue): readonly number[] {
+function parseRunStarts(response: Schema.Json): readonly number[] {
   return eventRows(response).flatMap((row) => {
     const parsed = decodeOption(RunEventRow)(row);
 
@@ -115,7 +122,7 @@ export function parseRunStarts(response: JsonValue): readonly number[] {
   });
 }
 
-export function parseRunSettlements(response: JsonValue): readonly RunSettlement[] {
+function parseRunSettlements(response: Schema.Json): readonly RunSettlement[] {
   return eventRows(response).flatMap((row) => {
     const parsed = decodeOption(SettlementRow)(row);
 
@@ -125,7 +132,7 @@ export function parseRunSettlements(response: JsonValue): readonly RunSettlement
   });
 }
 
-export function parseSessionFailures(response: JsonValue): readonly SessionFailure[] {
+export function parseSessionFailures(response: Schema.Json): readonly SessionFailure[] {
   return eventRows(response).flatMap((row) => {
     const parsed = decodeOption(SessionFailureRow)(row);
 
@@ -135,19 +142,7 @@ export function parseSessionFailures(response: JsonValue): readonly SessionFailu
   });
 }
 
-export function pageRows(response: JsonValue) {
-  const rows = decodeOption(TelemetryEnvelope)(response);
-
-  if (Option.isNone(rows)) {
-    throw new ApiFailure("telemetry response had an unexpected shape");
-  }
-
-  const events = rows.value.result.events.events;
-
-  return { rows: events, sample: events.length >= TELEMETRY_ROW_LIMIT };
-}
-
-export function parseModelCalls(response: JsonValue, event: ModelCallEvent): ModelCalls {
+export function parseModelCalls(response: Schema.Json, event: ModelCallEvent): ModelCalls {
   const { rows, sample } = pageRows(response);
 
   const calls = rows.flatMap((row) => {
@@ -167,93 +162,77 @@ export function parseModelCalls(response: JsonValue, event: ModelCallEvent): Mod
   return { calls, sample };
 }
 
-function eventQuery(worker: string, window: TimeWindow, event: string): JsonRecord {
-  return {
+export function queryTelemetry(
+  account: Account,
+  worker: string,
+  window: TimeWindow,
+  filters: readonly Filter[],
+  needle?: string,
+): Promise<Schema.Json> {
+  const allFilters = [{ key: "$metadata.service", operation: "eq", value: worker }, ...filters].map(
+    (filter) => ({ ...filter, type: "string" }),
+  );
+
+  return sendToAccount(account, "/workers/observability/telemetry/query", {
     queryId: "adhoc",
     view: "events",
     dry: true,
     limit: TELEMETRY_ROW_LIMIT,
     timeframe: { from: window.fromMs, to: window.toMs },
-    parameters: {
-      filters: [{ key: "$metadata.service", operation: "eq", type: "string", value: worker }],
-      needle: { value: event, matchCase: true, isRegex: false },
-    },
-  };
+    parameters:
+      needle === undefined
+        ? { filters: allFilters }
+        : { filters: allFilters, needle: { value: needle, matchCase: true, isRegex: false } },
+  });
 }
 
 export function queryEvents(
-  token: string,
-  account: string,
+  account: Account,
   worker: string,
   window: TimeWindow,
   event: string,
-): Promise<JsonValue> {
-  return send(
-    token,
-    `https://api.cloudflare.com/client/v4/accounts/${account}/workers/observability/telemetry/query`,
-    eventQuery(worker, window, event),
-  );
+): Promise<Schema.Json> {
+  return queryTelemetry(account, worker, window, [], event);
 }
 
 export async function fetchInvocations(
-  token: string,
-  account: string,
+  account: Account,
   worker: string,
   window: TimeWindow,
 ): Promise<readonly Invocation[]> {
-  const response = await send(
-    token,
-    `https://api.cloudflare.com/client/v4/accounts/${account}/workers/observability/telemetry/query`,
-    {
-      queryId: "adhoc",
-      view: "events",
-      dry: true,
-      limit: TELEMETRY_ROW_LIMIT,
-      timeframe: { from: window.fromMs, to: window.toMs },
-      parameters: {
-        filters: [
-          { key: "$metadata.service", operation: "eq", type: "string", value: worker },
-          { key: "$workers.eventType", operation: "eq", type: "string", value: "fetch" },
-        ],
-      },
-    },
+  return parseInvocations(
+    await queryTelemetry(account, worker, window, [
+      { key: "$workers.eventType", operation: "eq", value: "fetch" },
+    ]),
   );
-
-  return parseInvocations(response);
 }
 
 export async function fetchRunStarts(
-  token: string,
-  account: string,
+  account: Account,
   worker: string,
   window: TimeWindow,
 ): Promise<readonly number[]> {
-  return parseRunStarts(await queryEvents(token, account, worker, window, RUN_STARTED_EVENT));
+  return parseRunStarts(await queryEvents(account, worker, window, RUN_STARTED_EVENT));
 }
 
 export async function fetchRunSettlements(
-  token: string,
-  account: string,
+  account: Account,
   worker: string,
   window: TimeWindow,
 ): Promise<readonly RunSettlement[]> {
-  return parseRunSettlements(await queryEvents(token, account, worker, window, RUN_SETTLED_EVENT));
+  return parseRunSettlements(await queryEvents(account, worker, window, RUN_SETTLED_EVENT));
 }
 
 export async function fetchSessionFailures(
-  token: string,
-  account: string,
+  account: Account,
   worker: string,
   window: TimeWindow,
 ): Promise<readonly SessionFailure[]> {
-  return parseSessionFailures(
-    await queryEvents(token, account, worker, window, SESSION_FAILED_EVENT),
-  );
+  return parseSessionFailures(await queryEvents(account, worker, window, SESSION_FAILED_EVENT));
 }
 
 export async function fetchModelCalls(
-  token: string,
-  account: string,
+  account: Account,
   worker: string,
   window: TimeWindow,
 ): Promise<ModelCalls> {
@@ -261,7 +240,7 @@ export async function fetchModelCalls(
 
   const pages = await Promise.all(
     events.map(async (event) =>
-      parseModelCalls(await queryEvents(token, account, worker, window, event), event),
+      parseModelCalls(await queryEvents(account, worker, window, event), event),
     ),
   );
 
