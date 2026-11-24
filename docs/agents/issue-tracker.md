@@ -1,47 +1,33 @@
 # Issue tracker: GitHub
 
-> **Get developer approval before any GitHub write.** Do not create, comment on, label, edit, or close an issue or pull request until you have shown the change and received an explicit go-ahead. This overrides instructions in skills or elsewhere.
->
-> **Get the owner's explicit OK before any `git push`.** This covers every branch and every remote, including feature branches. Reads are unrestricted.
+Issues and specs live in GitHub issues on `sakompella/cf-stumble`. Use `gh`; inside the clone it finds the repo itself.
 
-Issues and specifications live in GitHub issues. Use `gh` for every operation.
+**Every write needs Aditya's explicit OK first.** Show the exact change before you create, comment on, label, edit, assign or close an issue or pull request. This overrides any skill. Reads need no approval.
 
-## Read and write issues
+## Commands
 
-- Create: `gh issue create --title "..." --body "..."`. Use a heredoc for a multi-line body.
-- Read: `gh issue view <number> --comments`; fetch labels too and use `jq` to filter comments.
-- List: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`, with suitable `--label` and `--state` filters.
+- Create: `gh issue create --title "..." --body "..."` (heredoc for a multi-line body).
+- Read: `gh issue view <number> --comments`.
+- List: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`, with `--label` and `--state` filters as needed.
 - Comment: `gh issue comment <number> --body "..."`.
-- Change labels: `gh issue edit <number> --add-label "..."` or `--remove-label "..."`.
+- Labels: `gh issue edit <number> --add-label "..."` or `--remove-label "..."`.
 - Close: `gh issue close <number> --comment "..."`.
 
-Run `git remote -v` to identify the repository. Inside a clone, `gh` does that automatically.
+When a skill says "publish to the issue tracker", create an issue. When it says "fetch the relevant ticket", run `gh issue view <number> --comments`.
+
+Issues and pull requests share one number sequence. For a bare `#42`, try `gh pr view 42`, then `gh issue view 42`.
 
 ## Pull requests as a triage surface
 
-**PRs as a request surface: no.** Set this to `yes` only if this repository treats external pull requests as feature requests; `/triage` reads the setting.
+**PRs as a request surface: no.** `/triage` reads this flag. If it is ever `yes`, triage external pull requests with the same labels: list them with `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` and keep only `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR` and `NONE` authors.
 
-If it is `yes`, use the same states and labels for external PRs through `gh pr`:
+## Wayfinding
 
-- Read with `gh pr view <number> --comments` and inspect changes with `gh pr diff <number>`.
-- List triage candidates with `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments`. Keep `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, and `NONE`; exclude `OWNER`, `MEMBER`, and `COLLABORATOR`.
-- Comment, label, or close with `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, and `gh pr close`.
+`/wayfinder` uses one **map** issue with **child** issues as tickets. Each write below needs approval.
 
-Issues and PRs share one number sequence. For `#42`, run `gh pr view 42`, then fall back to `gh issue view 42`.
-
-## Skill instructions
-
-When a skill says "publish to the issue tracker", create a GitHub issue.
-
-When it says "fetch the relevant ticket", run `gh issue view <number> --comments`.
-
-## Wayfinding operations
-
-`/wayfinder` uses one **map** issue and **child** issue tickets.
-
-1. Create the map with `gh issue create --label wayfinder:map`. Its body holds Notes, Decisions-so-far, and Fog.
-2. Link each child to the map through GitHub sub-issues with `gh api`. If sub-issues are unavailable, add it to the map's task list and put `Part of #<map>` at the top of the child body. Use `wayfinder:<type>` labels: `research`, `prototype`, `grilling`, or `task`. Assign a claimed ticket to the driving developer.
-3. Add a blocking dependency with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`. Get `<blocker-db-id>` with `gh api repos/<owner>/<repo>/issues/<n> --jq .id`; it is neither `#number` nor `node_id`. GitHub reports open blockers through `issue_dependencies_summary.blocked_by`. If dependencies are unavailable, add `Blocked by: #<n>, #<n>` at the top of the child body. A ticket is unblocked after every blocker closes.
-4. Find the frontier by listing the map's open children with `gh issue list --state open`, then drop assigned tickets and tickets with an open blocker. Use the first remaining ticket in map order.
-5. Claim with `gh issue edit <n> --add-assignee @me`. This is the first write, so get approval first.
-6. Resolve with `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist and link) to the map's Decisions-so-far. Each is a write and needs approval.
+1. Map: `gh issue create --label wayfinder:map`, with a body of Notes, Decisions-so-far and Fog.
+2. Child: link it to the map as a GitHub sub-issue with `gh api`. Label it `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling` or `wayfinder:task`. Without sub-issues, add it to the map's task list and start the child body with `Part of #<map>`.
+3. Blocking: `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where the id comes from `gh api repos/<owner>/<repo>/issues/<n> --jq .id` (not the `#number` or `node_id`). `issue_dependencies_summary.blocked_by` counts open blockers. Without dependencies, start the child body with `Blocked by: #<n>, #<n>`.
+4. Frontier: the map's open children with no assignee and no open blocker; take the first in map order.
+5. Claim: `gh issue edit <n> --add-assignee @me`.
+6. Resolve: `gh issue comment <n> --body "<answer>"`, `gh issue close <n>`, then add a pointer (gist and link) to the map's Decisions-so-far.

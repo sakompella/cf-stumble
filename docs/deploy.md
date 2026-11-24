@@ -1,114 +1,98 @@
 # Deploy cf-stumble
 
-Deploy a cf-stumble instance to your Cloudflare account.
+How to deploy and operate a cf-stumble instance on Cloudflare. Agents follow the same procedures, with completion checks, in `.agents/skills/cf-operations/SKILL.md`.
 
-cf-stumble is a coding agent that runs in your Cloudflare account. Every request except `GET /health` needs HTTP Basic auth: the user name `aditya` and the password in the `OWNER_PASSWORD` secret. The Worker answers 503 until that secret is set.
+Every request except `GET /health` needs HTTP Basic auth with the user name `aditya` and the `OWNER_PASSWORD` secret. Until that secret is set, the Worker answers 503.
 
 ## Before you start
 
 You need:
 
-- A Cloudflare account on the Workers Paid plan. This project uses Durable Objects with SQLite storage, Containers, and Worker Loaders. They are not available on the free plan.
+- A Cloudflare account on the Workers Paid plan, for Durable Objects with SQLite, Containers and Worker Loaders.
 - A GitHub account.
-- A domain in the same Cloudflare account for the Worker's route.
-- Docker, to pull the Container image and push it to Cloudflare's registry.
+- A domain in the same Cloudflare account. The production route is `productionRoute` in `infra/worker-settings.ts`; change it for your zone.
+- Docker, to deploy from a machine.
 
-The workspace runs project commands and can make Workers AI requests. Use an account where you can control the resulting charges.
+The workspace runs commands and calls Workers AI, so use an account where you can control the charges.
 
 ## Configuration files
 
-`infra/alchemy.run.ts` is the only description of the Worker. It is an [Alchemy](https://alchemy.run) stack, pinned to Alchemy 2.0.0-beta.87, that declares the Worker, its route, the two Durable Object classes, the Container, and the Workers AI and loader bindings. `infra/worker-settings.ts` holds the values that the stack, the test Worker and the Worker code read, so they cannot drift: the Worker name for a stage, the compatibility date and flags, the Durable Object class names, the entry point, the route, the container instance size, the shell modules asset, the static assets settings (`runWorkerFirst`), the cache setting, the observability settings, and the one plain-text variable, `CHATGPT_MODEL`, which `plainTextBindings(stage)` sets per stage (see "Connect ChatGPT"). It has no `node:` imports, because the Worker code imports it. `@cloudflare/vitest-plugin` also turns on features its test runner needs, `enable_weak_ref` and six Node.js module flags, when the compatibility date does not already imply them. The production flags include the same features, and `test/runtime-parity.test.ts` fails when the test Worker enables a compatibility feature that production lacks. When it fails after a plugin upgrade, add the new flag to the production flags; do not leave the tests running on features production does not have. Neither file declares per-instance values or secrets (see "Instance secrets").
+`infra/alchemy.run.ts` is the only description of the Worker: an [Alchemy](https://alchemy.run) stack, pinned in `infra/package.json`, that declares the Worker, its route, the `Supervisor` and `WorkspaceHost` Durable Objects, the container, the module-map R2 bucket and the bindings. There is no Wrangler config. `infra/worker-settings.ts` holds the values that the stack, the test Worker and the Worker code share, such as Worker names, compatibility flags, the route, the container size and `CHATGPT_MODEL`. Change shared values there, and keep `node:` imports out of it, because the Worker bundle includes it.
 
-`tools/worker-startup.test.ts`, part of `pnpm test:tools` and so of `pnpm verify`, starts the bundle that a deploy uploads. `infra/worker-bundle.ts` builds it through Alchemy's own source provider (`Cloudflare.Workers.resolveSource` and `makeSourceContext`, the calls the Worker provider makes before it uploads), so the check runs Alchemy's rolldown output, not an esbuild approximation. The test then starts those modules on local workerd through Miniflare with the production compatibility date and flags and the bindings of `infra/test-worker.ts`, requests `/health`, and makes one owner request that constructs the `Supervisor` and the `WorkspaceHost`. Cloudflare runs the same module load when it validates an upload, so a top-level throw, a global that the production flags lack (the `FinalizationRegistry` failure of the 2caaafcb deploy), or a missing Durable Object class fails here before the merge. The check needs no Cloudflare credentials. It does not see limits that only the platform enforces, such as the startup CPU time limit, and it has no Workers AI binding and no container. The same test fails when the uploaded files (source maps left out) exceed 700 KiB gzip.
+The stack sets `legacy_module_registry` on purpose; without it, Alchemy turns on `new_module_registry`. `tools/worker-startup.test.ts`, part of `pnpm verify`, starts the exact bundle Alchemy uploads in Miniflare with the production settings, so a Worker that cannot start, or an upload over 700 KiB gzip, fails before merge.
 
-The stack is a function of the stage:
+Stages:
 
-- The stage `prod` is production: the Worker `cf-stumble` on the route `stumble.akompella.dev/*`, a `workers.dev` subdomain without preview URLs, a `standard-3` container, and traces on.
-- Any other stage `<stage>` is a separate Worker, `cf-stumble-<stage>`, with its own container application attached to its `WorkspaceHost` namespace, a `workers.dev` subdomain without preview URLs, no route, and traces off. Every stage boots the production instance size, which the Durable Object requests at launch.
-- Vitest builds its Worker, `cf-stumble-test`, from `infra/worker-settings.ts` through the Miniflare options in `infra/test-worker.ts`, which `vitest.config.ts` passes to the Workers Vitest plugin. It leaves out the Workers AI binding and the container, because the test runtime has no AI service to reach.
+- `prod` is the Worker `cf-stumble` on the production route, with traces on.
+- Any other stage is a separate Worker `cf-stumble-<stage>` with its own container application, no route, and traces off.
+- Every stage has a `workers.dev` subdomain without preview URLs and runs the production container size, `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk).
 
-Alchemy is its own pnpm project in `infra/`, with its own lockfile, because the Worker's dependency tree, which the Container image copies, should not change for Alchemy. `pnpm install:infra` installs it; `pnpm verify` and `pnpm run deploy` run that first.
+Commands, run from the repository root:
 
-Run Alchemy from the repository root, because the stack names its files relative to it: `pnpm alchemy <command> --config infra/alchemy.run.ts --stage <stage>`. The commands you need:
-
-- `pnpm run deploy [<stage>] [flags]` runs `infra/deploy.sh`. It installs `infra/`, writes the owner page's script with `pnpm run build:page`, writes the shell module set for the isolate with `pnpm run build:shell-modules`, and deploys the stage, `prod` when you name none. It passes the remaining flags, such as `--yes` or `--force`, to `alchemy deploy`. Alchemy does not run a build command of its own, so deploy every stage through this script.
-- `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod` lists what a deploy would change, and changes nothing.
-- `pnpm alchemy logs --config infra/alchemy.run.ts --stage prod --tail` streams the Worker's logs.
+- `pnpm run deploy [<stage>] [flags]` runs `infra/deploy.sh`: `install:infra`, `build:page`, `build:shell-modules`, then `alchemy deploy` for the stage (`prod` by default) with any flags such as `--yes` or `--force`. Alchemy runs no build of its own, so always deploy through this script.
+- `pnpm alchemy plan --config infra/alchemy.run.ts --stage <stage>` shows what a deploy would change.
+- `pnpm alchemy logs --config infra/alchemy.run.ts --stage <stage> --tail` streams logs (needs Workers Tail Read).
 - `pnpm alchemy destroy --config infra/alchemy.run.ts --stage <stage>` deletes a stage's Worker and container application.
+- `pnpm exec cf` handles secrets, container applications, registry images, deployment lists and auth. `pnpm exec cf auth whoami` shows the account and refreshes the `cf` login.
 
-Alchemy keeps what it deployed for each stage in the account, in a Worker named `alchemy-state-store` (ADR-0049). The first `plan` or `deploy` on an account creates that Worker and two secrets in the account's default Secrets Store, and saves its address and token under `~/.alchemy/profiles/`. Any machine with credentials for the account reads the same state. Do not delete the state store while a stage exists: Alchemy then forgets what it deployed, and the next deploy must pass `--adopt` to take the existing resources back.
+Alchemy reads `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, or a profile from `pnpm alchemy profile edit --profile default --add Cloudflare`. The `cf` login's OAuth token (`oauth_token` in `~/.config/cloudflare/config/default.json`) also works.
 
-Alchemy reads `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, or a profile that `pnpm alchemy profile edit --profile default --add Cloudflare` writes. The staging rehearsal used the OAuth token of the `cf` login (`oauth_token` in `~/.config/cloudflare/config/default.json`, after `pnpm exec cf auth whoami` refreshed it). `cf` stays for secrets, container applications, registry images, and deployment lists. `cf` reads no configuration file.
+### Alchemy state
 
-Alchemy changes two things that `cf deploy` did not. It adds plain-text variables named `ALCHEMY_*` to the Worker. It also turns on the `new_module_registry` compatibility flag unless the Worker sets `legacy_module_registry`, so the stack sets that flag to keep the module registry that `cf deploy` used.
+Alchemy records each stage's resources in a Worker named `alchemy-state-store` in the account. The first `plan` or `deploy` on an account creates it, with two secrets in the account's Secrets Store. Every machine and CI run with credentials for the account reads the same state.
 
-Use `pnpm run deploy` as the only deploy path for the Worker. If Workers Builds is connected to the Worker, disable or reconfigure it first, so that an automatic build does not deploy through another path. Alchemy does not see changes made outside it, such as a dashboard edit or a `cf deploy`: the next deploy is a no-op unless the stack changed. Deploy with `--force` to write the stack's settings again.
-
-Do not rename or remove `Supervisor` or `WorkspaceHost`, or their bindings. Alchemy writes the Durable Object migrations, and a class that disappears from the stack can orphan or delete that class's stored data.
+- Never delete `alchemy-state-store` while a stage exists. If it is lost, the next deploy needs `--adopt` to take the existing resources back.
+- Alchemy does not see changes made outside it, such as a dashboard edit, `cf deploy` or Workers Builds; the next plain deploy is a no-op. Deploy with `--force` to write the stack's settings again, and disable Workers Builds if it is connected.
+- Deploy a stage from one place at a time. CI serializes its own deploys, but a deploy from a machine does not wait for CI.
+- Do not rename or remove `Supervisor`, `WorkspaceHost` or their bindings. Alchemy writes the Durable Object migrations, and a class that leaves the stack can lose its data.
 
 ## Instance secrets
 
-Values that differ per instance are Worker secrets, set once per instance and never committed. No file declares them, and an Alchemy deploy keeps secrets that the stack does not declare: the staging rehearsal set `HARNESS_REPOSITORY_URL`, `GITHUB_OAUTH_CLIENT_ID` and `GH_TOKEN`, deployed a changed Worker, and found all three afterwards. The only plain-text variable the stack declares is `CHATGPT_MODEL`: `gpt-6.1-sol` on `prod` and `gpt-6.1-terra` on every other stage, so tests spend the cheaper model.
+Per-instance values are Worker secrets. No file declares them, and a deploy keeps them.
 
-| Secret                   | Required by the Worker | Purpose                                        |
-| ------------------------ | ---------------------- | ---------------------------------------------- |
-| `OWNER_PASSWORD`         | Yes                    | The password for HTTP Basic auth.              |
-| `HARNESS_REPOSITORY_URL` | No                     | The fork the instance builds its harness from. |
-| `GITHUB_OAUTH_CLIENT_ID` | No                     | The GitHub OAuth app for the device flow.      |
-| `GH_TOKEN`               | No                     | An unattended-run GitHub credential.           |
-| `ORB_PROVIDER_TOKEN`     | No                     | The token a workspace provider presents.       |
+| Secret                   | Required | Purpose                                          |
+| ------------------------ | -------- | ------------------------------------------------ |
+| `OWNER_PASSWORD`         | Yes      | The HTTP Basic auth password.                    |
+| `HARNESS_REPOSITORY_URL` | No       | The fork the harness is built from.              |
+| `GITHUB_OAUTH_CLIENT_ID` | No       | The GitHub OAuth app for the device flow.        |
+| `GH_TOKEN`               | No       | A GitHub credential for unattended runs.         |
+| `ORB_PROVIDER_TOKEN`     | No       | The token a workspace provider machine presents. |
 
-Set each one after the first deploy, when the Worker exists:
+The stack sets one plain-text variable, `CHATGPT_MODEL`: `gpt-6.1-sol` on `prod` and the cheaper `gpt-6.1-terra` elsewhere.
+
+Set a secret once the Worker exists:
 
 ```sh
 pnpm exec cf workers secrets update <NAME> --worker <worker> --type secret_text --text '<value>'
 ```
 
-The value appears in the command line and the shell history. For a credential such as `GH_TOKEN`, keep the value in a file outside the repository, pass `--text "$(cat <file>)"`, and delete the file afterward.
-
-Every later deploy keeps them.
-
-Set `OWNER_PASSWORD` right after the first deploy, because until then every request but `GET /health` answers 503. Push to `main` only after the secret exists on `cf-stumble`, because that push deploys. Generate the password into a file outside the repository and pipe the file into `cf`, which reads the value from standard input when you omit `--text`:
+`--text` leaves the value in shell history. For a credential, omit `--text` and pipe in a file kept outside the repository:
 
 ```sh
 openssl rand -base64 24 > ~/cf-stumble-owner-password
 pnpm exec cf workers secrets update OWNER_PASSWORD --worker cf-stumble --type secret_text < ~/cf-stumble-owner-password
 ```
 
-Keep the file in a password manager or delete it. The browser asks for the user name `aditya` and this password. For `curl` and scripts, export the password as `CF_STUMBLE_PASSWORD` and pass `-u "aditya:$CF_STUMBLE_PASSWORD"`.
+Keep the password in a password manager and delete the file. For `curl`, export it as `CF_STUMBLE_PASSWORD` and pass `-u "aditya:$CF_STUMBLE_PASSWORD"`. Set `OWNER_PASSWORD` on `cf-stumble` before you push to `main`, because that push deploys. A changed secret reaches the Durable Objects only after they restart (see "Durable Objects and new versions").
 
-A request that changes state (any method but `GET` and `HEAD`) must also come from the instance's own page: if its `Origin` header names another origin, or its `Sec-Fetch-Site` header is anything but `same-origin`, the Worker answers 403 `cross-origin-request`. `curl` sends neither header, so the Basic credential is enough.
+A request that changes state (any method but `GET` and `HEAD`) is refused with 403 `cross-origin-request` if its `Origin` header names another origin or its `Sec-Fetch-Site` is not `same-origin`. `curl` sends neither header.
+
+## Set up a new instance
+
+1. Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (see "Credentials") and run `pnpm exec cf auth whoami`.
+2. Run `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`. On a new account this creates the state store.
+3. Run `pnpm run deploy`.
+4. Set `OWNER_PASSWORD` and any other secrets, then run `pnpm run deploy --force` so the Durable Objects see them.
+5. For CI, set `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `OWNER_PASSWORD` in the GitHub repository.
+6. Submit and activate the first generation ("First run"), then connect GitHub and ChatGPT.
+
+`prod` answers on its route and on `https://cf-stumble.<account subdomain>.workers.dev`.
 
 ## Durable Objects and new versions
 
-A new Worker version does not restart a running Durable Object by itself. Cloudflare applies a code update strategy to each deployment (https://developers.cloudflare.com/durable-objects/deployments/durable-objects-code-updates/). The default is `deferred` with a 300-second `max_delay`: an object that is idle starts on the new version at its next request, and an object that is active keeps its current code until it hibernates or `max_delay` passes. Secrets are part of a version, so a secret change is a new version and follows the same rule. An instance holds its `env` from construction, so reading a secret per request does not help; the instance must restart.
+By default, Cloudflare lets an active Durable Object keep its old code for up to 300 seconds after a deploy ([code updates](https://developers.cloudflare.com/durable-objects/deployments/durable-objects-code-updates/)). The stack sets `codeUpdateStrategy: { mode: "immediate" }`, so every `pnpm run deploy` restarts `Supervisor` and `WorkspaceHost` on the new version within seconds. The restart interrupts their work: a running tool call ends as interrupted and the agent retries it.
 
-On staging stage `dv-ilj1k8` (2026-11-10) the default behaved like this:
-
-- After a secret change the idle Supervisor started on the new version within 2 to 5 seconds. A Supervisor that was running a conversation turn restarted about 23 seconds later.
-- The WorkspaceHost, which holds the container, a hibernating provider WebSocket and an alarm, stayed on the old version for at least 3 minutes after a deploy while it served a tool call, and for at least 80 seconds after a secret change while a poll kept it busy. During that time the Supervisor already ran the new version. This matches what the e2e run saw (a Supervisor without `GH_TOKEN`) and what the fuzz run saw (an old WorkspaceHost after a deploy).
-- Cloudflare documents a hard bound of `max_delay`, so the wait ends after 5 minutes at the latest, but nothing logs `do.started` until a request reaches the restarted object.
-
-The stack sets `codeUpdateStrategy: { mode: "immediate" }` (`infra/alchemy.run.ts`), so every `pnpm run deploy`, locally and in CI, restarts both classes on the new version. On the same stage the WorkspaceHost started on the new version 7 seconds after a deploy and the Supervisor 12 seconds after, while both were busy. A restart interrupts what a Durable Object is serving (a running tool call ended as interrupted and the agent retried it); a deferred update does the same once `max_delay` passes, only later. The restarted WorkspaceHost is inactive until a request or its alarm reaches it, and the platform stops a container shortly after its object becomes inactive, so the Host sets the container's inactivity timeout to outlast its idle alarm, which then pulls the container's files and stops it (ADR-0043).
-
-A restart or a platform fault ends what a Durable Object is doing with an error such as `Durable Object reset because its code was updated.`, `Internal error in Durable Object storage caused object to be reset` or `Internal error while starting up Durable Object storage caused object to be reset`. The platform marks some of these with the property `retryable` and not others (https://developers.cloudflare.com/durable-objects/best-practices/error-handling/), and a restart can come well after the deploy: on the production deploy of 96be4be1 (run 44075948231) the new version was deployed at 11:40:26 and the Supervisor was reset at 11:41:12. A cold Workspace Host can also fail to start its storage with no deploy at all: both attempts of run 44185631101 (56e15f51) ran `Plan: no changes`, and the Host failed its first build call after 33 and 45 seconds with the storage start-up error above, then started normally a few seconds later. Earlier fixes put a retry in each layer and decided from the error text, the Worker's version or the `retryable` mark which one to run. Those decisions did not cover this fault, so the recovery has one owner, the release step, and no layer below it repeats work.
-
-Preparing a generation can run twice: a build starts from a fresh scratch tree, a stored module map is reused, submitting the same commit returns the same label, and recording a result twice changes nothing. The layers report what happened and the release step decides to run it again:
-
-- The Workspace Host answers each build call. When something it called fails, it answers `workspace-restarted` for a failure the platform marks `retryable` and `workspace-unavailable` otherwise. The two answers help the log; the Supervisor treats them alike.
-- The Supervisor's build runs its steps once. A rejected or timed-out Host call, or a Host answer of either code, ends the build with `build-workspace-unavailable` after the scratch cleanup. That code means the infrastructure interrupted the build and the same commit can be prepared again. A step that exits non-zero is `build-step-failed`, an unreadable module map is `build-output-invalid`, and a build that wrote no module map is `build-output-missing`; none of these is repeated.
-- The Worker's `POST /api/generations/submit` calls the Supervisor to submit and to prepare. It does not repeat either call. When the Supervisor rejects a call, the Worker answers 503 `infrastructure-interrupted`, with the recorded label when the submit had already committed, and logs the error once with its raw `retryable` and `overloaded` flags (`absent` when the platform set none). Any other answer, including `build-workspace-unavailable`, passes through as the preparation.
-- The release step (`tools/release-generation.mts`) owns the repeat, with one deadline of 10 minutes for all its calls. It submits the same commit again, with a fresh request, after a pause of 5 seconds that doubles up to 60 seconds, when the preparation reports `build-workspace-unavailable` or the Worker answers 503 `infrastructure-interrupted`. It also repeats any of its calls (the status read, the submit, the activation) when the request does not complete, for example a connection reset (`ECONNRESET`) on the status read right after a submit of 60 and 81 seconds, which failed `ci:local` on a throwaway stage twice; the cause of the reset is not established. The submit may take only the time that is left of the deadline. When the deadline passes, the job fails with an error that says the infrastructure interrupted the release a number of times and names the last interruption. A failed build step, an invalid artifact, a compatibility mismatch, a failed startup check or any other HTTP answer fails the job at once.
-
-The owner page and `stumble gen prepare` do not repeat anything: after `build-workspace-unavailable` or `infrastructure-interrupted`, submit or prepare the same commit again. A wait in the release for the new version to serve would not replace this: the Host reports no version without a new relay, the release would need a Cloudflare token to know the deployed version, and the cold-start fault happens with no deploy.
-
-`cf workers secrets update` creates its version with the default strategy and cannot set another. After you change a secret, apply the new version at once:
-
-```sh
-pnpm run deploy <stage> --force
-```
-
-Or, without a build, deploy the latest version again with the immediate strategy:
+A Durable Object reads secrets once, when it starts, and `cf workers secrets update` creates a version with the default strategy. After a secret change, restart the objects with `pnpm run deploy <stage> --force`, or redeploy the latest version without a build:
 
 ```sh
 pnpm exec cf workers deployments create --worker <worker> --strategy percentage \
@@ -116,255 +100,168 @@ pnpm exec cf workers deployments create --worker <worker> --strategy percentage 
   --code-update-strategy-mode immediate
 ```
 
-`pnpm ops:check` reports `do-version-skew` when a Durable Object served a request on an older version more than five minutes after the latest deployment (`docs/agents/design/observability.md`, "Checking a running deployment").
+`pnpm ops:check` reports `do-version-skew` when a Durable Object still served on an older version five minutes after the latest deployment.
+
+A restart or platform fault can interrupt a generation build, with errors such as `Durable Object reset because its code was updated.` or `Internal error while starting up Durable Object storage caused object to be reset`. This can happen a minute after a deploy, or on a cold Workspace Host with no deploy at all. The build then ends with `build-workspace-unavailable`, or the submit answers 503 `infrastructure-interrupted`. Either way, submit the same commit again; that is safe and returns the same label. Only the release step retries by itself; from the owner page or `stumble gen prepare`, resubmit yourself. `build-step-failed`, `build-output-invalid` and `build-output-missing` are real build failures.
 
 ## Deploying from CI
 
-GitHub Actions deploys production. Two workflows in `.github/workflows/` do the work:
+GitHub Actions deploys production:
 
-- `verify.yml` runs `pnpm verify` on Ubuntu for every push and every pull request.
-- `deploy.yml` runs `pnpm run deploy prod --yes` when Verify passes on a push to `main`. It checks out the commit that Verify tested. When that commit is no longer the tip of `main`, the run skips its image and deploy jobs, because the newer commit deploys on its own run. A concurrency group per stage lets only one deploy of a stage run at a time; a second deploy waits for the first to finish.
+- `.github/workflows/verify.yml` runs `nix develop -c pnpm verify` on every push and pull request.
+- `.github/workflows/deploy.yml` runs when Verify passes on a push to `main`: it builds or finds the workspace image, then runs `pnpm run deploy prod --yes` on the tested commit. If a newer commit is already on `main`, it skips, because that commit deploys on its own run. One deploy per stage runs at a time.
 
-The normal deploy path is therefore a push or merge to `main`. The runner has Docker, so it pulls the Container image that CI published and pushes it to the account's registry. Pushing that image from the Mac through OrbStack failed with "use of closed network connection" during the staging rehearsal, which is why deploys moved to CI.
+To deploy by hand, run `gh workflow run deploy.yml --ref main`. Add `-f stage=<stage>` to deploy a staging copy, and destroy it from a machine afterwards.
 
-You can also start a deploy by hand from `main`: open **Actions** > **Deploy** > **Run workflow**, or run `gh workflow run deploy.yml --ref main`. Set `stage` (`-f stage=<stage>`) to deploy a staging copy, the Worker `cf-stumble-<stage>`, from CI; destroy it from a machine afterwards, which needs no Docker. The workflow skips the job when you start it from any other branch.
+`--yes` approves Alchemy's plan unread, so a push to `main` applies whatever the plan contains. Review `infra/` changes in the pull request and read the plan in the job log.
 
 ### Release of main as a generation
 
-After a production deploy of `main`, the deploy job runs `tools/release-generation.mts`. It reads the active generation from `GET /api/status` and makes main's commit the active generation, so a merge to `main` reaches the agent without a manual submit and activate. It skips the release when the active generation already runs that commit, or when `git diff` between the active commit and main's commit shows no change in the files the facet bundles (the module map's esbuild inputs, `package.json`, `pnpm-lock.yaml`, and the module map build scripts). Otherwise it submits the commit, and when the startup check answers `ready` it activates the new generation with the epoch it just read:
+After a production deploy, the job runs `tools/release-generation.mts` to make main's commit the active generation. It does nothing when that commit is already active, or when nothing the facet bundles changed (the module map's sources, `package.json`, `pnpm-lock.yaml` and the module map build scripts). Otherwise it submits the commit and, once the startup check answers `ready`, activates it:
 
-- 409 `run-active`: the job tries again every 30 seconds for 15 minutes, then reports in the job summary that the generation is ready and stops without failing the deploy.
-- 409 `stale-epoch`: it reads the epoch again and resends. After an activation whose answer was lost, it resends with that activation's epoch instead, also while it waits on `run-active`, so the Supervisor refuses the resend when the lost activation took effect. A `stale-epoch` answer then means the active generation changed after an activation that may have taken effect, for example a probation rollback or an owner rollback. The release does not activate again, which would undo that change. It reads the status: when main's commit is active, it reports the activation; otherwise it reports in the job summary that the generation is ready and not activated, and stops without failing the deploy.
-- 409 `drops-active-commit`: `main` does not contain the active generation's commit, usually an agent change whose pull request is not merged yet. The job reports this in the job summary and leaves the active generation in place. Merge the pull request, or activate the new generation with `"force":true` to drop that change.
-- The deploy restarts the Supervisor and the Workspace Host on the new version, and the restart or a cold start can interrupt the submit while it prepares the commit (see "Durable Objects and new versions"). The release repeats its calls within one 10-minute deadline; see that section for what counts as an interruption. When the deadline passes, the job fails with an infrastructure error.
-- Any other startup check that does not answer `ready` fails the job; the deploy itself has already finished.
+- 409 `run-active`: it retries every 30 seconds for 15 minutes, then stops without failing and writes "Not activated" in the job summary.
+- 409 `stale-epoch`: it rereads the epoch and resends. If an earlier activation's answer was lost and the active generation has changed since, for example by a rollback, it leaves that change alone and reports "Not activated".
+- 409 `drops-active-commit`: `main` lacks the active generation's commit, usually an agent change whose pull request is not merged. Merge it, or activate with `"force":true` to drop that change.
+- An interrupted submit (`build-workspace-unavailable`, 503 `infrastructure-interrupted`, or a request that does not complete) is retried. The pause starts at 5 seconds and doubles up to 60, and all retries share one 10-minute deadline.
 
-**What a failed release means, and when to run it again.** The deploy has finished when the release job fails, so the Worker already runs the new version. The generation that served before still serves, except in the case of a lost activation answer below. Read the error and act on the layer it names:
+The release logs in with the repository secret `OWNER_PASSWORD` (same value as the Worker secret; `gh secret set OWNER_PASSWORD --repo <owner>/<repository>`). It calls the Worker's `workers.dev` URL, because the zone's Bot Fight Mode challenges GitHub runners on the routed hostname.
 
-- `the infrastructure interrupted the release of <sha> <n> times within 10 minutes; last: <reason>`: the platform kept resetting or failing the Supervisor or the Workspace Host for the whole deadline, and the release never got a final answer. Run the failed job again, which is safe: the release first reads the active generation and ends with "already the active generation" when the earlier attempt got through, and otherwise submits the same commit (same label) and activates once. If the last call before the deadline was the activation, check the active generation with `GET /api/status` or the owner page before you assume that it did not happen. If a second run fails the same way, read the `[retryable=... overloaded=...]` lines in the Worker's logs (`docs/agents/design/observability.md`, "Querying"), run `pnpm ops:check`, and see "Known and accepted" in `docs/agents/status.md` for the unexplained cold-start fault.
-- `generation <n> for <sha> is not ready: <build-step-failed | build-output-invalid | build-output-missing | a startup check stage and reason>`: the commit did not build or did not pass the check. Nothing below the release repeats it and the release does not repeat it, so a rerun of the same commit fails the same way. Fix the commit and merge again. The one exception is a check stage `mount-failed` or `conversation-failed` whose reason names no change in the commit, such as `the candidate did not answer compatibility`: a fault in the Host or the Supervisor during the check lands here too (the check turns a rejected candidate call into a failed stage), so run the job once more before you debug the code.
-- `activating generation <n> answered <code>`: the Supervisor refused the activation for a reason that the release does not handle. Read the code, then activate the ready generation from the owner page or run the job again once the cause is gone.
-- A job that succeeds with a "Not activated" line in its summary (`run-active` for 15 minutes, `drops-active-commit`, or a changed active generation after a lost activation answer) is not a failure: the generation is ready and you decide whether it should serve.
+If the release job fails, the deploy has already finished and the previous generation still serves:
 
-When a newer commit of `main` has been pushed, its own Deploy run releases it, and a rerun of the older commit's job is not needed.
+- `the infrastructure interrupted the release of <sha> <n> times within 10 minutes; last: <reason>`: rerun the job. A rerun stops if the commit is already active and otherwise resubmits under the same label. If a second run fails the same way, read the `[retryable=... overloaded=...]` lines in the Worker's logs (`docs/agents/design/observability.md`, "Querying") and run `pnpm ops:check`.
+- `generation <n> for <sha> is not ready: <reason>`: the commit failed to build or failed its startup check; fix the commit. A `mount-failed` or `conversation-failed` stage whose reason names nothing in the commit, such as `the candidate did not answer compatibility`, can be a platform fault, so rerun once first.
+- `activating generation <n> answered <code>`: fix the cause, then activate from the owner page or rerun.
 
-The step authenticates as the owner with the repository secret `OWNER_PASSWORD`, the same password as the Worker secret. Set it once with `gh secret set OWNER_PASSWORD --repo <owner>/<repository>`, which reads it from standard input. Deploys of other stages do not run the release.
-
-The step reaches the owner API at the Worker's `workers.dev` URL, not the routed hostname: the zone's Bot Fight Mode challenges GitHub Actions runners, and a WAF skip rule cannot bypass it, while zone bot rules do not cover `workers.dev`. The first release on the routed hostname failed with Cloudflare's challenge page. The workflow derives the URL from the account's `workers.dev` subdomain through the Cloudflare API with the deploy token, the same lookup Alchemy makes for the state store. Every request sends `Origin` with the URL's own origin, which the owner gate accepts for mutations; Basic auth applies on `workers.dev` as on the routed hostname.
-
-A runner has no terminal, so Alchemy cannot ask you to approve its plan. `--yes` approves it, and a push to `main` applies whatever the plan contains. Review changes to `infra/` in the pull request, and read the plan in the job log afterwards.
+"Not activated" in a successful job means the generation is ready and you decide whether it serves.
 
 ### Credentials
 
-The deploy job reads two values from the repository settings (**Settings** > **Secrets and variables** > **Actions**):
+The workflows read the repository secret `CLOUDFLARE_API_TOKEN` and the variable `CLOUDFLARE_ACCOUNT_ID`. Create an account API token (**Manage Account** > **Account API Tokens** > **Create Custom Token**) with these permissions, and store it with `gh secret set CLOUDFLARE_API_TOKEN --repo <owner>/<repository>`:
 
-- The secret `CLOUDFLARE_API_TOKEN`: an account API token with the permissions in the table below.
-- The variable `CLOUDFLARE_ACCOUNT_ID`: the account ID. It is not secret.
+| Permission group         | Scope             | Used for                                              |
+| ------------------------ | ----------------- | ----------------------------------------------------- |
+| Workers Scripts Write    | Account           | The Worker, migrations and the state store Worker.    |
+| Workers Containers Write | Account           | The container application and image push.             |
+| Secrets Store Write      | Account           | Reading the state store's token (Read is not enough). |
+| Workers Routes Write     | Zone of the route | The production route.                                 |
+| Zone Read                | Zone of the route | Looking up the zone ID.                               |
 
-| Permission group         | Scope                               | Used for                                                                                                    |
-| ------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Workers Scripts Write    | Account                             | The Worker, its settings and versions, Durable Object migrations, the state store Worker, preview sessions. |
-| Workers Containers Write | Account                             | The container application, its rollouts, and the registry credentials for the image push.                   |
-| Secrets Store Write      | Account                             | Reading the state store's token through a preview Worker that binds the secret; Read cannot bind it.        |
-| Workers Routes Write     | Zone: the zone that holds the route | The route `stumble.akompella.dev/*`.                                                                        |
-| Zone Read                | Zone: the zone that holds the route | Looking up the zone ID from the zone name in the stack.                                                     |
+The `cf` login cannot create tokens (`pnpm exec cf accounts tokens create` answers 403, code 9109).
 
-`pnpm alchemy logs` also needs Workers Tail Read; the deploy does not.
-
-Create the token as an account API token: **Manage Account** > **Account API Tokens** > **Create Token** > **Create Custom Token**. Add the five permissions, limit the zone permissions to the route's zone, then copy the value into the secret with `gh secret set CLOUDFLARE_API_TOKEN --repo <owner>/<repository>`, which reads it from standard input. The `cf` login cannot create tokens: its OAuth scopes do not include token management, and `pnpm exec cf accounts tokens create` answers 403 with code 9109.
-
-### State in CI
-
-GitHub Actions sets `CI=true`, and Alchemy then keeps no state store credentials on disk. On every run it finds the account's single Secrets Store and reads the state store's bearer token from it through a short-lived preview Worker that binds the secret. It then derives the address of the `alchemy-state-store` Worker from the account's `workers.dev` subdomain. A CI run therefore reads the same state as any machine that deploys to the account, because each one finds the store from the account. Nothing about the state is kept in GitHub. Keep exactly one Secrets Store on the account: Alchemy takes the first one it lists.
-
-In CI, Alchemy refuses to create a missing state store or upgrade an outdated one unless the command has `--yes`. The deploy passes `--yes` to approve its plan, so it can also create or upgrade the store. Create the store from a machine before the first CI deploy, so that you see it happen: the first `pnpm alchemy plan` on the account creates it (step 3 of the switch).
+In CI, Alchemy finds the state store through the account's Secrets Store and `workers.dev` subdomain, so keep exactly one Secrets Store on the account. It creates or upgrades the store only with `--yes`, so create it from a machine first (see "Set up a new instance").
 
 ## Deploy an update
 
-A push to `main` deploys through CI (see "Deploying from CI"). To deploy from a machine instead, run `pnpm run deploy`. It pulls the published Container image, which needs Docker, and pushes it to the account's registry. On the Mac, Alchemy's push of the image's 1 GB layer through OrbStack failed with "use of closed network connection" during the staging rehearsal, so deploy from a machine only when CI cannot. Agents follow the same steps with their completion checks in `.agents/skills/cf-operations/SKILL.md`.
+The normal path is a push to `main`. Deploy from a machine with `pnpm run deploy` only when CI cannot: it pulls the roughly 1 GB container image and pushes it to the account's registry, and that push has failed through OrbStack on the Mac with "use of closed network connection". Retry on a steady network.
 
-The checks below apply to both paths. For a deploy from CI, do steps 1 to 5 before you merge to `main`; the Deploy workflow then takes the place of `pnpm run deploy`, and the checks after the deploy stay the same.
+For a CI deploy, do steps 1 to 5 before you merge; the Deploy workflow replaces step 6.
 
-Before you deploy:
+1. Start from a clean tree on `main` and run `pnpm verify`.
+2. Set the credentials and run `pnpm exec cf auth whoami`.
+3. Run `pnpm exec cf workers secrets list --worker <worker>`. A deploy keeps secrets, so a missing one stays missing.
+4. Check that the last rollout finished: `pnpm exec cf containers applications get <container-app-id>`. The application is the one whose `durable_objects.namespace_id` is the Worker's `WorkspaceHost` namespace; Alchemy generates its name.
+5. Run `pnpm run build:page` and `pnpm run build:shell-modules`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read the plan.
+6. Run `pnpm run deploy`.
 
-1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
-2. Set the credentials (see "Configuration files") and run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` reads `CLOUDFLARE_API_TOKEN`, else that login (see `docs/agents/design/observability.md`, "Credentials").
-3. Check that the instance secrets you rely on exist: `pnpm exec cf workers secrets list --worker <worker>`. A deploy keeps secrets, so a missing one stays missing.
-4. Check that the last container rollout finished. `pnpm exec cf containers applications get <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Checking a running deployment", shows each instance's state. Find `<container-app-id>` in the applications list: it is the application whose `durable_objects.namespace_id` is the Worker's `WorkspaceHost` namespace id (`GET /accounts/<account-id>/workers/durable_objects/namespaces`). Alchemy generates the application's name.
-5. Run `pnpm run build:page` and `pnpm run build:shell-modules`, then `pnpm alchemy plan --config infra/alchemy.run.ts --stage prod`, and read what it would change.
+A new image replaces the container, so files outside `/workspace` are lost. If the deploy stops at "Loading stack state" with `... so it was left untouched: Rate limited`, too many deploys ran in a few minutes; nothing changed, so wait ten minutes and rerun.
 
-Then run `pnpm run deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
+After the deploy, check:
 
-When several deploys run within a few minutes, the Cloudflare API can rate-limit Alchemy's state store. The deploy then stops at "Loading stack state" with `Could not determine whether Cloudflare State Store 'alchemy-state-store' exists, so it was left untouched: Rate limited`, before it changes anything. Wait about ten minutes and run the same command again. On 2026-11-13 three preview deploys stopped this way; the later deploys succeeded, and the account still held one Worker, one container application, one pair of Durable Object namespaces and one module-map bucket for the stage.
+- `pnpm exec cf workers deployments list --worker <worker>` shows a new version at 100%.
+- The container application kept its id and its version went up; a new id means a second application.
+- The Durable Object namespace ids and secret names are unchanged.
+- Observability still shows logs, traces (on `prod`) and Issues on.
+- `pnpm ops:check --since 1h` prints a check mark, or only findings you can explain.
 
-After the deploy, compare against what you had before:
-
-- The deployment list (`pnpm exec cf workers deployments list --worker <worker>`) shows a new version at 100%.
-- The container application keeps its id, and its version goes up. A new application id means the deploy created a second application instead of updating the first.
-- The Durable Object namespace ids for `Supervisor` and `WorkspaceHost` are unchanged, and the secret names are the same as before.
-- The Worker's Observability settings still show logs, traces, and Issues on.
-- `pnpm ops:check --since 1h` prints a check mark, or only findings you can explain. The idle stop fires ten minutes after the last work (`workspace.container.idle-stop`).
-
-For a risky change, stage it first on a separate stage with its own Worker and container, then destroy it. The procedure, with the cleanup list and the proof that only the production Worker remains, is in `.agents/skills/cf-operations/SKILL.md`, "Stage a risky change".
-
-Workers Logs keeps events for 7 days. After a deploy that changes lifecycle behavior, copy out the events you need as evidence before they expire.
+Try a risky change on its own stage first (`.agents/skills/cf-operations/SKILL.md`, "Stage"). Workers Logs keeps events for 7 days.
 
 ## Roll back a generation
 
-A generation rollback changes the harness code that serves conversations, nothing else. `POST /api/generations/rollback` with `{"label":<n>,"observedEpoch":<epoch from /api/status>}`, or `stumble gen rollback <n> --epoch <epoch>` from a conversation, loads the module map stored for that generation's commit; nothing is rebuilt. Project files, the harness checkout in `/workspace/harness`, and every conversation and its history stay as they are: the next message continues the same thread on the older code. An activation behaves the same way. Undo a bad change to files with Git (commit and push work you want to keep), not with a rollback.
+A rollback switches only the harness code that serves conversations. Send `POST /api/generations/rollback` with `{"label":<n>,"observedEpoch":<epoch>}`, or run `stumble gen rollback <n> --epoch <epoch>` in a conversation. The stored module map is loaded and nothing is rebuilt. Files and conversations are untouched, so undo a bad file change with Git.
 
-- Only a generation that served before can be a rollback target (`not-previously-active` otherwise). The owner API refuses a target whose commit does not contain the serving generation's commit with `drops-active-commit`; send `"force":true` to switch anyway. While a run is active the owner API answers 409 `run-active`; cancel the run or wait for it.
-- Probation rolls back by itself only when the first run on a newly activated generation fails because of the generation (`failed`) or stalls before its first model turn (`stalled`, at the 8-minute deadline). A generation whose tools return errors completes its run and is proven; one whose model call fails ends the run as a model error without a verdict. Both keep serving; roll them back by hand. A run that ignores the deadline's abort stays active, but once its deadline passed the owner may roll back, which ends it.
-- A failed preparation never changes the serving generation. `stumble gen prepare` names the failed build step and Git's reason; after `build-workspace-unavailable` (the workspace did not finish the build, for example because the platform restarted it) prepare the same commit again.
+- The target must have served before (`not-previously-active`).
+- A target that does not contain the serving generation's commit is refused with `drops-active-commit`; add `"force":true` to switch anyway.
+- During an active run the API answers 409 `run-active`, unless the run is past its 8-minute deadline, in which case the rollback ends it.
+- Probation rolls back by itself only when the first run on a new generation fails because of the generation or stalls before its first model turn. Tool errors and model errors keep it serving.
 
 ### When the host protocol changes
 
-`FACET_COMPATIBILITY` (`pi-durable@<version>/host-<N>`, `src/facet/runtime-contract.ts`) is compiled into both the Worker and every generation. Activation and rollback refuse a generation whose recorded key differs from the deployed Worker's with `facet-compatibility-mismatch`, and the startup check refuses a candidate that reports another key. The Supervisor does not check the key of the generation that is already serving: after a deploy that changes the key, the old generation keeps serving until another is activated, and it may fail against the new host.
+`FACET_COMPATIBILITY` (`src/facet/runtime-contract.ts`) is compiled into the Worker and every generation. Activation, rollback and the startup check refuse a generation with a different key (`facet-compatibility-mismatch`), but the serving generation is not rechecked, so after a deploy that changes the key it keeps serving and may fail.
 
-- Deploy a key change together with a generation that reports the new key. The Deploy workflow does this for `main`: it releases main's commit as a generation right after the deploy ("Release of main as a generation"). Check `/api/status` afterwards; if the release did not activate, submit and activate main's commit by hand.
-- To return to an older host, deploy the older Worker commit. Generations recorded under that commit's key can be activated or rolled back to again. A generation recorded under the newer key cannot: submit the commit you want to serve (normally the same commit as the Worker) and activate it. Submitting a commit again re-runs its startup check under its existing label, and only a commit whose facet reports the deployed key passes.
-- Generations built for another key cannot be converted; prepare a new commit instead (`docs/agents/status.md`, "Old generation tables are not converted").
+- Deploy a key change together with a generation that has the new key. For `main` the release step does this; if it did not activate, submit and activate main's commit by hand.
+- To return to an older host, deploy the older Worker commit, then activate a generation recorded under its key, or submit that commit.
+- Generations cannot be converted to another key. Prepare a new commit.
 
 ## Container image
 
-CI builds the image once. `.github/workflows/workspace-image.yml` builds `infra/workspace-image/computerd.Dockerfile` for linux/amd64, with `infra/workspace-image` as the build context, and pushes it to GitHub Container Registry as `ghcr.io/sakompella/cf-stumble-workspace:<hash>`. `infra/workspace-image/image-ref.sh` prints that reference; `<hash>` is a hash of the Dockerfile and the patch. It skips the build when that tag exists, and on `main` it moves `latest` to it. The Deploy workflow runs it first, so a deploy always finds its image. Nothing else builds the image, and no machine builds it locally: a change to those files is the only reason to rebuild, and CI does it. The package is public (the first publish from this public repository was pullable without a login), so machines pull without credentials.
+`.github/workflows/workspace-image.yml` builds `infra/workspace-image/computerd.Dockerfile` for linux/amd64 and pushes `ghcr.io/sakompella/cf-stumble-workspace:<hash>`, a hash of the Dockerfile and `computerd-walk.patch` (`infra/workspace-image/image-ref.sh` prints it). It skips existing tags and moves `latest` on `main`. The Deploy and Preview workflows run it first. The package is public, so pulls need no login. Do not build the image by hand; `pnpm ci:local` builds it only when the tag is not published.
 
-`infra/workspace-image/image.ts` runs that script and holds the reference as `workspaceImage`; only the stack imports it. Cloudflare Containers only pull images from the deploying account's managed registry or from a registry that account has configured, so a direct reference to a ghcr.io image fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Alchemy's `image` option pulls the image and pushes it to the account's registry on deploy, so the deploy needs Docker and a pull of about a gigabyte, not a build.
-
-If you deploy by hand, use Docker. Podman does not work for this deployment because it can rewrite the image manifest when it pushes, leaving the deploy with a local digest that Cloudflare cannot find in the registry. The resulting deployment error is `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
-
-The image also carries the packages your harness build needs, fetched from the lockfile. That makes it about a gigabyte larger and your first build several minutes faster, because the build reads packages from the image instead of the network.
-
-## Isolate backend
-
-The workspace also has an isolate backend, which runs shell commands in a Dynamic Worker with no container. The model picks the backend for each `bash` call through the tool's optional `backend` parameter (`isolate` or `container`); a call that names none runs in the isolate when every program in it is one the isolate has and it touches no absolute path outside `/workspace`, and in the container otherwise (`routedBackend` in `src/workspace/project/exec-routing.ts`). The isolate has no Node, pnpm, `gh` or Git, and its only network use is `curl`, so those commands run in the container. `pnpm run deploy` ships the isolate's shell modules as a static asset (the `ASSETS` binding). The Worker serves that asset behind the owner check: `workerAssets` sets `runWorkerFirst` at the top level of Alchemy's `assets` option, where Alchemy reads it (under `config`, as the stack once had it, Cloudflare received no worker-first setting, and the asset layer answered `/shell-modules.json` without credentials). `tools/worker-assets.test.ts` reads the option through Alchemy to keep it so.
-
-## What to expect the first time
-
-Your first submission is slow. Installing packages and bundling the harness takes most of that time. It is not stuck.
-
-The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk), set by `WORKSPACE_CONTAINER_INSTANCE` in `infra/worker-settings.ts`. Activating or rolling back a generation takes under a second.
-
-The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. On a staging stage in November 2026, a container start took about 1 s when the host already had the image, and the first start after an image change took about 38 s. An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules` and `/tmp`. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
-
-## Troubleshooting a hostname that serves another site
-
-The hostname can answer another site instead of cf-stumble.
-
-A deployed Worker does not claim a hostname on its own. A proxied DNS record on the zone may already point that hostname somewhere else. This is often a wildcard record such as `*.example.com`.
-
-Check the hostname in the dashboard:
-
-- Open **Websites** > your zone > **DNS** > **Records**. Look for a record for the hostname and for a proxied wildcard record.
-- Open **Workers & Pages** > your Worker > **Settings** > **Domains & Routes**. Check whether the hostname has a Worker route or custom domain.
-- Run `curl -I https://<your-hostname>`. The response shows whether another site answers it.
-
-Use a Worker route when a proxied record already covers the hostname. Add a route for `<your-hostname>/*` in the zone. A route sends matching requests to the Worker and does not write DNS.
-
-Use a custom domain when the hostname has no record and you want Cloudflare to create one. A custom domain writes a DNS record for the hostname.
-
-## Troubleshooting a wedged workspace
-
-If workspace operations hang, runs fail their tool calls, routes answer `internal-error`, or GitHub status times out after a large `npm install`, a large dependency tree may be inside the durable workspace. Installing one there makes the workspace unresponsive because its files live in Durable Object storage. The managed instructions steer the agent to copy projects to container-local scratch before installing dependencies or running checks.
-
-As the owner, send `POST /api/workspace/reset` to recover. Projects and the harness re-clone on the next use. The reset deletes everything in the workspace that is not pushed to GitHub: uncommitted changes, unpushed commits and local branches in every clone, the GitHub login (a `GH_TOKEN` secret is installed again), and the container with its `/tmp`, `node_modules` and Nix store. Conversations, projects, generations and the ChatGPT login stay. Commit and push first; afterwards, `git fetch origin <branch>` in the new clone brings pushed work back.
-
-## One entry point
-
-The stage `prod` answers on the hostname you gave the Worker a route for, and on its `workers.dev` URL, `https://cf-stumble.<account subdomain>.workers.dev`. The `workers.dev` URL exists for CI: the zone's Bot Fight Mode challenges GitHub Actions runners on the routed hostname and a WAF skip rule cannot bypass it, so the release step reaches the owner API on `workers.dev` (see "Release of main as a generation"). Zone bot rules do not cover `workers.dev`, and the owner gate still requires Basic auth there. Preview URLs stay off on every stage.
-
-## Connect a project
-
-The workspace is a development machine. It has `git` and `gh`. Authorize GitHub inside the workspace, then connect one GitHub repository from there. The `gh` credential stays in the workspace's local GitHub configuration. The repository keeps its own files and Git history. Your browser does not receive the GitHub credential.
-
-Set `GITHUB_OAUTH_CLIENT_ID` as a Worker secret before you authorize (see "Instance secrets"). It names the GitHub OAuth app the device flow uses. The value is public, but it is stored as a secret so that a deploy keeps it. Without it, starting the device flow answers `not-configured`.
-
-Set the `GH_TOKEN` secret if you want an unattended run to authorize without a person at a browser. cf-stumble installs `GH_TOKEN` as the workspace credential whenever the workspace has no usable one, and treats it as a test and development path, not a second production login. A deployment with neither value set reports `disconnected`.
-
-The page checks the GitHub connection when it loads and when you press **Check again**, and shows when the last check ran. `GET /api/github/connection` answers the last check and when it ran (`checkedAt`, in milliseconds since the epoch) without waking the workspace container. `POST /api/github/connection/refresh` runs a new check in the container. Do not poll the refresh: each one counts as workspace work, so a client that repeats it keeps the container running.
-
-The sidebar also contains the harness project. It selects `/workspace/harness`, which is a Git clone of the harness repository. It is not a second connected repository or a separate workspace.
-
-A connection is refused when the repository is over the size limits in `docs/agents/design/github-connection.md`, "Connecting a repository". The clone measures the repository inside the workspace, with the workspace's GitHub credential.
-
-To remove a connected project, select it in the sidebar and press **Disconnect repository**, then confirm; or send `POST /api/projects/{id}/disconnect`. The request refuses an unknown project, the harness, or a project whose own run is active (`run-active`); a run in another project does not block it. Otherwise it drops the project's conversation pointer, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The conversation itself stays in storage, unused. The clone removal is best-effort: it can fail after the catalog entry is already gone, leaving the project's files on disk with no project that owns them.
-
-## Connect ChatGPT
-
-The model route answers from the fixed Workers AI model until you connect a ChatGPT account. After that it answers from OpenAI's Responses API with your ChatGPT subscription, using the model that `CHATGPT_MODEL` names in `infra/worker-settings.ts` (`gpt-6.1-sol` on `prod`, `gpt-6.1-terra` on other stages). The Supervisor keeps the access and refresh tokens in its SQLite and refreshes them itself, so you connect once per instance. Your browser and the harness never receive a token. See ADR-0047.
-
-Connect from the owner page:
-
-1. Select **Log in with ChatGPT** in the sidebar, then open the sign-in link it shows.
-2. Sign in to ChatGPT and approve cf-stumble.
-3. OpenAI sends the browser to `http://127.0.0.1:1455/auth/callback?...`. Nothing listens there, so the browser shows a connection error. That is expected. Copy the whole address from the address bar.
-4. Paste it into the sidebar and select **Finish**. The panel says the account is connected.
-
-A sign-in expires after 10 minutes, and only the most recent one can be finished. The address holds a one-time code; it is useless without the verifier the Supervisor kept.
-
-The page shows one of three states:
-
-- **connected** (with the model name): model calls use your subscription. When OpenAI refuses a call for the plan's usage limit, the page adds **usage limit reached**, with the time the limit ends when OpenAI gave one. A call the limit refuses before it sends any output is answered by Workers AI instead, and the saved conversation shows a notice before that answer. The connection stays connected.
-- **reconnect required** (with the reason): OpenAI refused the refresh token or the access token. Every model call fails with `chatgpt-reconnect-required` until you connect again or disconnect. The route does not fall back to Workers AI here, so a broken subscription is visible.
-- **not connected (Workers AI fallback)**: model calls use Workers AI.
-
-When the page shows **reconnect required**, reconnect the same way: select **Log in with ChatGPT**, sign in, paste the callback address and select **Finish**. The panel then says **connected** and the next turn uses ChatGPT. Until you do, every turn fails with `chatgpt-reconnect-required`. To use Workers AI in the meantime, send `POST /api/chatgpt/disconnect`; the page shows no **Disconnect** button in this state. Unit tests cover a refused refresh and a repeated 401; no deployed check has produced this state, because only a real sign-in stores a credential that OpenAI can refuse.
-
-**Disconnect** deletes the stored tokens and returns the route to Workers AI. It does not revoke the grant at OpenAI. To revoke it, remove cf-stumble from your ChatGPT account's settings.
+Cloudflare Containers pull only from registries the account has configured, so a direct ghcr.io reference fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Alchemy pulls the image and pushes it to the account's registry on deploy (`infra/workspace-image/image.ts`). Use Docker for that, not Podman: Podman can rewrite the manifest on push, and the deploy fails with `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
 
 ## First run
 
-Before you submit a generation, `GET /api/status` returns `{"activeGeneration":{"generation":null,"epoch":0}}`, and a message answers 503 `no-active-generation`. That is normal on a new instance. It does not mean that the deployment failed. `GET /` serves the owner page and `GET /health` returns `{"ok":true}` before any generation exists. Any path that is not the page or the owner API answers 404.
+On a new instance, `GET /api/status` returns `{"activeGeneration":{"generation":null,"epoch":0}}` and a message answers 503 `no-active-generation`. That is normal: submit and activate the first generation by hand. With `curl`, send each request as `curl -u "aditya:$CF_STUMBLE_PASSWORD" -H 'content-type: application/json' -d '<body>' https://<your-hostname>/api/generations/<action>`:
 
-The first generation does not happen by itself. Submit it, then activate it. With `curl`, send each request as `curl -u "aditya:$CF_STUMBLE_PASSWORD" -H 'content-type: application/json' -d '<body>' https://<your-hostname>/api/generations/submit`:
+1. `POST /api/generations/submit` with `{"harnessCommit":"<full commit ID>"}`. Note `outcome.generation.label`. This also creates the workspace and clones the harness into `/workspace/harness`.
+2. Read the epoch from `GET /api/status`, then `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`.
 
-1. Send `POST /api/generations/submit` with `{"harnessCommit":"<full commit ID>"}`. Read `outcome.generation.label` from its response. The Supervisor creates the workspace as part of this submission and clones or reconciles the harness repository in `/workspace/harness`.
-2. Read the epoch from `GET /api/status`, then send `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`. Use the label from the submission response and the epoch from the status response. A refused activation answers with a 4xx status and `{"ok":false,"problem":{"code":...}}`: 409 `stale-epoch` means the epoch moved, so read it again and resend; 409 `not-ready` means that generation has not passed its startup check; 404 `unknown-generation` means no generation has that label; 409 `run-active` means a run is active, so wait for it to settle or cancel it, then resend; 409 `drops-active-commit` means the new commit does not contain the active generation's commit (checked with `git merge-base --is-ancestor` in the workspace's harness checkout), so changes made only in that commit would stop being served. Add `"force":true` to the body to activate it anyway. When the check cannot run, for example because a commit is not in the checkout, the activation goes ahead.
+Activation refusals:
 
-`GET /api/status` also returns `mainAhead`: how many commits `origin/main` in the harness checkout has that the active generation's commit does not, as of the last submit or activation, or `null` when it is not known. The page shows it as "main +N" next to the generation. The count comes from the checkout's last fetch, which every submission makes, so status never starts the container.
+- 409 `stale-epoch`: reread the epoch and resend.
+- 409 `not-ready`: the generation has not passed its startup check.
+- 404 `unknown-generation`: no generation has that label.
+- 409 `run-active`: wait for the run or cancel it, then resend.
+- 409 `drops-active-commit`: the new commit lacks the active generation's commit, so changes only there would stop being served. Add `"force":true` to activate anyway.
 
-One submission extracts the requested commit, installs dependencies, bundles the module map, and stores that map in the Supervisor's SQLite storage. These are separate build steps, so a failure reports its phase. The startup check then cold-starts the candidate and asks it for its facet compatibility key. It fails the candidate unless the answer equals the key the deployed Worker holds: the pinned Pi Durable version and the host protocol revision (ADR-0048). The candidate must then answer a scripted conversation: a scripted model asks it to run parallel bash calls in the isolate and the container, `stumble gen status`, and a write, edit and read on a scratch file, then the candidate must finish with the scripted reply. A failure names the step that failed. That conversation never reaches ChatGPT or Workers AI. A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
+The first submission takes several minutes, mostly installing packages and bundling. A failed build names its step. The startup check then requires the candidate's facet compatibility key to match the Worker's (ADR-0048) and runs a scripted conversation that never calls a real model. A failed candidate leaves the serving generation in place, and resubmitting a commit returns its existing generation.
 
 ## Point the instance at your own fork
 
-Your instance builds its own harness from a Git repository, and it has to be told which one. Set the `HARNESS_REPOSITORY_URL` secret to the HTTPS URL of your fork (see "Instance secrets"):
+Set `HARNESS_REPOSITORY_URL` to your fork's HTTPS URL:
 
 ```sh
 pnpm exec cf workers secrets update HARNESS_REPOSITORY_URL --worker cf-stumble --type secret_text --text 'https://github.com/your-name/cf-stumble.git'
 ```
 
-An empty value means the repository named in `src/harness-build.ts`, which is this project's own. Leave it empty and your instance will build this repository rather than your fork, so your own harness commits will never be reachable from it. Nothing else about a fork needs changing.
+Without it, the instance builds `sakompella/cf-stumble` (`src/harness-build.ts`), and commits in your fork never reach it. A wrong URL fails the first build step and leaves the serving generation in place.
 
-A wrong URL fails safely. The first build step tries to clone it, fails, and reports a failed candidate; the generation that was serving keeps serving.
+## Connect a project
+
+The workspace has `git` and `gh`. Authorize GitHub inside the workspace, then connect a repository. The credential stays in the workspace and never reaches the browser.
+
+- Set `GITHUB_OAUTH_CLIENT_ID` first; without it the device flow answers `not-configured`.
+- Set `GH_TOKEN` to let unattended runs work without a browser login. It is installed whenever the workspace has no usable credential, and is meant for tests and development.
+
+`GET /api/github/connection` returns the last check (`checkedAt`, epoch milliseconds) without waking the container. `POST /api/github/connection/refresh` checks again in the container. Do not poll the refresh: each call counts as workspace work and keeps the container running.
+
+The sidebar's harness project is `/workspace/harness`, not a connected repository. Repositories over the size limits in `docs/agents/design/github-connection.md`, "Connecting a repository", are refused.
+
+To remove a project, press **Disconnect repository** or send `POST /api/projects/{id}/disconnect`. This deletes its workspace clone, including uncommitted work. It is refused for the harness or while that project's run is active (`run-active`).
+
+## Connect ChatGPT
+
+Without a ChatGPT account, the model route uses Workers AI. Connected, it uses your ChatGPT subscription with the `CHATGPT_MODEL` model. The Supervisor stores and refreshes the tokens, so you connect once per instance (ADR-0047).
+
+1. Select **Log in with ChatGPT** in the sidebar and open the sign-in link.
+2. Sign in and approve cf-stumble.
+3. The browser lands on `http://127.0.0.1:1455/auth/callback?...` and shows a connection error. That is expected. Copy the whole address.
+4. Paste it into the sidebar and select **Finish** within 10 minutes. Only the latest sign-in can be finished.
+
+States on the page:
+
+- **connected**: calls use your subscription. On **usage limit reached**, a call refused before any output falls back to Workers AI, with a notice in the conversation.
+- **reconnect required**: OpenAI refused the tokens. Every call fails with `chatgpt-reconnect-required`, with no fallback. Log in again, or send `POST /api/chatgpt/disconnect` to use Workers AI meanwhile.
+- **not connected (Workers AI fallback)**.
+
+**Disconnect** deletes the stored tokens but does not revoke the grant; do that in your ChatGPT account settings.
 
 ## Run the workspace container on your own machine
 
-An x86_64 Linux machine you own can run the workspace container instead of Cloudflare
-(ADR-0050). The machine opens every connection itself, so it needs no inbound port. Run the
-provider by hand while you develop, and stop it when you finish. It is not a service.
+An x86_64 Linux machine can run the workspace container instead of Cloudflare (ADR-0050). It opens all connections itself, so it needs no inbound port. Run the provider by hand while you work. It receives the whole workspace, including the GitHub credential, so use only a machine you trust with that.
 
-The page's "Workspace container" control (`GET`/`POST /api/workspace/backend`) picks the backend.
-Production stays on `cloudflare`, which always uses the Cloudflare container. `provider` uses a
-connected provider, else Cloudflare. A change stops a running container, so the next command starts on the
-chosen backend. The answer says what the change did (`container`: `stopped`, `not-running` or `kept`) and where the next container starts (`startsOn`), and the page shows that in the control's result row. It is refused while a run is active. Switch to `provider` after you start the
-provider, and back to `cloudflare` when you stop it.
-
-1. Make a random token and keep it in a gitignored file inside the checkout, for example
-   `openssl rand -hex 32 > .audit/local/orb-provider-token`.
-2. Set it as the `ORB_PROVIDER_TOKEN` secret (see "Instance secrets"):
-
-   ```sh
-   pnpm exec cf workers secrets update ORB_PROVIDER_TOKEN --worker cf-stumble --type secret_text < .audit/local/orb-provider-token
-   ```
-
-   `cf` reads the value from stdin, so the token stays out of the command line.
-
-3. The provider and its dispatch scripts support x86_64 Linux only for now, because the workspace
-   image is linux/amd64. `stumble orb provider` logs a warning on any other platform and carries on. On the
-   machine, do nothing to build the image: CI publishes it as `ghcr.io/sakompella/cf-stumble-workspace`
-   (see "Container image"). The dispatch scripts default `STUMBLE_IMAGE` to the tag for the checkout's
-   `infra/workspace-image/image-ref.sh` and pull it when it is missing; set `STUMBLE_IMAGE` to use another image.
-4. Run the provider from the checkout:
+1. Create a token: `openssl rand -hex 32 > .audit/local/orb-provider-token` (`.audit/` is gitignored).
+2. Set it: `pnpm exec cf workers secrets update ORB_PROVIDER_TOKEN --worker cf-stumble --type secret_text < .audit/local/orb-provider-token`.
+3. Start the provider from the checkout. It pulls the image named by `infra/workspace-image/image-ref.sh` if missing (`STUMBLE_IMAGE` overrides it). With rootless podman, use `podman-dispatch.sh` instead.
 
    ```sh
    STUMBLE_ORB_URL=https://stumble.akompella.dev \
@@ -372,149 +269,65 @@ provider, and back to `cloudflare` when you stop it.
    pnpm stumble orb provider src/stumble-cli/orb/docker-dispatch.sh
    ```
 
-The provider reconnects by itself after a deploy. It stops its container on SIGINT or SIGTERM.
+4. When it logs `connected to the Workspace Host`, set the page's **Workspace container** control to `provider` (or `POST /api/workspace/backend` with `{"backend":"provider"}`). The change stops the running container and is refused during a run.
+5. When you finish, switch back to `cloudflare`, then stop the provider with Ctrl-C.
 
-### Rootless podman on Linux
+The provider reconnects after a deploy. Without the secret, `/orb/provider` and `/orb/computerd` answer 401. To revoke a machine, set a new token; delete the secret to turn the feature off.
 
-A Linux machine with rootless podman runs the provider with `podman-dispatch.sh`. Rootless podman's host gateway is not the host's
-loopback, so the script runs the container on `pasta` with `--map-host-loopback`, and
-`computer.internal` reaches the provider's `127.0.0.1` listener.
+## Troubleshooting
 
-1. Pull the image once so the first start does not wait: `podman pull --platform linux/amd64 "$(infra/workspace-image/image-ref.sh)"`. Never build it on hp.
-2. Keep the token in `.audit/local/orb-provider-token` (mode 0600) and a wrapper
-   `.audit/local/orb-provider.sh` that reads it, so the token never appears in a command line or
-   a log. Both stay untracked because `.audit/local/` is gitignored; put nothing in `~/.config`:
+**The hostname serves another site.** A Worker does not claim a hostname by itself, and a proxied DNS record, often a wildcard, may already send it elsewhere. Check the zone's DNS records, the Worker's **Domains & Routes**, and `curl -I https://<your-hostname>`. If a proxied record covers the hostname, add a Worker route for `<your-hostname>/*`; a route writes no DNS. If there is no record, a custom domain creates one.
 
-   ```sh
-   #!/usr/bin/env bash
-   set -euo pipefail
-   cd "$(dirname "$0")/../.."
-   STUMBLE_ORB_URL=https://stumble.akompella.dev
-   STUMBLE_ORB_TOKEN="$(cat .audit/local/orb-provider-token)"
-   export STUMBLE_ORB_URL STUMBLE_ORB_TOKEN
-   exec pnpm stumble orb provider src/stumble-cli/orb/podman-dispatch.sh
-   ```
-
-3. Run `.audit/local/orb-provider.sh` in a terminal and check that it logs
-   `connected to the Workspace Host`. Switch the page's "Workspace container" control to
-   `provider`, or send `POST /api/workspace/backend` with `{"backend":"provider"}`.
-4. When you finish, switch back to `cloudflare` the same way, then stop the script with Ctrl-C.
-
-Without the secret, `/orb/provider` and `/orb/computerd` answer 401 to every request. No route
-mints or shows the token, and a workspace reset leaves it in place. To revoke a machine, set a new
-value; the provider's socket closes when the new Worker version starts, and the old value no longer
-connects. Delete the secret to turn the feature off.
-
-The provider receives the whole workspace, including the GitHub credential. Give the token only to
-a machine you trust with that.
+**The workspace hangs.** If workspace operations hang, tool calls fail, routes answer `internal-error`, or the GitHub status times out after a large `npm install`, a big dependency tree is probably inside the durable workspace, whose files live in Durable Object storage. Send `POST /api/workspace/reset`. It deletes everything not pushed to GitHub: uncommitted and unpushed work, local branches, the GitHub login (`GH_TOKEN` is reinstalled), and the container with `/tmp`, `node_modules` and the Nix store. Conversations, projects, generations and the ChatGPT login stay, and projects re-clone on next use. Push first.
 
 ## End-to-end run
 
-`pnpm e2e` (`tools/e2e/run.mts`) checks a real deployment. It deploys a fresh stage
-`e2e-<run id>` from the checkout, sets its secrets, and submits and activates a generation from the
-tip of `main`. It sets `OWNER_PASSWORD` last and then deploys the stage again with
-`--force`: the first deploy starts the Durable Objects without the secrets, and the Supervisor did
-not see `GH_TOKEN` until a new version replaced it, so every push answered 401. Harness provisioning
-fetches a commit the checkout lacks by its ID, so a pushed branch's commit can be prepared as a
-generation. Right after the stage answers `/api/status`, the script requests `/shell-modules.json`
-without credentials and fails the deploy step unless the answer is 401. Then it runs three workflows and the ChatGPT turn, each with a time
-limit:
+`pnpm e2e` (`tools/e2e/run.mts`) tests a real deployment. Run it before merging a risky change to the Worker, the Supervisor, the Workspace Host or the facet. It costs container time and model calls, and needs `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `GH_TOKEN` (contents write on the harness repository).
 
-1. Page: a Playwright spec opens the owner page, sends a message, waits for the streamed answer,
-   reloads and finds the turn again, then sends a turn that runs `sleep 300` and cancels it. The run
-   must settle as `aborted`.
-2. Product loop: the script connects `sakompella/cf-stumble` as a project. When the instance had
-   it connected before the run, the step fails before it sends a turn and the cleanup leaves the
-   project alone, since a disconnect would delete the owner's clone. The agent commits a
-   marker file and pushes the branch `e2e/<run id>`, and the script reads the file back through the
-   GitHub API.
-3. Self-modification: as `SYSTEM.md` tells the agent, it commits a marker file to the harness on a
-   branch `self-modify/<run id>-gen` made from `origin/main`, pushes it, switches the checkout back
-   to `main`, runs `stumble gen prepare` and activates the generation. The checkout's `main` stays
-   at its upstream, so the next provision can fast-forward it. The script waits for a new active generation
-   in `/api/status` whose commit holds the marker, then checks that the next turn gets an answer.
-4. ChatGPT turn (`tools/e2e/chatgpt.mts`): it skips with a message unless
-   `/api/chatgpt/connection` is `connected` and the run targets a `--stage`. The agent reads three
-   files and answers. Every assistant entry of the turn must come from provider `chatgpt` with the
-   stage's `CHATGPT_MODEL` and carry no `provider-fallback` diagnostic. The script then reads the
-   stage's `chatgpt.model-call` ok events from Workers Logs, waits up to 5 minutes for one per
-   answer, checks that `instructionsHash` and `toolsHash` are the same on every call, and prints the
-   share of cached prompt tokens.
+Steps, each with a time limit:
 
-A step's time limit or an interrupt stops the processes the step started (each child leads its own process group, which gets SIGTERM and after 10 s SIGKILL) and waits until no process of the group is left before the next step starts, including a grandchild that closed its output. After an interrupt the remaining steps do not start. Cleanup runs after a failure, and Ctrl-C starts it too: the children are detached from the terminal's process group, so the interrupt does not reach cleanup's own processes. A closed terminal (SIGHUP) is handled like Ctrl-C. A script killed with SIGKILL leaves its children running; finish with `pnpm e2e --run-id <id> --cleanup`. Cleanup runs `ops:check` for the stage, deletes the
-run's `e2e/` branches and any `self-modify/` branch that holds the run's marker, destroys the stage,
-deletes its container images, and checks that no Worker, container application, Durable Object
-namespace, bucket or image of the stage is left. The script prints a pass or fail line per step and
-exits 1 when any step failed.
+1. Deploy a fresh stage `e2e-<run id>`, set its secrets and deploy again with `--force`. Check that `/shell-modules.json` answers 401 without credentials, then submit and activate the tip of `main`.
+2. Product loop: connect `sakompella/cf-stumble` and have the agent push a marker commit to `e2e/<run id>`. If the repository was already connected, the step fails and cleanup leaves it alone.
+3. Self-modification: the agent commits a marker to the harness on `self-modify/<run id>-gen`, runs `stumble gen prepare` and activates it; the next turn must answer.
+4. ChatGPT turn, skipped unless the stage has ChatGPT connected: every answer must come from `chatgpt` with the stage's `CHATGPT_MODEL`.
+5. Cleanup: `ops:check`, delete the run's branches, destroy the stage and its images, and confirm nothing is left.
 
-The script needs `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `GH_TOKEN` (contents write on
-the harness repository) in the environment. On a machine with only podman it puts a `docker` shim
-first in `PATH`. Set `CHROMIUM_PATH` where Playwright's own Chromium does not run, as on NixOS.
+A timeout, Ctrl-C or a closed terminal starts cleanup. The script prints a pass or fail line per step and exits 1 on any failure.
 
-- `--keep` keeps a fresh stage: it skips the cleanup and writes a generated owner password to a
-  file in the temporary directory. On an existing `--stage` or `--url`, which the script never
-  destroys, the cleanup still deletes the run's branches and restores the target.
-  `pnpm e2e --run-id <id> --cleanup` cleans up a kept run later.
-- `--stage <stage>` or `--url <url>` runs the workflows against an existing instance. The script
-  then does not deploy or destroy; it disconnects the project the run connected and rolls back to the generation that
-  was active before. Set `E2E_OWNER_PASSWORD` to that instance's password.
+- `--keep` skips cleanup on a fresh stage and writes the owner password to the temporary directory.
+- `--stage <stage>` or `--url <url>` targets an existing instance, which is never deployed or destroyed; set `E2E_OWNER_PASSWORD`. Cleanup disconnects the run's project and rolls back to the earlier generation.
+- `--run-id <id> --cleanup` finishes a killed or kept run (the id is in the first output line). For an existing instance, run it on the same machine, because the restore state is in the temporary directory.
 
-A run takes about 5 minutes, 3 of them deploying. It uses about 4 container instance-minutes and 10
-to 16 Workers AI calls. When Workers AI answers `3040: Capacity temporarily exceeded`, a turn stops
-with `model_error`, and that workflow fails.
-
-Prefer a fresh stage. On an existing instance, a turn that failed in an earlier run stays in the
-harness conversation, and the agent can carry out its steps in the next turn, which then delays the
-page turn. If a run was killed before cleanup finished, `pnpm e2e --run-id <id> --cleanup` finishes
-it; the run id is in the first output line. On an existing instance it disconnects the run's project and rolls
-back to the generation that was active before the run, which the run recorded in
-`cf-stumble-e2e-<id>-restore.json` in the temporary directory, so run it on the same machine or in
-the same job. No GitHub workflow runs the e2e script on a throwaway
-stage: a fresh stage needs a user token as its `GH_TOKEN`, because the Workspace's GitHub credential
-check calls `GET /user`, which the job's `GITHUB_TOKEN` cannot call. Run a throwaway-stage e2e from
-a machine with `pnpm ci:local --stage <stage>`.
+Prefer a fresh stage: a turn that failed in an earlier run stays in the harness conversation and can disturb the next run. No GitHub workflow runs e2e on a throwaway stage, because a fresh stage needs a user token as `GH_TOKEN`; use `pnpm ci:local --stage <stage>`.
 
 ### Preview stage and `pnpm ci:local`
 
-The stage `preview` (Worker `cf-stumble-preview`) is persistent: no run destroys it, and you
-connect ChatGPT on its owner page once. `.github/workflows/preview.yml` runs on every pull request
-and by hand, one run at a time (concurrency group `preview`). It runs Verify and the workspace image
-build on the pull request's head, deploys that commit to `preview`, releases it as the active
-generation with `tools/release-generation.mts --force`, and runs
-`pnpm e2e --stage preview --keep`. `--force` lets the release replace a generation from another
-branch whose commit the new one does not contain. The workflow reads the secrets `CLOUDFLARE_API_TOKEN` and
-`PREVIEW_OWNER_PASSWORD` (the preview's owner password) and the `CLOUDFLARE_ACCOUNT_ID` variable.
-The e2e step lists and deletes the run's branches with the job's `GITHUB_TOKEN` (contents write);
-the agent on the preview pushes with the preview Worker's own `GH_TOKEN` secret.
+The stage `preview` (Worker `cf-stumble-preview`) is never destroyed, so you connect ChatGPT on it once. `.github/workflows/preview.yml` runs on every pull request, one at a time: Verify and the image build on the head commit, deploy to `preview`, release with `tools/release-generation.mts --force` (so it can replace another branch's generation), then `pnpm e2e --stage preview --keep`. It reads the secrets `CLOUDFLARE_API_TOKEN` and `PREVIEW_OWNER_PASSWORD` and the variable `CLOUDFLARE_ACCOUNT_ID`. The agent on the preview pushes with the preview Worker's own `GH_TOKEN` secret.
 
-`pnpm ci:local [--stage <stage>]` (`tools/ci-local.mts`) runs the same chain from a machine: Verify
-in `nix develop`, the workspace image (pulled from GHCR, or built with docker or the podman shim
-when the tag is not published), the deploy, the release, the e2e run with the ChatGPT turn, and
-`ops:check` on the stage. It prints one pass or fail line per step. HEAD must be pushed, because the
-stage's harness fetches it from GitHub. Without `--stage` it targets `preview` and reads the owner
-password from `.audit/local/preview-owner-password` in the main checkout. Any other stage is a
-throwaway: it gets a generated password and its secrets, and it is destroyed at the end; `prod` is
-refused. When `CLOUDFLARE_API_TOKEN` is unset it refreshes the `cf` login and uses its token, and `GH_TOKEN` defaults to `gh auth token`.
+`pnpm ci:local [--stage <stage>]` (`tools/ci-local.mts`) runs the same chain from a machine: Verify in `nix develop`, the image, deploy, release, e2e with the ChatGPT turn, and `ops:check`.
+
+- Push HEAD first; the stage's harness fetches it from GitHub.
+- Without `--stage` it targets `preview`, with the password from `.audit/local/preview-owner-password` in the main checkout.
+- Any other stage is a throwaway with a generated password, destroyed at the end. `prod` is refused.
+- Without `CLOUDFLARE_API_TOKEN` it uses the `cf` login. `GH_TOKEN` defaults to `gh auth token`.
 
 ## Stop paying for the container
 
-The container costs money while it runs. The page, `GET /api/status`, the project list and the connection views answer from the Supervisor's record and never start it. A message, a project connect or disconnect, a generation submit, activate or rollback, `POST /api/github/connection/refresh` and a workspace reset reach the workspace and start or keep it running.
+The container costs money while it runs. The page, `GET /api/status`, the project list and the connection views never start it. Messages, project connect and disconnect, generation submit, activate and rollback, `POST /api/github/connection/refresh` and a workspace reset start it or keep it running. A client that keeps calling one of these routes keeps the container running, and `pnpm ops:check` does not flag it, because each call counts as work.
 
-When you finish work:
+When you finish:
 
-1. Let every run settle, or press **Cancel turn**. A run keeps the container until it settles or its 8-minute deadline passes, and a 30- or 60-minute budget continues it in new 8-minute runs.
-2. Close the page or any script that sends messages or refreshes the GitHub connection. The page itself keeps only an event stream open, which does not keep the container running.
-3. Wait for the idle stop, or stop the container at once. The Workspace Host stops it ten minutes after the last workspace work and logs `workspace.container.idle-stop` with `outcome: "stopped"`. To stop it at once, switch the page's **Workspace container** control to **Provider** and back to **Cloudflare**, or send `POST /api/workspace/backend` with `{"backend":"provider"}` and then `{"backend":"cloudflare"}`. Each change copies the container's files into the store and destroys the container, and the next command starts a new one. The result row says "stopped the container" when it did. The Host refuses the change while a run is active.
-4. Check that it stopped. `GET /accounts/<account-id>/containers/applications/<container-app-id>/instances` lists the instance with `status.state` `running` while it runs. `pnpm ops:check --since 2h` reports a container that ran past the idle stop (`ran-past-idle`).
+1. Let runs settle or press **Cancel turn**. A run holds the container until it settles or reaches its 8-minute deadline; a 30- or 60-minute budget continues it in new 8-minute runs.
+2. Close scripts that send messages or refresh the GitHub connection. The page's event stream does not keep the container running.
+3. Wait for the idle stop, ten minutes after the last workspace work (`workspace.container.idle-stop`, ADR-0043). To stop it now, switch **Workspace container** to **Provider** and back to **Cloudflare**, or send `POST /api/workspace/backend` with `{"backend":"provider"}`, then `{"backend":"cloudflare"}`.
+4. Confirm with `pnpm ops:check --since 2h` (`ran-past-idle` means it ran too long) or `GET /accounts/<account-id>/containers/applications/<container-app-id>/instances` (`status.state` is `running` while it runs).
 
-Do not use `POST /api/workspace/reset` to stop the container: it also deletes the workspace. To stop all cost of an instance, destroy it as described in "Cost and cleanup".
-
-The account has one notification policy, the auto-created billing budget alert (email when total spend reaches 10 dollars). It warns; it stops nothing. The Ops check workflow runs `pnpm ops:check` on production once a day at 13:41 UTC.
-
-Observed on a staging stage on 2026-11-14 with Workers AI and a three-step task (write a file, run it with `node` in the container, answer): the first model answer came after 3.1 to 3.5 seconds in every case. The first shell result came after 8.8 seconds with the container stopped (an image start), 9.4 seconds after an idle stop (a snapshot restore) and 7.1 seconds with the container running. A switch of the backend stopped the container in under a second; the idle stop came 600 seconds after the last run settled.
+A stop loses files the sync does not keep, such as `node_modules` and `/tmp`, and the next request pays a cold start. Never use `POST /api/workspace/reset` to stop the container; it deletes the workspace. `.github/workflows/ops-check.yml` runs `ops:check` on production daily at 13:41 UTC.
 
 ## Cost and cleanup
 
-Workers Paid, Container time, and Workers AI requests can cost money. The Workspace Host stops the container ten minutes after the last work (ADR-0043), so an unused instance costs little. A client that keeps calling a route that touches the workspace keeps the container running, and `pnpm ops:check` counts each call as work, so it does not report it (`docs/agents/incident-2026-09-container-cost.md`).
+Workers Paid, container time and Workers AI calls cost money; an idle instance costs little. To delete an instance:
 
-Delete the Worker and the Container application with `pnpm alchemy destroy --config infra/alchemy.run.ts --stage prod`, and delete the old images in the account's registry, when you no longer need the instance. Delete the `alchemy-state-store` Worker and its two Secrets Store secrets only when no stage on the account remains. Each deploy of a new image leaves the previous one in the registry as rollback history; list them with `pnpm exec cf containers images list` and remove the ones you will not roll back to with `pnpm exec cf containers images delete <repository>:<tag>`.
+1. `pnpm alchemy destroy --config infra/alchemy.run.ts --stage <stage>` deletes the Worker and container application.
+2. Delete old images from the account's registry: `pnpm exec cf containers images list`, then `pnpm exec cf containers images delete <repository>:<tag>`. Each image deploy leaves the previous one there.
+3. Delete `alchemy-state-store` and its two Secrets Store secrets only when no stage remains on the account.

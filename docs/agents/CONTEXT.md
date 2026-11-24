@@ -24,7 +24,14 @@ _Avoid_: ordinary commit, revision, version
 The generation currently selected and running as the main harness.
 
 **Real turn**:
-A user interaction. A successful HTTP status alone does not prove that a streamed interaction completed.
+A run on an owner's message, as opposed to the startup check's scripted conversation. Only a run that
+settles completed is evidence; a 202 or an open stream is not.
+
+**Probation**:
+The state of a newly activated generation until a real turn on it completes. If a run fails because of
+the generation, or stalls before its first model turn, the Supervisor rolls back to the last generation
+that completed a real turn (`src/supervisor/generation-machine.ts`). A cancel, a model error or a long
+run neither proves nor fails it.
 
 **Run**:
 The work Pi Durable does on a project's conversation from a submitted message until it settles. A run
@@ -76,17 +83,17 @@ _Avoid_: generation
 A Git repository containing main-harness source. It is logically separate from repositories used for the user's other work.
 
 **Project repository**:
-A Git repository used for a piece of user work. In version 0, each project is a GitHub repository
-that the user connected to cf-stumble.
+A Git repository used for a piece of user work: a GitHub repository that the owner connected to
+cf-stumble.
 
 **Project thread**:
 The current Pi Durable conversation for one project. Starting a fresh thread replaces its conversation and
-compacted context but preserves every repository in the Computer workspace. Version 0 presents one
-current thread per project.
+compacted context but preserves every repository in the Computer workspace. A project has one
+current thread.
 
 **Computer workspace**:
-A durable filesystem and command environment provided by `@cloudflare/computer`. Version 0 uses one
-workspace for the owner's harness repository and connected project repositories. Each repository
+A durable filesystem and command environment provided by `@cloudflare/computer`. One workspace holds
+the owner's harness repository and every connected project repository. Each repository
 has its own directory and Git history, but the directories are not security boundaries.
 
 **Accumulated context**:
@@ -96,13 +103,16 @@ main-harness generation.
 **Workspace Host**:
 The Durable Object that owns the Computer workspace and its container (`WorkspaceHost`). It counts
 work, stops the container after ten minutes with none (ADR-0043), and answers the Supervisor's build,
-provision, credential and project calls.
+provision, credential and project calls. It runs the container on Cloudflare, or on a provider machine
+of Aditya's when one is connected and selected (ADR-0050).
 
-**Worker-shell**:
-Computer's text-oriented execution backend. It has no Git; every `git` command runs in the container backend.
+**Isolate backend**:
+Computer's Worker-shell backend, a shell in a Dynamic Worker. A `bash` call runs there when the
+isolate can run every program in it, and in the container otherwise or when the model asks for the
+container. It has no Git; every `git` command runs in the container (ADR-0052).
 
 **Container backend**:
-Computer's Linux process backend for Git, Node, package managers, builds, tests, and project commands.
+Computer's Linux container backend for Git, Node, package managers, builds, tests, and project commands.
 
 ## Generation requests
 
@@ -113,7 +123,7 @@ A request for the supervisor to create and check a generation from a particular 
 A request to make a specific existing generation active. The requester may name the target, but the supervisor checks and performs or rejects the change.
 
 **Startup check**:
-The supervisor's check of a prepared generation before it may become ready. The candidate runs in isolation and must report the supervisor's facet compatibility and answer one scripted conversation that runs one workspace command. A failed check marks the generation failed and leaves the active generation serving.
+The Supervisor's check of a prepared generation before it may become ready. The candidate runs in its own facet with a scripted model. It must report the Supervisor's facet compatibility and complete the scripted conversation: commands on the isolate and the container, `stumble gen status`, and a write, edit and read of a scratch file (`src/startup-check-model.ts`). A failed check marks the generation failed and leaves the active generation serving.
 
 **Release**:
 The step of the Deploy workflow that, after a production deploy, submits `main`'s commit as a
@@ -148,5 +158,5 @@ The statement of who is trusted: the owner and an owner-approved harness, on one
 _Avoid_: sandbox, multi-tenant isolation
 
 **Done**:
-Single-owner version 1 works: the owner can use one connected project, reload the browser without losing accepted work, cancel a run, try and undo a harness change, deploy and recover from a failed update, and stop paying for the container when work ends. It does not include public access, guests, teams or isolation between projects. The multi-person service in the README is a long-term aspiration, not part of done. See `status.md`, "What done means".
+Single-owner version 1 works: the owner can use one connected project for real work, reload the browser without losing accepted work, cancel a run, activate a harness change and roll it back, stop or restart the container without silently losing an acknowledged write, deploy and recover from a failed update, and stop paying for the container when work ends. It does not include public access, guests, teams, isolation between projects, owner-selected models or a cap on the account's bill. The multi-person service in the README is a long-term aspiration, not part of done.
 _Avoid_: complete, production-ready for several users
