@@ -4,13 +4,13 @@
 
 The Workspace Host can run its workspace container on a machine Aditya owns instead of as a Cloudflare
 Container. The machine runs `stumble orb provider <dispatch-script>`, which opens every connection
-itself, so it needs no inbound port, as with Amp's self-hosted orbs. When no provider is connected, the Host uses the Cloudflare container as before.
+itself, so it needs no inbound port, as with Amp's self-hosted orbs. When no provider is connected, the Host uses the Cloudflare container.
 
 **Host requirement.** The provider and its dispatch scripts support x86_64 Linux only for now,
 because the workspace image is linux/amd64. `stumble orb provider` checks `process.platform` and
 `process.arch` and logs a one-line warning elsewhere, then carries on. There is no arm64 build.
 
-**Seam.** Computer 0.8.0's `ContainerBackend` drives a container only through
+**Seam.** Computer's `ContainerBackend` drives a container only through
 `IWorkspaceContainerAPI`. `ProviderContainerAPI` (`src/workspace/provider-container.ts`) implements
 it over the provider's socket, and the Host builds a second `ContainerBackend` on top of it. The
 Workspace sees one backend (`src/workspace/workspace-platform.ts`), which picks the provider when
@@ -48,7 +48,7 @@ band with `cf workers secrets update`, or from CI, and the Alchemy stack never d
 deploy keeps it (`docs/deploy.md`, "Instance secrets"). The provider presents it from
 `STUMBLE_ORB_TOKEN`, and the Host compares the SHA-256 digests of the two values with
 `crypto.subtle.timingSafeEqual`. When the secret is unset or empty, both `/orb/provider` and
-`/orb/computerd` refuse every request, so a deploy without the secret behaves as before this ADR. A
+`/orb/computerd` refuse every request, so a deploy without the secret runs the container only on Cloudflare. A
 workspace reset leaves the secret alone. The token is required because a provider runs code on
 Aditya's machine and receives the whole workspace, including the GitHub credential. There is no
 HTTP route that mints or reads it. To revoke a

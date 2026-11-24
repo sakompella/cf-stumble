@@ -2,7 +2,7 @@
 
 > **Review:** Agent-only
 
-The immutable host composes asynchronous work and recoverable failures with Effect 4. The host is
+The immutable host composes asynchronous work and recoverable failures with Effect. The host is
 the Worker, the owner routes, the model route, the Supervisor, the Workspace Host, the GitHub
 code, and the orb CLI that runs on the provider machine (`src/stumble-cli/orb`). An operation that can fail in an expected way fails with a
 tagged error in its Effect error channel, and the code that knows what the failure means handles it
@@ -52,7 +52,7 @@ option. The code below it is interrupted and never reads the signal.
   requirement or authority for a generation under ADR-0003. The module map built from
   `src/facet/generation-1` contains no Effect code.
 
-**State machines (2026-11-09).** Host code whose state is persisted and changes in more than one
+**State machines.** Host code whose state is persisted and changes in more than one
 step is written as a state machine. Its states are one closed union, defined with
 `Schema.TaggedUnion`, so the same definition gives the type, the decoder for stored rows, the
 constructors, and an exhaustive `match`. Each variant carries only the data that is valid in that
