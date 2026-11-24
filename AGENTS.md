@@ -4,61 +4,68 @@
 
 ### Issue tracker
 
-Issues live as GitHub issues in `sakompella/cf-stumble`, managed with the `gh` CLI; all write operations need explicit developer approval. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub issues on `sakompella/cf-stumble` and are managed with `gh`; every GitHub write needs Aditya's explicit OK first. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-The five canonical triage roles use their default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+The five triage roles use their default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single context, kept under `docs/agents/` rather than the repo root. Before architecture, planning or implementation work, read `docs/agents/domain.md`: it gives the reading order.
 
 ### Writing documentation
 
-When you create or edit prose documentation, read `docs/agents/writing-style.md` and follow its plain technical English guidance.
+Before you write or edit prose docs, read `docs/agents/writing-style.md`.
 
-### Verification
+## Scope
 
-Run `nix develop -c pnpm verify` before you claim anything works. `flake.nix` pins the whole environment (Node 22, pnpm, dash, bash, GNU coreutils, git, jq, perl, findutils, gnused, gnugrep, gawk), so the shell tests run the same on Linux and macOS; they fail with a message when run outside it, so use `nix develop -c` for every `pnpm` command that runs tests. `pnpm verify` runs `verify:project-protocol`, `build:page`, typecheck, tools typecheck (both run `tsrs --noEmit`, the Rust port of the TypeScript compiler; the repo has no `typescript` package, and `tsrs` exits 2 on a type error where `tsc` exited 1), `lint:effect`, format check, `knip`, lint (`oxlint --type-aware`; oxlint finds the `tsrs-lint` command of the `tsrs` package in `node_modules/.bin` and runs the type-aware rules in it, so the repo needs no `oxlint-tsgolint`), `test:tools`, `build:module-map`, `build:shell-modules`, `build:loaded-execution-env-fixture`, and the full test suite in that order. `build:shell-modules` writes the ignored `build/shell-assets/shell-modules.json`, the module set of the isolate shell; it ships as a static asset (the `ASSETS` binding) and the Worker loads it into a Dynamic Worker, so it stays out of the Worker bundle. `test:tools` runs the tests under `tools/` (the vendored lint rules, the Foldkit lint rule decisions, the owner page script's size budget, the Worker startup check with its size budget for the upload, and `ops:check`) with `node --test`, because Vitest only collects `test/`. It takes about 90 seconds on the Mac. The Worker startup check (`tools/worker-startup.test.ts`) builds the bundle that Alchemy uploads (`infra/worker-bundle.ts`) and starts it in Miniflare with the production compatibility settings, so a Worker that cannot start fails before merge, not at the deploy's upload (the 2caaafcb `FinalizationRegistry` deploy failure). See `docs/deploy.md`, "Configuration files". `lint:effect` type-checks the same projects again with `effect-tsgo tsrs`, a tsrs build from `@effect/tsgo` that adds the Effect language service, and fails on any Effect diagnostic, such as a floating Effect, a bare `yield` in `Effect.gen`, or error handling on an Effect that cannot fail. Plain `tsrs` ignores the `@effect/language-service` entry under `plugins` in `tsconfig.base.json`, which sets the rules: every rule that is on by default is enforced, suggestions included, except `schemaNumber` (the numbers come from JSON, which cannot hold `NaN` or `Infinity`) and `unknownInEffectCatch` (its hits are boundary adapters that log or drop the cause, ADR-0045). `anyUnknownInErrorContext` and `effectTryWithoutCatch` are on too, though off by default: an error channel holds a tagged error, and a `tryPromise` maps its rejection to one. Fix a hit at its cause; `@effect-diagnostics` directives are comments, which the repo forbids. `build:page` writes the ignored module that holds the owner page's script, so on a fresh checkout run it before `pnpm typecheck` or `pnpm test` alone. `knip` fails on any export under `src/` that production code never imports, and on any `src/` file production never reaches. Production is `src/worker.ts`, the page entry, the generation-1 facet entry, and the `tools/` scripts that `package.json` runs. A test that imports an export does not count. When a test exercises real logic through an export, add that file to `ignoreIssues` in `knip.json` with the issue type it needs (`exports` or `types`); otherwise delete the export or the re-export. The order matters: type errors make the type-aware lint rules report noise about `error` types instead of the real fault, and formatting changes what lint sees, since wrapping a long line has pushed a file over `max-lines` here before.
+Earlier agents here built far past what Aditya asked (Oct 2026 forensics: `.audit/opus-overhaul-2026-10-30/forensics.md` on his machines). So:
 
-After a staging deploy or an e2e run, run `pnpm ops:check` (see `docs/agents/design/observability.md`, "Checking a running deployment") before you claim it works. `pnpm verify` cannot see runtime faults such as an idle container that keeps running. Run `pnpm e2e` (`docs/deploy.md`, "End-to-end run") before you merge a risky change to the Worker, the Supervisor, the Workspace Host or the facet; it deploys a throwaway stage, costs container time and model calls, and is not part of `pnpm verify`. `pnpm ci:local` runs the whole CI chain from a machine (Verify, workspace image, deploy, release, e2e with the ChatGPT turn, `ops:check`) against the persistent `preview` stage, or against a throwaway `--stage <name>` that it destroys at the end (`docs/deploy.md`, "Preview stage and `pnpm ci:local`"). When the machine is busy, a test can exceed Vitest's default 5 s timeout; run that test again alone before you suspect your change.
-
-CI runs the full gate on Ubuntu: `.github/workflows/verify.yml` installs Nix and runs `nix develop -c pnpm verify` on every push and pull request. A tracked `.githooks/pre-commit` runs the same command and blocks the commit when it fails. `pnpm format` fixes formatting; nothing else in the gate is auto-fixable.
-
-`pnpm test:mutation` runs StrykerJS mutation testing on the pure modules listed under `mutate` in `stryker.config.json`: the Supervisor state machines, exec routing and input parsing, redaction, the model route stream parser, the facet's stream event check, the project catalog and the GitHub device flow. Stryker cannot run tests in the Workers pool, so `vitest.mutation.config.ts` runs only the Node-project tests (`*.props.test.ts` and `*.shell.test.ts`); a module you add to `mutate` must be importable under Node and covered by a Node-project test. `tsconfigFile` is empty because Stryker otherwise parses `tsconfig.json` with the `typescript` package, which the repository does not install. The full run (about 1,900 mutants) took 30 minutes on the HP server under load, mostly in the Git status property against real Git, and writes `build/mutation/index.html`. It is not part of `pnpm verify`; run it (`nix develop -c pnpm test:mutation`) after you change one of those modules or its tests, and read the surviving mutants. Pass `--mutate <file>` to check one module.
-
-### Editor setup
-
-The repo has no editor config. `pnpm typecheck` and `pnpm typecheck:tools` run `tsrs`, so point the editor at the same checker or it will disagree with `pnpm verify`. The language server is `pnpm exec tsrs --lsp -stdio`. In VS Code, install the TypeScript 7 extension (`TypeScriptTeam.native-preview`) and set this in your user or workspace settings (from tsrs's `docs/LSP.md`; use the `tsrs` version in `package.json`), then run "TypeScript 7: Restart Server":
-
-```jsonc
-{
-  "js/ts.experimental.useTsgo": true,
-  "js/ts.tsdk.path": "./node_modules/tsrs/tsdk",
-}
-```
-
-Other editors run `tsrs --lsp -stdio` as an LSP server for TypeScript files, and should turn off other TypeScript servers. To see the Effect diagnostics of `pnpm lint:effect` in the editor, run `pnpm exec effect-tsgo tsrs --lsp -stdio` in place of `tsrs --lsp -stdio`, not beside it: both report the TypeScript diagnostics, so running both shows each one twice. That server is the tsrs version that `@effect/tsgo` ships (0.25.0 for `@effect/tsgo` 0.70.0), the same version as the one in `package.json`. The VS Code extension starts the `tsrs` in `node_modules`, so it shows no Effect diagnostics; the repo does not run `effect-tsgo patch`, which rewrites `node_modules`. The server passes 4,092 of 4,562 upstream editor-feature test groups, so a missing hover or fix is not proof of a type error: trust `pnpm typecheck`.
-
-### Cloudflare operations
-
-Deploying with Alchemy (a push to `main`, which deploys through GitHub Actions, or `pnpm run deploy`), checking a deployment or runtime with `pnpm ops:check`, staging a risky change, and diagnosing container cost or idle stops: use the `cf-operations` skill (`.agents/skills/cf-operations/SKILL.md`). `docs/deploy.md` is the human runbook.
-
-### Alchemy, Cloudflare CLI and configuration
-
-`infra/alchemy.run.ts`, an Alchemy stack, is the only description of the Worker. It builds from the values in `infra/worker-settings.ts`, which `infra/test-worker.ts` and the Worker code also read, so change a shared value there. Keep that file free of `node:` imports, because the Worker bundle includes it. There is no `cloudflare.config.ts` and no Wrangler config. Vitest runs the Worker `cf-stumble-test` from the Miniflare options in `infra/test-worker.ts` (no `AI` binding, no container) and adds `OWNER_PASSWORD`. `pnpm run deploy [<stage>] [flags]` (`infra/deploy.sh`) is the deploy path for every stage: it runs `install:infra`, `build:page` and `build:shell-modules`, then deploys the stage, `prod` (production) when none is named, and passes the flags to `alchemy deploy`. CI runs it too. Any other stage is a separate Worker named `cf-stumble-<stage>`, so a staging copy is `pnpm run deploy <stage>`. Run Alchemy from the repository root through `pnpm alchemy ... --config infra/alchemy.run.ts`, never by hand-written paths. `infra/` is its own pnpm project with its own lockfile; `pnpm install:infra` installs it. The repository has no local dev server script: `alchemy dev` needs the production state store, so test changes on a staging stage. Alchemy's state lives in the account's `alchemy-state-store` Worker (ADR-0049). Never delete that Worker, and deploy with `--force` after anything changed the Worker outside Alchemy. `cf` stays for what needs no configuration file: secrets (`cf workers secrets`), container applications, images, deployment lists, and auth; run it as `pnpm exec cf` under Node. `pnpm alchemy logs --config infra/alchemy.run.ts --stage prod --tail` streams the Worker's logs. The repository does not declare `wrangler`. Per-instance values (`OWNER_PASSWORD`, `HARNESS_REPOSITORY_URL`, `GITHUB_OAUTH_CLIENT_ID`, `GH_TOKEN`) are Worker secrets that the stack never declares; an Alchemy deploy keeps them. See `docs/deploy.md`.
-
-### Browser checks
-
-`pnpm verify` never opens a browser, so it cannot see that the owner page fills itself in. To look at the page yourself, use the `chrome-devtools` MCP server: open the page served by a staging copy (the repository has no local dev server script), then read its snapshot, console messages and network requests. The page needs Basic auth. Set an `Authorization: Basic <base64 of aditya:password>` header with the server's `emulate` tool (`extraHttpHeaders`) and open the plain URL. Do not put the credentials in the URL: the page loads, but its own `fetch` calls fail because Chrome refuses a request whose URL includes credentials.
-
-### Scope
-
-Earlier agents on this repository built far past what Aditya asked (see the Oct 2026 forensics in `.audit/opus-overhaul-2026-10-30/forensics.md` on his machines). Before you build:
-
-- Do the plain request first. If you choose a heavier option than the one he named, say so before you build it.
-- Guard only against failures that have happened. Name the incident in the commit message.
-- One writer pass and one review pass. Fold review nits into the same commit.
-- Keep plans, evidence, and decision logs in `.audit/` or `_*.md`; never commit them.
+- Do the plain request first. If you pick a heavier option than the one he named, say so before you build it.
+- Guard only against failures that have happened, and name the incident in the commit message.
+- One writer pass, one review pass. Fold review nits into the same commit.
+- Keep plans, evidence and decision logs in `.audit/` or `_*.md` (globally gitignored); never commit them.
 - Prove a change on the deployed instance or a staging copy, not only against fakes.
+- Get Aditya's explicit OK before any `git push`, to any branch or remote.
+- Leave the content of `README.md` alone unless Aditya asks. If it only needs reformatting for `pnpm format:check`, do that in a commit of its own.
 
-### Project architecture
+## Verification
 
-For architecture, planning, or implementation work, read `docs/agents/domain.md` before exploring. It gives the required reading order for the product overview, glossary, current ADRs, Computer integration, and current status. Everything under `docs/agents/` is agent-generated. Never change the content of `README.md` unless Aditya asks. If it only needs reformatting to pass `pnpm format:check`, reformat it in a commit of its own.
+Run every `pnpm` command that builds or tests inside `nix develop -c`: `flake.nix` pins Node, pnpm and the shell tools, and the shell tests refuse to run outside it.
+
+- `nix develop -c pnpm verify` is the gate. Run it before you claim anything works. CI (`.github/workflows/verify.yml`) and the tracked `.githooks/pre-commit` run the same command. Only formatting is auto-fixable: `pnpm format`.
+- On a fresh checkout, run `pnpm build:page` before `pnpm typecheck` or `pnpm test` on their own: it writes the ignored module that holds the owner page script.
+- Typechecking uses `tsrs`, the Rust port of the TypeScript compiler; the repo has no `typescript` package. `tsrs` exits 2 on a type error.
+- `pnpm lint:effect` runs the Effect language service (`effect-tsgo tsrs`) and fails on any Effect diagnostic. Its rules are under `plugins` in `tsconfig.base.json`. Fix a hit at its cause: the repo forbids comments, so `@effect-diagnostics` directives are not an option.
+- `knip --production` fails on any `src/` export or file that production code never reaches. A test import does not count. When a test exercises real logic through an export, add the file to `ignoreIssues` in `knip.json` with the issue type (`exports` or `types`); otherwise delete the export.
+- `tools/worker-startup.test.ts` builds the bundle Alchemy uploads and starts it in Miniflare, so a Worker that cannot start fails before merge.
+- `test/runtime-parity.test.ts` fails when the test Worker enables a compatibility feature that production lacks, usually after a `@cloudflare/vitest-plugin` upgrade. Add the flag to the production flags in `infra/worker-settings.ts`.
+- A busy machine can push a test past Vitest's 5 s timeout. Rerun that test alone before you suspect your change.
+- `pnpm test:mutation` (StrykerJS, not in `verify`) covers the modules under `mutate` in `stryker.config.json`. Run it after you change one of them or its tests, and read the surviving mutants; `--mutate <file>` checks one module. It runs only Node-project tests (`*.props.test.ts`, `*.shell.test.ts`), so a module you add must import under Node and have such a test.
+
+`verify` cannot see runtime faults, such as an idle container that keeps running:
+
+- After a staging deploy or an e2e run, run `pnpm ops:check` (`docs/agents/design/observability.md`, "Checking a running deployment").
+- Before you merge a risky change to the Worker, the Supervisor, the Workspace Host or the facet, run `pnpm e2e` (`docs/deploy.md`, "End-to-end run"). It deploys a throwaway stage and costs container time and model calls.
+- `pnpm ci:local` runs the whole CI chain from this machine (`docs/deploy.md`, "Preview stage and `pnpm ci:local`").
+
+## Cloudflare and Alchemy
+
+For deploys (a push to `main` deploys through GitHub Actions; `pnpm run deploy [<stage>]` deploys by hand), `pnpm ops:check`, staging a risky change, or diagnosing container cost and idle stops, use the `cf-operations` skill (`.agents/skills/cf-operations/SKILL.md`). `docs/deploy.md` is the human runbook.
+
+- `infra/alchemy.run.ts` is the only description of the Worker; there is no Wrangler config. Shared values live in `infra/worker-settings.ts`, which the Worker bundle includes, so keep it free of `node:` imports.
+- Vitest runs the Worker from the Miniflare options in `infra/test-worker.ts` (no `AI` binding, no container).
+- Every stage other than `prod` is a separate Worker, `cf-stumble-<stage>`. There is no local dev server (`alchemy dev` needs the production state store), so test on a staging stage.
+- Run Alchemy from the repo root as `pnpm alchemy <command> --config infra/alchemy.run.ts`. `infra/` is its own pnpm project; `pnpm install:infra` installs it.
+- Alchemy's state lives in the account's `alchemy-state-store` Worker. Never delete it. After anything changes the Worker outside Alchemy, deploy with `--force`.
+- Use `pnpm exec cf` for secrets, container applications, images, deployment lists and auth.
+- Per-instance values (`OWNER_PASSWORD`, `HARNESS_REPOSITORY_URL`, `GITHUB_OAUTH_CLIENT_ID`, `GH_TOKEN`, `ORB_PROVIDER_TOKEN`) are Worker secrets the stack never declares, so a deploy keeps them (`docs/deploy.md`, "Instance secrets").
+
+## Browser checks
+
+`verify` never opens a browser. To check the owner page, open a staging copy with the `chrome-devtools` MCP server and read its snapshot, console and network requests. The page needs Basic auth: set an `Authorization: Basic <base64 of aditya:password>` header with the `emulate` tool (`extraHttpHeaders`) and open the plain URL. Credentials in the URL break the page's own `fetch` calls.
+
+## Editor setup
+
+Point the editor at `pnpm exec tsrs --lsp -stdio`, or it will disagree with `verify`. In VS Code, install `TypeScriptTeam.native-preview` and set `"js/ts.experimental.useTsgo": true` and `"js/ts.tsdk.path": "./node_modules/tsrs/tsdk"`. To see the `lint:effect` diagnostics too, run `pnpm exec effect-tsgo tsrs --lsp -stdio` instead of plain `tsrs`, not beside it. The language server misses some editor features; trust `pnpm typecheck`.

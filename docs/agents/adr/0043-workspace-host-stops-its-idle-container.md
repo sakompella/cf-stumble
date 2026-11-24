@@ -13,7 +13,7 @@ closes it. That socket is one incoming request that never ends, and an incoming 
 Durable Object active, so the object never becomes inactive and the platform never stops the
 container "shortly after the Durable Object becomes inactive". On production one such request ran
 56 minutes and another 26, and a staging container with no heartbeat ran 26 minutes untouched.
-Idle containers also burn CPU, because computerd's disk poll walks `/workspace` every 250 ms.
+Idle containers also burn CPU, because computerd's shim polls `/workspace` (every five seconds, ADR-0042).
 
 **Rules.** Work counts as in flight from the start of a Host RPC (`build`, `provision`,
 `removeProject`, `ensureManagedInstructions`, `credential`, `reset`) and of each project `exec`

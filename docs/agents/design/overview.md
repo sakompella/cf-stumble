@@ -2,7 +2,7 @@
 
 cf-stumble is a personal agent that primarily helps with coding and can improve its own main harness. It is inspired by Autolith, Amp's Orbs, NixOS, and Cloudflare's Think. Its main harness runs its agent loop on Pi Durable, on Cloudflare Durable Objects, Dynamic Workers, Dynamic Worker facets, and Computer.
 
-The product is for one owner. It grows around that person's projects, instructions, working habits, and accumulated context. Coding is its primary use, not a permanent limit on what the harness may help with. Public signup, teams and shared use are not part of it (see "Not built"), and the README's hope of multi-person use is a long-term aspiration that nothing here implements. `status.md`, "What done means", says what finished looks like.
+The product is for one owner. It grows around that person's projects, instructions, working habits, and accumulated context. Coding is its primary use, not a permanent limit on what the harness may help with. Public signup, teams and shared use are not part of it (see "Not built"), and the README's hope of multi-person use is a long-term aspiration that nothing here implements. `CONTEXT.md`, "Done", says what finished looks like.
 
 ## The two harnesses
 
@@ -70,3 +70,5 @@ A run outlives its browser. `POST /api/projects/{id}/messages` answers 202 once 
 The page folds Pi Durable's `pi.live` document into a run phase (`src/conversation-view/run-phase.ts`): a run that has no generation, no tool round and no compaction yet is `Preparing`, and the page writes "preparing the workspace" beside the turn status; a compaction reads "summarizing earlier messages" and a generation that has no text yet "waiting for the model". On a cold start the wait is the workspace's environment, which is the Host's container provision in the harness project, so it is shown there. The wording sits outside the live status, which keeps saying `running` until the run ends. The label also shows for a moment between tool rounds.
 
 A 202 does not prove that the run completed. Only the conversation shows its result.
+
+The owner page is a Foldkit program (`src/page/client`; Aditya chose Foldkit). It is immutable host code, not part of a generation. `pnpm build:page` bundles it into one script that the Worker serves at `/assets/owner-<hash>.js` with an immutable cache header, because the page itself is `no-store` and would otherwise download about 200 KB gzip on every load. The page's policy is `script-src 'self'`, a per-response nonce and `https://static.cloudflareinsights.com/beacon.min.js/`, with no `'unsafe-inline'` or `'unsafe-eval'`. The nonce also covers the inline script that Cloudflare's JavaScript Detections inject: Cloudflare stamps the policy's nonce on it, and its per-request ray ID rules out a hash. The beacon source ends in a slash so it matches the versioned path. Foldkit's Schema JIT needs eval, so it stays off.

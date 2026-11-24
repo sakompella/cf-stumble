@@ -9,7 +9,7 @@ The workspace image builds `computerd` from Computer source commit
 This changes the image half of the pins that ADR-0026 records; the source commit stays the same.
 
 A Cloudflare container cannot mount FUSE, so computerd keeps `/workspace` in step with its store
-through a userspace shim. Upstream, the shim walks the whole tree every 250 ms and before every
+through a userspace shim. Upstream, the shim walks the whole tree on a timer and before every
 workspace pull, and its walk follows symlinks. After one `npm install` in a project, every
 deployed workspace operation took minutes, both with `node_modules` in the project and with
 `node_modules` as a symlink into `/tmp`. The `ignore` list cf-stumble sends with each pull keeps
@@ -43,4 +43,11 @@ which the source stage compiles on Debian trixie and passes to the build through
 and rebase the walk patch. Delete the walk patch and this record when an upstream release fixes
 the walk and `flush`.
 
-ADR-0044 changes how often the shim walks the disk: it no longer polls every 250 ms.
+**Poll interval.** The patch also adds `COMPUTERD_POLL_MS` (one positive integer; unset keeps
+upstream's 250 ms), and the image sets it to `5000`. The walk `lstat`s every entry outside an
+ignored segment whether or not anything changed: on staging an idle computerd used about 0.1 vCPU
+per 1,000 entries at 250 ms. Sync does not need the fast poll. At the pinned commit the sync RPC
+reconciles the disk before every pull (`beforeFetch: () => shim.reconcileNow()`) and flushes after
+every push (`afterApply: () => shim.flush()`), so every Host operation sees the disk it expects.
+The poll only moves a background process's write into the store sooner; at five seconds that write
+arrives up to five seconds later, for a twentieth of the idle CPU.

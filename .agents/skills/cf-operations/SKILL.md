@@ -44,7 +44,7 @@ Compare against what you recorded before step 2. The container application keeps
 
 ### 1. Run the command
 
-Give `ops:check` a credential: it reads `CLOUDFLARE_API_TOKEN`, else the `cf` login in `~/.config/cloudflare/config/default.json` (refreshed by `pnpm exec cf auth whoami`; an API token with Account Analytics Read is better for repeated runs). See `docs/agents/design/observability.md`, "Checking a running deployment", "Credentials". Then run `pnpm ops:check`. The account is `CLOUDFLARE_ACCOUNT_ID`, else the only account the token sees. Add `--worker <worker>` or `--since 90m|2h|1d` for another Worker or window.
+Give `ops:check` a credential: it reads `CLOUDFLARE_API_TOKEN`, else the `cf` login in `~/.config/cloudflare/config/default.json` (refreshed by `pnpm exec cf auth whoami`; an API token with Account Analytics Read is better for repeated runs). See `docs/agents/design/observability.md`, "Checking a running deployment". Then run `pnpm ops:check`. The account is `CLOUDFLARE_ACCOUNT_ID`, else the only account the token sees. Add `--worker <worker>` or `--since 90m|2h|1d` for another Worker or window.
 
 ### 2. Read the result
 
@@ -90,6 +90,6 @@ Run the Check branch over the window. Sum running minutes per day from the usage
 
 ### 2. Match the known causes
 
-`docs/agents/incident-2026-09-container-cost.md` lists the causes found so far: a client that polls a route that touches the workspace, a Durable Object kept active by an open request, and the shim's disk walk. Compare your evidence with each.
+The causes found so far: a client that polls a route that touches the workspace (every such call counts as work, so the idle stop never fires), a Durable Object kept active by an open request (ADR-0043), and the shim's disk walk (ADR-0042). Compare your evidence with each.
 
 **Complete when:** each known cause is confirmed or excluded with a number, or the remainder is recorded as unknown. Billing data needs an API token with Billing Read; the `cf` login cannot read it.
