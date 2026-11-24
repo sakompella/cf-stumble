@@ -3,14 +3,13 @@
 > **Review:** Agent-only
 
 The main harness runs its agent loop on Pi Durable (`@earendil-works/pi-durable`, with `pi-ai` and
-`chord`), pinned to one exact version. Pi Durable replaces the vendored Pi core, the Supervisor's
-thread store, its turn leases and the turn stream the browser held open. A run now outlives the
-browser: the browser sends a message, the generation works on it in the background, and the
-browser watches the conversation.
+`chord`), pinned to one exact version in `package.json`. Pi Durable owns the agent loop, the thread
+store and the run, so cf-stumble keeps no Pi core, thread store, turn lease or turn stream of its
+own. A run outlives the browser: the browser sends a message, the generation works on it in the
+background, and the browser watches the conversation.
 
 **The page watches Pi Durable's committed view.** The facet streams `conversation.watch()`, Pi
-Durable 1.5.0's committed conversation view, instead of the event stream of 1.4.0 (`watchEvents`,
-removed in 1.5.0). The stream is JSON lines. The first line is `[["r", view]]`, a replace of the whole
+Durable's committed conversation view. The stream is JSON lines. The first line is `[["r", view]]`, a replace of the whole
 view; each later line is the array of delta ops that turns the previous view into the next (Chord's
 `delta` format, applied on the page with `applyImmutable`). The view holds a window of entries and
 the documents `pi.live` (the active run: partial answer, tool calls and their output, retry state)
@@ -28,16 +27,16 @@ Activation and rollback abort the facet; the next call mounts the new generation
 same storage, and Pi Durable resumes the interrupted work. The Supervisor never deletes the serving
 facet. Startup-check candidates run under per-commit names and never open the session.
 
-We first kept the session in the Supervisor's own SQLite and reached it from the facet through a
-storage RPC adapter. In production every commit then waited about 43 ms for the Supervisor's durable
-write, which added about 395 ms at p50 and 750 ms at p95 to a one-tool turn; facet-owned storage
-answered at about 146 ms p50. The adapter's one advantage was a session that could outlive a Pi
-Durable schema change across a rollback, and the compatibility key below already rules that rollback out.
+**Alternative.** Keeping the session in the Supervisor's own SQLite, reached from the facet through
+a storage RPC adapter, was measured in production: every commit waited about 43 ms for the
+Supervisor's durable write, which added about 395 ms at p50 and 750 ms at p95 to a one-tool turn;
+facet-owned storage answered at about 146 ms p50. The adapter's one advantage is a session that
+could outlive a Pi Durable schema change across a rollback, and the compatibility key below already
+rules that rollback out.
 
 **Every runnable generation speaks the Supervisor's facet compatibility.** The compatibility key,
 `FACET_COMPATIBILITY` in `src/facet/runtime-contract.ts`, is `pi-durable@<version>/host-<N>`: the pinned Pi
-Durable version, and the revision of the facet-to-Supervisor protocol (`host-2` added the `running`
-call). Bump `host-N` whenever that RPC contract changes in a way an older generation does not
+Durable version, and the revision of the facet-to-Supervisor protocol. Bump `host-N` whenever that RPC contract changes in a way an older generation does not
 satisfy. The startup check asks the candidate's `compatibility()` and fails the candidate unless it
 equals the Supervisor's key. A generation built before the method existed cannot answer and fails
 at mount. Preparation records the checked key on the generation, and activation and rollback refuse
@@ -63,9 +62,29 @@ disconnect refuses with `run-active` only while a run is active in that project.
 Loader starts it with `enable_weak_ref`, which `chord` needs. `FACET_RUNTIME`, beside the key in
 `src/facet/runtime-contract.ts`, holds the loader's compatibility date and flags.
 
-The harness no longer shows the repository's diff after a turn; that was a generation-0 frame with no
-Pi Durable equivalent.
+**Model errors.** Pi retries a model error only when its text matches Pi's own list
+(`isRetryableAssistantError`), and Pi Durable cannot be told to extend that list. The route's own
+failures therefore live in one table, `src/model-route-wire/failure.ts`, and a test asks Pi about
+each text. The Supervisor not answering, the route not answering and a stream cut short are retried
+(three times, after 2, 4 and 8 s); a reply the facet cannot read is not. Pi compacts a thread only
+when the error text matches its context-overflow list (`isContextOverflow`), so the route refuses a
+request over 1 MiB with Pi's own `request_too_large` wording. Pi budgets the context in estimated
+tokens, and tool results full of control characters, such as reads of a binary file, can push a
+request past 1 MiB below the token threshold; with any other wording every later run of that thread
+fails the same way.
 
-**Amendment (2026-11-17).** Pi retries a model error only when its text matches Pi's own list (`isRetryableAssistantError`), which Pi Durable cannot be told to extend. The route's own failures therefore live in one table, `src/model-route-wire/failure.ts`, and a test asks Pi about each text. The Supervisor not answering, the route not answering and a stream cut short are retried (three times, after 2, 4 and 8 s); a reply the facet cannot read is not. Pi compacts a thread only when the error text matches its context-overflow list (`isContextOverflow`), so the route refuses a request over 1 MiB with Pi's own `request_too_large` wording. Pi budgets the context in estimated tokens, and tool results full of control characters, such as reads of a binary file, can push the request past 1 MiB below the token threshold; with the old wording every later run of that thread failed the same way.
+**Run endings.** Three rules keep a run's ending from being lost or mistaken.
 
-**Amendment (2026-11-18).** Three rules keep a run's ending from being lost or mistaken. First, the facet stores the runs of the last `running` report that the Supervisor took (`relay.reported`, in the facet's storage), and writes the runs it is about to send before it sends them. A new session that follows a lost report therefore starts from what the Supervisor knew, and its first report carries the failures of the runs that ended meanwhile; before this a refused report left the run to settle `completed`, which could prove a generation that had faulted. Second, the owner's cancel first clears the conversation's run budgets and then aborts, and the deadline continues a run only while it has a budget, so a deadline abort that races a cancel cannot continue the cancelled run; a resend of a message the facet already holds leaves the budgets as they are. Third, the Supervisor stores a cancel that arrives before the facet's first `running` report for the conversation (table `conversation_cancels`), and the run that the next report starts begins as cancelled, so it settles `cancelled` and not `unanswered`. These changes need no protocol revision: the first two sit in the facet and ship with the next generation, the third sits in the Supervisor.
+1. The facet stores the runs of the last `running` report that the Supervisor took
+   (`relay.reported`, in the facet's storage), and writes the runs it is about to send before it
+   sends them. A new session that follows a lost report therefore starts from what the Supervisor
+   knew, and its first report carries the failures of the runs that ended meanwhile. Otherwise a
+   refused report leaves the run to settle `completed`, which could prove a generation that had
+   faulted.
+2. The owner's cancel first clears the conversation's run budgets and then aborts, and the deadline
+   continues a run only while it has a budget, so a deadline abort that races a cancel cannot
+   continue the cancelled run. A resend of a message the facet already holds leaves the budgets as
+   they are.
+3. The Supervisor stores a cancel that arrives before the facet's first `running` report for the
+   conversation (table `conversation_cancels`), and the run that the next report starts begins as
+   cancelled, so it settles `cancelled` and not `unanswered`.

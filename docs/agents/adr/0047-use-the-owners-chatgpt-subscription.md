@@ -46,7 +46,7 @@ name on `ModelRoute` and `ProjectRpcTarget` and fails when the prototype chain h
 lacks. A new public method on either class is a new capability for mutable code. Its author adds
 the name to the list on purpose, and the reviewer decides whether a facet may call it.
 
-**The fallback is narrow.** With no connection the route calls Workers AI as before and marks the answer's `served` record with `fallback: "chatgpt-not-connected"`; the facet keeps that as a `provider-fallback` diagnostic. It is a field of the `done` event, not an event of its own, because a facet's event check accepts unknown fields but refuses unknown events, so a generation built before it still serves. A connection
+**The fallback is narrow.** With no connection the route calls Workers AI and marks the answer's `served` record with `fallback: "chatgpt-not-connected"`; the facet keeps that as a `provider-fallback` diagnostic. It is a field of the `done` event, not an event of its own, because a facet's event check accepts unknown fields but refuses unknown events, so a generation built before it still serves. A connection
 that needs a reconnect fails every call with `chatgpt-reconnect-required` instead of falling back,
 so the owner sees that the subscription stopped answering. A token server that is down fails the
 call with `model-unavailable`, unless the stored token is still valid.
@@ -64,7 +64,7 @@ code or type is `subscription_sharing_usage_limit_exceeded`,
 event carries `served`: the provider, model and reasoning effort that answered. The facet writes them as the
 message's `provider`, `model` and `providerThinkingLevel`, so the saved thread records which model answered;
 without `served` (a Worker from before it) the message keeps `host-model-route`. Once any text or tool call was sent, it never falls back: the call
-ends with one `model-unavailable` error, as before, because two providers' halves of one answer are
+ends with one `model-unavailable` error, because two providers' halves of one answer are
 not one answer. Either way the connection stays connected and the Supervisor records the limit,
 but only while the access token the call sent is still the stored, connected one. A call that meets
 the limit after a Disconnect, a new sign-in, or a refresh replaced its token records nothing, so an
@@ -76,13 +76,12 @@ yet reached, so a second call that meets the same limit in the stream keeps the 
 refusals, such as `subscription_sharing_user_not_eligible` or
 `subscription_sharing_usage_unavailable`, still fail the call.
 
-**Amendment (2026-11-17).** The Supervisor's write of a limit or of a refused token is best effort.
-`src/chatgpt/model-turn.ts` catches a write that rejects and logs `chatgpt.account-update-failed`
-with the update and the redacted cause, and the call's result stands: a Workers AI fallback does not
-fail because bookkeeping failed. The next call meets the same limit or refusal and records it again.
+Recording a limit or a refused token is best effort. When the Supervisor's write rejects,
+`src/chatgpt/model-turn.ts` logs `chatgpt.account-update-failed` with the update and the redacted
+cause, and the call's result stands, so a Workers AI fallback does not fail because bookkeeping
+failed. The next call meets the same limit or refusal and records it again.
 
-**The model is fixed per deployment.** `CHATGPT_MODEL` in `infra/worker-settings.ts` names it
-(`gpt-6.1-sol`, the model OpenAI's token sharing documentation uses in its examples). The request
+**The model is fixed per deployment.** `CHATGPT_MODEL` in `infra/worker-settings.ts` names it. The request
 uses medium reasoning effort, `store: false` and streaming, and passes system messages as
 `instructions`, because the token sharing preview accepts only that shape. It sends the facet's
 per-conversation provider session id as `prompt_cache_key` and as the `session_id` and
