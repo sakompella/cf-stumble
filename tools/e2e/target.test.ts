@@ -3,11 +3,25 @@ import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { after, describe, it } from "node:test";
 import * as Predicate from "effect/Predicate";
-import { connectPayload } from "../browser-harness/fixtures.mts";
+import type { ANSWERS } from "../../src/api/answers.js";
 import { Owner } from "./owner-api.mts";
 import { forgetRestoreState, loadRestoreState, saveRestoreState } from "./restore-state.mts";
 import { Target } from "./target.mts";
 import { productLoop } from "./workflows.mts";
+
+function connectPayload(
+  alreadyConnected: boolean,
+): (typeof ANSWERS)["POST /api/projects/connect"]["Encoded"] {
+  return {
+    ok: true,
+    project: {
+      id: "octocat-new-repo",
+      displayName: "new-repo",
+      repositoryUrl: "https://github.com/octocat/new-repo",
+    },
+    alreadyConnected,
+  };
+}
 
 const PROJECT = "e2e-project";
 

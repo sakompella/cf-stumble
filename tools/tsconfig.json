@@ -6,5 +6,5 @@
     "types": ["node"]
   },
   "include": ["**/*.ts", "**/*.mts"],
-  "exclude": ["oxlint/anti-slop", "e2e/fuzz/page"]
+  "exclude": ["oxlint/anti-slop"]
 }

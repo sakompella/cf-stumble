@@ -7,7 +7,7 @@ import { chatgptArea } from "./chatgpt.mts";
 import type { Owner } from "./owner-api.mts";
 import { MINUTE_MS, Steps } from "./steps.mts";
 import { Target } from "./target.mts";
-import { pageWorkflow, productLoop, selfModification, type Run } from "./workflows.mts";
+import { productLoop, selfModification, type Run } from "./workflows.mts";
 
 const { values } = parseArgs({
   options: {
@@ -45,7 +45,6 @@ async function workflows(owner: Owner): Promise<void> {
     signal,
   });
 
-  await step("page workflow", 8 * MINUTE_MS, (signal) => pageWorkflow(run(signal)));
   await step("product loop", 12 * MINUTE_MS, (signal) =>
     productLoop(run(signal), (projectId) => {
       target.connectedProject = projectId;

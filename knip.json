@@ -8,7 +8,6 @@
     "tools/*.mts!",
     "tools/ops-check/run.mts!",
     "tools/e2e/run.mts!",
-    "tools/e2e/fuzz/run.mts!",
     "infra/alchemy.run.ts!"
   ],
   "project": ["src/**/*.ts!", "tools/**/*.{ts,mts}!", "infra/**/*.ts!"],
@@ -16,12 +15,9 @@
   "ignoreIssues": {
     "tools/**": ["files", "exports", "types", "nsExports", "nsTypes", "duplicates"],
     "src/conversation-view/view-reader.ts": ["exports"],
-    "src/github/repository-size-guard.ts": ["exports"],
-    "src/page/client/api.ts": ["exports"],
     "src/project-catalog.ts": ["exports"],
     "src/selectable-projects.ts": ["exports"],
     "src/stumble-cli/orb/tunnel.ts": ["exports"],
-    "src/workspace-command-timeout.ts": ["exports"],
     "src/workspace/commands/build-harness.ts": ["exports"],
     "src/workspace/commands/provision-project.ts": ["exports"],
     "src/workspace/commands/remove-project.ts": ["exports"],

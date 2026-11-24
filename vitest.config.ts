@@ -11,7 +11,7 @@ const EFFECT_IMPORT = /from\s+"(effect(?:\/[\w-]+)*)"/gu;
 
 const PREBUNDLE_DIRECTORY = resolve(import.meta.dirname, "node_modules/.cache/effect-prebundle");
 
-const OWNER_PAGE_CLIENT = ["src/page/client/**", "test/page/client/**"];
+const OWNER_PAGE_CLIENT = ["src/page/client/**"];
 
 function importedEffectPaths(): readonly string[] {
   const sources = globSync(["src/**/*.ts", "test/**/*.ts"], {
@@ -126,11 +126,7 @@ export default defineConfig({
         test: {
           name: "node",
           testTimeout: 20_000,
-          include: [
-            "test/**/*.props.test.ts",
-            "test/**/*.shell.test.ts",
-            "test/page/client/**/*.test.ts",
-          ],
+          include: ["test/**/*.props.test.ts", "test/**/*.shell.test.ts"],
           environment: "node",
           pool: "forks",
           server: { deps: { inline: ["@cloudflare/computer"] } },

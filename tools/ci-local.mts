@@ -1,8 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
-import { chromium } from "@playwright/test";
 import { PRODUCTION_STAGE, workerName } from "../infra/worker-settings.ts";
 import {
   accountFrom,
@@ -40,11 +39,7 @@ async function localEnv(): Promise<NodeJS.ProcessEnv> {
   const env = await deployEnv(process.env);
   const gh = env["GH_TOKEN"] ?? (await succeed("gh", ["auth", "token"])).trim();
 
-  const browser = existsSync(chromium.executablePath())
-    ? undefined
-    : (env["CHROMIUM_PATH"] ?? (await succeed("sh", ["-c", "command -v chromium"])).trim());
-
-  return { ...env, GH_TOKEN: gh, ...(browser !== undefined && { CHROMIUM_PATH: browser }) };
+  return { ...env, GH_TOKEN: gh };
 }
 
 async function withCloudflare(env: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv> {

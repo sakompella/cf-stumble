@@ -15,6 +15,5 @@ export default defineConfig({
     unstubGlobals: true,
     server: { deps: { inline: ["@cloudflare/computer"] } },
     include: ["test/**/*.props.test.ts", "test/**/*.shell.test.ts"],
-    exclude: ["test/page/client/**"],
   },
 });

@@ -6,5 +6,5 @@
     "types": ["@cloudflare/workers-types", "@cloudflare/vitest-plugin/types"]
   },
   "include": ["src", "test", "*.config.ts"],
-  "exclude": ["src/page/client", "test/page/client", "src/stumble-cli/orb", "test/stumble-cli/orb"]
+  "exclude": ["src/page/client", "src/stumble-cli/orb", "test/stumble-cli/orb"]
 }
