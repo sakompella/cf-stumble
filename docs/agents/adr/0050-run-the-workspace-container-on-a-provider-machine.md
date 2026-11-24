@@ -51,7 +51,7 @@ deploy keeps it (`docs/deploy.md`, "Instance secrets"). The provider presents it
 `/orb/computerd` refuse every request, so a deploy without the secret behaves as before this ADR. A
 workspace reset leaves the secret alone. The token is required because a provider runs code on
 Aditya's machine and receives the whole workspace, including the GitHub credential. There is no
-HTTP route that mints or reads it, because owner routes have no authentication yet. To revoke a
+HTTP route that mints or reads it. To revoke a
 provider, change the secret. That deploys a new Worker version, which closes the provider's
 socket, and the old value no longer connects.
 

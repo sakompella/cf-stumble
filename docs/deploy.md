@@ -196,7 +196,7 @@ A rollback switches only the harness code that serves conversations. Send `POST 
 
 `.github/workflows/workspace-image.yml` builds `infra/workspace-image/computerd.Dockerfile` for linux/amd64 and pushes `ghcr.io/sakompella/cf-stumble-workspace:<hash>`, a hash of the Dockerfile and `computerd-walk.patch` (`infra/workspace-image/image-ref.sh` prints it). It skips existing tags and moves `latest` on `main`. The Deploy and Preview workflows run it first. The package is public, so pulls need no login. Do not build the image by hand; `pnpm ci:local` builds it only when the tag is not published.
 
-Cloudflare Containers pull only from registries the account has configured, so a direct ghcr.io reference fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Alchemy pulls the image and pushes it to the account's registry on deploy (`infra/workspace-image/image.ts`). Use Docker for that, not Podman: Podman can rewrite the manifest on push, and the deploy fails with `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
+Cloudflare Containers pull only from registries the account has configured, so a direct ghcr.io reference fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Alchemy pulls the image and pushes it to the account's registry on deploy (`infra/workspace-image/image.ts`). Docker is preferred; Podman works through a `docker` shim (which `pnpm ci:local` creates when `docker` is missing), though Podman can occasionally rewrite a manifest on push and fail with `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
 
 ## First run
 
