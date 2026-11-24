@@ -33,9 +33,6 @@ importers:
         specifier: 3.6.1
         version: 3.6.1(supports-color@10.2.2)
     devDependencies:
-      '@antithesishq/bombadil':
-        specifier: 0.7.10
-        version: 0.7.10
       '@cloudflare/oxlint-config':
         specifier: 0.1.0
         version: 0.1.0(eslint@10.15.0(jiti@2.7.0)(supports-color@10.2.2))(oxlint@1.94.0)(supports-color@10.2.2)(tsrs@0.25.0-ts7.1.0-beta)(typescript@5.9.3)
@@ -60,9 +57,6 @@ importers:
       '@oxlint/plugins':
         specifier: ^1.94.0
         version: 1.94.0
-      '@playwright/test':
-        specifier: 1.65.1
-        version: 1.65.1
       '@stryker-mutator/core':
         specifier: 10.1.1
         version: 10.1.1(@types/node@22.20.5)
@@ -113,10 +107,6 @@ packages:
     peerDependenciesMeta:
       zod:
         optional: true
-
-  '@antithesishq/bombadil@0.7.10':
-    resolution: {integrity: sha512-71aLKQBB3GNDBQZXU6MCKbt99dl9I+/pjg0EfGD9eCKXDIqpKPXD2rFH6yCJude37RGtnKq6hZFfZhuTp+Tykg==}
-    hasBin: true
 
   '@aws-sdk/client-bedrock-runtime@3.1127.0':
     resolution: {integrity: sha512-IDl/lrPb90aH+pZFHGNDmgH9nAUQj5PlZH1sJ3w7RikctyjHSnY3oNjZhrLoaBoQn/rNK0zsP6OHEqEhj2tdLA==}
@@ -1761,11 +1751,6 @@ packages:
     resolution: {integrity: sha512-U/yG5a2IELJxAtwkgGmhZJnLCHRzyxNyWWbaDKMbCyjB0kuPxU9fvIZCxf7Kv7jz7I7IXlyuY7gXkXGMdLHhPw==}
     engines: {node: '>= 22'}
 
-  '@playwright/test@1.65.1':
-    resolution: {integrity: sha512-y+NCIRm2LvY4slUVWvGh1nujJ8RF/hEisIsq2mtUPgdQC4L701bq5hZGMhrpeXjACvwvO9tj5dJqhvM6TP9lbw==}
-    engines: {node: '>=20'}
-    hasBin: true
-
   '@poppinss/colors@4.1.6':
     resolution: {integrity: sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg==}
 
@@ -3074,16 +3059,6 @@ packages:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
-  playwright-core@1.65.1:
-    resolution: {integrity: sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw==}
-    engines: {node: '>=20'}
-    hasBin: true
-
-  playwright@1.65.1:
-    resolution: {integrity: sha512-vJ1FuoOrNwOKHUIVEvSt3jT1L+wjjDpwhwIstKtfvTh8XIG4FG4bIFuvNdMxi81LGfAhUgUZleVFaOLY4RIUUw==}
-    engines: {node: '>=20'}
-    hasBin: true
-
   postcss@8.5.32:
     resolution: {integrity: sha512-LJlKCCAUFKOuZxipUdYw1NzIITEsPcgyOG9LkvRJvuKj/bRzbuRY0ARXvL0pWGpsZvn8jku+LMep2eU0seHp8g==}
     engines: {node: ^10 || ^12 || >=14}
@@ -3598,8 +3573,6 @@ snapshots:
       standardwebhooks: 1.1.1
     optionalDependencies:
       zod: 4.6.6
-
-  '@antithesishq/bombadil@0.7.10': {}
 
   '@aws-sdk/client-bedrock-runtime@3.1127.0':
     dependencies:
@@ -5010,10 +4983,6 @@ snapshots:
   '@platformatic/vfs@0.5.0':
     optional: true
 
-  '@playwright/test@1.65.1':
-    dependencies:
-      playwright: 1.65.1
-
   '@poppinss/colors@4.1.6':
     dependencies:
       kleur: 4.1.5
@@ -6356,12 +6325,6 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@4.0.7: {}
-
-  playwright-core@1.65.1: {}
-
-  playwright@1.65.1:
-    dependencies:
-      playwright-core: 1.65.1
 
   postcss@8.5.32:
     dependencies:

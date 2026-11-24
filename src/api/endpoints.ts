@@ -68,9 +68,7 @@ function routeOf(endpoint: Endpoint): Route {
   return { endpoint, method, pattern, segments: pattern.split("/") };
 }
 
-export const ENDPOINT_ROUTES: readonly Route[] = Object.keys(ENDPOINTS)
-  .filter(isEndpoint)
-  .map(routeOf);
+const ENDPOINT_ROUTES: readonly Route[] = Object.keys(ENDPOINTS).filter(isEndpoint).map(routeOf);
 
 function matches(route: Route, segments: readonly string[]): boolean {
   return (

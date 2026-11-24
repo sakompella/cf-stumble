@@ -1,5 +1,4 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { execute } from "./process.mts";
 import { REPOSITORY_URL, type GitHub } from "./github.mts";
 import type { Owner } from "./owner-api.mts";
 
@@ -36,24 +35,6 @@ export function markerPath(runId: string, suffix: string): string {
 
 function markerText(run: Run, suffix: string): string {
   return `cf-stumble e2e ${run.id}${suffix}`;
-}
-
-export async function pageWorkflow(run: Run): Promise<void> {
-  const finished = await execute(
-    "pnpm",
-    ["exec", "playwright", "test", "-c", "tools/e2e/playwright.config.mts"],
-    {
-      env: {
-        ...process.env,
-        E2E_RUN_ID: run.id,
-        E2E_URL: run.owner.url,
-        E2E_OWNER_PASSWORD: run.password,
-      },
-      echo: true,
-    },
-  );
-
-  check(finished.code === 0, `the page spec exited ${finished.code}`);
 }
 
 export async function productLoop(run: Run, connected: (projectId: string) => void) {

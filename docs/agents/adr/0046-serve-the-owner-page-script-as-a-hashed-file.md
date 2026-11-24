@@ -43,9 +43,7 @@ cannot be made to load one, because it creates no script element and renders mod
 output only as text. A source pinned to the exact path would be stricter, but it needs the request
 origin in the policy, and the page's own guarantees already close the gap.
 
-**Builds.** `pnpm verify` runs `build:page` before the typecheck. `pnpm test:browser` runs it first,
-and the stub server serves the file with the Worker's headers and
-policy. `pnpm run deploy` runs it before Alchemy bundles the Worker. On a fresh checkout,
+**Builds.** `pnpm verify` runs `build:page` before the typecheck. `pnpm run deploy` runs it before Alchemy bundles the Worker. On a fresh checkout,
 run `pnpm build:page` before `pnpm typecheck` or `pnpm test` alone. The page is immutable host
 code, not part of a generation's module map.
 

@@ -494,18 +494,7 @@ when the tag is not published), the deploy, the release, the e2e run with the Ch
 stage's harness fetches it from GitHub. Without `--stage` it targets `preview` and reads the owner
 password from `.audit/local/preview-owner-password` in the main checkout. Any other stage is a
 throwaway: it gets a generated password and its secrets, and it is destroyed at the end; `prod` is
-refused. When `CLOUDFLARE_API_TOKEN` is unset it refreshes the `cf` login and uses its token,
-`GH_TOKEN` defaults to `gh auth token`, and `CHROMIUM_PATH` defaults to `chromium` on `PATH` when
-Playwright's own browser is missing.
-
-### Page fuzz
-
-`pnpm e2e:fuzz --area page [--seed n] [--minutes n]` drives the owner page on a fresh `fzpage-<id>`
-stage with [Bombadil](https://github.com/antithesishq/bombadil) (`tools/e2e/fuzz/page/`, pinned in
-`package.json`). It needs `CHROMIUM_PATH` on NixOS. It clicks, double-clicks, reloads, resizes and
-sends a few capped hostile prompts, some while the network is offline, slow or dropping, and checks
-that no error is uncaught, no send is duplicated or lost, and the transcript matches the stored
-conversation after it settles. A failing round prints its seed and keeps its trace.
+refused. When `CLOUDFLARE_API_TOKEN` is unset it refreshes the `cf` login and uses its token, and `GH_TOKEN` defaults to `gh auth token`.
 
 ## Stop paying for the container
 
